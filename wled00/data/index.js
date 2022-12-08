@@ -17,6 +17,7 @@ var d = document;
 var palettesData;
 var fxdata = [];
 var pJson = {}, eJson = {}, lJson = {};
+var plJson = {}; // array of playlists
 var pN = "", pI = 0, pNum = 0;
 var pmt = 1, pmtLS = 0, pmtLast = 0;
 var lastinfo = {};
@@ -522,7 +523,7 @@ function loadFXData(callback = null)
 		fxdata = json||[];
 		// add default value for Solid
 		fxdata.shift()
-		fxdata.unshift(";!;0");
+		fxdata.unshift(";!;");
 	})
 	.catch((e)=>{
 		fxdata = [];
@@ -718,19 +719,19 @@ function populateSegments(s)
 			miYck = `<label class="check revchkl">Mirror<input type="checkbox" id="seg${i}mY" onchange="setMiY(${i})" ${inst.mY?"checked":""}><span class="checkmark"></span></label>`;
 		}
 		let map2D = `<div id="seg${i}map2D" data-map="map2D" class="lbl-s hide">Expand 1D FX<br>
-			<div class="sel-p"><select class="sel-p" id="seg${i}mp12" onchange="setMp12(${i})">
-				<option value="0" ${inst.mp12==0?' selected':''}>Pixels</option>
-				<option value="1" ${inst.mp12==1?' selected':''}>Bar</option>
-				<option value="2" ${inst.mp12==2?' selected':''}>Arc</option>
-				<option value="3" ${inst.mp12==3?' selected':''}>Corner</option>
+			<div class="sel-p"><select class="sel-p" id="seg${i}m12" onchange="setM12(${i})">
+				<option value="0" ${inst.m12==0?' selected':''}>Pixels</option>
+				<option value="1" ${inst.m12==1?' selected':''}>Bar</option>
+				<option value="2" ${inst.m12==2?' selected':''}>Arc</option>
+				<option value="3" ${inst.m12==3?' selected':''}>Corner</option>
 			</select></div>
 		</div>`;
-		let sndSim = `<div data-snd="ssim" class="lbl-s hide">Sound sim<br>
-			<div class="sel-p"><select class="sel-p" id="seg${i}ssim" onchange="setSSim(${i})">
-				<option value="0" ${inst.ssim==0?' selected':''}>BeatSin</option>
-				<option value="1" ${inst.ssim==1?' selected':''}>WeWillRockYou</option>
-				<option value="2" ${inst.ssim==2?' selected':''}>U10_3</option>
-				<option value="3" ${inst.ssim==3?' selected':''}>U14_3</option>
+		let sndSim = `<div data-snd="si" class="lbl-s hide">Sound sim<br>
+			<div class="sel-p"><select class="sel-p" id="seg${i}si" onchange="setSi(${i})">
+				<option value="0" ${inst.si==0?' selected':''}>BeatSin</option>
+				<option value="1" ${inst.si==1?' selected':''}>WeWillRockYou</option>
+				<option value="2" ${inst.si==2?' selected':''}>U10_3</option>
+				<option value="3" ${inst.si==3?' selected':''}>U14_3</option>
 			</select></div>
 		</div>`;
 		cn += `<div class="seg lstI ${i==s.mainseg ? 'selected' : ''} ${exp ? "expanded":""}" id="seg${i}">
@@ -847,17 +848,18 @@ function populateEffects()
 		let fd = "";
 		if (ef.name.indexOf("RSVD") < 0) {
 			if (Array.isArray(fxdata) && fxdata.length>id) {
-				if (fxdata[id].length==0) fd = ";;!;1d"
+				if (fxdata[id].length==0) fd = ";;!;1"
 				else fd = fxdata[id];
 				let eP = (fd == '')?[]:fd.split(";"); // effect parameters
 				let p = (eP.length<3 || eP[2]==='')?[]:eP[2].split(","); // palette data
 				if (p.length>0 && (p[0] !== "" && !isNumeric(p[0]))) nm += "&#x1F3A8;";	// effects using palette
-				let m = (eP.length<4 || eP[3]==='')?[]:eP[3].split(","); // metadata
-				if (m.length>0) for (let r of m) {
-					if (r.substring(0,2)=="1d") nm += "&#8942;"; // 1D effects
-					if (r.substring(0,2)=="2d") nm += "&#9638;"; // 2D effects
-					if (r.substring(0,2)=="vo") nm += "&#9834;"; // volume effects
-					if (r.substring(0,2)=="fr") nm += "&#9835;"; // frequency effects
+				let m = (eP.length<4 || eP[3]==='')?'1':eP[3]; // flags
+				if (id == 0) m = ''; // solid has no flags
+				if (m.length>0) {
+					if (m.includes('1')) nm += "&#8942;"; // 1D effects
+					if (m.includes('2')) nm += "&#9638;"; // 2D effects
+					if (m.includes('v')) nm += "&#9834;"; // volume effects
+					if (m.includes('f')) nm += "&#9835;"; // frequency effects
 				}
 			}
 			html += generateListItemHtml('fx',id,nm,'setFX','',fd);
@@ -1195,7 +1197,7 @@ function updateSelectedFx()
 		var selectedName = selectedEffect.querySelector(".lstIname").innerText;
 		var segs = gId("segcont").querySelectorAll(`div[data-map="map2D"]`);
 		for (const seg of segs) if (selectedName.indexOf("\u25A6")<0) seg.classList.remove("hide"); else seg.classList.add("hide");
-		var segs = gId("segcont").querySelectorAll(`div[data-snd="ssim"]`);
+		var segs = gId("segcont").querySelectorAll(`div[data-snd="si"]`);
 		for (const seg of segs) if (selectedName.indexOf("\u266A")<0 && selectedName.indexOf("\266B")<0) seg.classList.add("hide"); else seg.classList.remove("hide"); // also "♫ "?
 	}
 }
@@ -1535,8 +1537,8 @@ function requestJson(command=null)
 		if (json.info) {
 			let i = json.info;
 			// append custom palettes (when loading for the 1st time)
-			if (!command && isEmpty(lastinfo) && i.leds && i.leds.cpal) {
-				for (let j = 0; j<i.leds.cpal; j++) {
+			if (!command && isEmpty(lastinfo) && i.cpalcount) {
+				for (let j = 0; j<i.cpalcount; j++) {
 					let div = d.createElement("div");
 					gId('pallist').appendChild(div);
 					div.outerHTML = generateListItemHtml(
@@ -1697,15 +1699,6 @@ function resetUtil()
 	+ '<div class="segname" onclick="makeSeg()"><i class="icons btn-icon">&#xe18a;</i>Add segment</div></div>';
 }
 
-var plJson = {"0":{
-	"ps": [0],
-	"dur": [100],
-	"transition": [-1],	// to be inited to default transition dur
-	"repeat": 0,
-	"r": false,
-	"end": 0
-}};
-
 function makePlSel(el, incPl=false) {
 	var plSelContent = "";
 	delete pJson["0"];	// remove filler preset
@@ -1786,6 +1779,14 @@ function plR(p) {
 function makeP(i,pl) {
 	var content = "";
 	if (pl) {
+		if (i===0) plJson[0] = {
+			ps: [1],
+			dur: [100],
+			transition: [tr],
+			repeat: 0,
+			r: false,
+			end: 0
+		};
 		var rep = plJson[i].repeat ? plJson[i].repeat : 0;
 		content = 
 `<div id="ple${i}" style="margin-top:10px;"></div><label class="check revchkl">Shuffle
@@ -1908,7 +1909,6 @@ function makePlUtil()
 	if (pNum < 2) {
 		showToast("You need at least 2 presets to make a playlist!"); //return;
 	}
-	if (plJson[0].transition[0] < 0) plJson[0].transition[0] = tr;
 	let p = gId('putil');
 	p.classList.remove('staybot');
 	p.classList.add('pres');
@@ -2073,17 +2073,17 @@ function setMiY(s)
 	requestJson(obj);
 }
 
-function setMp12(s)
+function setM12(s)
 {
-	var value = gId(`seg${s}mp12`).selectedIndex;
-	var obj = {"seg": {"id": s, "mp12": value}};
+	var value = gId(`seg${s}m12`).selectedIndex;
+	var obj = {"seg": {"id": s, "m12": value}};
 	requestJson(obj);
 }
 
-function setSSim(s)
+function setSi(s)
 {
-	var value = gId(`seg${s}ssim`).selectedIndex;
-	var obj = {"seg": {"id": s, "ssim": value}};
+	var value = gId(`seg${s}si`).selectedIndex;
+	var obj = {"seg": {"id": s, "si": value}};
 	requestJson(obj);
 }
 
