@@ -1,5 +1,35 @@
 ## WLED changelog
 
+#### Build 2304090
+-   updated Arduino ESP8266 core to 4.1.0 (newer compiler)
+-   updated NeoPixelBus to 2.7.3 (with support for UCS890x chipset)
+-   better support for ESP32-C3, ESP32-S2 and ESP32-S3 (Arduino ESP32 core 5.2.0)
+-   iPad/tablet with 1024 pixels width in landscape orientation PC mode support (#3153)
+-   fix for Pixel Art Converter (#3155)
+
+#### Build 2303240
+-   Peek scaling of large 2D matrices
+-   Added 0D (1 pixel) metadata for effects & enhance 0D (analog strip) UI handling
+-   Added ability to disable ADAlight (-D WLED_DISABLE_ADALIGHT)
+-   Fixed APA102 output on Ethernet enabled controllers
+-   Added ArtNet virtual/network output (#3121)
+-   Klipper usermod (#3106)
+-   Remove DST from CST timezone
+-   various fixes and enhancements
+
+#### Build 2302180
+
+-   Removed Blynk support (servers shut down on 31st Dec 2022)
+-   Added `ledgap.json` to complement ledmaps for 2D matrices
+-   Added support for white addressable strips (#3073)
+-   Ability to use SHT temperature usermod with PWM fan usermod
+-   Added `onStateChange()` callback to usermods (#3081)
+-   Refactored `bus_manager` [internal]
+-   Dual 1D & 2D mode (add 1D strip after the matrix)
+-   Removed 1D -> 2D mapping for individual pixel control
+-   effect tweak: Fireworks 1D
+-   various bugfixes
+
 #### Build 2301240
 
 -   Version bump to v0.14.0-b2 "Hoshi"
