@@ -189,7 +189,7 @@ void realtimeLock(uint32_t timeoutMs, byte md)
 void exitRealtime() {
   if (!realtimeMode) return;
   if (realtimeOverride == REALTIME_OVERRIDE_ONCE) realtimeOverride = REALTIME_OVERRIDE_NONE;
-  strip.setBrightness(scaledBri(bri));
+  strip.setBrightness(scaledBri(bri), true);
   realtimeTimeout = 0; // cancel realtime mode immediately
   realtimeMode = REALTIME_MODE_INACTIVE; // inform UI immediately
   realtimeIP[0] = 0;
@@ -362,7 +362,7 @@ void handleNotifications()
           uint16_t stopY  = 1, stop   = (udpIn[3+ofs] << 8 | udpIn[4+ofs]);
           uint16_t offset = (udpIn[7+ofs] << 8 | udpIn[8+ofs]);
           if (!receiveSegmentOptions) {
-            selseg.set(start, stop, selseg.grouping, selseg.spacing, offset, startY, stopY);
+            selseg.setUp(start, stop, selseg.grouping, selseg.spacing, offset, startY, stopY);
             continue;
           }
           //for (size_t j = 1; j<4; j++) selseg.setOption(j, (udpIn[9 +ofs] >> j) & 0x01); //only take into account mirrored, on, reversed; ignore selected
@@ -396,9 +396,9 @@ void handleNotifications()
             stopY  = (udpIn[34+ofs] << 8 | udpIn[35+ofs]);
           }
           if (receiveSegmentBounds) {
-            selseg.set(start, stop, udpIn[5+ofs], udpIn[6+ofs], offset, startY, stopY);
+            selseg.setUp(start, stop, udpIn[5+ofs], udpIn[6+ofs], offset, startY, stopY);
           } else {
-            selseg.set(selseg.start, selseg.stop, udpIn[5+ofs], udpIn[6+ofs], selseg.offset, selseg.startY, selseg.stopY);
+            selseg.setUp(selseg.start, selseg.stop, udpIn[5+ofs], udpIn[6+ofs], selseg.offset, selseg.startY, selseg.stopY);
           }
         }
         stateChanged = true;
