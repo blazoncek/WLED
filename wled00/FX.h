@@ -379,8 +379,7 @@ typedef struct Segment {
     uint16_t aux0;  // custom var
     uint16_t aux1;  // custom var
     byte* data;     // effect data pointer
-    CRGB* leds;     // local leds[] array (may be a pointer to global)
-    static CRGB *_globalLeds;             // global leds[] array
+    uint32_t* leds; // local leds[] array (may be a pointer to global)
     static uint16_t maxWidth, maxHeight;  // these define matrix width & height (max. segment dimensions)
 
   private:
@@ -484,12 +483,11 @@ typedef struct Segment {
       //Serial.print(F("Destroying segment:"));
       //if (name) Serial.printf(" %s (%p)", name, name);
       //if (data) Serial.printf(" %d (%p)", (int)_dataLen, data);
-      //if (leds) Serial.printf(" [%u]", length()*sizeof(CRGB));
       //Serial.println();
       //#endif
-      if (!Segment::_globalLeds && leds) free(leds);
       if (name) delete[] name;
       if (_t) delete _t;
+      if (leds) free(leds);
       deallocateData();
     }
 
@@ -497,7 +495,7 @@ typedef struct Segment {
     Segment& operator= (Segment &&orig) noexcept; // move assignment
 
 #ifdef WLED_DEBUG
-    size_t getSize() const { return sizeof(Segment) + (data?_dataLen:0) + (name?strlen(name):0) + (_t?sizeof(Transition):0) + (!Segment::_globalLeds && leds?sizeof(CRGB)*length():0); }
+    size_t getSize() const { return sizeof(Segment) + (data?_dataLen:0) + (name?strlen(name):0) + (_t?sizeof(Transition):0) + (leds?sizeof(CRGB)*length():0); }
 #endif
 
     inline bool     getOption(uint8_t n) const { return ((options >> n) & 0x01); }
@@ -538,7 +536,7 @@ typedef struct Segment {
       * Safe to call from interrupts and network requests.
       */
     inline void markForReset(void) { reset = true; }  // setOption(SEG_OPTION_RESET, true)
-    void setUpLeds(void);   // set up leds[] array for loseless getPixelColor()
+    void setUpLeds(void); // local double buffer/lossless getPixelColor()
 
     // transition functions
     void     startTransition(uint16_t dur); // transition has to start before actual segment values change
@@ -579,7 +577,7 @@ typedef struct Segment {
     uint16_t virtualHeight(void) const;
     uint16_t nrOfVStrips(void) const;
   #ifndef WLED_DISABLE_2D
-    uint16_t XY(uint16_t x, uint16_t y); // support function to get relative index within segment (for leds[])
+    uint16_t XY(uint16_t x, uint16_t y); // support function to get relative index within segment
     void setPixelColorXY(int x, int y, uint32_t c); // set relative pixel within segment with color
     void setPixelColorXY(int x, int y, byte r, byte g, byte b, byte w = 0) { setPixelColorXY(x, y, RGBW32(r,g,b,w)); } // automatically inline
     void setPixelColorXY(int x, int y, CRGB c)                             { setPixelColorXY(x, y, RGBW32(c.r,c.g,c.b,0)); } // automatically inline
@@ -710,7 +708,6 @@ class WS2812FX {  // 96 bytes
       panel.clear();
 #endif
       customPalettes.clear();
-      if (useLedsArray && Segment::_globalLeds) free(Segment::_globalLeds);
     }
 
     static WS2812FX* getInstance(void) { return instance; }
@@ -757,8 +754,7 @@ class WS2812FX {  // 96 bytes
       hasCCTBus(void),
       // return true if the strip is being sent pixel updates
       isUpdating(void),
-      deserializeMap(uint8_t n=0),
-      useLedsArray = false;
+      deserializeMap(uint8_t n=0);
 
     inline bool isServicing(void) { return _isServicing; }
     inline bool hasWhiteChannel(void) {return _hasWhiteChannel;}
@@ -905,7 +901,7 @@ class WS2812FX {  // 96 bytes
     uint8_t _segment_index;
     uint8_t _mainSegment;
 
-    void
+    uint8_t
       estimateCurrentAndLimitBri(void);
 };
 

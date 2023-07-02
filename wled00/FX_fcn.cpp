@@ -74,7 +74,6 @@
 // Segment class implementation
 ///////////////////////////////////////////////////////////////////////////////
 uint16_t Segment::_usedSegmentData = 0U; // amount of RAM all segments use for their data[]
-CRGB    *Segment::_globalLeds = nullptr;
 uint16_t Segment::maxWidth = DEFAULT_LED_COUNT;
 uint16_t Segment::maxHeight = 1;
 
@@ -86,11 +85,11 @@ Segment::Segment(const Segment &orig) {
   data = nullptr;
   _dataLen = 0;
   _t = nullptr;
-  if (leds && !Segment::_globalLeds) leds = nullptr;
+  leds = nullptr;
   if (orig.name) { name = new char[strlen(orig.name)+1]; if (name) strcpy(name, orig.name); }
   if (orig.data) { if (allocateData(orig._dataLen)) memcpy(data, orig.data, orig._dataLen); }
   if (orig._t)   { _t = new Transition(orig._t->_dur, orig._t->_briT, orig._t->_cctT, orig._t->_colorT); }
-  if (orig.leds && !Segment::_globalLeds) { leds = (CRGB*)malloc(sizeof(CRGB)*length()); if (leds) memcpy(leds, orig.leds, sizeof(CRGB)*length()); }
+  if (orig.leds) { leds = (uint32_t*)malloc(sizeof(uint32_t)*length()); if (leds) memcpy(leds, orig.leds, sizeof(uint32_t)*length()); }
 }
 
 // move constructor
@@ -111,7 +110,7 @@ Segment& Segment::operator= (const Segment &orig) {
     // clean destination
     if (name) delete[] name;
     if (_t)   delete _t;
-    if (leds && !Segment::_globalLeds) free(leds);
+    if (leds) free(leds);
     deallocateData();
     // copy source
     memcpy((void*)this, (void*)&orig, sizeof(Segment));
@@ -120,12 +119,12 @@ Segment& Segment::operator= (const Segment &orig) {
     data = nullptr;
     _dataLen = 0;
     _t = nullptr;
-    if (!Segment::_globalLeds) leds = nullptr;
+    leds = nullptr;
     // copy source data
     if (orig.name) { name = new char[strlen(orig.name)+1]; if (name) strcpy(name, orig.name); }
     if (orig.data) { if (allocateData(orig._dataLen)) memcpy(data, orig.data, orig._dataLen); }
     if (orig._t)   { _t = new Transition(orig._t->_dur, orig._t->_briT, orig._t->_cctT, orig._t->_colorT); }
-    if (orig.leds && !Segment::_globalLeds) { leds = (CRGB*)malloc(sizeof(CRGB)*length()); if (leds) memcpy(leds, orig.leds, sizeof(CRGB)*length()); }
+    if (orig.leds) { leds = (uint32_t*)malloc(sizeof(uint32_t)*length()); if (leds) memcpy(leds, orig.leds, sizeof(uint32_t)*length()); }
   }
   return *this;
 }
@@ -135,9 +134,9 @@ Segment& Segment::operator= (Segment &&orig) noexcept {
   //DEBUG_PRINTLN(F("-- Moving segment --"));
   if (this != &orig) {
     if (name) delete[] name; // free old name
+    if (leds) free(leds);
     deallocateData(); // free old runtime data
     if (_t) delete _t;
-    if (leds && !Segment::_globalLeds) free(leds);
     memcpy((void*)this, (void*)&orig, sizeof(Segment));
     orig.name = nullptr;
     orig.data = nullptr;
@@ -183,8 +182,7 @@ void Segment::deallocateData() {
   */
 void Segment::resetIfRequired() {
   if (reset) {
-    if (leds && !Segment::_globalLeds) { free(leds); leds = nullptr; }
-    //if (transitional && _t) { transitional = false; delete _t; _t = nullptr; }
+    if (leds) { free(leds); leds = nullptr; }
     deallocateData();
     next_time = 0; step = 0; call = 0; aux0 = 0; aux1 = 0;
     reset = false; // setOption(SEG_OPTION_RESET, false);
@@ -193,19 +191,16 @@ void Segment::resetIfRequired() {
 
 void Segment::setUpLeds() {
   // deallocation happens in resetIfRequired() as it is called when segment changes or in destructor
-  if (Segment::_globalLeds)
-    #ifndef WLED_DISABLE_2D
-    leds = &Segment::_globalLeds[start + startY*Segment::maxWidth];
-    #else
-    leds = &Segment::_globalLeds[start];
-    #endif
-  else if (leds == nullptr && length() > 0) { //softhack007 quickfix - avoid malloc(0) which is undefined behaviour (should not happen, but i've seen it)
+  if (useGlobalLedBuffer) return; // TODO optional seg buffer for FX without lossy restore due to opacity
+
+  // no global buffer
+  if (leds == nullptr && length() > 0) { //softhack007 quickfix - avoid malloc(0) which is undefined behaviour (should not happen, but i've seen it)
     //#if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_PSRAM)
     //if (psramFound())
     //  leds = (CRGB*)ps_malloc(sizeof(CRGB)*length());   // softhack007 disabled; putting leds into psram leads to horrible slowdown on WROVER boards
     //else
     //#endif
-      leds = (CRGB*)malloc(sizeof(CRGB)*length());
+    leds = (uint32_t *)calloc(length(), sizeof(uint32_t));
   }
 }
 
@@ -722,7 +717,7 @@ uint32_t Segment::getPixelColor(int i)
   }
 #endif
 
-  if (leds) return RGBW32(leds[i].r, leds[i].g, leds[i].b, 0);
+  if (leds) return leds[i];
 
   if (reverse) i = virtualLength() - i - 1;
   i *= groupLength();
@@ -1062,24 +1057,6 @@ void WS2812FX::finalizeInit(void)
     Segment::maxHeight = 1;
   }
 
-  //initialize leds array. TBD: realloc if nr of leds change
-  if (Segment::_globalLeds) {
-    purgeSegments(true);
-    free(Segment::_globalLeds);
-    Segment::_globalLeds = nullptr;
-  }
-  if (useLedsArray) {
-    size_t arrSize = sizeof(CRGB) * getLengthTotal();
-    // softhack007 disabled; putting leds into psram leads to horrible slowdown on WROVER boards (see setUpLeds())
-    //#if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_PSRAM)
-    //if (psramFound())
-    //  Segment::_globalLeds = (CRGB*) ps_malloc(arrSize);
-    //else
-    //#endif
-      Segment::_globalLeds = (CRGB*) malloc(arrSize);
-    memset(Segment::_globalLeds, 0, arrSize);
-  }
-
   //segments are created in makeAutoSegments();
   DEBUG_PRINTLN(F("Loading custom palettes"));
   loadCustomPalettes(); // (re)load all custom palettes
@@ -1106,8 +1083,11 @@ void WS2812FX::service() {
     // last condition ensures all solid segments are updated at the same time
     if(nowUp > seg.next_time || _triggered || (doShow && seg.mode == FX_MODE_STATIC))
     {
-      if (seg.grouping == 0) seg.grouping = 1; //sanity check
-      doShow = true;
+      if (seg.grouping == 0) seg.grouping = 1; // sanity check
+//      if (!doShow) {
+//        busses.setBrightness(_brightness); // bus luminance must be set before FX using setPixelColor()
+        doShow = true;
+//      }
       uint16_t delay = FRAMETIME;
 
       if (!seg.freeze) { //only run effect function if not frozen
@@ -1168,7 +1148,7 @@ uint32_t WS2812FX::getPixelColor(uint16_t i)
 #define MA_FOR_ESP        100 //how much mA does the ESP use (Wemos D1 about 80mA, ESP32 about 120mA)
                               //you can set it to 0 if the ESP is powered by USB and the LEDs by external
 
-void WS2812FX::estimateCurrentAndLimitBri() {
+uint8_t WS2812FX::estimateCurrentAndLimitBri() {
   //power limit calculation
   //each LED can draw up 195075 "power units" (approx. 53mA)
   //one PU is the power it takes to have 1 channel 1 step brighter per brightness step
@@ -1183,8 +1163,7 @@ void WS2812FX::estimateCurrentAndLimitBri() {
 
   if (ablMilliampsMax < 150 || actualMilliampsPerLed == 0) { //0 mA per LED and too low numbers turn off calculation
     currentMilliamps = 0;
-    busses.setBrightness(_brightness);
-    return;
+    return _brightness;
   }
 
   uint16_t pLen = getLengthPhysical();
@@ -1206,7 +1185,12 @@ void WS2812FX::estimateCurrentAndLimitBri() {
     for (uint_fast16_t i = 0; i < len; i++) { //sum up the usage of each LED
       uint32_t c = bus->getPixelColor(i);
       byte r = R(c), g = G(c), b = B(c), w = W(c);
-
+      if (useGlobalLedBuffer) {
+        r = scale8(r, _brightness);
+        g = scale8(g, _brightness); 
+        b = scale8(b, _brightness);
+        w = scale8(w, _brightness);
+      }
       if(useWackyWS2815PowerModel) { //ignore white component on WS2815 power calculation
         busPowerSum += (MAX(MAX(r,g),b)) * 3;
       } else {
@@ -1221,23 +1205,17 @@ void WS2812FX::estimateCurrentAndLimitBri() {
     powerSum += busPowerSum;
   }
 
-  uint32_t powerSum0 = powerSum;
-  powerSum *= _brightness;
-
-  if (powerSum > powerBudget) //scale brightness down to stay in current limit
-  {
+  uint8_t newBri = _brightness;
+  if (powerSum > powerBudget) {//scale brightness down to stay in current limit
     float scale = (float)powerBudget / (float)powerSum;
     uint16_t scaleI = scale * 255;
     uint8_t scaleB = (scaleI > 255) ? 255 : scaleI;
-    uint8_t newBri = scale8(_brightness, scaleB);
-    busses.setBrightness(newBri); //to keep brightness uniform, sets virtual busses too
-    currentMilliamps = (powerSum0 * newBri) / puPerMilliamp;
-  } else {
-    currentMilliamps = powerSum / puPerMilliamp;
-    busses.setBrightness(_brightness);
+    newBri = scale8(_brightness, scaleB);
   }
+  currentMilliamps = (powerSum * newBri) / puPerMilliamp;
   currentMilliamps += MA_FOR_ESP; //add power of ESP back to estimate
   currentMilliamps += pLen; //add standby power back to estimate
+  return newBri;
 }
 
 void WS2812FX::show(void) {
@@ -1246,7 +1224,8 @@ void WS2812FX::show(void) {
   show_callback callback = _callback;
   if (callback) callback();
 
-  estimateCurrentAndLimitBri();
+  uint8_t busBrightness = estimateCurrentAndLimitBri();
+  busses.setBrightness(busBrightness);
 
   // some buses send asynchronously and this method will return before
   // all of the data has been sent.
@@ -1604,7 +1583,7 @@ void WS2812FX::printSize() {
   DEBUG_PRINTF("Data: %d*%d=%uB\n", sizeof(const char *), _modeData.size(), (_modeData.capacity()*sizeof(const char *)));
   DEBUG_PRINTF("Map: %d*%d=%uB\n", sizeof(uint16_t), (int)customMappingSize, customMappingSize*sizeof(uint16_t));
   size = getLengthTotal();
-  if (useLedsArray) DEBUG_PRINTF("Buffer: %d*%u=%uB\n", sizeof(CRGB), size, size*sizeof(CRGB));
+  if (useGlobalLedBuffer) DEBUG_PRINTF("Buffer: %d*%u=%uB\n", sizeof(CRGB), size, size*sizeof(CRGB));
 }
 #endif
 

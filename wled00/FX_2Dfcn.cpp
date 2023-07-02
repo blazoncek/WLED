@@ -286,8 +286,7 @@ void Segment::setPixelColorXY(float x, float y, uint32_t col, bool aa)
 
 // returns RGBW values of pixel
 uint32_t Segment::getPixelColorXY(uint16_t x, uint16_t y) {
-  int i = XY(x,y);
-  if (leds) return RGBW32(leds[i].r, leds[i].g, leds[i].b, 0);
+  if (leds) return leds[XY(x,y)];
   if (reverse  ) x = virtualWidth()  - x - 1;
   if (reverse_y) y = virtualHeight() - y - 1;
   if (transpose) { uint16_t t = x; x = y; y = t; } // swap X & Y if segment transposed

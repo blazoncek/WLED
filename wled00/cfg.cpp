@@ -90,7 +90,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   CJSON(strip.cctBlending, hw_led[F("cb")]);
   Bus::setCCTBlend(strip.cctBlending);
   strip.setTargetFps(hw_led["fps"]); //NOP if 0, default 42 FPS
-  CJSON(strip.useLedsArray, hw_led[F("ld")]);
+  CJSON(useGlobalLedBuffer, hw_led[F("ld")]);
 
   #ifndef WLED_DISABLE_2D
   // 2D Matrix Settings
@@ -134,7 +134,8 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   if (fromFS || !ins.isNull()) {
     uint8_t s = 0;  // bus iterator
     if (fromFS) busses.removeAll(); // can't safely manipulate busses directly in network callback
-    uint32_t mem = 0;
+    uint32_t mem = 0, globalBufMem = 0;
+    uint16_t maxlen = 0;
     bool busesChanged = false;
     for (JsonObject elm : ins) {
       if (s >= WLED_MAX_BUSSES+WLED_MIN_VIRTUAL_BUSSES) break;
@@ -162,7 +163,11 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       if (fromFS) {
         BusConfig bc = BusConfig(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz);
         mem += BusManager::memUsage(bc);
-        if (mem <= MAX_LED_MEMORY) if (busses.add(bc) == -1) break;  // finalization will be done in WLED::beginStrip()
+        if (useGlobalLedBuffer && start + length > maxlen) {
+          maxlen = start + length;
+          globalBufMem = maxlen * 4;
+        }
+        if (mem + globalBufMem <= MAX_LED_MEMORY) if (busses.add(bc) == -1) break;  // finalization will be done in WLED::beginStrip()
       } else {
         if (busConfigs[s] != nullptr) delete busConfigs[s];
         busConfigs[s] = new BusConfig(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode);
@@ -706,7 +711,7 @@ void serializeConfig() {
   hw_led[F("cb")] = strip.cctBlending;
   hw_led["fps"] = strip.getTargetFps();
   hw_led[F("rgbwm")] = Bus::getGlobalAWMode(); // global auto white mode override
-  hw_led[F("ld")] = strip.useLedsArray;
+  hw_led[F("ld")] = useGlobalLedBuffer;
 
   #ifndef WLED_DISABLE_2D
   // 2D Matrix Settings

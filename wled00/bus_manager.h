@@ -18,6 +18,10 @@
 #define IC_INDEX_WS2812_2CH_3X(i)  ((i)*2/3)
 #define WS2812_2CH_3X_SPANS_2_ICS(i) ((i)&0x01)    // every other LED zone is on two different ICs
 
+// flag for using double buffering in BusDigital
+extern bool useGlobalLedBuffer;
+
+
 //temporary struct for passing bus configuration to bus
 struct BusConfig {
   uint8_t type;
@@ -54,6 +58,7 @@ struct BusConfig {
   }
 };
 
+
 // Defines an LED Strip and its color ordering.
 struct ColorOrderMapEntry {
   uint16_t start;
@@ -87,12 +92,14 @@ struct ColorOrderMap {
     ColorOrderMapEntry _mappings[WLED_MAX_COLOR_ORDER_MAPPINGS];
 };
 
+
 //parent class of BusDigital, BusPwm, and BusNetwork
 class Bus {
   public:
     Bus(uint8_t type, uint16_t start, uint8_t aw)
     : _bri(255)
     , _len(1)
+    , _data(nullptr) // keep data access consistent across all types of buses
     , _valid(false)
     , _needsRefresh(false)
     {
@@ -162,6 +169,7 @@ class Bus {
     uint8_t  _bri;
     uint16_t _start;
     uint16_t _len;
+    uint8_t  *_data;
     bool     _valid;
     bool     _needsRefresh;
     uint8_t  _autoWhiteMode;
@@ -170,6 +178,8 @@ class Bus {
     static uint8_t _cctBlend;
 
     uint32_t autoWhiteCalc(uint32_t c);
+    uint8_t *allocData(size_t size = 1);
+    void     freeData() { if (_data) free(_data); _data = nullptr; }
 };
 
 
@@ -223,6 +233,18 @@ class BusDigital : public Bus {
     uint16_t _frequencykHz = 0U;
     void * _busPtr = nullptr;
     const ColorOrderMap &_colorOrderMap;
+
+    inline uint32_t restoreColorLossy(uint32_t c, uint8_t _restaurationBri) {
+      if (_bri == 255) return c;
+      uint8_t* chan = (uint8_t*) &c;
+
+      for (uint8_t i=0; i<4; i++)
+      {
+        uint16_t val = chan[i];
+        chan[i] = ((val << 8) + _restaurationBri) / (_restaurationBri + 1); //adding _bri slighly improves recovery / stops degradation on re-scale
+      }
+      return c;
+    }
 };
 
 
@@ -251,7 +273,7 @@ class BusPwm : public Bus {
 
   private:
     uint8_t _pins[5] = {255, 255, 255, 255, 255};
-    uint8_t _data[5] = {0};
+    uint8_t _pwmdata[5] = {0};
     #ifdef ARDUINO_ARCH_ESP32
     uint8_t _ledcStart = 255;
     #endif
@@ -283,7 +305,7 @@ class BusOnOff : public Bus {
 
   private:
     uint8_t _pin = 255;
-    uint8_t _data = 0;
+    uint8_t _onoffdata = 0;
 };
 
 
@@ -323,7 +345,6 @@ class BusNetwork : public Bus {
     uint8_t   _UDPchannels;
     bool      _rgbw;
     bool      _broadcastLock;
-    byte     *_data;
 };
 
 
@@ -343,7 +364,7 @@ class BusManager {
 
     void setStatusPixel(uint32_t c);
 
-    void setPixelColor(uint16_t pix, uint32_t c, int16_t cct=-1);
+    void setPixelColor(uint16_t pix, uint32_t c);
 
     void setBrightness(uint8_t b);
 
