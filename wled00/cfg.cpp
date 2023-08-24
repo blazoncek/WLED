@@ -161,7 +161,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       ledType |= refresh << 7; // hack bit 7 to indicate strip requires off refresh
       uint8_t AWmode = elm[F("rgbwm")] | autoWhiteMode;
       if (fromFS) {
-        BusConfig bc = BusConfig(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz);
+        BusConfig bc = BusConfig(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz, useGlobalLedBuffer);
         mem += BusManager::memUsage(bc);
         if (useGlobalLedBuffer && start + length > maxlen) {
           maxlen = start + length;
@@ -170,7 +170,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
         if (mem + globalBufMem <= MAX_LED_MEMORY) if (busses.add(bc) == -1) break;  // finalization will be done in WLED::beginStrip()
       } else {
         if (busConfigs[s] != nullptr) delete busConfigs[s];
-        busConfigs[s] = new BusConfig(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode);
+        busConfigs[s] = new BusConfig(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz, useGlobalLedBuffer);
         busesChanged = true;
       }
       s++;
@@ -178,7 +178,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     doInitBusses = busesChanged;
     // finalization done in beginStrip()
   }
-  if (hw_led["rev"]) busses.getBus(0)->reversed = true; //set 0.11 global reversed setting for first bus
+  if (hw_led["rev"]) busses.getBus(0)->setReversed(true); //set 0.11 global reversed setting for first bus
 
   // read color order map configuration
   JsonArray hw_com = hw[F("com")];
@@ -202,6 +202,9 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   disablePullUp = !pull;
   JsonArray hw_btn_ins = btn_obj[F("ins")];
   if (!hw_btn_ins.isNull()) {
+    for (uint8_t b = 0; b < WLED_MAX_BUTTONS; b++) { // deallocate existing button pins
+      pinManager.deallocatePin(btnPin[b], PinOwner::Button); // does nothing if trying to deallocate a pin with PinOwner != Button
+    }
     uint8_t s = 0;
     for (JsonObject btn : hw_btn_ins) {
       CJSON(buttonType[s], btn["type"]);
@@ -269,6 +272,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 
   int hw_ir_pin = hw["ir"]["pin"] | -2; // 4
   if (hw_ir_pin > -2) {
+    pinManager.deallocatePin(irPin, PinOwner::IR);
     if (pinManager.allocatePin(hw_ir_pin, false, PinOwner::IR)) {
       irPin = hw_ir_pin;
     } else {
@@ -281,6 +285,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   JsonObject relay = hw[F("relay")];
   int hw_relay_pin = relay["pin"] | -2;
   if (hw_relay_pin > -2) {
+    pinManager.deallocatePin(rlyPin, PinOwner::Relay);
     if (pinManager.allocatePin(hw_relay_pin,true, PinOwner::Relay)) {
       rlyPin = hw_relay_pin;
       pinMode(rlyPin, OUTPUT);
@@ -746,7 +751,7 @@ void serializeConfig() {
     uint8_t nPins = bus->getPins(pins);
     for (uint8_t i = 0; i < nPins; i++) ins_pin.add(pins[i]);
     ins[F("order")] = bus->getColorOrder();
-    ins["rev"] = bus->reversed;
+    ins["rev"] = bus->isReversed();
     ins[F("skip")] = bus->skippedLeds();
     ins["type"] = bus->getType() & 0x7F;
     ins["ref"] = bus->isOffRefreshRequired();
