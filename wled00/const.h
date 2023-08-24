@@ -269,6 +269,10 @@
 #define COL_ORDER_GBR             5
 #define COL_ORDER_MAX             5
 
+//ESP-NOW
+#define ESP_NOW_STATE_UNINIT       0
+#define ESP_NOW_STATE_ON           1
+#define ESP_NOW_STATE_ERROR        2
 
 //Button type
 #define BTN_TYPE_NONE             0

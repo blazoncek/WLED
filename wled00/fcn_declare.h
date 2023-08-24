@@ -218,7 +218,7 @@ void deletePreset(byte index);
 bool getPresetName(byte index, String& name);
 
 //remote.cpp
-void handleRemote();
+void handleRemote(uint8_t *data, size_t len);
 
 //set.cpp
 bool isAsterisksOnly(const char* str, byte maxLen);
@@ -234,6 +234,9 @@ void handleNotifications();
 void setRealtimePixel(uint16_t i, byte r, byte g, byte b, byte w);
 void refreshNodeList();
 void sendSysInfoUDP();
+#ifndef WLED_DISABLE_ESPNOW
+void espNowReceiveCB(uint8_t* address, uint8_t* data, uint8_t len, signed int rssi, bool broadcast);
+#endif
 
 //network.cpp
 int getSignalQuality(int rssi);

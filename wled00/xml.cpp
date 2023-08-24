@@ -280,11 +280,11 @@ void getSettingsJS(byte subPage, char* dest)
     sappend('c',SET_F("WS"),noWifiSleep);
 
     #ifndef WLED_DISABLE_ESPNOW
-    sappend('c',SET_F("RE"),enable_espnow_remote);
+    sappend('c',SET_F("RE"),enableESPNow);
     sappends('s',SET_F("RMAC"),linked_remote);
     #else
     //hide remote settings if not compiled
-    oappend(SET_F("document.getElementById('remd').style.display='none';"));
+    oappend(SET_F("toggle('ESPNOW');"));  // hide ESP-NOW setting
     #endif
 
     #ifdef WLED_USE_ETHERNET
@@ -324,7 +324,7 @@ void getSettingsJS(byte subPage, char* dest)
     if (last_signal_src[0] != 0) //Have seen an ESP-NOW Remote
     {
       sappends('m',SET_F("(\"rlid\")[0]"),last_signal_src);
-    } else if (!enable_espnow_remote)
+    } else if (!enableESPNow)
     {
       sappends('m',SET_F("(\"rlid\")[0]"),(char*)F("(Enable remote to listen)"));
     } else 
@@ -480,6 +480,12 @@ void getSettingsJS(byte subPage, char* dest)
   {
     sappend('v',SET_F("UP"),udpPort);
     sappend('v',SET_F("U2"),udpPort2);
+  #ifndef WLED_DISABLE_ESPNOW
+    if (enableESPNow) sappend('c',SET_F("EN"),useESPNowSync);
+    else              oappend(SET_F("toggle('ESPNOW');"));  // hide ESP-NOW setting
+  #else
+    oappend(SET_F("toggle('ESPNOW');"));  // hide ESP-NOW setting
+  #endif
     sappend('v',SET_F("GS"),syncGroups);
     sappend('v',SET_F("GR"),receiveGroups);
 

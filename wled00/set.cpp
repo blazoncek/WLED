@@ -35,11 +35,31 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     noWifiSleep = request->hasArg(F("WS"));
 
     #ifndef WLED_DISABLE_ESPNOW
-    enable_espnow_remote = request->hasArg(F("RE"));
-    strlcpy(linked_remote,request->arg(F("RMAC")).c_str(), 13);
-
-    //Normalize MAC format to lowercase
-    strlcpy(linked_remote,strlwr(linked_remote), 13);
+    bool oldESPNow = enableESPNow;
+    enableESPNow = request->hasArg(F("RE"));
+    if (oldESPNow != enableESPNow) {
+      if (!enableESPNow) {
+        DEBUG_PRINTLN(F("ESP-NOW stopping."));
+        if (statusESPNow == ESP_NOW_STATE_ON) quickEspNow.stop();
+        statusESPNow = ESP_NOW_STATE_UNINIT;
+      } else {
+        quickEspNow.onDataRcvd(espNowReceiveCB);
+        if (apActive || !WLED_CONNECTED) {
+          DEBUG_PRINTLN(F("ESP-NOW initing in AP mode."));
+          #ifdef ESP32
+          quickEspNow.setWiFiBandwidth(WIFI_IF_AP, WIFI_BW_HT20); // Only needed for ESP32 in case you need coexistence with ESP8266 in the same network
+          #endif //ESP32
+          if (quickEspNow.begin(apChannel, WIFI_IF_AP)) { // Same channel must be used for both AP and ESP-NOW
+            statusESPNow = ESP_NOW_STATE_ERROR; // error
+          } else {
+            statusESPNow = ESP_NOW_STATE_ON; // ok
+          }
+        }
+      }
+    }
+    strlcpy(linked_remote, request->arg(F("RMAC")).c_str(), 12);
+    linked_remote[12] = '\0';
+    strlwr(linked_remote);  //Normalize MAC format to lowercase
     #endif
 
     #ifdef WLED_USE_ETHERNET
@@ -292,6 +312,10 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     if (t > 0) udpPort = t;
     t = request->arg(F("U2")).toInt();
     if (t > 0) udpPort2 = t;
+
+    #ifndef WLED_DISABLE_ESPNOW
+    useESPNowSync = request->hasArg(F("EN"));
+    #endif
 
     syncGroups = request->arg(F("GS")).toInt();
     receiveGroups = request->arg(F("GR")).toInt();

@@ -35,7 +35,14 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   CJSON(simplifiedUI, id[F("sui")]);
 #endif
 
-  JsonObject nw_ins_0 = doc["nw"]["ins"][0];
+  JsonObject nw = doc["nw"];
+#ifndef WLED_DISABLE_ESPNOW
+  CJSON(enableESPNow, nw[F("espnow")]);
+  getStringFromJson(linked_remote, nw[F("linekd_remote")], 13);
+  linked_remote[12] = '\0';
+#endif
+
+  JsonObject nw_ins_0 = nw["ins"][0];
   getStringFromJson(clientSSID, nw_ins_0[F("ssid")], 33);
   //int nw_ins_0_pskl = nw_ins_0[F("pskl")];
   //The WiFi PSK is normally not contained in the regular file for security reasons.
@@ -382,6 +389,10 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   CJSON(udpPort, if_sync[F("port0")]); // 21324
   CJSON(udpPort2, if_sync[F("port1")]); // 65506
 
+#ifndef WLED_DISABLE_ESPNOW
+  CJSON(useESPNowSync, if_sync[F("espnow")]);
+#endif
+
   JsonObject if_sync_recv = if_sync["recv"];
   CJSON(receiveNotificationBrightness, if_sync_recv["bri"]);
   CJSON(receiveNotificationColor, if_sync_recv["col"]);
@@ -452,13 +463,6 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   getStringFromJson(mqttGroupTopic, if_mqtt[F("topics")][F("group")], 33); // ""
   CJSON(retainMqttMsg, if_mqtt[F("rtn")]);
 #endif
-
-#ifndef WLED_DISABLE_ESPNOW
-  JsonObject remote = doc["remote"];
-  CJSON(enable_espnow_remote, remote[F("remote_enabled")]);
-  getStringFromJson(linked_remote, remote[F("linked_remote")], 13);
-#endif
-
 
 #ifndef WLED_DISABLE_HUESYNC
   JsonObject if_hue = interfaces["hue"];
@@ -647,6 +651,10 @@ void serializeConfig() {
 #endif
 
   JsonObject nw = doc.createNestedObject("nw");
+#ifndef WLED_DISABLE_ESPNOW
+  nw[F("espnow")] = enableESPNow;
+  nw[F("linked_remote")] = linked_remote;
+#endif
 
   JsonArray nw_ins = nw.createNestedArray("ins");
 
@@ -848,6 +856,10 @@ void serializeConfig() {
   if_sync[F("port0")] = udpPort;
   if_sync[F("port1")] = udpPort2;
 
+#ifndef WLED_DISABLE_ESPNOW
+  if_sync[F("espnow")] = useESPNowSync;
+#endif
+
   JsonObject if_sync_recv = if_sync.createNestedObject("recv");
   if_sync_recv["bri"] = receiveNotificationBrightness;
   if_sync_recv["col"] = receiveNotificationColor;
@@ -911,13 +923,6 @@ void serializeConfig() {
   if_mqtt_topics[F("device")] = mqttDeviceTopic;
   if_mqtt_topics[F("group")] = mqttGroupTopic;
 #endif
-
-#ifndef WLED_DISABLE_ESPNOW
-  JsonObject remote = doc.createNestedObject(F("remote"));
-  remote[F("remote_enabled")] = enable_espnow_remote;
-  remote[F("linked_remote")] = linked_remote;
-#endif
-
 
 #ifndef WLED_DISABLE_HUESYNC
   JsonObject if_hue = interfaces.createNestedObject("hue");
