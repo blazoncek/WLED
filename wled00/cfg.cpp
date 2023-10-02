@@ -38,7 +38,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   JsonObject nw = doc["nw"];
 #ifndef WLED_DISABLE_ESPNOW
   CJSON(enableESPNow, nw[F("espnow")]);
-  getStringFromJson(linked_remote, nw[F("linekd_remote")], 13);
+  getStringFromJson(linked_remote, nw[F("linked_remote")], 13);
   linked_remote[12] = '\0';
 #endif
 
@@ -223,7 +223,9 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
         if (((buttonType[s] == BTN_TYPE_ANALOG) || (buttonType[s] == BTN_TYPE_ANALOG_INVERTED)) && (digitalPinToAnalogChannel(btnPin[s]) < 0))
         {
           // not an ADC analog pin
-          DEBUG_PRINTF("PIN ALLOC error: GPIO%d for analog button #%d is not an analog pin!\n", btnPin[s], s);
+          DEBUG_PRINT(F("PIN ALLOC error: GPIO")); DEBUG_PRINT(btnPin[s]);
+          DEBUG_PRINT(F("for analog button #")); DEBUG_PRINT(s);
+          DEBUG_PRINTLN(F(" is not an analog pin!"));
           btnPin[s] = -1;
           pinManager.deallocatePin(pin,PinOwner::Button);
         }
@@ -364,6 +366,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 
   JsonObject light_tr = light["tr"];
   CJSON(fadeTransition, light_tr["mode"]);
+  CJSON(modeBlending, light_tr["fx"]);
   int tdd = light_tr["dur"] | -1;
   if (tdd >= 0) transitionDelay = transitionDelayDefault = tdd * 100;
   CJSON(strip.paletteFade, light_tr["pal"]);
@@ -400,17 +403,15 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   CJSON(receiveGroups, if_sync_recv["grp"]);
   CJSON(receiveSegmentOptions, if_sync_recv["seg"]);
   CJSON(receiveSegmentBounds, if_sync_recv["sb"]);
-  //! following line might be a problem if called after boot
-  receiveNotifications = (receiveNotificationBrightness || receiveNotificationColor || receiveNotificationEffects || receiveSegmentOptions);
 
   JsonObject if_sync_send = if_sync["send"];
-  prev = notifyDirectDefault;
-  CJSON(notifyDirectDefault, if_sync_send[F("dir")]);
-  if (notifyDirectDefault != prev) notifyDirect = notifyDirectDefault;
+  CJSON(sendNotifications, if_sync_send["en"]);
+  sendNotificationsRT = sendNotifications;
+  CJSON(notifyDirect, if_sync_send[F("dir")]);
   CJSON(notifyButton, if_sync_send["btn"]);
   CJSON(notifyAlexa, if_sync_send["va"]);
   CJSON(notifyHue, if_sync_send["hue"]);
-  CJSON(notifyMacro, if_sync_send["macro"]);
+//  CJSON(notifyMacro, if_sync_send["macro"]);
   CJSON(syncGroups, if_sync_send["grp"]);
   if (if_sync_send[F("twice")]) udpNumRetries = 1; // import setting from 0.13 and earlier
   CJSON(udpNumRetries, if_sync_send["ret"]);
@@ -420,7 +421,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   CJSON(nodeBroadcastEnabled, if_nodes[F("bcast")]);
 
   JsonObject if_live = interfaces["live"];
-  CJSON(receiveDirect, if_live["en"]);
+  CJSON(receiveDirect, if_live["en"]);  // UDP/Hyperion realtime
   CJSON(useMainSegmentOnly, if_live[F("mso")]);
   CJSON(e131Port, if_live["port"]); // 5568
   if (e131Port == DDP_DEFAULT_PORT) e131Port = E131_DEFAULT_PORT; // prevent double DDP port allocation
@@ -835,6 +836,7 @@ void serializeConfig() {
 
   JsonObject light_tr = light.createNestedObject("tr");
   light_tr["mode"] = fadeTransition;
+  light_tr["fx"] = modeBlending;
   light_tr["dur"] = transitionDelayDefault / 100;
   light_tr["pal"] = strip.paletteFade;
   light_tr[F("rpc")] = randomPaletteChangeTime;
@@ -869,11 +871,12 @@ void serializeConfig() {
   if_sync_recv["sb"]  = receiveSegmentBounds;
 
   JsonObject if_sync_send = if_sync.createNestedObject("send");
+  if_sync_send["en"] = sendNotifications;
   if_sync_send[F("dir")] = notifyDirect;
   if_sync_send["btn"] = notifyButton;
   if_sync_send["va"] = notifyAlexa;
   if_sync_send["hue"] = notifyHue;
-  if_sync_send["macro"] = notifyMacro;
+//  if_sync_send["macro"] = notifyMacro;
   if_sync_send["grp"] = syncGroups;
   if_sync_send["ret"] = udpNumRetries;
 
@@ -882,7 +885,7 @@ void serializeConfig() {
   if_nodes[F("bcast")] = nodeBroadcastEnabled;
 
   JsonObject if_live = interfaces.createNestedObject("live");
-  if_live["en"] = receiveDirect;
+  if_live["en"] = receiveDirect; // UDP/Hyperion realtime
   if_live[F("mso")] = useMainSegmentOnly;
   if_live["port"] = e131Port;
   if_live[F("mc")] = e131Multicast;
@@ -900,6 +903,7 @@ void serializeConfig() {
   if_live[F("no-gc")] = arlsDisableGammaCorrection;
   if_live[F("offset")] = arlsOffset;
 
+#ifndef WLED_DISABLE_ALEXA
   JsonObject if_va = interfaces.createNestedObject("va");
   if_va[F("alexa")] = alexaEnabled;
 
@@ -908,6 +912,7 @@ void serializeConfig() {
   if_va_macros.add(macroAlexaOff);
 
   if_va["p"] = alexaNumPresets;
+#endif
 
 #ifdef WLED_ENABLE_MQTT
   JsonObject if_mqtt = interfaces.createNestedObject("mqtt");
@@ -1038,7 +1043,7 @@ bool deserializeConfigSec() {
   JsonObject ap = doc["ap"];
   getStringFromJson(apPass, ap["psk"] , 65);
 
-  JsonObject interfaces = doc["if"];
+  [[maybe_unused]] JsonObject interfaces = doc["if"];
 
 #ifdef WLED_ENABLE_MQTT
   JsonObject if_mqtt = interfaces["mqtt"];
@@ -1077,7 +1082,7 @@ void serializeConfigSec() {
   JsonObject ap = doc.createNestedObject("ap");
   ap["psk"] = apPass;
 
-  JsonObject interfaces = doc.createNestedObject("if");
+  [[maybe_unused]] JsonObject interfaces = doc.createNestedObject("if");
 #ifdef WLED_ENABLE_MQTT
   JsonObject if_mqtt = interfaces.createNestedObject("mqtt");
   if_mqtt["psk"] = mqttPass;

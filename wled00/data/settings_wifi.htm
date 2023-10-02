@@ -195,16 +195,16 @@
 		<i>Can help with connectivity issues.<br>
 		Do not enable if WiFi is working correctly, increases power consumption.</i>
 
-		<h3>Wireless Remote</h3>
+		<h3>ESP-NOW Wireless</h3>
 		<div id="NoESPNOW" class="hide">
 			<i class="warn">This firmware build does not include ESP-NOW support.<br></i>
 		</div>
 		<div id="ESPNOW">
 			Enable ESP-NOW: <input type="checkbox" name="RE"><br>
 			<i>Listen for events over ESP-NOW<br>
-			Keep disabled if not using a remote, increases power consumption.<br></i>
-			Remote MAC: <input type="text" name="RMAC"><br>
-			Last device seen: <span class="rlid">None</span> <br>
+			Keep disabled if not using a remote or wireless sync, increases power consumption.<br></i>
+			Paired Remote MAC: <input type="text" name="RMAC" minlength="12" maxlength="12"><br>
+			Last device seen: <span class="rlid" onclick="d.Sf.RMAC.value=this.textContent;" style="cursor:pointer;">None</span> <br>
 		</div>
 
 		<div id="ethd">

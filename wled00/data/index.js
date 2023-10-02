@@ -1,6 +1,6 @@
 //page js
 var loc = false, locip, locproto = "http:";
-var isOn = false, nlA = false, isLv = false, isInfo = false, isNodes = false, syncSend = false, syncTglRecv = true;
+var isOn = false, nlA = false, isLv = false, isInfo = false, isNodes = false, syncSend = false/*, syncTglRecv = true*/;
 var hasWhite = false, hasRGB = false, hasCCT = false;
 var nlDur = 60, nlTar = 0;
 var nlMode = false;
@@ -426,16 +426,28 @@ function presetError(empty)
 	if (hasBackup) {
 		cn += `<br><br>`;
 		if (empty)
-			cn += `However, there is backup preset data of a previous installation available.<br>
-			(Saving a preset will hide this and overwrite the backup)`;
+			cn += `However, there is backup preset data of a previous installation available.<br>(Saving a preset will hide this and overwrite the backup)`;
 		else
 			cn += `Here is a backup of the last known good state:`;
-		cn += `<textarea id="bck"></textarea><br>
-			<button class="btn" onclick="cpBck()">Copy to clipboard</button>`;
+		cn += `<textarea id="bck"></textarea><br><button class="btn" onclick="cpBck()">Copy to clipboard</button>`;
+		cn += `<br><button type="button" class="btn" onclick="restore(gId('bck').value)">Restore</button>`;
 	}
 	cn += `</div>`;
 	gId('pcont').innerHTML = cn;
 	if (hasBackup) gId('bck').value = bckstr;
+}
+
+function restore(txt) {
+	var req = new XMLHttpRequest();
+	req.addEventListener('load', function(){showToast(this.responseText,this.status >= 400)});
+	req.addEventListener('error', function(e){showToast(e.stack,true);});
+	req.open("POST", getURL("/upload"));
+	var formData = new FormData();
+	var b = new Blob([txt], {type: "application/json"});
+	formData.append("data", b, '/presets.json');
+	req.send(formData);
+	setTimeout(loadPresets, 2000);
+	return false;
 }
 
 function loadPresets(callback = null)
@@ -613,7 +625,7 @@ function parseInfo(i) {
 	if (loc)    name = "(L) " + name;
 	d.title     = name;
 	ledCount    = i.leds.count;
-	syncTglRecv = i.str;
+	//syncTglRecv = i.str;
 	maxSeg      = i.leds.maxseg;
 	pmt         = i.fs.pmt;
 	gId('buttonNodes').style.display = lastinfo.ndc > 0 ? null:"none";
@@ -672,8 +684,6 @@ function populateInfo(i)
 		}
 	}
 	var vcn = "Kuuhaku";
-	if (i.ver.startsWith("0.14.")) vcn = "Hoshi";
-//	if (i.ver.includes("-bl")) vcn = "Supāku";
 	if (i.cn) vcn = i.cn;
 
 	cn += `v${i.ver} "${vcn}"<br><br><table>
@@ -1688,7 +1698,7 @@ function toggleSync()
 	if (syncSend) showToast('Other lights in the network will now sync to this one.');
 	else showToast('This light and other lights in the network will no longer sync.');
 	var obj = {"udpn": {"send": syncSend}};
-	if (syncTglRecv) obj.udpn.recv = syncSend;
+	//if (syncTglRecv) obj.udpn.recv = syncSend;
 	requestJson(obj);
 }
 

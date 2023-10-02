@@ -674,7 +674,7 @@ void WLED::initConnection()
   #endif
 
 #ifndef WLED_DISABLE_ESPNOW
-  if (enableESPNow && statusESPNow == ESP_NOW_STATE_ON) {
+  if (statusESPNow == ESP_NOW_STATE_ON) {
     DEBUG_PRINTLN(F("ESP-NOW stopping."));
     quickEspNow.stop();
     statusESPNow = ESP_NOW_STATE_UNINIT;
@@ -717,11 +717,6 @@ void WLED::initConnection()
     // convert the "serverDescription" into a valid DNS hostname (alphanumeric)
     char hostname[25];
     prepareHostname(hostname);
-
-#ifdef ESP8266
-    WiFi.hostname(hostname);
-#endif
-
     WiFi.begin(clientSSID, clientPass);
 #ifdef ARDUINO_ARCH_ESP32
   #if defined(LOLIN_WIFI_FIX) && (defined(ARDUINO_ARCH_ESP32C3) || defined(ARDUINO_ARCH_ESP32S2) || defined(ARDUINO_ARCH_ESP32S3))
@@ -731,6 +726,7 @@ void WLED::initConnection()
     WiFi.setHostname(hostname);
 #else
     wifi_set_sleep_type((noWifiSleep) ? NONE_SLEEP_T : MODEM_SLEEP_T);
+    WiFi.hostname(hostname);
 #endif
   }
 
