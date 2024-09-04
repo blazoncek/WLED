@@ -24,7 +24,7 @@ bool continuousSendLED = false;
 uint32_t lastUpdate = 0;
 
 void updateBaudRate(uint32_t rate){
-  uint16_t rate100 = rate/100;
+  unsigned rate100 = rate/100;
   if (rate100 == currentBaud || rate100 < 96) return;
   currentBaud = rate100;
 
@@ -39,9 +39,9 @@ void updateBaudRate(uint32_t rate){
 // RGB LED data return as JSON array. Slow, but easy to use on the other end.
 void sendJSON(){
   if (!pinManager.isPinAllocated(hardwareTX) || pinManager.getPinOwner(hardwareTX) == PinOwner::DebugOut) {
-    uint16_t used = strip.getLengthTotal();
+    unsigned used = strip.getLengthTotal();
     Serial.write('[');
-    for (uint16_t i=0; i<used; i++) {
+    for (unsigned i=0; i<used; i++) {
       Serial.print(strip.getPixelColor(i));
       if (i != used-1) Serial.write(',');
     }
@@ -53,11 +53,11 @@ void sendJSON(){
 void sendBytes(){
   if (!pinManager.isPinAllocated(hardwareTX) || pinManager.getPinOwner(hardwareTX) == PinOwner::DebugOut) {
     Serial.write(0xC9); Serial.write(0xDA);
-    uint16_t used = strip.getLengthTotal();
-    uint16_t len = used*3;
+    unsigned used = strip.getLengthTotal();
+    unsigned len = used*3;
     Serial.write(highByte(len));
     Serial.write(lowByte(len));
-    for (uint16_t i=0; i < used; i++) {
+    for (unsigned i=0; i < used; i++) {
       uint32_t c = strip.getPixelColor(i);
       Serial.write(qadd8(W(c), R(c))); //R, add white channel to RGB channels as a simple RGBW -> RGB map
       Serial.write(qadd8(W(c), G(c))); //G
@@ -113,23 +113,26 @@ void handleSerial()
 
         } else if (next == '{') { //JSON API
           bool verboseResponse = false;
-          if (!requestJSONBufferLock(16)) return;
+          if (!requestJSONBufferLock(16)) {
+            Serial.println(F("{\"error\":3}")); // ERR_NOBUF
+            return;
+          }
           Serial.setTimeout(100);
-          DeserializationError error = deserializeJson(doc, Serial);
+          DeserializationError error = deserializeJson(*pDoc, Serial);
           if (error) {
             releaseJSONBufferLock();
             return;
           }
-          verboseResponse = deserializeState(doc.as<JsonObject>());
+          verboseResponse = deserializeState(pDoc->as<JsonObject>());
           //only send response if TX pin is unused for other purposes
           if (verboseResponse && (!pinManager.isPinAllocated(hardwareTX) || pinManager.getPinOwner(hardwareTX) == PinOwner::DebugOut)) {
-            doc.clear();
-            JsonObject state = doc.createNestedObject("state");
+            pDoc->clear();
+            JsonObject state = pDoc->createNestedObject("state");
             serializeState(state);
-            JsonObject info  = doc.createNestedObject("info");
+            JsonObject info  = pDoc->createNestedObject("info");
             serializeInfo(info);
 
-            serializeJson(doc, Serial);
+            serializeJson(*pDoc, Serial);
             Serial.println();
           }
           releaseJSONBufferLock();

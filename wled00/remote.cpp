@@ -14,17 +14,22 @@
 #define WIZMOTE_BUTTON_BRIGHT_UP   9
 #define WIZMOTE_BUTTON_BRIGHT_DOWN 8
 
+#define WIZ_SMART_BUTTON_ON          100
+#define WIZ_SMART_BUTTON_OFF         101
+#define WIZ_SMART_BUTTON_BRIGHT_UP   102
+#define WIZ_SMART_BUTTON_BRIGHT_DOWN 103
+
 // This is kind of an esoteric strucure because it's pulled from the "Wizmote"
 // product spec. That remote is used as the baseline for behavior and availability
 // since it's broadly commercially available and works out of the box as a drop-in
 typedef struct WizMoteMessageStructure {
   uint8_t program;  // 0x91 for ON button, 0x81 for all others
   uint8_t seq[4];   // Incremetal sequence number 32 bit unsigned integer LSB first
-  uint8_t byte5;    // Unknown (seen 0x20)
+  uint8_t dt1;      // Button Data Type (0x32)
   uint8_t button;   // Identifies which button is being pressed
-  uint8_t byte8;    // Unknown, but always 0x01
-  uint8_t byte9;    // Unnkown, but always 0x64
-
+  uint8_t dt2;      // Battery Level Data Type (0x01)
+  uint8_t batLevel; // Battery Level 0-100
+  
   uint8_t byte10;   // Unknown, maybe checksum
   uint8_t byte11;   // Unknown, maybe checksum
   uint8_t byte12;   // Unknown, maybe checksum
@@ -63,7 +68,7 @@ static bool resetNightMode() {
 static void brightnessUp() {
   if (nightModeActive()) return;
   // dumb incremental search is efficient enough for so few items
-  for (uint8_t index = 0; index < numBrightnessSteps; ++index) {
+  for (unsigned index = 0; index < numBrightnessSteps; ++index) {
     if (brightnessSteps[index] > bri) {
       bri = brightnessSteps[index];
       break;
@@ -101,7 +106,7 @@ static void setOff() {
   }
 }
 
-inline void presetWithFallback(uint8_t presetID, uint8_t effectID, uint8_t paletteID) {
+void presetWithFallback(uint8_t presetID, uint8_t effectID, uint8_t paletteID) {
   resetNightMode();
   applyPresetWithFallback(presetID, CALL_MODE_BUTTON_PRESET, effectID, paletteID);
 }
@@ -117,11 +122,11 @@ static bool remoteJson(int button)
   sprintf_P(objKey, PSTR("\"%d\":"), button);
 
   // attempt to read command from remote.json
-  readObjectFromFile("/remote.json", objKey, &doc);
-  JsonObject fdo = doc.as<JsonObject>();
+  readObjectFromFile(PSTR("/remote.json"), objKey, pDoc);
+  JsonObject fdo = pDoc->as<JsonObject>();
   if (fdo.isNull()) {
     // the received button does not exist
-    if (!WLED_FS.exists("/remote.json")) errorFlag = ERR_FS_RMLOAD; //warn if file itself doesn't exist
+    //if (!WLED_FS.exists(F("/remote.json"))) errorFlag = ERR_FS_RMLOAD; //warn if file itself doesn't exist
     releaseJSONBufferLock();
     return parsed;
   }
@@ -209,6 +214,10 @@ void handleRemote(uint8_t *incomingData, size_t len) {
       case WIZMOTE_BUTTON_NIGHT          : activateNightMode();                             break;
       case WIZMOTE_BUTTON_BRIGHT_UP      : brightnessUp();                                  break;
       case WIZMOTE_BUTTON_BRIGHT_DOWN    : brightnessDown();                                break;
+      case WIZ_SMART_BUTTON_ON           : setOn();                                         break;
+      case WIZ_SMART_BUTTON_OFF          : setOff();                                        break;
+      case WIZ_SMART_BUTTON_BRIGHT_UP    : brightnessUp();                                  break;
+      case WIZ_SMART_BUTTON_BRIGHT_DOWN  : brightnessDown();                                break;
       default: break;
     }
   last_seq = cur_seq;
