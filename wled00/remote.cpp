@@ -180,8 +180,7 @@ void handleRemote(uint8_t *incomingData, size_t len) {
   message_structure_t *incoming = reinterpret_cast<message_structure_t *>(incomingData);
 
   if (len != sizeof(message_structure_t)) {
-    DEBUG_PRINT(F("Unknown incoming ESP Now message received of length "));
-    DEBUG_PRINTLN(len);
+    DEBUG_PRINTF_P(PSTR("Unknown incoming ESP Now message received of length %u\n"), len);
     return;
   }
 

@@ -172,7 +172,7 @@ class BobLightUsermod : public Usermod {
 
       numLights = lightcount;
 
-      #if WLED_DEBUG_USERMODS
+      #if WLED_DEBUG
       DEBUGUM_PRINTLN(F("Fill light data: "));
       DEBUGUM_PRINTF_P(PSTR(" lights %d\n"), numLights);
       for (int i=0; i<numLights; i++) {

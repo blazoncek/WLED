@@ -160,9 +160,9 @@ class UsermodBattery : public Usermod
       device[F("sw")]   = versionString;
 
       sprintf_P(buf, PSTR("homeassistant/%s/%s/%s/config"), type, mqttClientID, uid);
-      DEBUG_PRINTLN(buf);
+      DEBUGUM_PRINTLN(buf);
       size_t payload_size = serializeJson(doc, json_str);
-      DEBUG_PRINTLN(json_str);
+      DEBUGUM_PRINTLN(json_str);
 
       mqtt->publish(buf, 0, true, json_str, payload_size);
     }
@@ -200,7 +200,7 @@ class UsermodBattery : public Usermod
         bool success = false;
         DEBUGUM_PRINTLN(F("Allocating battery pin..."));
         if (batteryPin >= 0 && digitalPinToAnalogChannel(batteryPin) >= 0) 
-          if (pinManager.allocatePin(batteryPin, false, PinOwner::UM_Battery)) {
+          if (PinManager::allocatePin(batteryPin, false, PinOwner::UM_Battery)) {
             DEBUGUM_PRINTLN(F("Battery pin allocation succeeded."));
             success = true;
           }
@@ -561,7 +561,7 @@ class UsermodBattery : public Usermod
           if (newBatteryPin != batteryPin) 
           {
             // deallocate pin
-            pinManager.deallocatePin(batteryPin, PinOwner::UM_Battery);
+            PinManager::deallocatePin(batteryPin, PinOwner::UM_Battery);
             batteryPin = newBatteryPin;
             // initialise
             setup();
