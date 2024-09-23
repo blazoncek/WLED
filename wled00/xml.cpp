@@ -461,6 +461,7 @@ void getSettingsJS(byte subPage, char* dest)
     sappend('v',SET_F("IT"),irEnabled);
 #endif    
     sappend('c',SET_F("MSO"),!irApplyToAllSelected);
+    sappend('c',SET_F("ACW"),useAltWheel);
   }
 
   if (subPage == SUBPAGE_UI)

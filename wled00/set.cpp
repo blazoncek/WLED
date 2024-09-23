@@ -333,6 +333,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     if (t >= 0) transitionDelayDefault = t;
     t = request->arg(F("TP")).toInt();
     randomPaletteChangeTime = MIN(255,MAX(1,t));
+    useAltWheel = request->hasArg(F("ACW"));
     useHarmonicRandomPalette = request->hasArg(F("TH"));
 
     nightlightTargetBri = request->arg(F("TB")).toInt();

@@ -618,7 +618,7 @@ typedef struct Segment {
     [[gnu::hot]] uint16_t progress() const;                  // transition progression between 0-65535
     [[gnu::hot]] uint8_t  currentBri(bool useCct = false) const; // current segment brightness/CCT (blended while in transition)
     uint8_t  currentMode() const;                            // currently active effect/mode (while in transition)
-    [[gnu::hot]] uint8_t  currentPalette(void) const;        // currently active palette (while in transition)
+    [[gnu::hot]] uint8_t  currentPalette() const;            // currently active palette (while in transition)
     [[gnu::hot]] uint32_t currentColor(uint8_t slot) const;  // currently active segment color (blended while in transition)
     CRGBPalette16 &loadPalette(CRGBPalette16 &tgt, uint8_t pal);
     void     setCurrentPalette();
@@ -637,7 +637,7 @@ typedef struct Segment {
     #ifndef WLED_DISABLE_MODE_BLEND
     static inline void setClippingRect(int startX, int stopX, int startY = 0, int stopY = 1) { _clipStart = startX; _clipStop = stopX; _clipStartY = startY; _clipStopY = stopY; };
     #endif
-    bool isPixelClipped(int i) const;
+    [[gnu::hot]] bool isPixelClipped(int i) const;
     [[gnu::hot]] uint32_t getPixelColor(int i) const;
     // 1D support functions (some implement 2D as well)
     void blur(uint8_t, bool smear = false);
@@ -666,8 +666,8 @@ typedef struct Segment {
     // 2D matrix
     [[gnu::hot]] uint16_t virtualWidth()  const; // segment width in virtual pixels (accounts for groupping and spacing)
     [[gnu::hot]] uint16_t virtualHeight() const; // segment height in virtual pixels (accounts for groupping and spacing)
-    uint16_t nrOfVStrips() const;                // returns number of virtual vertical strips in 2D matrix (used to expand 1D effects into 2D)
   #ifndef WLED_DISABLE_2D
+    uint16_t nrOfVStrips() const;                // returns number of virtual vertical strips in 2D matrix (used to expand 1D effects into 2D)
     [[gnu::hot]] uint16_t XY(int x, int y);      // support function to get relative index within segment
     [[gnu::hot]] void setPixelColorXY(int x, int y, uint32_t c); // set relative pixel within segment with color
     inline void setPixelColorXY(unsigned x, unsigned y, uint32_t c)               { setPixelColorXY(int(x), int(y), c); }
@@ -708,6 +708,7 @@ typedef struct Segment {
     inline void blur2d(fract8 blur_amount) { blur(blur_amount); }
     inline void fill_solid(CRGB c) { fill(RGBW32(c.r,c.g,c.b,0)); }
   #else
+    constexpr uint16_t nrOfVStrips()                                              { return 1; }
     inline uint16_t XY(int x, int y)                                              { return x; }
     inline void setPixelColorXY(int x, int y, uint32_t c)                         { setPixelColor(x, c); }
     inline void setPixelColorXY(unsigned x, unsigned y, uint32_t c)               { setPixelColor(int(x), c); }

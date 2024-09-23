@@ -412,14 +412,14 @@ void Segment::restoreSegenv(tmpsegd_t &tmpSeg) {
 #endif
 
 uint8_t IRAM_ATTR Segment::currentBri(bool useCct) const {
-  uint32_t prog = progress();
-  uint32_t curBri = useCct ? cct : (on ? opacity : 0);
+  unsigned prog = progress();
+  unsigned curBri = useCct ? cct : (on ? opacity : 0);
   if (prog < 0xFFFFU) {
 #ifndef WLED_DISABLE_MODE_BLEND
-    uint8_t tmpBri = useCct ? _t->_cctT : (_t->_segT._optionsT & 0x0004 ? _t->_briT : 0);
+    unsigned tmpBri = useCct ? _t->_cctT : (_t->_segT._optionsT & 0x0004 ? _t->_briT : 0);
     if (blendingStyle > BLEND_STYLE_FADE) return _modeBlend ? tmpBri : curBri; // not fade/blend transition, each effect uses its brightness
 #else
-    uint8_t tmpBri = useCct ? _t->_cctT : _t->_briT;
+    unsigned tmpBri = useCct ? _t->_cctT : _t->_briT;
 #endif
     curBri *=  prog;
     curBri += tmpBri * (0xFFFFU - prog);
@@ -446,7 +446,7 @@ uint8_t Segment::currentMode() const {
 
 uint32_t IRAM_ATTR_YN Segment::currentColor(uint8_t slot) const {
   if (slot >= NUM_COLORS) slot = 0;
-  uint32_t prog = progress();
+  unsigned prog = progress();
   if (prog == 0xFFFFU) return colors[slot];
 #ifndef WLED_DISABLE_MODE_BLEND
   if (blendingStyle > BLEND_STYLE_FADE) {
@@ -667,19 +667,13 @@ uint16_t IRAM_ATTR Segment::virtualHeight() const {
   return vHeight;
 }
 
-uint16_t IRAM_ATTR Segment::nrOfVStrips() const {
-  unsigned vLen = 1;
 #ifndef WLED_DISABLE_2D
-  if (is2D()) {
-    switch (map1D2D) {
-      case M12_pBar:
-        vLen = virtualWidth();
-        break;
-    }
-  }
-#endif
+uint16_t IRAM_ATTR_YN Segment::nrOfVStrips() const {
+  unsigned vLen = 1;
+  if (is2D() && map1D2D == M12_pBar) vLen = virtualWidth();
   return vLen;
 }
+#endif
 
 // Constants for mapping mode "Pinwheel"
 #ifndef WLED_DISABLE_2D
@@ -1259,15 +1253,32 @@ void Segment::blur(uint8_t blur_amount, bool smear) {
 uint32_t Segment::color_wheel(uint8_t pos) const {
   if (palette) return color_from_palette(pos, false, true, 0); // perhaps "strip.paletteBlend < 2" should be better instead of "true"
   uint8_t w = W(currentColor(0));
-  pos = 255 - pos;
-  if (pos < 85) {
-    return RGBW32((255 - pos * 3), 0, (pos * 3), w);
-  } else if(pos < 170) {
-    pos -= 85;
-    return RGBW32(0, (pos * 3), (255 - pos * 3), w);
+  if (useAltWheel) {
+    // by @TripleWhy https://github.com/Aircoookie/WLED/pull/3681 (https://github.com/TripleWhy)
+    // These h and f values are the same h and f you have in the regular HSV to RGB conversion.
+    // The whole funciton really is just a HSV conversion, but assuming H=pos, S=1 and V=1.
+    const uint32_t h = (pos * 3) / 128;
+    const uint32_t f = (pos * 6) % 256;
+    switch (h) {
+      case 0: return RGBW32(255    , f      , 0      , w);
+      case 1: return RGBW32(255 - f, 255    , 0      , w);
+      case 2: return RGBW32(0      , 255    , f      , w);
+      case 3: return RGBW32(0      , 255 - f, 255    , w);
+      case 4: return RGBW32(f      , 0      , 255    , w);
+      case 5: return RGBW32(255    , 0      , 255 - f, w);
+      default: return 0;
+    }
   } else {
-    pos -= 170;
-    return RGBW32((pos * 3), (255 - pos * 3), 0, w);
+    pos = 255 - pos;
+    if (pos < 85) {
+      return RGBW32((255 - pos * 3), 0, (pos * 3), w);
+    } else if(pos < 170) {
+      pos -= 85;
+      return RGBW32(0, (pos * 3), (255 - pos * 3), w);
+    } else {
+      pos -= 170;
+      return RGBW32((pos * 3), (255 - pos * 3), 0, w);
+    }
   }
 }
 
@@ -1927,7 +1938,7 @@ void WS2812FX::setRange(uint16_t i, uint16_t i2, uint32_t col) {
   for (unsigned x = i; x <= i2; x++) setPixelColor(x, col);
 }
 
-#ifdef WLED_DEBUGFX_FX
+#ifdef WLED_DEBUG_FX
 void WS2812FX::printSize() {
   size_t size = 0;
   for (const Segment &seg : _segments) size += seg.getSize();
