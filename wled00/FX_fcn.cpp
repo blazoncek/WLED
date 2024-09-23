@@ -1566,7 +1566,7 @@ void WS2812FX::service() {
   _isServicing = false;
   _triggered = false;
 
-  #ifdef WLED_DEBUGFX_FX
+  #ifdef WLED_DEBUG_FX
   if (millis() - nowUp > _frametime) DEBUGFX_PRINTF_P(PSTR("Slow effects %u/%d.\n"), (unsigned)(millis()-nowUp), (int)_frametime);
   #endif
   if (doShow) {
@@ -1574,7 +1574,7 @@ void WS2812FX::service() {
     Segment::handleRandomPalette(); // slowly transition random palette; move it into for loop when each segment has individual random palette
     show();
   }
-  #ifdef WLED_DEBUGFX_FX
+  #ifdef WLED_DEBUG_FX
   if (millis() - nowUp > _frametime) DEBUGFX_PRINTF_P(PSTR("Slow strip %u/%d.\n"), (unsigned)(millis()-nowUp), (int)_frametime);
   #endif
 }

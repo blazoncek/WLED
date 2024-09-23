@@ -131,7 +131,7 @@ bool PinManager::allocatePin(byte gpio, bool output, PinOwner tag)
 {
   // HW I2C & SPI pins have to be allocated using allocateMultiplePins variant since there is always SCL/SDA pair
   if (!isPinOk(gpio, output) || (gpio >= WLED_NUM_PINS) || tag==PinOwner::HW_I2C || tag==PinOwner::HW_SPI) {
-    #ifdef WLED_DEBUGPM_PINMANAGER
+    #ifdef WLED_DEBUG_PINMANAGER
     if (gpio < 255) {  // 255 (-1) is the "not defined GPIO"
       if (!isPinOk(gpio, output)) {
         DEBUGPM_PRINTF_P(PSTR("PIN ALLOC: FAIL for owner 0x%02X: GPIO %d "), static_cast<int>(tag), gpio);
