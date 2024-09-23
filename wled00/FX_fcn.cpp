@@ -754,7 +754,7 @@ uint16_t IRAM_ATTR Segment::virtualLength() const {
 // if clipping start > stop the clipping range is inverted
 // _modeBlend==true  -> old effect during transition
 // _modeBlend==false -> new effect during transition
-bool IRAM_ATTR Segment::isPixelClipped(int i) const {
+bool IRAM_ATTR_YN Segment::isPixelClipped(int i) const {
 #ifndef WLED_DISABLE_MODE_BLEND
   if (_clipStart != _clipStop && blendingStyle > BLEND_STYLE_FADE) {
     bool invert = _clipStart > _clipStop;  // ineverted start & stop
@@ -777,7 +777,7 @@ bool IRAM_ATTR Segment::isPixelClipped(int i) const {
   return false;
 }
 
-void IRAM_ATTR Segment::setPixelColor(int i, uint32_t col)
+void IRAM_ATTR_YN Segment::setPixelColor(int i, uint32_t col)
 {
   if (!isActive()) return; // not active
 #ifndef WLED_DISABLE_2D

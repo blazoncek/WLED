@@ -618,7 +618,7 @@ typedef struct Segment {
     [[gnu::hot]] uint16_t progress() const;                  // transition progression between 0-65535
     [[gnu::hot]] uint8_t  currentBri(bool useCct = false) const; // current segment brightness/CCT (blended while in transition)
     uint8_t  currentMode() const;                            // currently active effect/mode (while in transition)
-    uint8_t  currentPalette(void) const;            // currently active palette (while in transition)
+    [[gnu::hot]] uint8_t  currentPalette(void) const;        // currently active palette (while in transition)
     [[gnu::hot]] uint32_t currentColor(uint8_t slot) const;  // currently active segment color (blended while in transition)
     CRGBPalette16 &loadPalette(CRGBPalette16 &tgt, uint8_t pal);
     void     setCurrentPalette();
@@ -679,7 +679,7 @@ typedef struct Segment {
     inline void setPixelColorXY(float x, float y, byte r, byte g, byte b, byte w = 0, bool aa = true) { setPixelColorXY(x, y, RGBW32(r,g,b,w), aa); }
     inline void setPixelColorXY(float x, float y, CRGB c, bool aa = true)                             { setPixelColorXY(x, y, RGBW32(c.r,c.g,c.b,0), aa); }
     #endif
-    bool isPixelXYClipped(int x, int y) const;
+    [[gnu::hot]] bool isPixelXYClipped(int x, int y) const;
     [[gnu::hot]] uint32_t getPixelColorXY(int x, int y) const;
     // 2D support functions
     inline void blendPixelColorXY(uint16_t x, uint16_t y, uint32_t color, uint8_t blend) { setPixelColorXY(x, y, color_blend(getPixelColorXY(x,y), color, blend)); }
@@ -854,10 +854,10 @@ class WS2812FX {  // 96 bytes
     inline void resume()                                      { _suspend = false; }   // will resume strip.service() execution
 
     bool
-      checkSegmentAlignment(void),
-      hasRGBWBus(void) const,
-      hasCCTBus(void) const,
-      isUpdating(void) const, // return true if the strip is being sent pixel updates
+      checkSegmentAlignment(),
+      hasRGBWBus() const,
+      hasCCTBus() const,
+      isUpdating() const, // return true if the strip is being sent pixel updates
       deserializeMap(uint8_t n=0);
 
     inline bool isServicing() const          { return _isServicing; }           // returns true if strip.service() is executing
@@ -868,9 +868,9 @@ class WS2812FX {  // 96 bytes
 
     uint8_t
       paletteBlend,
-      getActiveSegmentsNum(void) const,
-      getFirstSelectedSegId(void) const,
-      getLastActiveSegmentId(void) const,
+      getActiveSegmentsNum() const,
+      getFirstSelectedSegId() const,
+      getLastActiveSegmentId() const,
       getActiveSegsLightCapabilities(bool selectedOnly = false) const,
       addEffect(uint8_t id, mode_ptr mode_fn, const char *mode_name);         // add effect to the list; defined in FX.cpp;
 
