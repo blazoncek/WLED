@@ -190,8 +190,7 @@ int8_t findWiFi(bool doScan) {
     int rssi = -9999;
     unsigned selected = selectedWiFi;
     for (int o = 0; o < status; o++) {
-      DEBUG_PRINT(F(" WiFi available: ")); DEBUG_PRINT(WiFi.SSID(o));
-      DEBUG_PRINT(F(" RSSI: ")); DEBUG_PRINT(WiFi.RSSI(o)); DEBUG_PRINTLN(F("dB"));
+      DEBUG_PRINTF_P(PSTR(" WiFi available: %s RSSI: %ddB\n"), WiFi.SSID(o).c_str(), WiFi.RSSI(o));
       for (unsigned n = 0; n < multiWiFi.size(); n++)
         if (!strcmp(WiFi.SSID(o).c_str(), multiWiFi[n].clientSSID)) {
           // find the WiFi with the strongest signal (but keep priority of entry if signal difference is not big)
@@ -202,8 +201,7 @@ int8_t findWiFi(bool doScan) {
           break;
         }
     }
-    DEBUG_PRINT(F("Selected SSID: ")); DEBUG_PRINT(multiWiFi[selected].clientSSID);
-    DEBUG_PRINT(F(" RSSI: ")); DEBUG_PRINT(rssi); DEBUG_PRINTLN(F("dB"));
+    DEBUG_PRINTF_P(PSTR("Selected SSID: %s RSSI: %ddB\n"), multiWiFi[selected].clientSSID, rssi);
     return selected;
   }
   //DEBUG_PRINT(F("WiFi scan running."));
