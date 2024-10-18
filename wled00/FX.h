@@ -462,7 +462,7 @@ typedef struct Segment {
     #ifndef WLED_DISABLE_MODE_BLEND
     static bool          _modeBlend;          // mode/effect blending semaphore
     // clipping
-    static uint16_t _clipStart, _clipStop;
+    static unsigned _clipStart, _clipStop;
     static uint8_t  _clipStartY, _clipStopY;
     #endif
 
@@ -620,7 +620,6 @@ typedef struct Segment {
     [[gnu::hot]] uint16_t progress() const;                  // transition progression between 0-65535
     [[gnu::hot]] uint8_t  currentBri(bool useCct = false) const; // current segment brightness/CCT (blended while in transition)
     uint8_t  currentMode() const;                            // currently active effect/mode (while in transition)
-    [[gnu::hot]] uint8_t  currentPalette() const;            // currently active palette (while in transition)
     [[gnu::hot]] uint32_t currentColor(uint8_t slot) const;  // currently active segment color (blended while in transition)
     CRGBPalette16 &loadPalette(CRGBPalette16 &tgt, uint8_t pal);
 

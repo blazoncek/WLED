@@ -82,11 +82,11 @@ uint16_t      Segment::_lastPaletteChange = 0; // perhaps it should be per segme
 uint16_t      Segment::_lastPaletteBlend  = 0; // in millis (lowest 16 bits only)
 
 #ifndef WLED_DISABLE_MODE_BLEND
-bool Segment::_modeBlend = false;
-uint16_t Segment::_clipStart = 0;
-uint16_t Segment::_clipStop = 0;
+bool     Segment::_modeBlend  = false;
+unsigned Segment::_clipStart  = 0;
+unsigned Segment::_clipStop   = 0;
 uint8_t  Segment::_clipStartY = 0;
-uint8_t  Segment::_clipStopY = 1;
+uint8_t  Segment::_clipStopY  = 1;
 #endif
 
 // copy constructor
@@ -472,7 +472,6 @@ void Segment::beginDraw() {
   if (prog < 0xFFFFU) {
 #ifndef WLED_DISABLE_MODE_BLEND
     if (blendingStyle > BLEND_STYLE_FADE) {
-      //if (_modeBlend) loadPalette(_currentPalette, _t->_palTid); // not fade/blend transition, each effect uses its palette
       if (_modeBlend) _currentPalette = _t->_palT; // not fade/blend transition, each effect uses its palette
     } else
 #endif
@@ -657,13 +656,13 @@ uint16_t Segment::virtualHeight() const {
   return vHeight;
 }
 
+#ifndef WLED_DISABLE_2D
 uint16_t Segment::nrOfVStrips() const {
   unsigned vLen = 1;
-#ifndef WLED_DISABLE_2D
   if (is2D() && map1D2D == M12_pBar) vLen = virtualWidth();
-#endif
   return vLen;
 }
+#endif
 
 // Constants for mapping mode "Pinwheel"
 #ifndef WLED_DISABLE_2D
@@ -956,7 +955,7 @@ void Segment::setPixelColor(float i, uint32_t col, bool aa)
 
   if (i<0.0f || i>1.0f) return; // not normalized
 
-  float fC = i * (virtualLength()-1);
+  float fC = i * (vLength()-1);
   if (aa) {
     unsigned iL = roundf(fC-0.49f);
     unsigned iR = roundf(fC+0.49f);
@@ -983,10 +982,7 @@ void Segment::setPixelColor(float i, uint32_t col, bool aa)
 
 uint32_t IRAM_ATTR_YN Segment::getPixelColor(int i) const
 {
-  if (!isActive()) return 0; // not active
-
-  int vL = virtualLength();
-  if (i >= vL || i < 0) return 0;
+  if (!isActive() || i < 0) return 0; // not active
 
 #ifndef WLED_DISABLE_2D
   if (is2D()) {
@@ -1006,6 +1002,7 @@ uint32_t IRAM_ATTR_YN Segment::getPixelColor(int i) const
           unsigned vI = sqrt16(i*i/2);
           return getPixelColorXY(vI,vI); // use diagonal
         }
+        // fallthrough
       case M12_pCorner:
         // use longest dimension
         return vW>vH ? getPixelColorXY(i, 0) : getPixelColorXY(0, i);
@@ -1043,6 +1040,8 @@ uint32_t IRAM_ATTR_YN Segment::getPixelColor(int i) const
     return 0;
   }
 #endif
+
+  int vL = vLength();
 
 #ifndef WLED_DISABLE_MODE_BLEND
   if (isInTransition() && !_modeBlend && (blendingStyle == BLEND_STYLE_PUSH_RIGHT || blendingStyle == BLEND_STYLE_PUSH_LEFT)) {
@@ -1450,7 +1449,6 @@ void WS2812FX::service() {
   now = nowUp + timebase;
   if (nowUp - _lastShow < MIN_SHOW_DELAY || _suspend) return;
   bool doShow = false;
-  int pal = -1; // optimise palette loading
 
   _isServicing = true;
   _segment_index = 0;
@@ -1483,17 +1481,15 @@ void WS2812FX::service() {
         // The blending will largely depend on the effect behaviour since actual output (LEDs) may be
         // overwritten by later effect. To enable seamless blending for every effect, additional LED buffer
         // would need to be allocated for each effect and then blended together for each pixel.
-        [[maybe_unused]] uint8_t tmpMode = seg.currentMode();  // this will return old mode while in transition
-        seg.beginDraw();                      // set up parameters for get/setPixelColor()
-        delay = (*_mode[seg.mode])();         // run new/current mode
+        seg.beginDraw();                  // set up parameters for get/setPixelColor()
 #ifndef WLED_DISABLE_MODE_BLEND
-        Segment::setClippingRect(0, 0); // disable clipping (just in case)
+        Segment::setClippingRect(0, 0);   // disable clipping (just in case)
         if (seg.isInTransition()) {
           // set clipping rectangle
           // new mode is run inside clipping area and old mode outside clipping area
           unsigned p = seg.progress();
-          unsigned w = seg.is2D() ? seg.vWidth() : seg.vLength();
-          unsigned h = seg.vHeight();
+          unsigned w = seg.is2D() ? Segment::vWidth() : Segment::vLength();
+          unsigned h = Segment::vHeight();
           unsigned dw = p * w / 0xFFFFU + 1;
           unsigned dh = p * h / 0xFFFFU + 1;
           unsigned orgBS = blendingStyle;
@@ -1549,7 +1545,7 @@ void WS2812FX::service() {
           Segment::modeBlend(true);           // set semaphore
           seg.swapSegenv(_tmpSegData);        // temporarily store new mode state (and swap it with transitional state)
           seg.beginDraw();                    // set up parameters for get/setPixelColor()
-          unsigned d2 = (*_mode[tmpMode])();  // run old mode
+          unsigned d2 = (*_mode[seg.currentMode()])();  // run old mode
           seg.restoreSegenv(_tmpSegData);     // restore mode state (will also update transitional state)
           delay = MIN(delay,d2);              // use shortest delay
           Segment::modeBlend(false);          // unset semaphore

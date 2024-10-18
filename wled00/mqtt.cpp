@@ -191,6 +191,7 @@ bool initMqtt()
 {
   if (!mqttEnabled || mqttServer[0] == 0 || !WLED_CONNECTED) return false;
 
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
   if (mqtt == nullptr) {
     mqtt = new AsyncMqttClient();
     if (!mqtt) return false;

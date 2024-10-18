@@ -147,30 +147,9 @@ void WS2812FX::setUpMatrix() {
 // XY(x,y) - gets pixel index within current segment (often used to reference leds[] array element)
 uint16_t IRAM_ATTR_YN Segment::XY(int x, int y)
 {
-  const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
-  const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
+  const int vW = vWidth();  // segment width in logical pixels (can be 0 if segment is inactive)
+  const int vH = vHeight(); // segment height in logical pixels (is always >= 1)
   return isActive() ? (x%vW) + (y%vH) * vW : 0;
-}
-
-// raw setColor function without checks (checks are done in setPixelColorXY())
-void IRAM_ATTR_YN Segment::_setPixelColorXY_raw(int& x, int& y, uint32_t& col)
-{
-#ifndef WLED_DISABLE_MODE_BLEND
-  // if blending modes, blend with underlying pixel
-  if (_modeBlend) col = color_blend(strip.getPixelColorXY(start + x, startY + y), col, 0xFFFFU - progress(), true);
-#endif
-  strip.setPixelColorXY(start + x, startY + y, col);
-  if (mirror) { //set the corresponding horizontally mirrored pixel
-    if (transpose) strip.setPixelColorXY(start + x, startY + height() - y - 1, col);
-    else           strip.setPixelColorXY(start + width() - x - 1, startY + y, col);
-  }
-  if (mirror_y) { //set the corresponding vertically mirrored pixel
-    if (transpose) strip.setPixelColorXY(start + width() - x - 1, startY + y, col);
-    else           strip.setPixelColorXY(start + x, startY + height() - y - 1, col);
-  }
-  if (mirror_y && mirror) { //set the corresponding vertically AND horizontally mirrored pixel
-    strip.setPixelColorXY(start + width() - x - 1, startY + height() - y - 1, col);
-  }
 }
 
 // pixel is clipped if it falls outside clipping range (_modeBlend==true) or is inside clipping range (_modeBlend==false)
@@ -204,14 +183,36 @@ bool IRAM_ATTR_YN Segment::isPixelXYClipped(int x, int y) const {
   return false;
 }
 
+// raw setColor function without checks (checks are done in setPixelColorXY())
+void IRAM_ATTR_YN Segment::_setPixelColorXY_raw(int& x, int& y, uint32_t& col) {
+#ifndef WLED_DISABLE_MODE_BLEND
+  // if blending modes, blend with underlying pixel
+  if (_modeBlend) col = color_blend(strip.getPixelColorXY(start + x, startY + y), col, 0xFFFFU - progress(), true);
+#endif
+  strip.setPixelColorXY(start + x, startY + y, col);
+
+  const int W = width();
+  const int H = height();
+
+  if (mirror) { //set the corresponding horizontally mirrored pixel
+    if (transpose) strip.setPixelColorXY(start + x, startY + H - y - 1, col);
+    else           strip.setPixelColorXY(start + W - x - 1, startY + y, col);
+  }
+  if (mirror_y) { //set the corresponding vertically mirrored pixel
+    if (transpose) strip.setPixelColorXY(start + W - x - 1, startY + y, col);
+    else           strip.setPixelColorXY(start + x, startY + H - y - 1, col);
+  }
+  if (mirror_y && mirror) { //set the corresponding vertically AND horizontally mirrored pixel
+    strip.setPixelColorXY(start + W - x - 1, startY + H - y - 1, col);
+  }
+}
+
 void IRAM_ATTR_YN Segment::setPixelColorXY(int x, int y, uint32_t col)
 {
-  if (!isActive()) return; // not active
+  if (!isActive()) return;  // not active
 
-  const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
-  const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
-  // negative values of x & y cast into unsigend will become very large values and will therefore be greater than vW/vH
-  if (unsigned(x) >= unsigned(vW) || unsigned(y) >= unsigned(vH)) return;  // if pixel would fall out of virtual segment just exit
+  const int vW = vWidth();  // segment width in logical pixels (can be 0 if segment is inactive)
+  const int vH = vHeight(); // segment height in logical pixels (is always >= 1)
 
 #ifndef WLED_DISABLE_MODE_BLEND
   if (isInTransition() && !_modeBlend &&
@@ -233,7 +234,8 @@ void IRAM_ATTR_YN Segment::setPixelColorXY(int x, int y, uint32_t col)
   }
 #endif
 
-  if (x >= vW || y >= vH || x < 0 || y < 0 || isPixelXYClipped(x,y)) return;  // if pixel would fall out of virtual segment just exit
+  // negative values of x & y cast into unsigend will become very large values and will therefore be greater than vW/vH
+  if (unsigned(x) >= unsigned(vW) || unsigned(y) >= unsigned(vH) || isPixelXYClipped(x,y)) return;  // if pixel would fall out of virtual segment just exit
 
   // if color is unscaled
   if (!_colorScaled) col = color_fade(col, _segBri);
@@ -311,9 +313,8 @@ void Segment::setPixelColorXY(float x, float y, uint32_t col, bool aa)
 uint32_t IRAM_ATTR_YN Segment::getPixelColorXY(int x, int y) const {
   if (!isActive()) return 0; // not active
 
-  int vW = vWidth();
-  int vH = vHeight();
-  if (unsigned(x) >= unsigned(vW) || unsigned(y) >= unsigned(vH)) return 0;  // if pixel would fall out of virtual segment just exit
+  const int vW = vWidth();  // segment width in logical pixels (can be 0 if segment is inactive)
+  const int vH = vHeight(); // segment height in logical pixels (is always >= 1)
 
 #ifndef WLED_DISABLE_MODE_BLEND
   if (!_modeBlend &&
@@ -335,7 +336,7 @@ uint32_t IRAM_ATTR_YN Segment::getPixelColorXY(int x, int y) const {
   }
 #endif
 
-  if (x >= vW || y >= vH || x<0 || y<0 || isPixelXYClipped(x,y)) return 0;  // if pixel would fall out of virtual segment just exit
+  if (unsigned(x) >= unsigned(vW) || unsigned(y) >= unsigned(vH) || isPixelXYClipped(x,y)) return 0;  // if pixel would fall out of virtual segment just exit
 
   if (reverse  ) x = vW - x - 1;
   if (reverse_y) y = vH - y - 1;
@@ -583,6 +584,8 @@ void Segment::drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, uint32_t col,
     // Bresenham’s Algorithm
     int d = 3 - (2*radius);
     int y = radius, x = 0;
+    // pre-scale color for all pixels
+    col = color_fade(col, currentBri());
     while (y >= x) {
       setPixelColorXY(cx+x, cy+y, col);
       setPixelColorXY(cx-x, cy+y, col);
@@ -674,6 +677,8 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint3
     _colorScaled = true;
     // Bresenham's algorithm
     int err = (dx>dy ? dx : -dy)/2;   // error direction
+    // pre-scale color for all pixels
+    c = color_fade(c, currentBri());
     for (;;) {
       setPixelColorXY(x0, y0, c);
       if (x0==x1 && y0==y1) break;

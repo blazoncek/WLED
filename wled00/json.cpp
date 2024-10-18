@@ -52,7 +52,7 @@ bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     elem.remove("id");  // remove for recursive call
     elem.remove("rpt"); // remove for recursive call
     elem.remove("n");   // remove for recursive call
-    unsigned len = stop - start;
+    int len = stop - start;
     for (size_t i=id+1; i<strip.getMaxSegments(); i++) {
       start = start + len;
       if (start >= strip.getLengthTotal()) break;

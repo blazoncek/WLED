@@ -222,7 +222,6 @@ void WLED::loop()
     BusManager::setBrightness(bri); // fix re-initialised bus' brightness #4005
     if (aligned) strip.makeAutoSegments();
     else strip.fixInvalidSegments();
-    BusManager::setBrightness(bri); // fix re-initialised bus' brightness
     doSerializeConfig = true;
   }
   if (loadLedmap >= 0) {
@@ -266,7 +265,7 @@ void WLED::loop()
   }
   avgLoopMillis += loopMillis;
   if (loopMillis > maxLoopMillis) maxLoopMillis = loopMillis;
-  if (millis() - debugTime > 29999) {
+  if (debugTime == 0 || millis() - debugTime > 29999) {
     DEBUG_PRINTLN(F("---DEBUG INFO---"));
     DEBUG_PRINTF_P(PSTR("Runtime: %lu\n"),  millis());
     DEBUG_PRINTF_P(PSTR("Unix time: %u,%03u\n"), toki.getTime().sec, toki.getTime().ms);
@@ -278,6 +277,7 @@ void WLED::loop()
     }
     DEBUG_PRINTF_P(PSTR("TX power: %d/%d\n"), WiFi.getTxPower(), txPower);
     #endif
+    if (multiWiFi.size() > 1) DEBUG_PRINTF_P(PSTR("Wifi SSID: %s\n"), multiWiFi[selectedWiFi].clientSSID);
     DEBUG_PRINTF_P(PSTR("Wifi state: %d (channel %d, mode %d)\n"), WiFi.status(), WiFi.channel(), WiFi.getMode());
     #ifndef WLED_DISABLE_ESPNOW
     DEBUG_PRINTF_P(PSTR("ESP-NOW state: %u\n"), statusESPNow);
@@ -501,6 +501,7 @@ void WLED::setup()
     Serial.println(F("Ada"));
   }
   #endif
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
 
   // fill in unique mdns default
   if (strcmp(cmDNS, "x") == 0) sprintf_P(cmDNS, PSTR("wled-%*s"), 6, escapedMac.c_str() + 6);
@@ -528,10 +529,12 @@ void WLED::setup()
     });
     if (strlen(cmDNS) > 0)
       ArduinoOTA.setHostname(cmDNS);
+    DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
   }
 #endif
 #ifdef WLED_ENABLE_DMX
   initDMX();
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
 #endif
 
 #ifdef WLED_ENABLE_ADALIGHT
@@ -794,6 +797,7 @@ bool WLED::initEthernet()
 // once the connection is established initInterfaces() is called
 void WLED::initConnection()
 {
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
   DEBUG_PRINTLN(F("initConnection() called."));
   WiFi.disconnect(true); // close old connections (and also disengage STA mode)
 
@@ -861,12 +865,16 @@ void WLED::initInterfaces()
 #endif
 
 #ifndef WLED_DISABLE_OTA
-  if (aOtaEnabled)
+  if (aOtaEnabled) {
+    DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
     ArduinoOTA.begin();
+    DEBUG_PRINTLN(F("Arduino OTA started"));
+  }
 #endif
 
   // Set up mDNS responder:
   if (strlen(cmDNS) > 0) {
+    DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
     // "end" must be called before "begin" is called a 2nd time
     // see https://github.com/esp8266/Arduino/issues/7213
     MDNS.end();
@@ -877,7 +885,9 @@ void WLED::initInterfaces()
     MDNS.addService("wled", "tcp", 80);
     MDNS.addServiceTxt("wled", "tcp", "mac", escapedMac.c_str());
   }
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
   server.begin();
+  DEBUG_PRINTLN(F("AWS started"));
 
   if (udpPort > 0 && udpPort != ntpLocalPort) {
     udpConnected = notifierUdp.begin(udpPort);
@@ -889,8 +899,10 @@ void WLED::initInterfaces()
   if (ntpEnabled)
     ntpConnected = ntpUdp.begin(ntpLocalPort);
 
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
   e131.begin(e131Multicast, e131Port, e131Universe, E131_MAX_UNIVERSE_COUNT);
   ddp.begin(false, DDP_DEFAULT_PORT);
+  DEBUG_PRINTLN(F("E131 & DDP started"));
 
 #ifndef WLED_DISABLE_HUESYNC
   reconnectHue();
@@ -903,12 +915,14 @@ void WLED::initInterfaces()
   // we are connected to WiFi and ESP-NOW will only be used on master for sending out packets
   // on the same channel as WiFi it is connected to (slaves will need to find it, see below)
   if (enableESPNow) {
+    DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
     quickEspNow.onDataSent(espNowSentCB);     // see udp.cpp
     quickEspNow.onDataRcvd(espNowReceiveCB);  // see udp.cpp
     DEBUG_PRINTF_P(PSTR("ESP-NOW initing in STA mode, channel %d.\n"), WiFi.channel());
     bool espNowOK = quickEspNow.begin(); // Use no parameters to start ESP-NOW on same channel as WiFi, in STA mode
     statusESPNow = espNowOK ? ESP_NOW_STATE_ON : ESP_NOW_STATE_ERROR;
     scanESPNow = millis() + 5000;
+    DEBUG_PRINTLN(F("ESP-NOW started")); 
   }
 #endif
 
