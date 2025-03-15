@@ -895,15 +895,15 @@ ESP-NOW  inited in AP mode (channel: 6/1).
   if (wifiConfigured && (forceReconnect || lastReconnectAttempt == 0)) {
     // this is first attempt at connecting to SSID or we were forced to reconnect
     int found = findWiFi(); // find strongest WiFi
-    if (found == WIFI_SCAN_FAILED) {
+    if (found == WIFI_SCAN_FAILED && multiWiFi.size() > 1) {
       // fallback if scan returned error
       DEBUG_PRINTF_P(PSTR("WiFi: Initial connect or forced reconnect. @ %lus\n"), now/1000);
       DEBUG_PRINTF_P(PSTR("WiFi: Restarting scan. @ %lus\n"), now/1000);
       findWiFi(true);
       selectedWiFi = 0;
-    } else if (found >= 0) {
+    } else if (found >= 0 || (multiWiFi.size() == 1)) {
       DEBUG_PRINTF_P(PSTR("WiFi: Initial connect or forced reconnect. @ %lus\n"), now/1000);
-      selectedWiFi = found ? found-1 : 0; // if configured WiFi was not found use 1st
+      selectedWiFi = found>0 ? found-1 : 0; // if configured WiFi was not found use 1st
       initConnection(); // start connecting to preferred/configured WiFi
       forceReconnect = false;
       interfacesInited = false;
