@@ -502,15 +502,15 @@ void WiFiEvent(WiFiEvent_t event)
       //else          WiFi.disconnect(true);          // disable SSID scanning
       //delay(5);
       // WLED::connected() will take care of ESP-NOW
+      // convert the "serverDescription" into a valid DNS hostname (alphanumeric)
+      char hostname[64];
+      prepareHostname(hostname);
+      ETH.setHostname(hostname);
       if (multiWiFi[0].staticIP != (uint32_t)0x00000000 && multiWiFi[0].staticGW != (uint32_t)0x00000000) {
         ETH.config(multiWiFi[0].staticIP, multiWiFi[0].staticGW, multiWiFi[0].staticSN, dnsAddress);
       } else {
         ETH.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
       }
-      // convert the "serverDescription" into a valid DNS hostname (alphanumeric)
-      char hostname[64];
-      prepareHostname(hostname);
-      ETH.setHostname(hostname);
       showWelcomePage = false;
       break;
       }

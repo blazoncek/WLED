@@ -459,15 +459,26 @@ void WLED::setup()
   DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
 
   DEBUG_PRINTLN(F("Initializing WiFi"));
+  // convert the "serverDescription" into a valid DNS hostname (alphanumeric)
+  char hostname[64];
+  prepareHostname(hostname);
   WiFi.persistent(false);
   //WiFi.enableLongRange(true);
   WiFi.onEvent(WiFiEvent);
-#if defined(ARDUINO_ARCH_ESP32) && ESP_IDF_VERSION_MAJOR==4
+#ifdef ARDUINO_ARCH_ESP32
+  WiFi.setSleep(!noWifiSleep);
+  WiFi.setHostname(hostname);
+  WiFi.setTxPower(wifi_power_t(txPower));
+  #if ESP_IDF_VERSION_MAJOR==4 && !defined(CONFIG_IDF_TARGET_ESP32S2)
   WiFi.useStaticBuffers(true);    // use preallocated buffers (for speed)
-#endif
-#ifdef ESP8266
+  #endif
+#else
   WiFi.setPhyMode(force802_3g ? WIFI_PHY_MODE_11G : WIFI_PHY_MODE_11N);
+  wifi_set_sleep_type((noWifiSleep) ? NONE_SLEEP_T : MODEM_SLEEP_T);
+  WiFi.hostname(hostname);
 #endif
+  delay(15);                      // wait for hardware to be ready
+
   if (isWiFiConfigured()) {
     showWelcomePage = false;
     WiFi.setAutoReconnect(true);  // use automatic reconnect functionality
@@ -685,18 +696,6 @@ void WLED::initConnection()
       WiFi.config(IPAddress(), IPAddress(), IPAddress()); // empty IP address == 0.0.0.0
     }
 
-    // convert the "serverDescription" into a valid DNS hostname (alphanumeric)
-    char hostname[25];
-    prepareHostname(hostname);
-
-#ifdef ARDUINO_ARCH_ESP32
-    WiFi.setSleep(!noWifiSleep);
-    WiFi.setHostname(hostname);
-    WiFi.setTxPower(wifi_power_t(txPower));
-#else
-    wifi_set_sleep_type((noWifiSleep) ? NONE_SLEEP_T : MODEM_SLEEP_T);
-    WiFi.hostname(hostname);
-#endif
     unsigned i = 0;
     while (i < sizeof(multiWiFi[selectedWiFi].bssid)) if (multiWiFi[selectedWiFi].bssid[i++]) break;
     const uint8_t *bssid = i < sizeof(multiWiFi[selectedWiFi].bssid) ? multiWiFi[selectedWiFi].bssid : nullptr;
@@ -786,6 +785,7 @@ void WLED::connected()
 
   initESPNow(!WiFi.isConnected());  // if we are connected using Ethernet force hidden AP mode
 
+  showWelcomePage = false;
   interfacesInited = true;
   DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
 }
