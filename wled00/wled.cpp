@@ -901,7 +901,7 @@ ESP-NOW  inited in AP mode (channel: 6/1).
       DEBUG_PRINTF_P(PSTR("WiFi: Restarting scan. @ %lus\n"), now/1000);
       findWiFi(true);
       selectedWiFi = 0;
-    } else if (found >= 0 || (multiWiFi.size() == 1)) {
+    } else if (found > 0 || multiWiFi.size() == 1) {
       DEBUG_PRINTF_P(PSTR("WiFi: Initial connect or forced reconnect. @ %lus\n"), now/1000);
       selectedWiFi = found>0 ? found-1 : 0; // if configured WiFi was not found use 1st
       initConnection(); // start connecting to preferred/configured WiFi
