@@ -75,7 +75,7 @@ uint32_t      Segment::_currentColors[NUM_COLORS] = {0,0,0};
 CRGBPalette16 Segment::_currentPalette    = CRGBPalette16(CRGB::Black);
 CRGBPalette16 Segment::_randomPalette     = generateRandomPalette();  // was CRGBPalette16(DEFAULT_COLOR);
 CRGBPalette16 Segment::_newRandomPalette  = generateRandomPalette();  // was CRGBPalette16(DEFAULT_COLOR);
-uint16_t      Segment::_nextPaletteChange = 0; // perhaps it should be per segment
+uint16_t      Segment::_lastPaletteChange = 0; // perhaps it should be per segment
 uint16_t      Segment::_nextPaletteBlend  = 0; // in millis (lowest 16 bits only)
 uint16_t      Segment::_transitionProgress= 0xFFFF;
 
@@ -375,22 +375,22 @@ void Segment::beginDraw() {
 
 // relies on WS2812FX::service() to call it for each frame (strip.getFrameTime())
 void Segment::handleRandomPalette() {
-  uint16_t time_ms = millis();
-  uint16_t time_s  = millis()/1000;
+  uint16_t time_hs = millis()/10;  // 1/100th of a second resolution
   // is it time to generate a new palette?
-  if (time_s > _nextPaletteChange) {
+  if (time_hs > _lastPaletteChange + randomPaletteChangeTime*100) {
     _newRandomPalette  = useHarmonicRandomPalette ? generateHarmonicRandomPalette(_randomPalette) : generateRandomPalette();
-    _nextPaletteChange = time_s + randomPaletteChangeTime;
-    _nextPaletteBlend  = time_ms; // starts blending immediately
+    _lastPaletteChange = time_hs;
+    _nextPaletteBlend  = time_hs; // starts blending immediately
   }
   // there are about 255 blend passes of 48 "blends" to completely blend two palettes (in strip.getTransition() time)
-  if (time_ms < _nextPaletteBlend) return; // not yet time to blend, delay the update
-  unsigned frameTime       = strip.getFrameTime();  // in ms [8-1000]
-  unsigned transitionTime  = strip.getTransition(); // in ms [100-65535]
-  unsigned transitionSteps = frameTime > transitionTime ? 1 : transitionTime / frameTime; // i.e. 700ms/23ms = 30 or 20000ms/8ms = 2500 or 100ms/1000ms = 0 -> 1
-  unsigned noOfBlends      = transitionSteps > 255 ? 1 : 255 / transitionSteps;
-  _nextPaletteBlend = time_ms + (transitionSteps >> 8) * frameTime;
+  // if randomPaletteChangeTime is shorter than strip.getTransition() palette will never fully blend
+  unsigned frameTime = strip.getFrameTime();  // in ms [8-1000]
+  unsigned transitionTime = strip.getTransition(); // in ms [100-65535]
+  if (time_hs < _nextPaletteBlend || time_hs > _lastPaletteChange + (transitionTime + frameTime)/10) return; // not yet time or past transition time, no need to blend
+  unsigned transitionFrames = frameTime > transitionTime ? 1 : transitionTime / frameTime; // i.e. 700ms/23ms = 30 or 20000ms/8ms = 2500 or 100ms/1000ms = 0 -> 1
+  unsigned noOfBlends = transitionFrames > 255 ? 1 : 255 / transitionFrames;
   for (unsigned i = 0; i < noOfBlends; i++) nblendPaletteTowardPalette(_randomPalette, _newRandomPalette, 48);
+  _nextPaletteBlend = time_hs + ((transitionFrames >> 8) * frameTime) / 10; // postpone next blend if necessary
 }
 
 // sets Segment geometry (length or width/height and grouping, spacing and offset as well as 2D mapping)
