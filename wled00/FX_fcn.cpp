@@ -240,22 +240,26 @@ CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) {
   if (pal == 0) pal = _default_palette; // _default_palette is set in setMode()
   switch (pal) {
     case 0: //default palette. Exceptions for specific effects above
-      targetPalette = PartyColors_p; break;
+      targetPalette = PartyColors_p;
+      break;
     case 1: //randomly generated palette
       targetPalette = _randomPalette; //random palette is generated at intervals in handleRandomPalette() 
       break;
     case 2: {//primary color only
       CRGB prim = gamma32(colors[0]);
-      targetPalette = CRGBPalette16(prim); break;}
+      targetPalette = CRGBPalette16(prim);
+      break;}
     case 3: {//primary + secondary
       CRGB prim = gamma32(colors[0]);
       CRGB sec  = gamma32(colors[1]);
-      targetPalette = CRGBPalette16(prim,prim,sec,sec); break;}
+      targetPalette = CRGBPalette16(prim,prim,sec,sec);
+      break;}
     case 4: {//primary + secondary + tertiary
       CRGB prim = gamma32(colors[0]);
       CRGB sec  = gamma32(colors[1]);
       CRGB ter  = gamma32(colors[2]);
-      targetPalette = CRGBPalette16(ter,sec,prim); break;}
+      targetPalette = CRGBPalette16(ter,sec,prim);
+      break;}
     case 5: {//primary + secondary (+tertiary if not off), more distinct
       CRGB prim = gamma32(colors[0]);
       CRGB sec  = gamma32(colors[1]);
@@ -322,7 +326,8 @@ void Segment::stopTransition() {
   _t = nullptr;
 }
 
-void Segment::updateTransitionProgress() const {  // sets transition progress (0-65535) based on time passed since transition start
+// sets transition progress variable (0-65535) based on time passed since transition start
+void Segment::updateTransitionProgress() const {
   Segment::_transitionProgress = 0xFFFF;
   if (isInTransition()) {
     unsigned diff = millis() - _t->_start;
@@ -374,14 +379,13 @@ void Segment::beginDraw() {
 }
 
 // relies on WS2812FX::service() to call it for each frame (strip.getFrameTime())
-// we do not care if timinigs are less accurate so we are taking shortcuts and do fast integer based (approximate) math
 void Segment::handleRandomPalette() {
   unsigned long now = millis();
-  uint16_t now_s = now >> 10; // faster than /1000 (but a bit less accurate which we don't mind)
+  uint16_t now_s = now / 1000; // we only need seconds (and @dedehai hated shift >> 10)
   if (now_s < Segment::_lastPaletteChange) Segment::_lastPaletteChange = 0; // handle overflow (which happens every 18h for 16 bit now_s)
   // is it time to generate a new palette?
   if (now_s > (uint16_t)(Segment::_lastPaletteChange + randomPaletteChangeTime)) { // must be explicitly cast to uin16_t as it will not owerflow otherwise
-    Segment::_newRandomPalette  = useHarmonicRandomPalette ? generateHarmonicRandomPalette(_randomPalette) : generateRandomPalette();
+    Segment::_newRandomPalette  = useHarmonicRandomPalette ? generateHarmonicRandomPalette(Segment::_randomPalette) : generateRandomPalette();
     Segment::_lastPaletteChange = now_s;
     Segment::_nextPaletteBlend  = now; // starts blending immediately
   }
@@ -389,7 +393,7 @@ void Segment::handleRandomPalette() {
   // if randomPaletteChangeTime is shorter than strip.getTransition() palette will never fully blend
   unsigned frameTime = strip.getFrameTime();  // in ms [8-1000]
   unsigned transitionTime = strip.getTransition(); // in ms [100-65535]
-  if (now < Segment::_nextPaletteBlend || now > ((Segment::_lastPaletteChange<<10) + transitionTime + 2*frameTime)) return; // not yet time or past transition time, no need to blend
+  if (now < Segment::_nextPaletteBlend || now > ((Segment::_lastPaletteChange*1000) + transitionTime + 2*frameTime)) return; // not yet time or past transition time, no need to blend
   unsigned transitionFrames = frameTime > transitionTime ? 1 : transitionTime / frameTime; // i.e. 700ms/23ms = 30 or 20000ms/8ms = 2500 or 100ms/1000ms = 0 -> 1
   unsigned noOfBlends = transitionFrames > 255 ? 1 : 255 / transitionFrames;
   for (unsigned i = 0; i < noOfBlends; i++) nblendPaletteTowardPalette(Segment::_randomPalette, Segment::_newRandomPalette, 48);
