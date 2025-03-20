@@ -85,7 +85,6 @@
     #define WIFI_MODE_STA WIFI_STA
     #define WIFI_MODE_AP WIFI_AP
     #define WIFI_MODE_APSTA WIFI_AP_STA
-    #define ESP_NOW_SEND_SUCCESS 0
     #include <QuickEspNow.h>
   #endif
 #else // ESP32
