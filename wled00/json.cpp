@@ -251,18 +251,17 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
       seg.fill(BLACK);
     }
 
-    // shadow function variables
-    unsigned start = 0, stop = 0;
-    unsigned set = 0; //0 nothing set, 1 start set, 2 range set
+    unsigned iStart = 0, iStop = 0;
+    unsigned iSet = 0; //0 nothing set, 1 start set, 2 range set
 
     for (size_t i = 0; i < iarr.size(); i++) {
       if (iarr[i].is<JsonInteger>()) {
-        if (!set) {
-          start = abs(iarr[i].as<int>());
-          set++;
+        if (!iSet) {
+          iStart = abs(iarr[i].as<int>());
+          iSet++;
         } else {
-          stop = abs(iarr[i].as<int>());
-          set++;
+          iStop = abs(iarr[i].as<int>());
+          iSet++;
         }
       } else { //color
         uint8_t rgbw[] = {0,0,0,0};
@@ -278,10 +277,10 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
           }
         }
 
-        if (set < 2 || stop <= start) stop = start + 1;
+        if (iSet < 2 || iStop <= iStart) iStop = iStart + 1;
         uint32_t c = RGBW32(gamma8(rgbw[0]), gamma8(rgbw[1]), gamma8(rgbw[2]), gamma8(rgbw[3]));
-        while (start < stop) seg.setPixelColor(start++, c);
-        set = 0;
+        while (iStart < iStop) seg.setPixelColor(iStart++, c);
+        iSet = 0;
       }
     }
     seg.map1D2D = oldMap1D2D; // restore mapping

@@ -1499,11 +1499,11 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     const int cols = Segment::vWidth();   // use precalculated value from setDrawDimensions()
     const int rows = Segment::vHeight();  // use precalculated value from setDrawDimensions()
 
-    const auto setMirroredPixel = [&](int x, int y, uint32_t col, uint8_t opacity) {
+    const auto setMirroredPixel = [&](int x, int y, uint32_t col, uint8_t o) {
       const int baseX = topSegment.start  + x;
       const int baseY = topSegment.startY + y;
       size_t indx = XY(baseX, baseY); // absolute address on strip
-      _pixels[indx] = color_blend(_pixels[indx], blend(col, _pixels[indx]), opacity);
+      _pixels[indx] = color_blend(_pixels[indx], blend(col, _pixels[indx]), o);
       // Apply mirroring
       if (topSegment.mirror || topSegment.mirror_y) {
         const int mirrorX = topSegment.start  + width  - x - 1;
@@ -1511,9 +1511,9 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
         const size_t idxMX = XY(topSegment.transpose ? baseX : mirrorX, topSegment.transpose ? mirrorY : baseY);
         const size_t idxMY = XY(topSegment.transpose ? mirrorX : baseX, topSegment.transpose ? baseY : mirrorY);
         const size_t idxMM = XY(mirrorX, mirrorY);
-        if (topSegment.mirror)                        _pixels[idxMX] = color_blend(_pixels[idxMX], blend(col, _pixels[idxMX]), opacity);
-        if (topSegment.mirror_y)                      _pixels[idxMY] = color_blend(_pixels[idxMY], blend(col, _pixels[idxMY]), opacity);
-        if (topSegment.mirror && topSegment.mirror_y) _pixels[idxMM] = color_blend(_pixels[idxMM], blend(col, _pixels[idxMM]), opacity);
+        if (topSegment.mirror)                        _pixels[idxMX] = color_blend(_pixels[idxMX], blend(col, _pixels[idxMX]), o);
+        if (topSegment.mirror_y)                      _pixels[idxMY] = color_blend(_pixels[idxMY], blend(col, _pixels[idxMY]), o);
+        if (topSegment.mirror && topSegment.mirror_y) _pixels[idxMM] = color_blend(_pixels[idxMM], blend(col, _pixels[idxMM]), o);
       }
     };
 
@@ -1570,18 +1570,18 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
   } else {
     const int vLen = Segment::vLength();   // use precalculated value from setDrawDimensions()
 
-    const auto setMirroredPixel = [&](int i, uint32_t col, uint8_t opacity) {
+    const auto setMirroredPixel = [&](int i, uint32_t col, uint8_t o) {
       int indx = topSegment.start + i;
       // Apply mirroring
       if (topSegment.mirror) {
         unsigned indxM = topSegment.stop - i - 1;
         indxM += topSegment.offset; // offset/phase
         if (indxM >= topSegment.stop) indxM -= length; // wrap
-        _pixels[indxM] = color_blend(_pixels[indxM], blend(col, _pixels[indxM]), opacity);
+        _pixels[indxM] = color_blend(_pixels[indxM], blend(col, _pixels[indxM]), o);
       }
       indx += topSegment.offset; // offset/phase
       if (indx >= topSegment.stop) indx -= length; // wrap
-      _pixels[indx] = color_blend(_pixels[indx], blend(col, _pixels[indx]), opacity);
+      _pixels[indx] = color_blend(_pixels[indx], blend(col, _pixels[indx]), o);
     };
 
     // if we blend using "swipe" style we need to "shift" canvas to left or right
@@ -1644,8 +1644,8 @@ static uint8_t estimateCurrentAndLimitBri(uint8_t brightness, uint32_t *pixels) 
       lengthDigital += bus->getLength();
       // sum up the usage of each LED on digital bus
       uint32_t busPowerSum = 0;
-      for (unsigned i = 0; i < bus->getLength(); i++) {
-        uint32_t c = pixels[i + bus->getStart()];
+      for (unsigned j = 0; j < bus->getLength(); j++) {
+        uint32_t c = pixels[j + bus->getStart()];
         byte r = R(c), g = G(c), b = B(c), w = W(c);
         if (useWackyWS2815PowerModel) { //ignore white component on WS2815 power calculation
           busPowerSum += (max(max(r,g),b)) * 3;

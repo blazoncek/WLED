@@ -189,14 +189,8 @@ bool IRAM_ATTR Segment::isPixelXYClipped(int x, int y) const {
 void IRAM_ATTR Segment::setPixelColorXY(int x, int y, uint32_t col) const
 {
   if (!isActive()) return; // not active
-
-  const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
-  const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
-  const auto XY = [&](unsigned x, unsigned y){ return x + y*vW; };
-
-  if (x >= vW || y >= vH || x < 0 || y < 0) return;  // if pixel would fall out of virtual segment just exit
-
-  setPixelColorRaw(XY(x,y), col);
+  if (x >= (int)vWidth() || y >= (int)vHeight() || x < 0 || y < 0) return;  // if pixel would fall out of virtual segment just exit
+  setPixelColorXYRaw(x, y, col);
 }
 
 #ifdef WLED_USE_AA_PIXELS
@@ -245,14 +239,8 @@ void Segment::setPixelColorXY(float x, float y, uint32_t col, bool aa) const
 // returns RGBW values of pixel
 uint32_t IRAM_ATTR Segment::getPixelColorXY(int x, int y) const {
   if (!isActive()) return 0; // not active
-
-  const int vW = vWidth();
-  const int vH = vHeight();
-  const auto XY = [&](int x, int y){ return x + y*vW; };
-
-  if (x >= vW || y >= vH || x<0 || y<0) return 0;  // if pixel would fall out of virtual segment just exit
-
-  return getPixelColorRaw(XY(x,y));
+  if (x >= (int)vWidth() || y >= (int)vHeight() || x<0 || y<0) return 0;  // if pixel would fall out of virtual segment just exit
+  return getPixelColorXYRaw(x,y);
 }
 
 // 2D blurring, can be asymmetrical
@@ -598,7 +586,6 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
   if (chr < 32 || chr > 126) return; // only ASCII 32-126 supported
   chr -= 32; // align with font table entries
   const int font = w*h;
-  const auto XY = [](unsigned x, unsigned y){ return x + y*vWidth(); };
 
   CRGBPalette16 grad = col2 ? CRGBPalette16(CRGB(color), CRGB(col2)) : SEGPALETTE; // selected palette as gradient
 
@@ -624,7 +611,7 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
       }
       if (x0 < 0 || x0 >= (int)vWidth() || y0 < 0 || y0 >= (int)vHeight()) continue; // drawing off-screen
       if (((bits>>(j+(8-w))) & 0x01)) { // bit set
-        setPixelColorRaw(XY(x0, y0), c.color32);
+        setPixelColorXYRaw(x0, y0, c.color32);
       }
     }
   }
