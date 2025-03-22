@@ -6,7 +6,7 @@
 
 #define UDP_SEG_SIZE 36
 #define SEG_OFFSET (41)
-#define WLEDPACKETSIZE (41+(MAX_NUM_SEGMENTS*UDP_SEG_SIZE)+0)
+#define WLEDPACKETSIZE (41+(WS2812FX::getMaxSegments()*UDP_SEG_SIZE)+0)
 #define UDP_IN_MAXSIZE 1472
 #define PRESUMED_NETWORK_DELAY 3 //how many ms could it take on avg to reach the receiver? This will be added to transmitted times
 
@@ -49,7 +49,7 @@ void notify(byte callMode, bool followUp)
   //0: old 1: supports white 2: supports secondary color
   //3: supports FX intensity, 24 byte packet 4: supports transitionDelay 5: sup palette
   //6: supports timebase syncing, 29 byte packet 7: supports tertiary color 8: supports sys time sync, 36 byte packet
-  //9: supports sync groups, 37 byte packet 10: supports CCT, 39 byte packet 11: per segment options, variable packet length (40+MAX_NUM_SEGMENTS*3)
+  //9: supports sync groups, 37 byte packet 10: supports CCT, 39 byte packet 11: per segment options, variable packet length (40+WS2812FX::getMaxSegments()*3)
   //12: enhanced effect sliders, 2D & mapping options
   udpOut[11] = 12;
   col = mainseg.colors[1];
@@ -260,13 +260,13 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
       strip.resume();
     }
     size_t inactiveSegs = 0;
-    for (size_t i = 0; i < numSrcSegs && i < strip.getMaxSegments(); i++) {
+    for (size_t i = 0; i < numSrcSegs && i < WS2812FX::getMaxSegments(); i++) {
       unsigned ofs = 41 + i*udpIn[40]; //start of segment offset byte
       unsigned id = udpIn[0 +ofs];
       DEBUG_PRINTF_P(PSTR("UDP segment received: %u\n"), id);
       if      (id >  strip.getSegmentsNum()) break;
       else if (id == strip.getSegmentsNum()) {
-        if (receiveSegmentBounds && id < strip.getMaxSegments()) strip.appendSegment();
+        if (receiveSegmentBounds && id < WS2812FX::getMaxSegments()) strip.appendSegment();
         else break;
       }
       DEBUG_PRINTF_P(PSTR("UDP segment check: %u\n"), id);
@@ -1019,12 +1019,12 @@ void espNowReceiveCB(uint8_t* address, uint8_t* data, uint8_t len, signed int rs
     segsReceived = (len - 3 - 41) / UDP_SEG_SIZE;
   } else if (buffer->packet == packetsReceived && udpIn && ((len - 3) / UDP_SEG_SIZE) * UDP_SEG_SIZE == (len-3)) {
     // we received a packet full of segments
-    if (segsReceived >= MAX_NUM_SEGMENTS) {
+    if (segsReceived >= WS2812FX::getMaxSegments()) {
       // we are already past max segments, just ignore
       DEBUG_PRINTLN(F("ESP-NOW received segments past maximum."));
       len = 3;
-    } else if ((segsReceived + ((len - 3) / UDP_SEG_SIZE)) >= MAX_NUM_SEGMENTS) {
-      len = ((MAX_NUM_SEGMENTS - segsReceived) * UDP_SEG_SIZE) + 3; // we have reached max number of segments
+    } else if ((segsReceived + ((len - 3) / UDP_SEG_SIZE)) >= WS2812FX::getMaxSegments()) {
+      len = ((WS2812FX::getMaxSegments() - segsReceived) * UDP_SEG_SIZE) + 3; // we have reached max number of segments
     }
     if (len > 3) {
       memcpy(udpIn + 41 + (segsReceived * UDP_SEG_SIZE), buffer->data, len-3);
@@ -1042,7 +1042,7 @@ void espNowReceiveCB(uint8_t* address, uint8_t* data, uint8_t len, signed int rs
   if (!udpIn) return;
 
   packetsReceived++;
-  DEBUG_PRINTF_P(PSTR("ESP-NOW packet received: %d (%d/%d) s:[%d/%d]\n"), (int)buffer->packet, (int)packetsReceived, (int)buffer->noOfPackets, (int)segsReceived, MAX_NUM_SEGMENTS);
+  DEBUG_PRINTF_P(PSTR("ESP-NOW packet received: %d (%d/%d) s:[%d/%u]\n"), (int)buffer->packet, (int)packetsReceived, (int)buffer->noOfPackets, (int)segsReceived, WS2812FX::getMaxSegments());
   if (packetsReceived >= buffer->noOfPackets) {
     // last packet received
     if (now > lastProcessed + 250) {

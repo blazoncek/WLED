@@ -420,7 +420,7 @@ void deEEP() {
         Segment* seg = strip.getSegments();
         memcpy(seg, EEPROM.getDataPtr() +i+2, 240);
         if (ver == 2) { //versions before 2004230 did not have opacity
-          for (byte j = 0; j < strip.getMaxSegments(); j++)
+          for (byte j = 0; j < WS2812FX::getMaxSegments(); j++)
           {
             strip.getSegment(j).opacity = 255;
             strip.getSegment(j).setOption(SEG_OPTION_ON, true); // use transistion

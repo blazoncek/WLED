@@ -93,7 +93,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 
 /* How much data bytes each segment should max allocate to leave enough space for other segments,
   assuming each segment uses the same amount of data. 256 for ESP8266, 640 for ESP32. */
-#define FAIR_DATA_PER_SEG (MAX_SEGMENT_DATA / strip.getMaxSegments())
+#define FAIR_DATA_PER_SEG (MAX_SEGMENT_DATA / WS2812FX::getMaxSegments())
 
 #define MIN_SHOW_DELAY   (_frametime < 16 ? 8 : 15)
 

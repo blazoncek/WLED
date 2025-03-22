@@ -18,7 +18,7 @@
 static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
 {
   byte id = elem["id"] | it;
-  if (id >= strip.getMaxSegments()) return false;
+  if (id >= WS2812FX::getMaxSegments()) return false;
 
   bool newSeg = false;
   int stop = elem["stop"] | -1;
@@ -53,7 +53,7 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     elem.remove("rpt"); // remove for recursive call
     elem.remove("n");   // remove for recursive call
     unsigned len = stop - start;
-    for (size_t i=id+1; i<strip.getMaxSegments(); i++) {
+    for (size_t i=id+1; i<WS2812FX::getMaxSegments(); i++) {
       start = start + len;
       if (start >= strip.getLengthTotal()) break;
       //TODO: add support for 2D
@@ -596,7 +596,7 @@ void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segme
   root[F("mainseg")] = strip.getMainSegmentId();
 
   JsonArray seg = root.createNestedArray("seg");
-  for (size_t s = 0; s < strip.getMaxSegments(); s++) {
+  for (size_t s = 0; s < WS2812FX::getMaxSegments(); s++) {
     if (s >= strip.getSegmentsNum()) {
       if (forPreset && segmentBounds && !selectedSegmentsOnly) { //disable segments not part of preset
         JsonObject seg0 = seg.createNestedObject();
@@ -629,7 +629,7 @@ void serializeInfo(JsonObject root)
   leds[F("pwr")] = BusManager::currentMilliamps();
   leds["fps"] = strip.getFps();
   leds[F("maxpwr")] = BusManager::currentMilliamps()>0 ? BusManager::ablMilliampsMax() : 0;
-  leds[F("maxseg")] = strip.getMaxSegments();
+  leds[F("maxseg")] = WS2812FX::getMaxSegments();
   //leds[F("actseg")] = strip.getActiveSegmentsNum();
   //leds[F("seglock")] = false; //might be used in the future to prevent modifications to segment config
   leds[F("bootps")] = bootPreset;
