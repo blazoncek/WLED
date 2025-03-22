@@ -24,7 +24,7 @@
 // Uncomment some of the following lines to disable features:
 // Alternatively, with platformio pass your chosen flags to your custom build target in platformio_override.ini
 
-// You are required to disable over-the-air updates:
+// You are required to disable ArduinoOTA over-the-air updates:
 //#define WLED_DISABLE_OTA         // saves 14kb
 
 // You can choose some of these features to disable:
@@ -574,7 +574,11 @@ WLED_GLOBAL byte macroDoublePress[WLED_MAX_BUTTONS]   _INIT({0});
 // Security CONFIG
 WLED_GLOBAL bool otaLock        _INIT(false);     // prevents OTA firmware updates without password. ALWAYS enable if system exposed to any public networks
 WLED_GLOBAL bool wifiLock       _INIT(false);     // prevents access to WiFi settings when OTA lock is enabled
+#ifndef WLED_DISABLE_OTA
 WLED_GLOBAL bool aOtaEnabled    _INIT(true);      // ArduinoOTA allows easy updates directly from the IDE. Careful, it does not auto-disable when OTA lock is on
+#else
+WLED_GLOBAL bool aOtaEnabled    _INIT(false);     // ArduinoOTA allows easy updates directly from the IDE. Careful, it does not auto-disable when OTA lock is on
+#endif
 WLED_GLOBAL char settingsPIN[5] _INIT(WLED_PIN);  // PIN for settings pages
 WLED_GLOBAL bool correctPIN     _INIT(!strlen(settingsPIN));
 WLED_GLOBAL unsigned long lastEditTime _INIT(0);

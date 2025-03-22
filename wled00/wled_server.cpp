@@ -365,7 +365,7 @@ void initServer()
   createEditHandler(correctPIN);
 
   static const char _update[] PROGMEM = "/update";
-#ifndef WLED_DISABLE_OTA
+//#ifndef WLED_DISABLE_OTA
   //init ota page
   server.on(_update, HTTP_GET, [](AsyncWebServerRequest *request){
     if (otaLock) {
@@ -391,7 +391,7 @@ void initServer()
     }
   },[](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool isFinal){
     if (!correctPIN || otaLock) return;
-    if(!index){
+    if (!index) {
       DEBUG_PRINTLN(F("OTA Update Start"));
       #if WLED_WATCHDOG_TIMEOUT > 0
       WLED::instance().disableWatchdog();
@@ -405,9 +405,9 @@ void initServer()
       #endif
       Update.begin((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000);
     }
-    if(!Update.hasError()) Update.write(data, len);
-    if(isFinal){
-      if(Update.end(true)){
+    if (!Update.hasError()) Update.write(data, len);
+    if (isFinal) {
+      if (Update.end(true)) {
         DEBUG_PRINTLN(F("Update Success"));
       } else {
         DEBUG_PRINTLN(F("Update Failed"));
@@ -419,11 +419,11 @@ void initServer()
       }
     }
   });
-#else
-  server.on(_update, HTTP_GET, [](AsyncWebServerRequest *request){
-    serveMessage(request, 501, FPSTR(s_notimplemented), F("OTA updating is disabled in this build."), 254);
-  });
-#endif
+//#else
+//  server.on(_update, HTTP_GET, [](AsyncWebServerRequest *request){
+//    serveMessage(request, 501, FPSTR(s_notimplemented), F("OTA updating is disabled in this build."), 254);
+//  });
+//#endif
 
 
 #ifdef WLED_ENABLE_DMX
