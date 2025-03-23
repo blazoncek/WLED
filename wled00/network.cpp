@@ -323,8 +323,8 @@ void initESPNow(bool resetAP) {
     quickEspNow.setWiFiBandwidth(WIFI_IF_AP, WIFI_BW_HT20); // Only needed for ESP32 in case you need coexistence with ESP8266 in the same network
     #endif //ESP32
     bool espNowOK;
-    if (wifiMode & WIFI_MODE_STA) espNowOK = quickEspNow.begin();                       // we are in STA/APSTA mode
-    else                          espNowOK = quickEspNow.begin(apChannel, WIFI_IF_AP);  // Same channel must be used for both AP and ESP-NOW
+    if (wifiMode & WIFI_MODE_STA) espNowOK = quickEspNow.begin(255, WIFI_IF_STA, false);       // we are in STA/APSTA mode (asynchronous)
+    else                          espNowOK = quickEspNow.begin(apChannel, WIFI_IF_AP, false);  // Same channel must be used for both AP and ESP-NOW
     statusESPNow = espNowOK ? ESP_NOW_STATE_ON : ESP_NOW_STATE_ERROR;
     channelESPNow = apChannel;
     DEBUG_PRINTF_P(PSTR("ESP-NOW %s inited in %s mode (channel: %d/%d).\n"), espNowOK ? "" : "NOT", wifiModeStr, WiFi.channel(), (int)apChannel);

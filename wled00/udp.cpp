@@ -148,18 +148,20 @@ void notify(byte callMode, bool followUp)
     EspNowPartialPacket buffer = {{'W','L','E','D'}, 0, 1, {0}};
     // send global data
     DEBUG_PRINTLN(F("ESP-NOW sending first packet."));
-    const size_t bufferSize = sizeof(buffer.data)/sizeof(uint8_t);
+    constexpr size_t headerSize = sizeof(EspNowPartialPacket) - sizeof(EspNowPartialPacket::data);
+    constexpr size_t bufferSize = sizeof(buffer.data)/sizeof(uint8_t);
     size_t packetSize = 41; // size of static UDP data (excluding segments)
-    size_t s0 = 0;
+    size_t s0 = 0;          // number of already prepared/sent segments
     memcpy(buffer.data, udpOut, packetSize);
     // stuff as many segments in first packet as possible (normally up to 5)
-    for (size_t i = 0; packetSize < bufferSize && i < s; i++) {
+    for (size_t i = 0; packetSize + UDP_SEG_SIZE < bufferSize && i < s; i++) {
       memcpy(buffer.data + packetSize, &udpOut[41+i*UDP_SEG_SIZE], UDP_SEG_SIZE);
       packetSize += UDP_SEG_SIZE;
       s0++;
     }
     if (s > s0) buffer.noOfPackets += 1 + ((s - s0) * UDP_SEG_SIZE) / bufferSize; // set number of packets
-    auto err = quickEspNow.send(ESPNOW_BROADCAST_ADDRESS, reinterpret_cast<const uint8_t*>(&buffer), packetSize + sizeof(EspNowPartialPacket) - sizeof(EspNowPartialPacket::data));
+    auto err = quickEspNow.send(ESPNOW_BROADCAST_ADDRESS, reinterpret_cast<const uint8_t*>(&buffer), packetSize + headerSize);
+    DEBUG_PRINTF_P(PSTR("ESP-NOW first packet sent with %u segments.\n"), s0);
     if (!err && s0 < s) {
       // send rest of the segments
       buffer.packet++;
@@ -170,16 +172,16 @@ void notify(byte callMode, bool followUp)
       for (size_t i = s0; i < s; i++) {
         memcpy(buffer.data + packetSize, &udpOut[41+i*UDP_SEG_SIZE], UDP_SEG_SIZE);
         packetSize += UDP_SEG_SIZE;
-        if (packetSize + UDP_SEG_SIZE < bufferSize) continue;
-        DEBUG_PRINTF_P(PSTR("ESP-NOW sending packet: %d (%d)\n"), (int)buffer.packet, packetSize+3);
-        err = quickEspNow.send(ESPNOW_BROADCAST_ADDRESS, reinterpret_cast<const uint8_t*>(&buffer), packetSize + sizeof(EspNowPartialPacket) - sizeof(EspNowPartialPacket::data));
+        if (packetSize + UDP_SEG_SIZE < bufferSize) continue; // add another segment to buffer
+        DEBUG_PRINTF_P(PSTR("ESP-NOW sending packet: %d (%u)\n"), (int)buffer.packet, packetSize + headerSize);
+        err = quickEspNow.send(ESPNOW_BROADCAST_ADDRESS, reinterpret_cast<const uint8_t*>(&buffer), packetSize + headerSize);
         buffer.packet++;
         packetSize = 0;
         if (err) break;
       }
       if (!err && packetSize > 0) {
-        DEBUG_PRINTF_P(PSTR("ESP-NOW sending last packet: %d (%d)\n"), (int)buffer.packet, packetSize+3);
-        err = quickEspNow.send(ESPNOW_BROADCAST_ADDRESS, reinterpret_cast<const uint8_t*>(&buffer), packetSize+3);
+        DEBUG_PRINTF_P(PSTR("ESP-NOW sending last packet: %d (%u)\n"), (int)buffer.packet, packetSize + headerSize);
+        err = quickEspNow.send(ESPNOW_BROADCAST_ADDRESS, reinterpret_cast<const uint8_t*>(&buffer), packetSize + headerSize);
       }
     }
     if (err) {
