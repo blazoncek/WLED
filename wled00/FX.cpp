@@ -538,17 +538,15 @@ static const char _data_FX_MODE_TWINKLE[] PROGMEM = "Twinkle@!,!;!,!;!;;m12=0"; 
 
 
 /*
- * Dissolve function
+ * Blink several LEDs on and then off
  */
-uint16_t dissolve(uint32_t color) {
-  unsigned dataSize = sizeof(uint32_t) * SEGLEN;
-  if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
-
+uint16_t mode_dissolve(void) {
   if (SEGENV.call == 0) {
     SEGMENT.fill(SEGCOLOR(1));
     SEGENV.aux0 = 1;
   }
 
+  uint32_t color = SEGMENT.check1 ? SEGMENT.color_wheel(hw_random8()) : SEGCOLOR(0);
   for (unsigned j = 0; j <= SEGLEN / 15; j++) {
     if (hw_random8() <= SEGMENT.intensity) {
       for (size_t times = 0; times < 10; times++) { //attempt to spawn a new pixel 10 times
@@ -577,24 +575,7 @@ uint16_t dissolve(uint32_t color) {
 
   return FRAMETIME;
 }
-
-
-/*
- * Blink several LEDs on and then off
- */
-uint16_t mode_dissolve(void) {
-  return dissolve(SEGMENT.check1 ? SEGMENT.color_wheel(hw_random8()) : SEGCOLOR(0));
-}
 static const char _data_FX_MODE_DISSOLVE[] PROGMEM = "Dissolve@Repeat speed,Dissolve speed,,,,Random;!,!;!";
-
-
-/*
- * Blink several LEDs on and then off in random colors
- */
-//uint16_t mode_dissolve_random(void) {
-//  return dissolve(SEGMENT.color_wheel(hw_random8()));
-//}
-//static const char _data_FX_MODE_DISSOLVE_RANDOM[] PROGMEM = "Dissolve Rnd@Repeat speed,Dissolve speed;,!;!";
 
 
 /*
