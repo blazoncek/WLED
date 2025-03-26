@@ -135,7 +135,7 @@ void WLED::loop()
 
   yield();
 #ifdef ESP8266
-  MDNS.update();
+  if (strlen(cmDNS) > 0) MDNS.update();
 #endif
 
   //millis() rolls over every 50 days
@@ -526,8 +526,7 @@ void WLED::setup()
       WLED::instance().enableWatchdog();
       #endif
     });
-    if (strlen(cmDNS) > 0)
-      ArduinoOTA.setHostname(cmDNS);
+    ArduinoOTA.setHostname(strlen(cmDNS) > 0 ? cmDNS : hostname);
   }
 #endif
 #ifdef WLED_ENABLE_DMX
