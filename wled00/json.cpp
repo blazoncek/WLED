@@ -278,7 +278,7 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
         }
 
         if (iSet < 2 || iStop <= iStart) iStop = iStart + 1;
-        uint32_t c = RGBW32(gamma8(rgbw[0]), gamma8(rgbw[1]), gamma8(rgbw[2]), gamma8(rgbw[3]));
+        uint32_t c = RGBW32(rgbw[0], rgbw[1], rgbw[2], rgbw[3]);
         while (iStart < iStop) seg.setPixelColor(iStart++, c);
         iSet = 0;
       }
