@@ -59,12 +59,14 @@
 #endif
 
 #define MAX_PALETTES 3
+#define NUM_GEQ_CHANNELS 16                     // number of frequency channels. Don't change !!
 
-static volatile bool disableSoundProcessing = false;      // if true, sound processing (FFT, filters, AGC) will be suspended. "volatile" as its shared between tasks.
-static uint8_t audioSyncEnabled = 0;          // bit field: bit 0 - send, bit 1 - receive (config value)
-static bool udpSyncConnected = false;         // UDP connection status -> true if connected to multicast group
+class AudioReactive;                            // forward declaration
+static void simulateSound(uint8_t);
 
-#define NUM_GEQ_CHANNELS 16                                           // number of frequency channels. Don't change !!
+static volatile bool disableSoundProcessing = false;  // if true, sound processing (FFT, filters, AGC) will be suspended. "volatile" as its shared between tasks.
+static uint8_t audioSyncEnabled = 0;            // bit field: bit 0 - send, bit 1 - receive (config value)
+static bool udpSyncConnected = false;           // UDP connection status -> true if connected to multicast group
 
 // audioreactive variables
 #ifdef ARDUINO_ARCH_ESP32
@@ -74,13 +76,18 @@ static float    sampleAvg = 0.0f;               // Smoothed Average sample - sam
 static float    sampleAgc = 0.0f;               // Smoothed AGC sample
 static uint8_t  soundAgc = 0;                   // Automagic gain control: 0 - none, 1 - normal, 2 - vivid, 3 - lazy (config value)
 #endif
-//static float    volumeSmth = 0.0f;              // either sampleAvg or sampleAgc depending on soundAgc; smoothed sample
-static float FFT_MajorPeak = 1.0f;              // FFT: strongest (peak) frequency
-static float FFT_Magnitude = 0.0f;              // FFT: volume (magnitude) of peak frequency
-static bool samplePeak = false;      // Boolean flag for peak - used in effects. Responding routine may reset this flag. Auto-reset after strip.getMinShowDelay()
-static bool udpSamplePeak = false;   // Boolean flag for peak. Set at the same time as samplePeak, but reset by transmitAudioData
-static unsigned long timeOfPeak = 0; // time of last sample peak detection.
-static uint8_t fftResult[NUM_GEQ_CHANNELS]= {0};// Our calculated freq. channel result table to be used by effects
+//used in effects
+static float    volumeSmth = 0.0f;              // either sampleAvg or sampleAgc depending on soundAgc; smoothed sample
+static int16_t  volumeRaw = 0;                  // either sampleRaw or rawSampleAgc depending on soundAgc
+static float    my_magnitude = 0.0f;            // FFT_Magnitude, scaled by multAgc
+static float    FFT_MajorPeak = 1.0f;           // FFT: strongest (peak) frequency
+static float    FFT_Magnitude = 0.0f;           // FFT: volume (magnitude) of peak frequency
+static bool     samplePeak = false;             // Boolean flag for peak - used in effects. Responding routine may reset this flag. Auto-reset after strip.getMinShowDelay()
+static bool     udpSamplePeak = false;          // Boolean flag for peak. Set at the same time as samplePeak, but reset by transmitAudioData
+static unsigned long timeOfPeak = 0;            // time of last sample peak detection.
+static uint8_t  fftResult[NUM_GEQ_CHANNELS]= {0};// Our calculated freq. channel result table to be used by effects
+static uint8_t  maxVol = 31;                    // (was 10) Reasonable value for constant volume for 'peak detector', as it won't always trigger  (deprecated)
+static uint8_t  binNum = 8;                     // Used to select the bin for FFT based beat detection  (deprecated)
 
 // TODO: probably best not used by receive nodes
 //static float agcSensitivity = 128;            // AGC sensitivity estimation, based on agc gain (multAgc). calculated by getSensitivity(). range 0..255
@@ -94,15 +101,31 @@ static bool limiterOn = true;
 static uint16_t attackTime =  80;             // int: attack time in milliseconds. Default 0.08sec
 static uint16_t decayTime = 1400;             // int: decay time in milliseconds.  Default 1.40sec
 
+// audio source parameters and constant (used in effects and FFT routines)
+#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2)
+constexpr int SAMPLE_RATE = 16000;            // 16kHz - use if FFTtask takes more than 20ms. Physical sample time -> 32ms
+#define FFT_MIN_CYCLE 30                      // Use with 16Khz sampling
+constexpr float MAX_FREQ_LOG10 = 4.0103f;     // for 16Khz sampling
+#else
+constexpr int SAMPLE_RATE = 22050;            // Base sample rate in Hz - 22Khz is a standard rate. Physical sample time -> 23ms
+//constexpr int SAMPLE_RATE = 16000;          // 16kHz - use if FFTtask takes more than 20ms. Physical sample time -> 32ms
+//constexpr int SAMPLE_RATE = 20480;          // Base sample rate in Hz - 20Khz is experimental.    Physical sample time -> 25ms
+//constexpr int SAMPLE_RATE = 10240;          // Base sample rate in Hz - previous default.         Physical sample time -> 50ms
+#define FFT_MIN_CYCLE 21                      // minimum time before FFT task is repeated. Use with 22Khz sampling
+//#define FFT_MIN_CYCLE 30                      // Use with 16Khz sampling
+//#define FFT_MIN_CYCLE 23                      // minimum time before FFT task is repeated. Use with 20Khz sampling
+//#define FFT_MIN_CYCLE 46                      // minimum time before FFT task is repeated. Use with 10Khz sampling
+constexpr float MAX_FREQ_LOG10 = 4.04238f;    // log10(MAX_FREQUENCY)
+//constexpr float MAX_FREQ_LOG10 = 4.0103f;     // for 20Khz sampling
+//constexpr float MAX_FREQ_LOG10 = 3.9031f;     // for 16Khz sampling
+//constexpr float MAX_FREQ_LOG10 = 3.71f;       // for 10Khz sampling
+#endif
+constexpr float MAX_FREQUENCY = SAMPLE_RATE/2.0f; // sample frequency / 2 (as per Nyquist criterion)
+
 // peak detection
+static void autoResetPeak(void);     // peak auto-reset function
 #ifdef ARDUINO_ARCH_ESP32
 static void detectSamplePeak(void);  // peak detection function (needs scaled FFT results in vReal[]) - no used for 8266 receive-only mode
-#endif
-static void autoResetPeak(void);     // peak auto-reset function
-static uint8_t maxVol = 31;          // (was 10) Reasonable value for constant volume for 'peak detector', as it won't always trigger  (deprecated)
-static uint8_t binNum = 8;           // Used to select the bin for FFT based beat detection  (deprecated)
-
-#ifdef ARDUINO_ARCH_ESP32
 
 // use audio source class (ESP32 specific)
 #include "audio_source.h"
@@ -110,17 +133,16 @@ constexpr i2s_port_t I2S_PORT = I2S_NUM_0;       // I2S port to use (do not chan
 constexpr int BLOCK_SIZE = 128;                  // I2S buffer size (samples)
 
 // globals
-static uint8_t inputLevel = 128;              // UI slider value
+static uint8_t inputLevel = 128;                  // UI slider value
 #ifndef SR_SQUELCH
-  uint8_t soundSquelch = 10;                  // squelch value for volume reactive routines (config value)
-#else
-  uint8_t soundSquelch = SR_SQUELCH;          // squelch value for volume reactive routines (config value)
+  #define SR_SQUELCH 10
 #endif
+static uint8_t soundSquelch = SR_SQUELCH;         // squelch value for volume reactive routines (config value)
 #ifndef SR_GAIN
-  uint8_t sampleGain = 60;                    // sample gain (config value)
-#else
-  uint8_t sampleGain = SR_GAIN;               // sample gain (config value)
+  #define SR_GAIN 60
 #endif
+static uint8_t sampleGain = SR_GAIN;              // sample gain (config value)
+
 // user settable options for FFTResult scaling
 static uint8_t FFTScalingMode = 3;            // 0 none; 1 optimized logarithmic; 2 optimized linear; 3 optimized square root
 
@@ -128,19 +150,19 @@ static uint8_t FFTScalingMode = 3;            // 0 none; 1 optimized logarithmic
 // AGC presets
 //  Note: in C++, "const" implies "static" - no need to explicitly declare everything as "static const"
 // 
-#define AGC_NUM_PRESETS 3 // AGC presets:          normal,   vivid,    lazy
-const double agcSampleDecay[AGC_NUM_PRESETS]  = { 0.9994f, 0.9985f, 0.9997f}; // decay factor for sampleMax, in case the current sample is below sampleMax
-const float agcZoneLow[AGC_NUM_PRESETS]       = {      32,      28,      36}; // low volume emergency zone
-const float agcZoneHigh[AGC_NUM_PRESETS]      = {     240,     240,     248}; // high volume emergency zone
-const float agcZoneStop[AGC_NUM_PRESETS]      = {     336,     448,     304}; // disable AGC integrator if we get above this level
-const float agcTarget0[AGC_NUM_PRESETS]       = {     112,     144,     164}; // first AGC setPoint -> between 40% and 65%
-const float agcTarget0Up[AGC_NUM_PRESETS]     = {      88,      64,     116}; // setpoint switching value (a poor man's bang-bang)
-const float agcTarget1[AGC_NUM_PRESETS]       = {     220,     224,     216}; // second AGC setPoint -> around 85%
-const double agcFollowFast[AGC_NUM_PRESETS]   = { 1/192.f, 1/128.f, 1/256.f}; // quickly follow setpoint - ~0.15 sec
-const double agcFollowSlow[AGC_NUM_PRESETS]   = {1/6144.f,1/4096.f,1/8192.f}; // slowly follow setpoint  - ~2-15 secs
-const double agcControlKp[AGC_NUM_PRESETS]    = {    0.6f,    1.5f,   0.65f}; // AGC - PI control, proportional gain parameter
-const double agcControlKi[AGC_NUM_PRESETS]    = {    1.7f,   1.85f,    1.2f}; // AGC - PI control, integral gain parameter
-const float agcSampleSmooth[AGC_NUM_PRESETS]  = {  1/12.f,   1/6.f,  1/16.f}; // smoothing factor for sampleAgc (use rawSampleAgc if you want the non-smoothed value)
+#define AGC_NUM_PRESETS 3        // AGC presets:          normal,   vivid,    lazy
+static const double agcSampleDecay[AGC_NUM_PRESETS]  = { 0.9994f, 0.9985f, 0.9997f}; // decay factor for sampleMax, in case the current sample is below sampleMax
+static const float agcZoneLow[AGC_NUM_PRESETS]       = {      32,      28,      36}; // low volume emergency zone
+static const float agcZoneHigh[AGC_NUM_PRESETS]      = {     240,     240,     248}; // high volume emergency zone
+static const float agcZoneStop[AGC_NUM_PRESETS]      = {     336,     448,     304}; // disable AGC integrator if we get above this level
+static const float agcTarget0[AGC_NUM_PRESETS]       = {     112,     144,     164}; // first AGC setPoint -> between 40% and 65%
+static const float agcTarget0Up[AGC_NUM_PRESETS]     = {      88,      64,     116}; // setpoint switching value (a poor man's bang-bang)
+static const float agcTarget1[AGC_NUM_PRESETS]       = {     220,     224,     216}; // second AGC setPoint -> around 85%
+static const double agcFollowFast[AGC_NUM_PRESETS]   = { 1/192.f, 1/128.f, 1/256.f}; // quickly follow setpoint - ~0.15 sec
+static const double agcFollowSlow[AGC_NUM_PRESETS]   = {1/6144.f,1/4096.f,1/8192.f}; // slowly follow setpoint  - ~2-15 secs
+static const double agcControlKp[AGC_NUM_PRESETS]    = {    0.6f,    1.5f,   0.65f}; // AGC - PI control, proportional gain parameter
+static const double agcControlKi[AGC_NUM_PRESETS]    = {    1.7f,   1.85f,    1.2f}; // AGC - PI control, integral gain parameter
+static const float agcSampleSmooth[AGC_NUM_PRESETS]  = {  1/12.f,   1/6.f,  1/16.f}; // smoothing factor for sampleAgc (use rawSampleAgc if you want the non-smoothed value)
 // AGC presets end
 
 static AudioSource *audioSource = nullptr;
@@ -152,7 +174,7 @@ static bool useBandPassFilter = false;                    // if true, enables a 
 
 // some prototypes, to ensure consistent interfaces
 static float fftAddAvg(int from, int to);   // average of several FFT result bins
-void FFTcode(void * parameter);      // audio processing task: read samples, run FFT, fill GEQ channels from FFT results
+static void FFTcode(void * parameter);      // audio processing task: read samples, run FFT, fill GEQ channels from FFT results
 static void runMicFilter(uint16_t numSamples, float *sampleBuffer);          // pre-filtering of raw samples (band-pass)
 static void postProcessFFTResults(bool noiseGateOpen, int numberOfChannels); // post-processing and post-amp of GEQ channels
 
@@ -174,30 +196,20 @@ static float   fftAvg[NUM_GEQ_CHANNELS] = {0.0f};                     // Calcula
 static float   fftResultMax[NUM_GEQ_CHANNELS] = {0.0f};               // A table used for testing to determine how our post-processing is working.
 #endif
 
-// audio source parameters and constant
-constexpr SRate_t SAMPLE_RATE = 22050;        // Base sample rate in Hz - 22Khz is a standard rate. Physical sample time -> 23ms
-//constexpr SRate_t SAMPLE_RATE = 16000;        // 16kHz - use if FFTtask takes more than 20ms. Physical sample time -> 32ms
-//constexpr SRate_t SAMPLE_RATE = 20480;        // Base sample rate in Hz - 20Khz is experimental.    Physical sample time -> 25ms
-//constexpr SRate_t SAMPLE_RATE = 10240;        // Base sample rate in Hz - previous default.         Physical sample time -> 50ms
-#define FFT_MIN_CYCLE 21                      // minimum time before FFT task is repeated. Use with 22Khz sampling
-//#define FFT_MIN_CYCLE 30                      // Use with 16Khz sampling
-//#define FFT_MIN_CYCLE 23                      // minimum time before FFT task is repeated. Use with 20Khz sampling
-//#define FFT_MIN_CYCLE 46                      // minimum time before FFT task is repeated. Use with 10Khz sampling
-
 // FFT Constants
 constexpr uint16_t samplesFFT = 512;            // Samples in an FFT batch - This value MUST ALWAYS be a power of 2
 constexpr uint16_t samplesFFT_2 = 256;          // meaningfull part of FFT results - only the "lower half" contains useful information.
 // the following are observed values, supported by a bit of "educated guessing"
-//#define FFT_DOWNSCALE 0.65f                             // 20kHz - downscaling factor for FFT results - "Flat-Top" window @20Khz, old freq channels 
-#define FFT_DOWNSCALE 0.46f                             // downscaling factor for FFT results - for "Flat-Top" window @22Khz, new freq channels
-#define LOG_256  5.54517744f                            // log(256)
+//#define FFT_DOWNSCALE 0.65f                     // 20kHz - downscaling factor for FFT results - "Flat-Top" window @20Khz, old freq channels 
+#define FFT_DOWNSCALE 0.46f                     // downscaling factor for FFT results - for "Flat-Top" window @22Khz, new freq channels
+#define LOG_256  5.54517744f                    // log(256)
 
 // These are the input and output vectors.  Input vectors receive computed results from FFT.
 static float* vReal = nullptr;                  // FFT sample inputs / freq output -  these are our raw result bins
 static float* vImag = nullptr;                  // imaginary parts
 
 // Create FFT object
-// lib_deps += https://github.com/kosme/arduinoFFT#develop @ 1.9.2
+// lib_deps += https://github.com/kosme/arduinoFFT @ 2.0.1
 // these options actually cause slow-downs on all esp32 processors, don't use them.
 // #define FFT_SPEED_OVER_PRECISION     // enables use of reciprocals (1/x etc) - not faster on ESP32
 // #define FFT_SQRT_APPROXIMATION       // enables "quake3" style inverse sqrt  - slower on ESP32
@@ -224,12 +236,12 @@ void FFTcode(void * parameter)
   DEBUGSR_PRINT("FFT started on core: "); DEBUGSR_PRINTLN(xPortGetCoreID());
 
   // allocate FFT buffers on first call
-  if (vReal == nullptr) vReal = (float*) calloc(sizeof(float), samplesFFT);
-  if (vImag == nullptr) vImag = (float*) calloc(sizeof(float), samplesFFT);
+  if (vReal == nullptr) vReal = (float*) d_calloc(sizeof(float), samplesFFT);
+  if (vImag == nullptr) vImag = (float*) d_calloc(sizeof(float), samplesFFT);
   if ((vReal == nullptr) || (vImag == nullptr)) {
     // something went wrong
-    if (vReal) free(vReal); vReal = nullptr;
-    if (vImag) free(vImag); vImag = nullptr;
+    d_free(vReal); vReal = nullptr;
+    d_free(vImag); vImag = nullptr;
     return;
   }
   // Create FFT object with weighing factor storage
@@ -295,10 +307,10 @@ void FFTcode(void * parameter)
       //FFT.windowing(FFTWindow::Blackman_Harris, FFTDirection::Forward);  // Weigh data using "Blackman- Harris" window - sharp peaks due to excellent sideband rejection
       FFT.compute( FFTDirection::Forward );                       // Compute FFT
       FFT.complexToMagnitude();                                   // Compute magnitudes
-      vReal[0] = 0;   // The remaining DC offset on the signal produces a strong spike on position 0 that should be eliminated to avoid issues.
+      vReal[0] = 0.0f;   // The remaining DC offset on the signal produces a strong spike on position 0 that should be eliminated to avoid issues.
 
       FFT.majorPeak(&FFT_MajorPeak, &FFT_Magnitude);                // let the effects know which freq was most dominant
-      FFT_MajorPeak = constrain(FFT_MajorPeak, 1.0f, 11025.0f);   // restrict value to range expected by effects
+      FFT_MajorPeak = constrain(FFT_MajorPeak, 1.0f, MAX_FREQUENCY);// restrict value to range expected by effects
 
 #if defined(WLED_DEBUG_USERMODS) && defined(SR_DEBUG)
       haveDoneFFT = true;
@@ -306,8 +318,8 @@ void FFTcode(void * parameter)
 
     } else { // noise gate closed - only clear results as FFT was skipped. MIC samples are still valid when we do this.
       memset(vReal, 0, samplesFFT * sizeof(float));
-      FFT_MajorPeak = 1;
-      FFT_Magnitude = 0.001;
+      FFT_MajorPeak = 1.0f;
+      FFT_Magnitude = 0.001f;
     }
 
     for (int i = 0; i < samplesFFT; i++) {
@@ -448,24 +460,23 @@ static void postProcessFFTResults(bool noiseGateOpen, int numberOfChannels) // p
         if (FFTScalingMode > 0) fftCalc[i] *= FFT_DOWNSCALE;  // adjustment related to FFT windowing function
         // Manual linear adjustment of gain using sampleGain adjustment for different input types.
         fftCalc[i] *= soundAgc ? multAgc : ((float)sampleGain/40.0f * (float)inputLevel/128.0f + 1.0f/16.0f); //apply gain, with inputLevel adjustment
-        if(fftCalc[i] < 0) fftCalc[i] = 0;
+        if (fftCalc[i] < 0) fftCalc[i] = 0.0f;
       }
 
       // smooth results - rise fast, fall slower
-      if(fftCalc[i] > fftAvg[i])   // rise fast 
-        fftAvg[i] = fftCalc[i] *0.75f + 0.25f*fftAvg[i];  // will need approx 2 cycles (50ms) for converging against fftCalc[i]
-      else {                       // fall slow
-        if (decayTime < 1000) fftAvg[i] = fftCalc[i]*0.22f + 0.78f*fftAvg[i];       // approx  5 cycles (225ms) for falling to zero
+      if (fftCalc[i] > fftAvg[i])  fftAvg[i] = fftCalc[i]*0.75f + 0.25f*fftAvg[i];  // rise fast; will need approx 2 cycles (50ms) for converging against fftCalc[i]
+      else { // fall slow
+        if (decayTime < 1000)      fftAvg[i] = fftCalc[i]*0.22f + 0.78f*fftAvg[i];  // approx  5 cycles (225ms) for falling to zero
         else if (decayTime < 2000) fftAvg[i] = fftCalc[i]*0.17f + 0.83f*fftAvg[i];  // default - approx  9 cycles (225ms) for falling to zero
         else if (decayTime < 3000) fftAvg[i] = fftCalc[i]*0.14f + 0.86f*fftAvg[i];  // approx 14 cycles (350ms) for falling to zero
-        else fftAvg[i] = fftCalc[i]*0.1f  + 0.9f*fftAvg[i];                         // approx 20 cycles (500ms) for falling to zero
+        else                       fftAvg[i] = fftCalc[i]*0.1f  + 0.9f*fftAvg[i];   // approx 20 cycles (500ms) for falling to zero
       }
       // constrain internal vars - just to be sure
       fftCalc[i] = constrain(fftCalc[i], 0.0f, 1023.0f);
       fftAvg[i] = constrain(fftAvg[i], 0.0f, 1023.0f);
 
       float currentResult;
-      if(limiterOn == true)
+      if (limiterOn == true)
         currentResult = fftAvg[i];
       else
         currentResult = fftCalc[i];
@@ -478,30 +489,30 @@ static void postProcessFFTResults(bool noiseGateOpen, int numberOfChannels) // p
             if (currentResult > 1.0f) currentResult = logf(currentResult); // log to base "e", which is the fastest log() function
             else currentResult = 0.0f;                   // special handling, because log(1) = 0; log(0) = undefined
             currentResult *= 0.85f + (float(i)/18.0f);  // extra up-scaling for high frequencies
-            currentResult = mapf(currentResult, 0, LOG_256, 0, 255); // map [log(1) ... log(255)] to [0 ... 255]
-        break;
+            currentResult = mapf(currentResult, 0.0f, LOG_256, 0.0f, 255.0f); // map [log(1) ... log(255)] to [0 ... 255]
+          break;
         case 2:
             // Linear scaling
             currentResult *= 0.30f;                     // needs a bit more damping, get stay below 255
-            currentResult -= 4.0f;                       // giving a bit more room for peaks
+            currentResult -= 4.0f;                      // giving a bit more room for peaks (WLEDMM uses -2)
             if (currentResult < 1.0f) currentResult = 0.0f;
             currentResult *= 0.85f + (float(i)/1.8f);   // extra up-scaling for high frequencies
-        break;
+          break;
         case 3:
             // square root scaling
             currentResult *= 0.38f;
             currentResult -= 6.0f;
             if (currentResult > 1.0f) currentResult = sqrtf(currentResult);
-            else currentResult = 0.0f;                   // special handling, because sqrt(0) = undefined
+            else currentResult = 0.0f;                  // special handling, because sqrt(0) = undefined
             currentResult *= 0.85f + (float(i)/4.5f);   // extra up-scaling for high frequencies
-            currentResult = mapf(currentResult, 0.0, 16.0, 0.0, 255.0); // map [sqrt(1) ... sqrt(256)] to [0 ... 255]
-        break;
+            currentResult = mapf(currentResult, 0.0f, 16.0f, 0.0f, 255.0f); // map [sqrt(1) ... sqrt(256)] to [0 ... 255]
+          break;
 
         case 0:
         default:
             // no scaling - leave freq bins as-is
-            currentResult -= 4; // just a bit more room for peaks
-        break;
+            currentResult -= 4; // just a bit more room for peaks (WLEDMM uses -2)
+          break;
       }
 
       // Now, let's dump it all into fftResult. Need to do this, otherwise other routines might grab fftResult values prematurely.
@@ -546,6 +557,1167 @@ static void autoResetPeak(void) {
 }
 
 
+// WLED-SR effects (SR compatible IDs !!!)
+// non-audio effects moved to FX.cpp
+#define FX_MODE_PIXELS                 128
+#define FX_MODE_PIXELWAVE              129
+#define FX_MODE_JUGGLES                130
+#define FX_MODE_MATRIPIX               131
+#define FX_MODE_GRAVIMETER             132
+#define FX_MODE_PLASMOID               133
+#define FX_MODE_PUDDLES                134
+#define FX_MODE_MIDNOISE               135
+#define FX_MODE_NOISEMETER             136
+#define FX_MODE_FREQWAVE               137
+#define FX_MODE_FREQMATRIX             138
+#define FX_MODE_2DGEQ                  139
+#define FX_MODE_WATERFALL              140
+#define FX_MODE_FREQPIXELS             141
+#define FX_MODE_NOISEFIRE              143
+#define FX_MODE_PUDDLEPEAK             144
+#define FX_MODE_NOISEMOVE              145
+#define FX_MODE_RIPPLEPEAK             148
+#define FX_MODE_FREQMAP                155
+#define FX_MODE_GRAVCENTER             156
+#define FX_MODE_GRAVCENTRIC            157
+#define FX_MODE_GRAVFREQ               158
+#define FX_MODE_DJLIGHT                159
+#define FX_MODE_2DFUNKYPLANK           160
+#define FX_MODE_BLURZ                  163
+#define FX_MODE_2DWAVERLY              165
+#define FX_MODE_2DSWIRL                175
+#define FX_MODE_FLOWSTRIPE             179
+#define FX_MODE_ROCKTAVES              185
+#define FX_MODE_2DAKEMI                186
+
+static uint16_t mode_static(void) {
+  SEGMENT.fill(SEGCOLOR(0));
+  return FRAMETIME;
+}
+
+/////////////////////////////////
+//     * Ripple Peak           //
+/////////////////////////////////
+static uint16_t mode_ripplepeak(void) {                // * Ripple peak. By Andrew Tuline.
+                                                          // This currently has no controls.
+  #define MAXSTEPS 16                                     // Case statement wouldn't allow a variable.
+  //4 bytes
+  struct Ripple {
+    uint8_t state;
+    uint8_t color;
+    uint16_t pos;
+  };
+
+  constexpr unsigned maxRipples = 16;
+  unsigned dataSize = sizeof(Ripple) * maxRipples;
+  if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
+  Ripple* ripples = reinterpret_cast<Ripple*>(SEGENV.data);
+
+  if (SEGENV.call == 0) {
+    SEGMENT.custom1 = binNum;
+    SEGMENT.custom2 = maxVol * 2;
+  }
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  binNum = SEGMENT.custom1;                               // Select a bin.
+  maxVol = SEGMENT.custom2 / 2;                           // Our volume comparator.
+
+  SEGMENT.fade_out(240);                                  // Lower frame rate means less effective fading than FastLED
+  SEGMENT.fade_out(240);
+
+  for (int i = 0; i < SEGMENT.intensity/16; i++) {   // Limit the number of ripples.
+    if (samplePeak) ripples[i].state = 255;
+
+    switch (ripples[i].state) {
+      case 254:     // Inactive mode
+        break;
+
+      case 255:                                           // Initialize ripple variables.
+        ripples[i].pos = hw_random16(SEGLEN);
+        #ifdef ESP32
+        if (FFT_MajorPeak > 1.0f)                         // log10(0) is "forbidden" (throws exception)
+          ripples[i].color = (int)(log10f(FFT_MajorPeak) * 128.0f);
+        else ripples[i].color = 0;
+        #else
+        ripples[i].color = hw_random8();
+        #endif
+        ripples[i].state = 0;
+        break;
+
+      case 0:
+        SEGMENT.setPixelColor(ripples[i].pos, SEGMENT.color_from_palette(ripples[i].color, false, false, 0));
+        ripples[i].state++;
+        break;
+
+      case MAXSTEPS:                                      // At the end of the ripples. 254 is an inactive mode.
+        ripples[i].state = 254;
+        break;
+
+      default:                                            // Middle of the ripples.
+        SEGMENT.setPixelColor((ripples[i].pos + ripples[i].state + SEGLEN) % SEGLEN, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(ripples[i].color, false, false, 0), uint8_t(2*255/ripples[i].state)));
+        SEGMENT.setPixelColor((ripples[i].pos - ripples[i].state + SEGLEN) % SEGLEN, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(ripples[i].color, false, false, 0), uint8_t(2*255/ripples[i].state)));
+        ripples[i].state++;                               // Next step.
+        break;
+    } // switch step
+  } // for i
+
+  return FRAMETIME;
+} // mode_ripplepeak()
+static const char _data_FX_MODE_RIPPLEPEAK[] PROGMEM = "Ripple Peak@Fade rate,Max # of ripples,Select bin,Volume (min);!,!;!;1v;c2=0,m12=0,si=0"; // Pixel, Beatsin
+
+
+// Gravity struct requited for GRAV* effects
+typedef struct Gravity {
+  int    topLED;
+  int    gravityCounter;
+} gravity;
+
+///////////////////////
+//   * GRAVCENTER    //
+///////////////////////
+static uint16_t mode_gravcenter(void) {                // Gravcenter. By Andrew Tuline.
+  if (SEGLEN <= 1) return mode_static();
+
+  const unsigned dataSize = sizeof(gravity);
+  if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
+  Gravity* gravcen = reinterpret_cast<Gravity*>(SEGENV.data);
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  //SEGMENT.fade_out(240);
+  SEGMENT.fade_out(251);  // 30%
+
+  float segmentSampleAvg = volumeSmth * (float)SEGMENT.intensity / 255.0f;
+  segmentSampleAvg *= 0.125; // divide by 8, to compensate for later "sensitivity" upscaling
+
+  float mySampleAvg = mapf(segmentSampleAvg*2.0, 0, 32, 0, (float)SEGLEN/2.0f); // map to pixels available in current segment
+  int tempsamp = constrain(mySampleAvg, 0, SEGLEN/2);     // Keep the sample from overflowing.
+  uint8_t gravity = 8 - SEGMENT.speed/32;
+
+  for (int i=0; i<tempsamp; i++) {
+    uint8_t index = inoise8(i*segmentSampleAvg+strip.now, 5000+i*segmentSampleAvg);
+    SEGMENT.setPixelColor(i+SEGLEN/2, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
+    SEGMENT.setPixelColor(SEGLEN/2-i-1, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
+  }
+
+  if (tempsamp >= gravcen->topLED)
+    gravcen->topLED = tempsamp-1;
+  else if (gravcen->gravityCounter % gravity == 0)
+    gravcen->topLED--;
+
+  if (gravcen->topLED >= 0) {
+    SEGMENT.setPixelColor(gravcen->topLED+SEGLEN/2, SEGMENT.color_from_palette(strip.now, false, false, 0));
+    SEGMENT.setPixelColor(SEGLEN/2-1-gravcen->topLED, SEGMENT.color_from_palette(strip.now, false, false, 0));
+  }
+  gravcen->gravityCounter = (gravcen->gravityCounter + 1) % gravity;
+
+  return FRAMETIME;
+} // mode_gravcenter()
+static const char _data_FX_MODE_GRAVCENTER[] PROGMEM = "Gravcenter@Rate of fall,Sensitivity;!,!;!;1v;ix=128,m12=2,si=0"; // Circle, Beatsin
+
+
+///////////////////////
+//   * GRAVCENTRIC   //
+///////////////////////
+static uint16_t mode_gravcentric(void) {                     // Gravcentric. By Andrew Tuline.
+  if (SEGLEN <= 1) return mode_static();
+
+  unsigned dataSize = sizeof(gravity);
+  if (!SEGENV.allocateData(dataSize)) return mode_static();     //allocation failed
+  Gravity* gravcen = reinterpret_cast<Gravity*>(SEGENV.data);
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  //SEGMENT.fade_out(240);
+  //SEGMENT.fade_out(240); // twice? really?
+  SEGMENT.fade_out(253);  // 50%
+
+  float segmentSampleAvg = volumeSmth * (float)SEGMENT.intensity / 255.0f;
+  segmentSampleAvg *= 0.125f; // divide by 8, to compensate for later "sensitivity" upscaling
+
+  float mySampleAvg = mapf(segmentSampleAvg*2.0, 0.0f, 32.0f, 0.0f, (float)SEGLEN/2.0f); // map to pixels availeable in current segment
+  int tempsamp = constrain(mySampleAvg, 0, SEGLEN/2);     // Keep the sample from overflowing.
+  uint8_t gravity = 8 - SEGMENT.speed/32;
+
+  for (int i=0; i<tempsamp; i++) {
+    uint8_t index = segmentSampleAvg*24+strip.now/200;
+    SEGMENT.setPixelColor(i+SEGLEN/2, SEGMENT.color_from_palette(index, false, false, 0));
+    SEGMENT.setPixelColor(SEGLEN/2-1-i, SEGMENT.color_from_palette(index, false, false, 0));
+  }
+
+  if (tempsamp >= gravcen->topLED)
+    gravcen->topLED = tempsamp-1;
+  else if (gravcen->gravityCounter % gravity == 0)
+    gravcen->topLED--;
+
+  if (gravcen->topLED >= 0) {
+    SEGMENT.setPixelColor(gravcen->topLED+SEGLEN/2, CRGB::Gray);
+    SEGMENT.setPixelColor(SEGLEN/2-1-gravcen->topLED, CRGB::Gray);
+  }
+  gravcen->gravityCounter = (gravcen->gravityCounter + 1) % gravity;
+
+  return FRAMETIME;
+} // mode_gravcentric()
+static const char _data_FX_MODE_GRAVCENTRIC[] PROGMEM = "Gravcentric@Rate of fall,Sensitivity;!,!;!;1v;ix=128,m12=3,si=0"; // Corner, Beatsin
+
+
+///////////////////////
+//   * GRAVIMETER    //
+///////////////////////
+static uint16_t mode_gravimeter(void) {                // Gravmeter. By Andrew Tuline.
+  if (SEGLEN <= 1) return mode_static();
+
+  unsigned dataSize = sizeof(gravity);
+  if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
+  Gravity* gravcen = reinterpret_cast<Gravity*>(SEGENV.data);
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  //SEGMENT.fade_out(240);
+  SEGMENT.fade_out(249);  // 25%
+
+  float segmentSampleAvg = volumeSmth * (float)SEGMENT.intensity / 255.0;
+  segmentSampleAvg *= 0.25; // divide by 4, to compensate for later "sensitivity" upscaling
+
+  float mySampleAvg = mapf(segmentSampleAvg*2.0, 0, 64, 0, (SEGLEN-1)); // map to pixels available in current segment
+  int tempsamp = constrain(mySampleAvg,0,SEGLEN-1);       // Keep the sample from overflowing.
+  uint8_t gravity = 8 - SEGMENT.speed/32;
+
+  for (int i=0; i<tempsamp; i++) {
+    uint8_t index = inoise8(i*segmentSampleAvg+strip.now, 5000+i*segmentSampleAvg);
+    SEGMENT.setPixelColor(i, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
+  }
+
+  if (tempsamp >= gravcen->topLED)
+    gravcen->topLED = tempsamp;
+  else if (gravcen->gravityCounter % gravity == 0)
+    gravcen->topLED--;
+
+  if (gravcen->topLED > 0) {
+    SEGMENT.setPixelColor(gravcen->topLED, SEGMENT.color_from_palette(strip.now, false, false, 0));
+  }
+  gravcen->gravityCounter = (gravcen->gravityCounter + 1) % gravity;
+
+  return FRAMETIME;
+} // mode_gravimeter()
+static const char _data_FX_MODE_GRAVIMETER[] PROGMEM = "Gravimeter@Rate of fall,Sensitivity;!,!;!;1v;ix=128,m12=2,si=0"; // Circle, Beatsin
+
+
+//////////////////////
+//   * JUGGLES      //
+//////////////////////
+static uint16_t mode_juggles(void) {                   // Juggles. By Andrew Tuline.
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  SEGMENT.fade_out(224); // 6.25%
+  uint8_t my_sampleAgc = fmax(fmin(volumeSmth, 255.0), 0);
+
+  for (size_t i=0; i<SEGMENT.intensity/32+1U; i++) {
+    // if SEGLEN equals 1, we will always set color to the first and only pixel, but the effect is still good looking
+    SEGMENT.setPixelColor(beatsin16(SEGMENT.speed/4+i*2,0,SEGLEN-1), color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(strip.now/4+i*2, false, false, 0), my_sampleAgc));
+  }
+
+  return FRAMETIME;
+} // mode_juggles()
+static const char _data_FX_MODE_JUGGLES[] PROGMEM = "Juggles@!,# of balls;!,!;!;01v;m12=0,si=0"; // Pixels, Beatsin
+
+
+//////////////////////
+//   * MATRIPIX     //
+//////////////////////
+static uint16_t mode_matripix(void) {                  // Matripix. By Andrew Tuline.
+  // effect can work on single pixels, we just lose the shifting effect
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  uint8_t secondHand = micros()/(256-SEGMENT.speed)/500 % 16;
+  if(SEGENV.aux0 != secondHand) {
+    SEGENV.aux0 = secondHand;
+
+    int pixBri = volumeRaw * SEGMENT.intensity / 64;
+    unsigned k = SEGLEN-1;
+    // loop will not execute if SEGLEN equals 1
+    for (unsigned i = 0; i < k; i++) {
+      SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i+1)); // shift left
+    }
+    SEGMENT.setPixelColor(k, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(strip.now, false, false, 0), pixBri));
+  }
+
+  return FRAMETIME;
+} // mode_matripix()
+static const char _data_FX_MODE_MATRIPIX[] PROGMEM = "Matripix@!,Brightness;!,!;!;1v;ix=64,m12=2,si=1"; //,rev=1,mi=1,rY=1,mY=1 Circle, WeWillRockYou, reverseX
+
+
+//////////////////////
+//   * MIDNOISE     //
+//////////////////////
+static uint16_t mode_midnoise(void) {                  // Midnoise. By Andrew Tuline.
+  if (SEGLEN <= 1) return mode_static();
+// Changing xdist to SEGENV.aux0 and ydist to SEGENV.aux1.
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  SEGMENT.fade_out(SEGMENT.speed);
+  SEGMENT.fade_out(SEGMENT.speed);
+
+  float tmpSound2 = volumeSmth * (float)SEGMENT.intensity / 256.0;  // Too sensitive.
+  tmpSound2 *= (float)SEGMENT.intensity / 128.0;              // Reduce sensitivity/length.
+
+  unsigned maxLen = mapf(tmpSound2, 0, 127, 0, SEGLEN/2);
+  if (maxLen >SEGLEN/2) maxLen = SEGLEN/2;
+
+  for (unsigned i=(SEGLEN/2-maxLen); i<(SEGLEN/2+maxLen); i++) {
+    uint8_t index = inoise8(i*volumeSmth+SEGENV.aux0, SEGENV.aux1+i*volumeSmth);  // Get a value from the noise function. I'm using both x and y axis.
+    SEGMENT.setPixelColor(i, SEGMENT.color_from_palette(index, false, false, 0));
+  }
+
+  SEGENV.aux0=SEGENV.aux0+beatsin8_t(5,0,10);
+  SEGENV.aux1=SEGENV.aux1+beatsin8_t(4,0,10);
+
+  return FRAMETIME;
+} // mode_midnoise()
+static const char _data_FX_MODE_MIDNOISE[] PROGMEM = "Midnoise@Fade rate,Max. length;!,!;!;1v;ix=128,m12=1,si=0"; // Bar, Beatsin
+
+
+//////////////////////
+//   * NOISEFIRE    //
+//////////////////////
+// I am the god of hellfire. . . Volume (only) reactive fire routine. Oh, look how short this is.
+static uint16_t mode_noisefire(void) {                 // Noisefire. By Andrew Tuline.
+  CRGBPalette16 myPal = CRGBPalette16(CHSV(0,255,2),    CHSV(0,255,4),    CHSV(0,255,8), CHSV(0, 255, 8),  // Fire palette definition. Lower value = darker.
+                                      CHSV(0, 255, 16), CRGB::Red,        CRGB::Red,     CRGB::Red,
+                                      CRGB::DarkOrange, CRGB::DarkOrange, CRGB::Orange,  CRGB::Orange,
+                                      CRGB::Yellow,     CRGB::Orange,     CRGB::Yellow,  CRGB::Yellow);
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  if (SEGENV.call == 0) SEGMENT.fill(BLACK);
+
+  for (unsigned i = 0; i < SEGLEN; i++) {
+    unsigned index = inoise8(i*SEGMENT.speed/64,strip.now*SEGMENT.speed/64*SEGLEN/255);  // X location is constant, but we move along the Y at the rate of millis(). By Andrew Tuline.
+    index = (255 - i*256/SEGLEN) * index/(256-SEGMENT.intensity);                       // Now we need to scale index so that it gets blacker as we get close to one of the ends.
+                                                                                        // This is a simple y=mx+b equation that's been scaled. index/128 is another scaling.
+
+    SEGMENT.setPixelColor(i, ColorFromPalette(myPal, index, volumeSmth*2, LINEARBLEND)); // Use my own palette.
+  }
+
+  return FRAMETIME;
+} // mode_noisefire()
+static const char _data_FX_MODE_NOISEFIRE[] PROGMEM = "Noisefire@!,!;;;01v;m12=2,si=0"; // Circle, Beatsin
+
+
+///////////////////////
+//   * Noisemeter    //
+///////////////////////
+static uint16_t mode_noisemeter(void) {                // Noisemeter. By Andrew Tuline.
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  //uint8_t fadeRate = map(SEGMENT.speed,0,255,224,255);
+  uint8_t fadeRate = map(SEGMENT.speed,0,255,200,254);
+  SEGMENT.fade_out(fadeRate);
+
+  float tmpSound2 = volumeRaw * 2.0 * (float)SEGMENT.intensity / 255.0;
+  unsigned maxLen = mapf(tmpSound2, 0, 255, 0, SEGLEN); // map to pixels available in current segment              // Still a bit too sensitive.
+  if (maxLen < 0) maxLen = 0;
+  if (maxLen > SEGLEN) maxLen = SEGLEN;
+
+  for (unsigned i=0; i<maxLen; i++) {                                    // The louder the sound, the wider the soundbar. By Andrew Tuline.
+    uint8_t index = inoise8(i*volumeSmth+SEGENV.aux0, SEGENV.aux1+i*volumeSmth);  // Get a value from the noise function. I'm using both x and y axis.
+    SEGMENT.setPixelColor(i, SEGMENT.color_from_palette(index, false, false, 0));
+  }
+
+  SEGENV.aux0+=beatsin8_t(5,0,10);
+  SEGENV.aux1+=beatsin8_t(4,0,10);
+
+  return FRAMETIME;
+} // mode_noisemeter()
+static const char _data_FX_MODE_NOISEMETER[] PROGMEM = "Noisemeter@Fade rate,Width;!,!;!;1v;ix=128,m12=2,si=0"; // Circle, Beatsin
+
+
+//////////////////////
+//   * PIXELWAVE    //
+//////////////////////
+static uint16_t mode_pixelwave(void) {                 // Pixelwave. By Andrew Tuline.
+  if (SEGLEN <= 1) return mode_static();
+  // even with 1D effect we have to take logic for 2D segments for allocation as fill_solid() fills whole segment
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  uint8_t secondHand = micros()/(256-SEGMENT.speed)/500+1 % 16;
+  if (SEGENV.aux0 != secondHand) {
+    SEGENV.aux0 = secondHand;
+
+    uint8_t pixBri = volumeRaw * SEGMENT.intensity / 64;
+
+    const unsigned halfSeg = SEGLEN/2;
+    SEGMENT.setPixelColor(halfSeg, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(strip.now, false, false, 0), pixBri));
+    for (unsigned i = SEGLEN - 1; i > halfSeg; i--) SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i-1)); //move to the left
+    for (unsigned i = 0; i < halfSeg; i++)          SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i+1)); // move to the right
+  }
+
+  return FRAMETIME;
+} // mode_pixelwave()
+static const char _data_FX_MODE_PIXELWAVE[] PROGMEM = "Pixelwave@!,Sensitivity;!,!;!;1v;ix=64,m12=2,si=0"; // Circle, Beatsin
+
+
+//////////////////////
+//   * PLASMOID     //
+//////////////////////
+typedef struct Plasphase {
+  int16_t    thisphase;
+  int16_t    thatphase;
+} plasphase;
+
+static uint16_t mode_plasmoid(void) {                  // Plasmoid. By Andrew Tuline.
+  // even with 1D effect we have to take logic for 2D segments for allocation as fill_solid() fills whole segment
+  if (!SEGENV.allocateData(sizeof(plasphase))) return mode_static(); //allocation failed
+  Plasphase* plasmoip = reinterpret_cast<Plasphase*>(SEGENV.data);
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  SEGMENT.fadeToBlackBy(32);
+
+  plasmoip->thisphase += beatsin8_t(6,-4,4);                          // You can change direction and speed individually.
+  plasmoip->thatphase += beatsin8_t(7,-4,4);                          // Two phase values to make a complex pattern. By Andrew Tuline.
+
+  for (unsigned i = 0; i < SEGLEN; i++) {                          // For each of the LED's in the strand, set a brightness based on a wave as follows.
+    // updated, similar to "plasma" effect - softhack007
+    uint8_t thisbright = cubicwave8(((i*(1 + (3*SEGMENT.speed/32)))+plasmoip->thisphase) & 0xFF)/2;
+    thisbright += cos8_t(((i*(97 +(5*SEGMENT.speed/32)))+plasmoip->thatphase) & 0xFF)/2; // Let's munge the brightness a bit and animate it all with the phases.
+
+    uint8_t colorIndex=thisbright;
+    if (volumeSmth * SEGMENT.intensity / 64 < thisbright) {thisbright = 0;}
+
+    SEGMENT.addPixelColor(i, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(colorIndex, false, false, 0), thisbright));
+  }
+
+  return FRAMETIME;
+} // mode_plasmoid()
+static const char _data_FX_MODE_PLASMOID[] PROGMEM = "Plasmoid@Phase,# of pixels;!,!;!;01v;sx=128,ix=128,m12=0,si=0"; // Pixels, Beatsin
+
+
+///////////////////////
+//   * PUDDLEPEAK    //
+///////////////////////
+// Andrew's crappy peak detector. If I were 40+ years younger, I'd learn signal processing.
+static uint16_t mode_puddlepeak(void) {                // Puddlepeak. By Andrew Tuline.
+  if (SEGLEN <= 1) return mode_static();
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  unsigned size = 0;
+  uint8_t fadeVal = map(SEGMENT.speed,0,255, 224, 254);
+  unsigned pos = hw_random16(SEGLEN);                        // Set a random starting position.
+
+  if (SEGENV.call == 0) {
+    SEGMENT.custom1 = binNum;
+    SEGMENT.custom2 = maxVol * 2;
+  }
+
+  binNum = SEGMENT.custom1;                              // Select a bin.
+  maxVol = SEGMENT.custom2 / 2;                          // Our volume comparator.
+
+  SEGMENT.fade_out(fadeVal);
+
+  if (samplePeak == 1) {
+    size = volumeSmth * SEGMENT.intensity /256 /4 + 1;    // Determine size of the flash based on the volume.
+    if (pos+size>= SEGLEN) size = SEGLEN - pos;
+  }
+
+  for (unsigned i=0; i<size; i++) {                            // Flash the LED's.
+    SEGMENT.setPixelColor(pos+i, SEGMENT.color_from_palette(strip.now, false, false, 0));
+  }
+
+  return FRAMETIME;
+} // mode_puddlepeak()
+static const char _data_FX_MODE_PUDDLEPEAK[] PROGMEM = "Puddlepeak@Fade rate,Puddle size,Select bin,Volume (min);!,!;!;1v;c2=0,m12=0,si=0"; // Pixels, Beatsin
+
+
+//////////////////////
+//   * PUDDLES      //
+//////////////////////
+static uint16_t mode_puddles(void) {                   // Puddles. By Andrew Tuline.
+  if (SEGLEN <= 1) return mode_static();
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  unsigned size = 0;
+  uint8_t fadeVal = map(SEGMENT.speed, 0, 255, 224, 254);
+  unsigned pos = random16(SEGLEN);                        // Set a random starting position.
+
+  SEGMENT.fade_out(fadeVal);
+
+  if (volumeRaw > 1) {
+    size = volumeRaw * SEGMENT.intensity /256 /8 + 1;        // Determine size of the flash based on the volume.
+    if (pos+size >= SEGLEN) size = SEGLEN - pos;
+  }
+
+  for (unsigned i=0; i<size; i++) {                          // Flash the LED's.
+    SEGMENT.setPixelColor(pos+i, SEGMENT.color_from_palette(strip.now, false, false, 0));
+  }
+
+  return FRAMETIME;
+} // mode_puddles()
+static const char _data_FX_MODE_PUDDLES[] PROGMEM = "Puddles@Fade rate,Puddle size;!,!;!;1v;m12=0,si=0"; // Pixels, Beatsin
+
+
+//////////////////////
+//     * PIXELS     //
+//////////////////////
+static uint16_t mode_pixels(void) {                    // Pixels. By Andrew Tuline.
+  if (SEGLEN <= 1) return mode_static();
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  if (!SEGENV.allocateData(32*sizeof(uint8_t))) return mode_static(); //allocation failed
+  uint8_t *myVals = reinterpret_cast<uint8_t*>(SEGENV.data); // Used to store a pile of samples because WLED frame rate and WLED sample rate are not synchronized. Frame rate is too low.
+
+  myVals[strip.now%32] = volumeSmth;    // filling values semi randomly
+
+  SEGMENT.fade_out(64+(SEGMENT.speed>>1));
+
+  for (int i=0; i <SEGMENT.intensity/8; i++) {
+    unsigned segLoc = hw_random16(SEGLEN);                    // 16 bit for larger strands of LED's.
+    SEGMENT.setPixelColor(segLoc, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(myVals[i%32]+i*4, false, false, 0), uint8_t(volumeSmth)));
+  }
+
+  return FRAMETIME;
+} // mode_pixels()
+static const char _data_FX_MODE_PIXELS[] PROGMEM = "Pixels@Fade rate,# of pixels;!,!;!;1v;m12=0,si=0"; // Pixels, Beatsin
+
+
+///////////////////////////////
+//     BEGIN FFT ROUTINES    //
+///////////////////////////////
+
+
+//////////////////////
+//    ** Blurz      //
+//////////////////////
+static uint16_t mode_blurz(void) {                    // Blurz. By Andrew Tuline.
+  if (SEGLEN <= 1) return mode_static();
+  // even with 1D effect we have to take logic for 2D segments for allocation as fill_solid() fills whole segment
+  const unsigned cycleTime = 5 + 50*(255-SEGMENT.speed)/SEGLEN; // SPEED_FORMULA_L
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  if (SEGENV.call == 0) {
+    SEGMENT.fill(BLACK);
+    SEGENV.aux0 = 0;
+  }
+
+  int fadeoutDelay = (256 - SEGMENT.speed) / 32;
+  if ((fadeoutDelay <= 1 ) || ((SEGENV.call % fadeoutDelay) == 0)) SEGMENT.fade_out(SEGMENT.speed);
+
+  SEGENV.step += FRAMETIME;
+  if (SEGENV.step > cycleTime) {
+    unsigned segLoc = hw_random16(SEGLEN);
+    SEGMENT.setPixelColor(segLoc, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(2*fftResult[SEGENV.aux0%16]*240/max(1, (int)SEGLEN-1), false, false, 0), 2*fftResult[SEGENV.aux0%16]));
+    ++(SEGENV.aux0) %= 16; // make sure it doesn't cross 16
+
+    SEGENV.step = 1;
+    SEGMENT.blur(SEGMENT.intensity); // note: blur > 210 results in a alternating pattern, this could be fixed by mapping but some may like it (very old bug)
+  }
+
+  return FRAMETIME;
+} // mode_blurz()
+static const char _data_FX_MODE_BLURZ[] PROGMEM = "Blurz@Fade rate,Blur;!,Color mix;!;1f;m12=0,si=0"; // Pixels, Beatsin
+
+
+/////////////////////////
+//   ** DJLight        //
+/////////////////////////
+static uint16_t mode_DJLight(void) {                   // Written by ??? Adapted by Will Tatam.
+  if (SEGLEN <= 1) return mode_static();
+  // No need to prevent from executing on single led strips, only mid will be set (mid = 0)
+  const int mid = SEGLEN / 2;
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  uint8_t secondHand = micros()/(256-SEGMENT.speed)/500+1 % 64;
+  if (SEGENV.aux0 != secondHand) {                        // Triggered millis timing.
+    SEGENV.aux0 = secondHand;
+
+    CRGB color = CRGB(fftResult[15]/2, fftResult[5]/2, fftResult[0]/2).fadeToBlackBy(map(fftResult[4], 0, 255, 255, 4)); // 16-> 15 as 16 is out of bounds
+    SEGMENT.setPixelColor(mid, color);
+
+    // if SEGLEN equals 1 these loops won't execute
+    for (int i = SEGLEN - 1; i > mid; i--)   SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i-1)); // move to the left
+    for (int i = 0; i < mid; i++)            SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i+1)); // move to the right
+  }
+
+  return FRAMETIME;
+} // mode_DJLight()
+static const char _data_FX_MODE_DJLIGHT[] PROGMEM = "DJ Light@Speed;;;01f;m12=2,si=0"; // Circle, Beatsin
+
+
+////////////////////
+//   ** Freqmap   //
+////////////////////
+static uint16_t mode_freqmap(void) {                   // Map FFT_MajorPeak to SEGLEN. Would be better if a higher framerate.
+  if (SEGLEN <= 1) return mode_static();
+  // Start frequency = 60 Hz and log10(60) = 1.78
+  // End frequency = MAX_FREQUENCY in Hz and lo10(MAX_FREQUENCY) = MAX_FREQ_LOG10
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  if (SEGENV.call == 0) SEGMENT.fill(BLACK);
+  int fadeoutDelay = (256 - SEGMENT.speed) / 32;
+  if ((fadeoutDelay <= 1 ) || ((SEGENV.call % fadeoutDelay) == 0)) SEGMENT.fade_out(SEGMENT.speed);
+
+  int locn = (log10f((float)FFT_MajorPeak) - 1.78f) * (float)SEGLEN/(MAX_FREQ_LOG10 - 1.78f);  // log10 frequency range is from 1.78 to 3.71. Let's scale to SEGLEN.
+  if (locn < 1) locn = 0; // avoid underflow
+
+  if (locn >= (int)SEGLEN) locn = SEGLEN-1;
+  unsigned pixCol = (log10f(FFT_MajorPeak) - 1.78f) * 255.0f/(MAX_FREQ_LOG10 - 1.78f);   // Scale log10 of frequency values to the 255 colour index.
+  if (FFT_MajorPeak < 61.0f) pixCol = 0;                                                 // handle underflow
+
+  uint8_t bright = (uint8_t)my_magnitude;
+
+  SEGMENT.setPixelColor(locn, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(SEGMENT.intensity+pixCol, false, false, 0), bright));
+
+  return FRAMETIME;
+} // mode_freqmap()
+static const char _data_FX_MODE_FREQMAP[] PROGMEM = "Freqmap@Fade rate,Starting color;!,!;!;1f;m12=0,si=0"; // Pixels, Beatsin
+
+
+///////////////////////
+//   ** Freqmatrix   //
+///////////////////////
+static uint16_t mode_freqmatrix(void) {                // Freqmatrix. By Andreas Pleschung.
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  uint8_t secondHand = micros()/(256-SEGMENT.speed)/500 % 16;
+  if(SEGENV.aux0 != secondHand) {
+    SEGENV.aux0 = secondHand;
+
+    uint8_t sensitivity = map(SEGMENT.custom3, 0, 31, 1, 10); // reduced resolution slider
+    int pixVal = (volumeSmth * SEGMENT.intensity * sensitivity) / 256.0f;
+    if (pixVal > 255) pixVal = 255;
+
+    float intensity = map(pixVal, 0, 255, 0, 100) / 100.0f;  // make a brightness from the last avg
+
+    uint32_t pixel = BLACK;
+
+    // MajorPeak holds the freq. value which is most abundant in the last sample.
+    // With our sampling rate of 10240Hz we have a usable freq range from roughly 80Hz to 10240/2 Hz
+    // we will treat everything with less than 65Hz as 0
+
+    if (FFT_MajorPeak >= 80) {
+      int upperLimit = 80 + 42 * SEGMENT.custom2;
+      int lowerLimit = 80 + 3 * SEGMENT.custom1;
+      uint8_t i =  lowerLimit!=upperLimit ? map(FFT_MajorPeak, lowerLimit, upperLimit, 0, 255) : FFT_MajorPeak;  // may under/overflow - so we enforce uint8_t
+      unsigned b = 255 * intensity;
+      if (b > 255) b = 255;
+      pixel = CRGBW(CHSV(i, 240, (uint8_t)b)); // implicit conversion to RGB supplied by FastLED
+    }
+
+    // shift the pixels one pixel up
+    SEGMENT.setPixelColor(0, pixel);
+    // if SEGLEN equals 1 this loop won't execute
+    for (int i = SEGLEN - 1; i > 0; i--) SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i-1)); //move to the left
+  }
+
+  return FRAMETIME;
+} // mode_freqmatrix()
+static const char _data_FX_MODE_FREQMATRIX[] PROGMEM = "Freqmatrix@Speed,Sound effect,Low bin,High bin,Sensitivity;;;01f;m12=3,si=0"; // Corner, Beatsin
+
+
+//////////////////////
+//   ** Freqpixels  //
+//////////////////////
+// Start frequency = 60 Hz and log10(60) = 1.78
+// End frequency = 5120 Hz and lo10(5120) = 3.71
+//  SEGMENT.speed select faderate
+//  SEGMENT.intensity select colour index
+static uint16_t mode_freqpixels(void) {                // Freqpixel. By Andrew Tuline.
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  // this code translates to speed * (2 - speed/255) which is a) speed*2 or b) speed (when speed is 255)
+  // and since fade_out() can only take 0-255 it will behave incorrectly when speed > 127
+  //uint16_t fadeRate = 2*SEGMENT.speed - SEGMENT.speed*SEGMENT.speed/255;    // Get to 255 as quick as you can.
+  unsigned fadeRate = SEGMENT.speed*SEGMENT.speed; // Get to 255 as quick as you can.
+  fadeRate = map(fadeRate, 0, 65535, 1, 255);
+
+  int fadeoutDelay = (256 - SEGMENT.speed) / 64;
+  if ((fadeoutDelay <= 1 ) || ((SEGENV.call % fadeoutDelay) == 0)) SEGMENT.fade_out(fadeRate);
+
+  uint8_t pixCol = (log10f(FFT_MajorPeak) - 1.78f) * 255.0f/(MAX_FREQ_LOG10 - 1.78f);  // Scale log10 of frequency values to the 255 colour index.
+  if (FFT_MajorPeak < 61.0f) pixCol = 0;                                               // handle underflow
+  for (int i=0; i < SEGMENT.intensity/32+1; i++) {
+    unsigned locn = hw_random16(0,SEGLEN);
+    SEGMENT.setPixelColor(locn, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(SEGMENT.intensity+pixCol, false, false, 0), (uint8_t)my_magnitude));
+  }
+
+  return FRAMETIME;
+} // mode_freqpixels()
+static const char _data_FX_MODE_FREQPIXELS[] PROGMEM = "Freqpixels@Fade rate,Starting color and # of pixels;!,!,;!;1f;m12=0,si=0"; // Pixels, Beatsin
+
+
+//////////////////////
+//   ** Freqwave    //
+//////////////////////
+// Assign a color to the central (starting pixels) based on the predominant frequencies and the volume. The color is being determined by mapping the MajorPeak from the FFT
+// and then mapping this to the HSV color circle. Currently we are sampling at 10240 Hz, so the highest frequency we can look at is 5120Hz.
+//
+// SEGMENT.custom1: the lower cut off point for the FFT. (many, most time the lowest values have very little information since they are FFT conversion artifacts. Suggested value is close to but above 0
+// SEGMENT.custom2: The high cut off point. This depends on your sound profile. Most music looks good when this slider is between 50% and 100%.
+// SEGMENT.custom3: "preamp" for the audio signal for audio10.
+//
+// I suggest that for this effect you turn the brightness to 95%-100% but again it depends on your soundprofile you find yourself in.
+// Instead of using colorpalettes, This effect works on the HSV color circle with red being the lowest frequency
+//
+// As a compromise between speed and accuracy we are currently sampling with 10240Hz, from which we can then determine with a 512bin FFT our max frequency is 5120Hz.
+// Depending on the music stream you have you might find it useful to change the frequency mapping.
+static uint16_t mode_freqwave(void) {                  // Freqwave. By Andreas Pleschung.
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  uint8_t secondHand = micros()/(256-SEGMENT.speed)/500 % 16;
+  if(SEGENV.aux0 != secondHand) {
+    SEGENV.aux0 = secondHand;
+
+    float sensitivity = mapf(SEGMENT.custom3, 1, 31, 1, 10); // reduced resolution slider
+    float pixVal = min(255.0f, volumeSmth * (float)SEGMENT.intensity / 256.0f * sensitivity);
+    float intensity = mapf(pixVal, 0.0f, 255.0f, 0.0f, 100.0f) / 100.0f;  // make a brightness from the last avg
+
+    uint32_t pixel = BLACK;
+
+    // MajorPeak holds the freq. value which is most abundant in the last sample.
+    // With our sampling rate of 10240Hz we have a usable freq range from roughly 80Hz to 10240/2 Hz
+    // we will treat everything with less than 65Hz as 0
+
+    if (FFT_MajorPeak >= 80) {
+      int upperLimit = 80 + 42 * SEGMENT.custom2;
+      int lowerLimit = 80 + 3 * SEGMENT.custom1;
+      uint8_t i =  lowerLimit!=upperLimit ? map(FFT_MajorPeak, lowerLimit, upperLimit, 0, 255) : FFT_MajorPeak; // may under/overflow - so we enforce uint8_t
+      unsigned b = min(255.0f, 255.0f * intensity);
+      pixel = CRGBW(CHSV(i, 240, (uint8_t)b)); // implicit conversion to RGB supplied by FastLED
+    }
+
+    // shift the pixels one pixel outwards
+    // if SEGLEN equals 1 these loops won't execute
+    for (unsigned i = SEGLEN - 1; i > SEGLEN/2; i--) SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i-1)); //move to the left
+    for (unsigned i = 0; i < SEGLEN/2; i++)          SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i+1)); // move to the right
+    SEGMENT.setPixelColor(SEGLEN/2, pixel);
+  }
+
+  return FRAMETIME;
+} // mode_freqwave()
+static const char _data_FX_MODE_FREQWAVE[] PROGMEM = "Freqwave@Speed,Sound effect,Low bin,High bin,Pre-amp;;;01f;m12=2,si=0"; // Circle, Beatsin
+
+
+///////////////////////
+//    ** Gravfreq    //
+///////////////////////
+static uint16_t mode_gravfreq(void) {                  // Gravfreq. By Andrew Tuline.
+  if (SEGLEN <= 1) return mode_static();
+  unsigned dataSize = sizeof(gravity);
+  if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
+  Gravity* gravcen = reinterpret_cast<Gravity*>(SEGENV.data);
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  SEGMENT.fade_out(250);
+
+  float segmentSampleAvg = volumeSmth * (float)SEGMENT.intensity / 255.0f;
+  segmentSampleAvg *= 0.125f; // divide by 8,  to compensate for later "sensitivity" upscaling
+
+  float mySampleAvg = mapf(segmentSampleAvg*2.0f, 0,32, 0, (float)SEGLEN/2.0f); // map to pixels availeable in current segment
+  int tempsamp = constrain(mySampleAvg,0,SEGLEN/2);     // Keep the sample from overflowing.
+  uint8_t gravity = 8 - SEGMENT.speed/32;
+
+  for (int i=0; i<tempsamp; i++) {
+
+    //uint8_t index = (log10((int)FFT_MajorPeak) - (3.71-1.78)) * 255; //int? shouldn't it be floor() or similar
+    uint8_t index = (log10f(FFT_MajorPeak) - (MAX_FREQ_LOG10 - 1.78f)) * 255; //int? shouldn't it be floor() or similar
+
+    SEGMENT.setPixelColor(i+SEGLEN/2, SEGMENT.color_from_palette(index, false, false, 0));
+    SEGMENT.setPixelColor(SEGLEN/2-i-1, SEGMENT.color_from_palette(index, false, false, 0));
+  }
+
+  if (tempsamp >= gravcen->topLED)
+    gravcen->topLED = tempsamp-1;
+  else if (gravcen->gravityCounter % gravity == 0)
+    gravcen->topLED--;
+
+  if (gravcen->topLED >= 0) {
+    SEGMENT.setPixelColor(gravcen->topLED+SEGLEN/2, CRGB::Gray);
+    SEGMENT.setPixelColor(SEGLEN/2-1-gravcen->topLED, CRGB::Gray);
+  }
+  gravcen->gravityCounter = (gravcen->gravityCounter + 1) % gravity;
+
+  return FRAMETIME;
+} // mode_gravfreq()
+static const char _data_FX_MODE_GRAVFREQ[] PROGMEM = "Gravfreq@Rate of fall,Sensitivity;!,!;!;1f;ix=128,m12=0,si=0"; // Pixels, Beatsin
+
+
+//////////////////////
+//   ** Noisemove   //
+//////////////////////
+static uint16_t mode_noisemove(void) {                 // Noisemove.    By: Andrew Tuline
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  int fadeoutDelay = (256 - SEGMENT.speed) / 96;
+  if ((fadeoutDelay <= 1 ) || ((SEGENV.call % fadeoutDelay) == 0)) SEGMENT.fadeToBlackBy(4+ SEGMENT.speed/4);
+
+  uint8_t numBins = map(SEGMENT.intensity,0,255,0,16);    // Map slider to fftResult bins.
+  for (int i=0; i<numBins; i++) {                         // How many active bins are we using.
+    unsigned locn = inoise16(strip.now*SEGMENT.speed+i*50000, strip.now*SEGMENT.speed);   // Get a new pixel location from moving noise.
+    // if SEGLEN equals 1 locn will be always 0, hence we set the first pixel only
+    locn = map(locn, 7500, 58000, 0, SEGLEN-1);           // Map that to the length of the strand, and ensure we don't go over.
+    SEGMENT.setPixelColor(locn, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(i*64, false, false, 0), uint8_t(fftResult[i % 16]*4)));
+  }
+
+  return FRAMETIME;
+} // mode_noisemove()
+static const char _data_FX_MODE_NOISEMOVE[] PROGMEM = "Noisemove@Move speed,Fade rate;!,!;!;01f;m12=0,si=0"; // Pixels, Beatsin
+
+
+//////////////////////
+//   ** Rocktaves   //
+//////////////////////
+static uint16_t mode_rocktaves(void) {                 // Rocktaves. Same note from each octave is same colour.    By: Andrew Tuline
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  SEGMENT.fadeToBlackBy(16);                              // Just in case something doesn't get faded.
+
+  float frTemp = FFT_MajorPeak;
+  uint8_t octCount = 0;                                   // Octave counter.
+  uint8_t volTemp = 0;
+
+  volTemp = 32.0f + my_magnitude * 1.5f;                  // brightness = volume (overflows are handled in next lines)
+  if (my_magnitude < 48) volTemp = 0;                     // We need to squelch out the background noise.
+  if (my_magnitude > 144) volTemp = 255;                  // everything above this is full brightness
+
+  while ( frTemp > 249 ) {
+    octCount++;                                           // This should go up to 5.
+    frTemp = frTemp/2;
+  }
+
+  frTemp -= 132.0f;                                       // This should give us a base musical note of C3
+  frTemp  = fabsf(frTemp * 2.1f);                         // Fudge factors to compress octave range starting at 0 and going to 255;
+
+  unsigned i = map(beatsin8_t(8+octCount*4, 0, 255, 0, octCount*8), 0, 255, 0, SEGLEN-1);
+  i = constrain(i, 0U, SEGLEN-1U);
+  SEGMENT.addPixelColor(i, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette((uint8_t)frTemp, false, false, 0), volTemp));
+
+  return FRAMETIME;
+} // mode_rocktaves()
+static const char _data_FX_MODE_ROCKTAVES[] PROGMEM = "Rocktaves@;!,!;!;01f;m12=1,si=0"; // Bar, Beatsin
+
+
+///////////////////////
+//   ** Waterfall    //
+///////////////////////
+// Combines peak detection with FFT_MajorPeak and FFT_Magnitude.
+static uint16_t mode_waterfall(void) {                   // Waterfall. By: Andrew Tuline
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  // effect can work on single pixels, we just lose the shifting effect
+  if (SEGENV.call == 0) {
+    SEGENV.aux0 = 255;
+    SEGMENT.custom1 = binNum;
+    SEGMENT.custom2 = maxVol * 2;
+  }
+
+  binNum = SEGMENT.custom1;                              // Select a bin.
+  maxVol = SEGMENT.custom2 / 2;                          // Our volume comparator.
+
+  uint8_t secondHand = micros() / (256-SEGMENT.speed)/500 + 1 % 16;
+  if (SEGENV.aux0 != secondHand) {                        // Triggered millis timing.
+    SEGENV.aux0 = secondHand;
+
+    //uint8_t pixCol = (log10f((float)FFT_MajorPeak) - 2.26f) * 177;  // 10Khz sampling - log10 frequency range is from 2.26 (182hz) to 3.7 (5012hz). Let's scale accordingly.
+    uint8_t pixCol = (log10f(FFT_MajorPeak) - 2.26f) * 150;           // 22Khz sampling - log10 frequency range is from 2.26 (182hz) to 3.967 (9260hz). Let's scale accordingly.
+    if (FFT_MajorPeak < 182.0f) pixCol = 0;                           // handle underflow
+
+    unsigned k = SEGLEN-1;
+    if (samplePeak) {
+      SEGMENT.setPixelColor(k, CRGBW(CHSV(92,92,92)));
+    } else {
+      SEGMENT.setPixelColor(k, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(pixCol+SEGMENT.intensity, false, false, 0), (uint8_t)my_magnitude));
+    }
+    // loop will not execute if SEGLEN equals 1
+    for (unsigned i = 0; i < k; i++) {
+      SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i+1));
+    }
+  }
+
+  return FRAMETIME;
+} // mode_waterfall()
+static const char _data_FX_MODE_WATERFALL[] PROGMEM = "Waterfall@!,Adjust color,Select bin,Volume (min);!,!;!;01f;c2=0,m12=2,si=0"; // Circles, Beatsin
+
+
+#ifndef WLED_DISABLE_2D
+/////////////////////////
+//    * 2D Swirl       //
+/////////////////////////
+// By: Mark Kriegsman https://gist.github.com/kriegsman/5adca44e14ad025e6d3b , modified by Andrew Tuline
+static uint16_t mode_2DSwirl(void) {
+  if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  const int cols = SEG_W;
+  const int rows = SEG_H;
+
+  if (SEGENV.call == 0) {
+    SEGMENT.fill(BLACK);
+  }
+
+  const uint8_t borderWidth = 2;
+
+  SEGMENT.blur(SEGMENT.custom1);
+
+  int  i = beatsin8_t( 27*SEGMENT.speed/255, borderWidth, cols - borderWidth);
+  int  j = beatsin8_t( 41*SEGMENT.speed/255, borderWidth, rows - borderWidth);
+  int ni = (cols - 1) - i;
+  int nj = (cols - 1) - j;
+
+  SEGMENT.addPixelColorXY( i, j, ColorFromPalette(SEGPALETTE, (strip.now / 11 + volumeSmth*4), volumeRaw * SEGMENT.intensity / 64, LINEARBLEND)); //CHSV( ms / 11, 200, 255);
+  SEGMENT.addPixelColorXY( j, i, ColorFromPalette(SEGPALETTE, (strip.now / 13 + volumeSmth*4), volumeRaw * SEGMENT.intensity / 64, LINEARBLEND)); //CHSV( ms / 13, 200, 255);
+  SEGMENT.addPixelColorXY(ni,nj, ColorFromPalette(SEGPALETTE, (strip.now / 17 + volumeSmth*4), volumeRaw * SEGMENT.intensity / 64, LINEARBLEND)); //CHSV( ms / 17, 200, 255);
+  SEGMENT.addPixelColorXY(nj,ni, ColorFromPalette(SEGPALETTE, (strip.now / 29 + volumeSmth*4), volumeRaw * SEGMENT.intensity / 64, LINEARBLEND)); //CHSV( ms / 29, 200, 255);
+  SEGMENT.addPixelColorXY( i,nj, ColorFromPalette(SEGPALETTE, (strip.now / 37 + volumeSmth*4), volumeRaw * SEGMENT.intensity / 64, LINEARBLEND)); //CHSV( ms / 37, 200, 255);
+  SEGMENT.addPixelColorXY(ni, j, ColorFromPalette(SEGPALETTE, (strip.now / 41 + volumeSmth*4), volumeRaw * SEGMENT.intensity / 64, LINEARBLEND)); //CHSV( ms / 41, 200, 255);
+
+  return FRAMETIME;
+} // mode_2DSwirl()
+static const char _data_FX_MODE_2DSWIRL[] PROGMEM = "Swirl@!,Sensitivity,Blur;,Bg Swirl;!;2v;ix=64,si=0"; // Beatsin // TODO: color 1 unused?
+
+
+/////////////////////////
+//    * 2D Waverly     //
+/////////////////////////
+// By: Stepko, https://editor.soulmatelights.com/gallery/652-wave , modified by Andrew Tuline
+static uint16_t mode_2DWaverly(void) {
+  if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  const int cols = SEG_W;
+  const int rows = SEG_H;
+
+  SEGMENT.fadeToBlackBy(SEGMENT.speed);
+
+  long t = strip.now / 2;
+  for (int i = 0; i < cols; i++) {
+    unsigned thisVal = (1 + SEGMENT.intensity/64) * inoise8(i * 45 , t , t)/2;
+    thisVal /= 32; // reduce intensity of inoise8()
+    thisVal *= volumeSmth;
+    int thisMax = map(thisVal, 0, 512, 0, rows);
+
+    for (int j = 0; j < thisMax; j++) {
+      SEGMENT.addPixelColorXY(i, j, ColorFromPalette(SEGPALETTE, map(j, 0, thisMax, 250, 0), 255, LINEARBLEND));
+      SEGMENT.addPixelColorXY((cols - 1) - i, (rows - 1) - j, ColorFromPalette(SEGPALETTE, map(j, 0, thisMax, 250, 0), 255, LINEARBLEND));
+    }
+  }
+  if (SEGMENT.check3) SEGMENT.blur(16, cols*rows < 100);
+
+  return FRAMETIME;
+} // mode_2DWaverly()
+static const char _data_FX_MODE_2DWAVERLY[] PROGMEM = "Waverly@Amplification,Sensitivity,,,,,Blur;;!;2v;ix=64,si=0"; // Beatsin
+
+
+/////////////////////////
+//     ** 2D GEQ       //
+/////////////////////////
+static uint16_t mode_2DGEQ(void) { // By Will Tatam. Code reduction by Ewoud Wijma.
+  if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  const int NUM_BANDS = map(SEGMENT.custom1, 0, 255, 1, 16);
+  const int cols = SEG_W;
+  const int rows = SEG_H;
+
+  if (!SEGENV.allocateData(cols*sizeof(uint16_t))) return mode_static(); //allocation failed
+  uint16_t *previousBarHeight = reinterpret_cast<uint16_t*>(SEGENV.data); //array of previous bar heights per frequency band
+
+  if (SEGENV.call == 0) for (int i=0; i<cols; i++) previousBarHeight[i] = 0;
+
+  bool rippleTime = false;
+  if (strip.now - SEGENV.step >= (256U - SEGMENT.intensity)) {
+    SEGENV.step = strip.now;
+    rippleTime = true;
+  }
+
+  int fadeoutDelay = (256 - SEGMENT.speed) / 64;
+  if ((fadeoutDelay <= 1 ) || ((SEGENV.call % fadeoutDelay) == 0)) SEGMENT.fadeToBlackBy(SEGMENT.speed);
+
+  for (int x=0; x < cols; x++) {
+    uint8_t  band       = map(x, 0, cols, 0, NUM_BANDS);
+    if (NUM_BANDS < 16) band = map(band, 0, NUM_BANDS - 1, 0, 15); // always use full range. comment out this line to get the previous behaviour.
+    band = constrain(band, 0, 15);
+    unsigned colorIndex = band * 17;
+    int barHeight  = map(fftResult[band], 0, 255, 0, rows); // do not subtract -1 from rows here
+    if (barHeight > previousBarHeight[x]) previousBarHeight[x] = barHeight; //drive the peak up
+
+    uint32_t ledColor = BLACK;
+    for (int y=0; y < barHeight; y++) {
+      if (SEGMENT.check1) //color_vertical / color bars toggle
+        colorIndex = map(y, 0, rows-1, 0, 255);
+
+      ledColor = SEGMENT.color_from_palette(colorIndex, false, false, 0);
+      SEGMENT.setPixelColorXY(x, rows-1 - y, ledColor);
+    }
+    if (previousBarHeight[x] > 0)
+      SEGMENT.setPixelColorXY(x, rows - previousBarHeight[x], (SEGCOLOR(2) != BLACK) ? SEGCOLOR(2) : ledColor);
+
+    if (rippleTime && previousBarHeight[x]>0) previousBarHeight[x]--;    //delay/ripple effect
+  }
+
+  return FRAMETIME;
+} // mode_2DGEQ()
+static const char _data_FX_MODE_2DGEQ[] PROGMEM = "GEQ@Fade speed,Ripple decay,# of bands,,,Color bars;!,,Peaks;!;2f;c1=255,c2=64,pal=11,si=0"; // Beatsin
+
+
+/////////////////////////
+//  ** 2D Funky plank  //
+/////////////////////////
+static uint16_t mode_2DFunkyPlank(void) {              // Written by ??? Adapted by Will Tatam.
+  if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  const int cols = SEG_W;
+  const int rows = SEG_H;
+
+  int NUMB_BANDS = map(SEGMENT.custom1, 0, 255, 1, 16);
+  int barWidth = (cols / NUMB_BANDS);
+  int bandInc = 1;
+  if (barWidth == 0) {
+    // Matrix narrower than fft bands
+    barWidth = 1;
+    bandInc = (NUMB_BANDS / cols);
+  }
+
+  uint8_t secondHand = micros()/(256-SEGMENT.speed)/500+1 % 64;
+  if (SEGENV.aux0 != secondHand) {                        // Triggered millis timing.
+    SEGENV.aux0 = secondHand;
+
+    // display values of
+    int b = 0;
+    for (int band = 0; band < NUMB_BANDS; band += bandInc, b++) {
+      int hue = fftResult[band % 16];
+      int v = map(fftResult[band % 16], 0, 255, 10, 255);
+      for (int w = 0; w < barWidth; w++) {
+         int xpos = (barWidth * b) + w;
+         SEGMENT.setPixelColorXY(xpos, 0, CRGBW(CHSV(hue, 255, v)));
+      }
+    }
+
+    // Update the display:
+    for (int i = (rows - 1); i > 0; i--) {
+      for (int j = (cols - 1); j >= 0; j--) {
+        SEGMENT.setPixelColorXY(j, i, SEGMENT.getPixelColorXY(j, i-1));
+      }
+    }
+  }
+
+  return FRAMETIME;
+} // mode_2DFunkyPlank
+static const char _data_FX_MODE_2DFUNKYPLANK[] PROGMEM = "Funky Plank@Scroll speed,,# of bands;;;2f;si=0"; // Beatsin
+
+
+/////////////////////////
+//     2D Akemi        //
+/////////////////////////
+static uint8_t akemi[] PROGMEM = {
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,2,2,3,3,3,3,3,3,2,2,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,2,3,3,0,0,0,0,0,0,3,3,2,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,2,3,0,0,0,6,5,5,4,0,0,0,3,2,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,2,3,0,0,6,6,5,5,5,5,4,4,0,0,3,2,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,2,3,0,6,5,5,5,5,5,5,5,5,4,0,3,2,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,2,3,0,6,5,5,5,5,5,5,5,5,5,5,4,0,3,2,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,3,2,0,6,5,5,5,5,5,5,5,5,5,5,4,0,2,3,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,3,2,3,6,5,5,7,7,5,5,5,5,7,7,5,5,4,3,2,3,0,0,0,0,0,0,
+  0,0,0,0,0,2,3,1,3,6,5,1,7,7,7,5,5,1,7,7,7,5,4,3,1,3,2,0,0,0,0,0,
+  0,0,0,0,0,8,3,1,3,6,5,1,7,7,7,5,5,1,7,7,7,5,4,3,1,3,8,0,0,0,0,0,
+  0,0,0,0,0,8,3,1,3,6,5,5,1,1,5,5,5,5,1,1,5,5,4,3,1,3,8,0,0,0,0,0,
+  0,0,0,0,0,2,3,1,3,6,5,5,5,5,5,5,5,5,5,5,5,5,4,3,1,3,2,0,0,0,0,0,
+  0,0,0,0,0,0,3,2,3,6,5,5,5,5,5,5,5,5,5,5,5,5,4,3,2,3,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,6,5,5,5,5,5,7,7,5,5,5,5,5,4,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,6,5,5,5,5,5,5,5,5,5,5,5,5,4,0,0,0,0,0,0,0,0,0,
+  1,0,0,0,0,0,0,0,0,6,5,5,5,5,5,5,5,5,5,5,5,5,4,0,0,0,0,0,0,0,0,2,
+  0,2,2,2,0,0,0,0,0,6,5,5,5,5,5,5,5,5,5,5,5,5,4,0,0,0,0,0,2,2,2,0,
+  0,0,0,3,2,0,0,0,6,5,4,4,4,4,4,4,4,4,4,4,4,4,4,4,0,0,0,2,2,0,0,0,
+  0,0,0,3,2,0,0,0,6,5,5,5,5,5,5,5,5,5,5,5,5,5,5,4,0,0,0,2,3,0,0,0,
+  0,0,0,0,3,2,0,0,0,0,3,3,0,3,3,0,0,3,3,0,3,3,0,0,0,0,2,2,0,0,0,0,
+  0,0,0,0,3,2,0,0,0,0,3,2,0,3,2,0,0,3,2,0,3,2,0,0,0,0,2,3,0,0,0,0,
+  0,0,0,0,0,3,2,0,0,3,2,0,0,3,2,0,0,3,2,0,0,3,2,0,0,2,3,0,0,0,0,0,
+  0,0,0,0,0,3,2,2,2,2,0,0,0,3,2,0,0,3,2,0,0,0,3,2,2,2,3,0,0,0,0,0,
+  0,0,0,0,0,0,3,3,3,0,0,0,0,3,2,0,0,3,2,0,0,0,0,3,3,3,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,3,2,0,0,3,2,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,3,2,0,0,3,2,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,3,2,0,0,3,2,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,3,2,0,0,3,2,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,3,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,3,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+};
+
+static uint16_t mode_2DAkemi(void) {
+  if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  const int cols = SEG_W;
+  const int rows = SEG_H;
+
+  unsigned counter = (strip.now * ((SEGMENT.speed >> 2) +2)) & 0xFFFF;
+  counter = counter >> 8;
+
+  const float lightFactor  = 0.15f;
+  const float normalFactor = 0.4f;
+
+  float base = fftResult[0]/255.0f;
+
+  //draw and color Akemi
+  for (int y=0; y < rows; y++) for (int x=0; x < cols; x++) {
+    CRGB color;
+    CRGB soundColor = CRGB::Orange;
+    CRGB faceColor  = CRGB(SEGMENT.color_wheel(counter));
+    CRGB armsAndLegsColor = CRGB(SEGCOLOR(1) > 0 ? SEGCOLOR(1) : 0xFFE0A0); //default warmish white 0xABA8FF; //0xFF52e5;//
+    uint8_t ak = pgm_read_byte_near(akemi + ((y * 32)/rows) * 32 + (x * 32)/cols); // akemi[(y * 32)/rows][(x * 32)/cols]
+    switch (ak) {
+      case 3: armsAndLegsColor.r *= lightFactor;  armsAndLegsColor.g *= lightFactor;  armsAndLegsColor.b *= lightFactor;  color = armsAndLegsColor; break; //light arms and legs 0x9B9B9B
+      case 2: armsAndLegsColor.r *= normalFactor; armsAndLegsColor.g *= normalFactor; armsAndLegsColor.b *= normalFactor; color = armsAndLegsColor; break; //normal arms and legs 0x888888
+      case 1: color = armsAndLegsColor; break; //dark arms and legs 0x686868
+      case 6: faceColor.r *= lightFactor;  faceColor.g *= lightFactor;  faceColor.b *= lightFactor;  color=faceColor; break; //light face 0x31AAFF
+      case 5: faceColor.r *= normalFactor; faceColor.g *= normalFactor; faceColor.b *= normalFactor; color=faceColor; break; //normal face 0x0094FF
+      case 4: color = faceColor; break; //dark face 0x007DC6
+      case 7: color = SEGCOLOR(2) > 0 ? SEGCOLOR(2) : 0xFFFFFF; break; //eyes and mouth default white
+      case 8: if (base > 0.4) {soundColor.r *= base; soundColor.g *= base; soundColor.b *= base; color=soundColor;} else color = armsAndLegsColor; break;
+      default: color = BLACK; break;
+    }
+
+    if (SEGMENT.intensity > 128 && fftResult[0] > 128) { //dance if base is high
+      SEGMENT.setPixelColorXY(x, 0, BLACK);
+      SEGMENT.setPixelColorXY(x, y+1, color);
+    } else
+      SEGMENT.setPixelColorXY(x, y, color);
+  }
+
+  //add geq left and right
+  int xMax = cols/8;
+  for (int x=0; x < xMax; x++) {
+    unsigned band = map(x, 0, max(xMax,4), 0, 15);  // map 0..cols/8 to 16 GEQ bands
+    band = constrain(band, 0, 15);
+    int barHeight = map(fftResult[band], 0, 255, 0, 17*rows/32);
+    uint32_t color = SEGMENT.color_from_palette((band * 35), false, false, 0);
+
+    for (int y=0; y < barHeight; y++) {
+      SEGMENT.setPixelColorXY(x, rows/2-y, color);
+      SEGMENT.setPixelColorXY(cols-1-x, rows/2-y, color);
+    }
+  }
+
+  return FRAMETIME;
+} // mode_2DAkemi
+static const char _data_FX_MODE_2DAKEMI[] PROGMEM = "Akemi@Color speed,Dance;Head palette,Arms & Legs,Eyes & Mouth;Face palette;2f;si=0"; //beatsin
+#endif
+
 ////////////////////
 // usermod class  //
 ////////////////////
@@ -554,6 +1726,8 @@ static void autoResetPeak(void) {
 class AudioReactive : public Usermod {
 
   private:
+    static AudioReactive *instance;
+
 #ifdef ARDUINO_ARCH_ESP32
 
     #ifndef AUDIOPIN
@@ -616,7 +1790,7 @@ class AudioReactive : public Usermod {
       double FFT_MajorPeak;   //  08 Bytes
     };
 
-    #define UDPSOUND_MAX_PACKET 88 // max packet size for audiosync
+    constexpr static unsigned UDPSOUND_MAX_PACKET = MAX(sizeof(audioSyncPacket), sizeof(audioSyncPacket_v1));
 
     // set your config variables to their boot default value (this can also be done in readFromConfig() or a constructor if you prefer)
     #ifdef UM_AUDIOREACTIVE_ENABLE
@@ -640,23 +1814,16 @@ class AudioReactive : public Usermod {
 #ifdef ARDUINO_ARCH_ESP32
     // used for AGC
     int      last_soundAgc = -1;   // used to detect AGC mode change (for resetting AGC internal error buffers)
-    double   control_integrated = 0.0;   // persistent across calls to agcAvg(); "integrator control" = accumulated error
-
-
+    float    control_integrated = 0.0f;   // persistent across calls to agcAvg(); "integrator control" = accumulated error
     // variables used by getSample() and agcAvg()
     int16_t  micIn = 0;           // Current sample starts with negative values and large values, which is why it's 16 bit signed
-    double   sampleMax = 0.0;     // Max sample over a few seconds. Needed for AGC controller.
-    double   micLev = 0.0;        // Used to convert returned value to have '0' as minimum. A leveller
+    float    sampleMax = 0.0f;    // Max sample over a few seconds. Needed for AGC controller.
+    float    micLev = 0.0f;       // Used to convert returned value to have '0' as minimum. A leveller
     float    expAdjF = 0.0f;      // Used for exponential filter.
     float    sampleReal = 0.0f;	  // "sampleRaw" as float, to provide bits that are lost otherwise (before amplification by sampleGain or inputLevel). Needed for AGC.
     int16_t  sampleRaw = 0;       // Current sample. Must only be updated ONCE!!! (amplified mic value by sampleGain and inputLevel)
     int16_t  rawSampleAgc = 0;    // not smoothed AGC sample
 #endif
-
-    // variables used in effects
-    float   volumeSmth = 0.0f;    // either sampleAvg or sampleAgc depending on soundAgc; smoothed sample
-    int16_t  volumeRaw = 0;       // either sampleRaw or rawSampleAgc depending on soundAgc
-    float my_magnitude =0.0f;     // FFT_Magnitude, scaled by multAgc
 
     // used to feed "Info" Page
     unsigned long last_UDPTime = 0;    // time of last valid UDP sound sync datapacket
@@ -789,8 +1956,7 @@ class AudioReactive : public Usermod {
 
       float control_error;                        // "control error" input for PI control
 
-      if (last_soundAgc != soundAgc)
-        control_integrated = 0.0;                // new preset - reset integrator
+      if (last_soundAgc != soundAgc) control_integrated = 0.0f; // new preset - reset integrator
 
       // For PI controller, we need to have a constant "frequency"
       // so let's make sure that the control loop is not running at insane speed
@@ -801,12 +1967,12 @@ class AudioReactive : public Usermod {
       if (time_now - last_time > 2)  {
         last_time = time_now;
 
-        if((fabsf(sampleReal) < 2.0f) || (sampleMax < 1.0)) {
+        if ((fabsf(sampleReal) < 2.0f) || (sampleMax < 1.0f)) {
           // MIC signal is "squelched" - deliver silence
           tmpAgc = 0;
           // we need to "spin down" the intgrated error buffer
-          if (fabs(control_integrated) < 0.01)  control_integrated  = 0.0;
-          else                                  control_integrated *= 0.91;
+          if (fabs(control_integrated) < 0.01f)  control_integrated  = 0.0f;
+          else                                   control_integrated *= 0.91f;
         } else {
           // compute new setpoint
           if (tmpAgc <= agcTarget0Up[AGC_preset])
@@ -823,9 +1989,9 @@ class AudioReactive : public Usermod {
         
         if (((multAgcTemp > 0.085f) && (multAgcTemp < 6.5f))    //integrator anti-windup by clamping
             && (multAgc*sampleMax < agcZoneStop[AGC_preset]))   //integrator ceiling (>140% of max)
-          control_integrated += control_error * 0.002 * 0.25;   // 2ms = integration time; 0.25 for damping
+          control_integrated += control_error * 0.002f * 0.25f; // 2ms = integration time; 0.25 for damping
         else
-          control_integrated *= 0.9;                            // spin down that beasty integrator
+          control_integrated *= 0.9f;                           // spin down that beasty integrator
 
         // apply PI Control 
         tmpAgc = sampleReal * lastMultAgc;                      // check "zone" of the signal using previous gain
@@ -893,29 +2059,29 @@ class AudioReactive : public Usermod {
       #endif
 
       micLev += (micDataReal-micLev) / 12288.0f;
-      if(micIn < micLev) micLev = ((micLev * 31.0f) + micDataReal) / 32.0f; // align MicLev to lowest input signal
+      if (micIn < micLev) micLev = ((micLev * 31.0f) + micDataReal) / 32.0f; // align micLev to lowest input signal
 
-      micIn -= micLev;                                  // Let's center it to 0 now
+      micIn -= micLev;                                   // Let's center it to 0 now
       // Using an exponential filter to smooth out the signal. We'll add controls for this in a future release.
       float micInNoDC = fabsf(micDataReal - micLev);
       expAdjF = (weighting * micInNoDC + (1.0f-weighting) * expAdjF);
       expAdjF = fabsf(expAdjF);                         // Now (!) take the absolute value
 
-      expAdjF = (expAdjF <= soundSquelch) ? 0: expAdjF; // simple noise gate
-      if ((soundSquelch == 0) && (expAdjF < 0.25f)) expAdjF = 0; // do something meaningfull when "squelch = 0"
+      expAdjF = (expAdjF <= soundSquelch) ? 0.0f : expAdjF; // simple noise gate
+      if ((soundSquelch == 0) && (expAdjF < 0.25f)) expAdjF = 0.0f; // do something meaningfull when "squelch = 0"
 
       tmpSample = expAdjF;
       micIn = abs(micIn);                               // And get the absolute value of each sample
 
-      sampleAdj = tmpSample * sampleGain / 40.0f * inputLevel/128.0f + tmpSample / 16.0f; // Adjust the gain. with inputLevel adjustment
+      sampleAdj = tmpSample * sampleGain * inputLevel / 5120.0f /* /40 /128 */ + tmpSample / 16.0f; // Adjust the gain. with inputLevel adjustment
       sampleReal = tmpSample;
 
-      sampleAdj = fmax(fmin(sampleAdj, 255), 0);        // Question: why are we limiting the value to 8 bits ???
+      sampleAdj = fmax(fmin(sampleAdj, 255.0f), 0.0f);  // Question: why are we limiting the value to 8 bits ???
       sampleRaw = (int16_t)sampleAdj;                   // ONLY update sample ONCE!!!!
 
       // keep "peak" sample, but decay value if current sample is below peak
       if ((sampleMax < sampleReal) && (sampleReal > 0.5f)) {
-        sampleMax = sampleMax + 0.5f * (sampleReal - sampleMax);  // new peak - with some filtering
+        sampleMax += 0.5f * (sampleReal - sampleMax);  // new peak - with some filtering
         // another simple way to detect samplePeak - cannot detect beats, but reacts on peak volume
         if (((binNum < 12) || ((maxVol < 1))) && (millis() - timeOfPeak > 80) && (sampleAvg > 1)) {
           samplePeak    = true;
@@ -941,7 +2107,7 @@ class AudioReactive : public Usermod {
     */
     // effects: Gravimeter, Gravcenter, Gravcentric, Noisefire, Plasmoid, Freqpixels, Freqwave, Gravfreq, (2D Swirl, 2D Waverly)
     void limitSampleDynamics(void) {
-      const float bigChange = 196;                  // just a representative number - a large, expected sample value
+      const float bigChange = 196.0f;                  // just a representative number - a large, expected sample value
       static unsigned long last_time = 0;
       static float last_volumeSmth = 0.0f;
 
@@ -991,7 +2157,6 @@ class AudioReactive : public Usermod {
 #ifdef ARDUINO_ARCH_ESP32
     void transmitAudioData()
     {
-      if (!udpSyncConnected) return;
       //DEBUGSR_PRINTLN("Transmitting UDP Mic Packet");
 
       audioSyncPacket transmitData;
@@ -1011,19 +2176,29 @@ class AudioReactive : public Usermod {
       transmitData.FFT_Magnitude = my_magnitude;
       transmitData.FFT_MajorPeak = FFT_MajorPeak;
 
-      if (fftUdp.beginMulticastPacket() != 0) { // beginMulticastPacket returns 0 in case of error
+#ifndef WLED_DISABLE_ESPNOW
+      if (useESPNowSync && statusESPNow == ESP_NOW_STATE_ON) {
+        EspNowPartialPacket buffer = {{'W','L','E','D'}, 0, 1, {0}};
+        //DEBUGSR_PRINTLN(F("ESP-NOW Sending audio packet."));
+        size_t packetSize = sizeof(EspNowPartialPacket) - sizeof(EspNowPartialPacket::data) + sizeof(transmitData);
+        memcpy_P(buffer.data, PSTR("AUD"), 3); // prepend Audio sugnature
+        memcpy(buffer.data+3, &transmitData, sizeof(transmitData));
+        quickEspNow.send(ESPNOW_BROADCAST_ADDRESS, reinterpret_cast<const uint8_t*>(&buffer), packetSize + 3);
+      }
+#endif
+
+      if (udpSyncConnected && fftUdp.beginMulticastPacket() != 0) { // beginMulticastPacket returns 0 in case of error
         fftUdp.write(reinterpret_cast<uint8_t *>(&transmitData), sizeof(transmitData));
         fftUdp.endPacket();
       }
-      return;
     } // transmitAudioData()
 
 #endif
 
-    static bool isValidUdpSyncVersion(const char *header) {
+    static inline bool isValidUdpSyncVersion(const char *header) {
       return strncmp_P(header, UDP_SYNC_HEADER, 6) == 0;
     }
-    static bool isValidUdpSyncVersion_v1(const char *header) {
+    static inline bool isValidUdpSyncVersion_v1(const char *header) {
       return strncmp_P(header, UDP_SYNC_HEADER_v1, 6) == 0;
     }
 
@@ -1047,15 +2222,14 @@ class AudioReactive : public Usermod {
       // If it's true already, then the animation still needs to respond.
       autoResetPeak();
       if (!samplePeak) {
-            samplePeak = receivedPacket.samplePeak >0 ? true:false;
-            if (samplePeak) timeOfPeak = millis();
-            //userVar1 = samplePeak;
+        samplePeak = receivedPacket.samplePeak > 0;
+        if (samplePeak) timeOfPeak = millis();
       }
       //These values are only computed by ESP32
       for (int i = 0; i < NUM_GEQ_CHANNELS; i++) fftResult[i] = receivedPacket.fftResult[i];
       my_magnitude  = fmaxf(receivedPacket.FFT_Magnitude, 0.0f);
       FFT_Magnitude = my_magnitude;
-      FFT_MajorPeak = constrain(receivedPacket.FFT_MajorPeak, 1.0f, 11025.0f);  // restrict value to range expected by effects
+      FFT_MajorPeak = constrain(receivedPacket.FFT_MajorPeak, 1.0f, MAX_FREQUENCY);  // restrict value to range expected by effects
     }
 
     void decodeAudioData_v1(int packetSize, uint8_t *fftBuff) {
@@ -1075,15 +2249,14 @@ class AudioReactive : public Usermod {
       // If it's true already, then the animation still needs to respond.
       autoResetPeak();
       if (!samplePeak) {
-            samplePeak = receivedPacket->samplePeak >0 ? true:false;
-            if (samplePeak) timeOfPeak = millis();
-            //userVar1 = samplePeak;
+        samplePeak = receivedPacket->samplePeak > 0;
+        if (samplePeak) timeOfPeak = millis();
       }
       //These values are only available on the ESP32
       for (int i = 0; i < NUM_GEQ_CHANNELS; i++) fftResult[i] = receivedPacket->fftResult[i];
-      my_magnitude  = fmaxf(receivedPacket->FFT_Magnitude, 0.0);
+      my_magnitude  = fmaxf(receivedPacket->FFT_Magnitude, 0.0f);
       FFT_Magnitude = my_magnitude;
-      FFT_MajorPeak = constrain(receivedPacket->FFT_MajorPeak, 1.0, 11025.0);  // restrict value to range expected by effects
+      FFT_MajorPeak = constrain(receivedPacket->FFT_MajorPeak, 1.0f, MAX_FREQUENCY);  // restrict value to range expected by effects
     }
 
     bool receiveAudioData()   // check & process new data. return TRUE in case that new audio data was received. 
@@ -1125,6 +2298,9 @@ class AudioReactive : public Usermod {
 
   public:
     //Functions called by WLED or other usermods
+    AudioReactive() { AudioReactive::instance = this; }
+    inline bool isEnabled() { return enabled; }
+    inline static AudioReactive* getInstance() { return instance; }
 
     /*
      * setup() is called once at boot. WiFi is not yet connected at this point.
@@ -1157,6 +2333,38 @@ class AudioReactive : public Usermod {
         um_data->u_type[6] = UMT_BYTE;
         um_data->u_data[7] = &binNum;          // assigned in effect function from UI element!!! (Puddlepeak, Ripplepeak, Waterfall)
         um_data->u_type[7] = UMT_BYTE;
+        strip.addEffect(FX_MODE_PIXELS, &mode_pixels, _data_FX_MODE_PIXELS);
+        strip.addEffect(FX_MODE_PIXELWAVE, &mode_pixelwave, _data_FX_MODE_PIXELWAVE);
+        strip.addEffect(FX_MODE_JUGGLES, &mode_juggles, _data_FX_MODE_JUGGLES);
+        strip.addEffect(FX_MODE_MATRIPIX, &mode_matripix, _data_FX_MODE_MATRIPIX);
+        strip.addEffect(FX_MODE_GRAVIMETER, &mode_gravimeter, _data_FX_MODE_GRAVIMETER);
+        strip.addEffect(FX_MODE_PLASMOID, &mode_plasmoid, _data_FX_MODE_PLASMOID);
+        strip.addEffect(FX_MODE_PUDDLES, &mode_puddles, _data_FX_MODE_PUDDLES);
+        strip.addEffect(FX_MODE_MIDNOISE, &mode_midnoise, _data_FX_MODE_MIDNOISE);
+        strip.addEffect(FX_MODE_NOISEMETER, &mode_noisemeter, _data_FX_MODE_NOISEMETER);
+        strip.addEffect(FX_MODE_FREQWAVE, &mode_freqwave, _data_FX_MODE_FREQWAVE);
+        strip.addEffect(FX_MODE_FREQMATRIX, &mode_freqmatrix, _data_FX_MODE_FREQMATRIX);
+        strip.addEffect(FX_MODE_WATERFALL, &mode_waterfall, _data_FX_MODE_WATERFALL);
+        strip.addEffect(FX_MODE_FREQPIXELS, &mode_freqpixels, _data_FX_MODE_FREQPIXELS);
+        strip.addEffect(FX_MODE_NOISEFIRE, &mode_noisefire, _data_FX_MODE_NOISEFIRE);
+        strip.addEffect(FX_MODE_PUDDLEPEAK, &mode_puddlepeak, _data_FX_MODE_PUDDLEPEAK);
+        strip.addEffect(FX_MODE_NOISEMOVE, &mode_noisemove, _data_FX_MODE_NOISEMOVE);
+        strip.addEffect(FX_MODE_RIPPLEPEAK, &mode_ripplepeak, _data_FX_MODE_RIPPLEPEAK);
+        strip.addEffect(FX_MODE_FREQMAP, &mode_freqmap, _data_FX_MODE_FREQMAP);
+        strip.addEffect(FX_MODE_GRAVCENTER, &mode_gravcenter, _data_FX_MODE_GRAVCENTER);
+        strip.addEffect(FX_MODE_GRAVCENTRIC, &mode_gravcentric, _data_FX_MODE_GRAVCENTRIC);
+        strip.addEffect(FX_MODE_GRAVFREQ, &mode_gravfreq, _data_FX_MODE_GRAVFREQ);
+        strip.addEffect(FX_MODE_DJLIGHT, &mode_DJLight, _data_FX_MODE_DJLIGHT);
+        strip.addEffect(FX_MODE_BLURZ, &mode_blurz, _data_FX_MODE_BLURZ);
+        strip.addEffect(FX_MODE_ROCKTAVES, &mode_rocktaves, _data_FX_MODE_ROCKTAVES);
+        // --- 2D  effects ---
+        #ifndef WLED_DISABLE_2D
+        strip.addEffect(FX_MODE_2DGEQ, &mode_2DGEQ, _data_FX_MODE_2DGEQ); // audio
+        strip.addEffect(FX_MODE_2DFUNKYPLANK, &mode_2DFunkyPlank, _data_FX_MODE_2DFUNKYPLANK); // audio
+        strip.addEffect(FX_MODE_2DWAVERLY, &mode_2DWaverly, _data_FX_MODE_2DWAVERLY); // audio
+        strip.addEffect(FX_MODE_2DSWIRL, &mode_2DSwirl, _data_FX_MODE_2DSWIRL); // audio
+        strip.addEffect(FX_MODE_2DAKEMI, &mode_2DAkemi, _data_FX_MODE_2DAKEMI); // audio
+        #endif // WLED_DISABLE_2D
       }
 
 
@@ -1241,16 +2449,15 @@ class AudioReactive : public Usermod {
       if (!audioSource) enabled = false;                 // audio failed to initialise
 #endif
       if (enabled) onUpdateBegin(false);                 // create FFT task, and initialize network
-
-
+      if (enabled) disableSoundProcessing = false;       // all good - enable audio processing
 #ifdef ARDUINO_ARCH_ESP32
       if (FFT_Task == nullptr) enabled = false;          // FFT task creation failed
-      if((!audioSource) || (!audioSource->isInitialized())) {  // audio source failed to initialize. Still stay "enabled", as there might be input arriving via UDP Sound Sync 
+      if ((!audioSource) || (!audioSource->isInitialized())) {
+        // audio source failed to initialize. Still stay "enabled", as there might be input arriving via UDP Sound Sync 
         DEBUGSR_PRINTLN(F("AR: Failed to initialize sound input driver. Please check input PIN settings."));
         disableSoundProcessing = true;
       }
 #endif
-      if (enabled) disableSoundProcessing = false;       // all good - enable audio processing
       if (enabled) connectUDPSoundSync();
       if (enabled && addPalettes) createAudioPalettes();
       initDone = true;
@@ -1446,17 +2653,17 @@ class AudioReactive : public Usermod {
     {
 #if defined(WLED_DEBUG_USERMODS) && defined(SR_DEBUG)
       fftTime = sampleTime = 0;
-#endif
+  #endif
       // gracefully suspend FFT task (if running)
       disableSoundProcessing = true;
 
       // reset sound data
       micDataReal = 0.0f;
-      volumeRaw = 0; volumeSmth = 0;
-      sampleAgc = 0; sampleAvg = 0;
-      sampleRaw = 0; rawSampleAgc = 0;
-      my_magnitude = 0; FFT_Magnitude = 0; FFT_MajorPeak = 1;
-      multAgc = 1;
+      volumeRaw = 0; volumeSmth = 0.0f;
+      sampleAgc = 0.0f; sampleAvg = 0.0f;
+      sampleRaw = 0; rawSampleAgc = 0.0f;
+      my_magnitude = 0.0f; FFT_Magnitude = 0.0f; FFT_MajorPeak = 1.0f;
+      multAgc = 1.0f;
       // reset FFT data
       memset(fftCalc, 0, sizeof(fftCalc)); 
       memset(fftAvg, 0, sizeof(fftAvg)); 
@@ -1665,8 +2872,8 @@ class AudioReactive : public Usermod {
             if (receivedFormat == 2) infoArr.add(F(" v2"));
         }
 
-        #if defined(WLED_DEBUG_USERMODS) && defined(SR_DEBUG)
-        #ifdef ARDUINO_ARCH_ESP32
+#if defined(WLED_DEBUG_USERMODS) && defined(SR_DEBUG)
+  #ifdef ARDUINO_ARCH_ESP32
         infoArr = user.createNestedArray(F("Sampling time"));
         infoArr.add(float(sampleTime)/100.0f);
         infoArr.add(" ms");
@@ -1682,8 +2889,8 @@ class AudioReactive : public Usermod {
 
         DEBUGSR_PRINTF("AR Sampling time: %5.2f ms\n", float(sampleTime)/100.0f);
         DEBUGSR_PRINTF("AR FFT time     : %5.2f ms\n", float(fftTime)/100.0f);
-        #endif
-        #endif
+  #endif
+#endif
       }
     }
 
@@ -1735,7 +2942,7 @@ class AudioReactive : public Usermod {
     }
 
     void onStateChange(uint8_t callMode) override {
-      if (initDone && enabled && addPalettes && palettes==0 && strip.customPalettes.size()<10) {
+      if (initDone && enabled && addPalettes && palettes==0 && customPalettes.size()<10) {
         // if palettes were removed during JSON call re-add them
         createAudioPalettes();
       }
@@ -1951,7 +3158,8 @@ class AudioReactive : public Usermod {
       //strip.setPixelColor(0, RGBW32(0,0,0,0)) // set the first pixel to black
     //}
 
-   
+    bool onEspNowMessage(uint8_t *sender, uint8_t *data, uint8_t len) override;
+
     /*
      * getId() allows you to optionally give your V2 usermod an unique ID (please define it in const.h!).
      * This could be used in the future for the system to determine whether your usermod is installed.
@@ -1965,20 +3173,20 @@ class AudioReactive : public Usermod {
 void AudioReactive::removeAudioPalettes(void) {
   DEBUGSR_PRINTLN(F("Removing audio palettes."));
   while (palettes>0) {
-    strip.customPalettes.pop_back();
+    customPalettes.pop_back();
     DEBUGSR_PRINTLN(palettes);
     palettes--;
   }
-  DEBUGSR_PRINT(F("Total # of palettes: ")); DEBUGSR_PRINTLN(strip.customPalettes.size());
+  DEBUGSR_PRINT(F("Total # of palettes: ")); DEBUGSR_PRINTLN(customPalettes.size());
 }
 
 void AudioReactive::createAudioPalettes(void) {
-  DEBUGSR_PRINT(F("Total # of palettes: ")); DEBUGSR_PRINTLN(strip.customPalettes.size());
+  DEBUGSR_PRINT(F("Total # of palettes: ")); DEBUGSR_PRINTLN(customPalettes.size());
   if (palettes) return;
   DEBUGSR_PRINTLN(F("Adding audio palettes."));
   for (int i=0; i<MAX_PALETTES; i++)
-    if (strip.customPalettes.size() < 10) {
-      strip.customPalettes.push_back(CRGBPalette16(CRGB(BLACK)));
+    if (customPalettes.size() < 10) {
+      customPalettes.push_back(CRGBPalette16(CRGB(BLACK)));
       palettes++;
       DEBUGSR_PRINTLN(palettes);
     } else break;
@@ -2015,7 +3223,7 @@ CRGB AudioReactive::getCRGBForBand(int x, int pal) {
 
 void AudioReactive::fillAudioPalettes() {
   if (!palettes) return;
-  size_t lastCustPalette = strip.customPalettes.size();
+  size_t lastCustPalette = customPalettes.size();
   if (int(lastCustPalette) >= palettes) lastCustPalette -= palettes;
   for (int pal=0; pal<palettes; pal++) {
     uint8_t tcp[16];  // Needs to be 4 times however many colors are being used.
@@ -2044,9 +3252,116 @@ void AudioReactive::fillAudioPalettes() {
     tcp[14] = rgb.g;
     tcp[15] = rgb.b;
 
-    strip.customPalettes[lastCustPalette+pal].loadDynamicGradientPalette(tcp);
+    customPalettes[lastCustPalette+pal].loadDynamicGradientPalette(tcp);
   }
 }
+
+#ifndef WLED_DISABLE_ESPNOW
+bool AudioReactive::onEspNowMessage(uint8_t *senderESPNow, uint8_t *data, uint8_t len) {
+  // only handle messages from linked master/remote (ignore PING messages) or any master/remote if 0xFFFFFFFFFFFF
+  uint8_t anyMaster[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  if (memcmp(senderESPNow, masterESPNow, 6) != 0 && memcmp(masterESPNow, anyMaster, 6) != 0) {
+    //DEBUGSR_PRINTF("ESP-NOW unpaired remote sender (expected " MACSTR ").\n", MAC2STR(masterESPNow));
+    return false;
+  }
+
+  EspNowPartialPacket *buffer = reinterpret_cast<EspNowPartialPacket *>(data);
+  if (len < 6 || !(audioSyncEnabled & 0x02) || !useESPNowSync || memcmp(buffer->magic, "WLED", 4) != 0 || WLED_CONNECTED) {
+    //DEBUGSR_PRINTLN(F("ESP-NOW unexpected packet, not syncing or connected to WiFi."));
+    return false;
+  }
+
+  uint8_t *fftBuff = buffer->data;
+  // check for Audio signature
+  if (memcmp_P(fftBuff, PSTR("AUD"), 3) == 0) fftBuff += 3; // skip signature
+  else return false;
+
+  //DEBUGSR_PRINTLN("ESP-NOW Received Audio Sync Packet");
+  bool haveFreshData = false;
+  len -= sizeof(EspNowPartialPacket) - sizeof(EspNowPartialPacket::data) - 3; // adjust size
+
+  // VERIFY THAT THIS IS A COMPATIBLE PACKET
+  if (len == sizeof(audioSyncPacket) && (isValidUdpSyncVersion((const char *)fftBuff))) {
+    decodeAudioData(len, fftBuff);
+    haveFreshData = true;
+    receivedFormat = 2;
+  } else if (len == sizeof(audioSyncPacket_v1) && (isValidUdpSyncVersion_v1((const char *)fftBuff))) {
+    decodeAudioData_v1(len, fftBuff);
+    haveFreshData = true;
+    receivedFormat = 1;
+  } else receivedFormat = 0; // unknown format
+
+  if (haveFreshData) {
+    last_UDPTime = millis(); // fake UDP received packets
+    limitSampleDynamics();
+  }
+  return haveFreshData;
+}
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+// Begin simulateSound (to enable audio enhanced effects to display something)
+///////////////////////////////////////////////////////////////////////////////
+typedef enum UM_SoundSimulations {
+  UMS_BeatSin = 0,
+  UMS_WeWillRockYou,
+  UMS_10_13,
+  UMS_14_3
+} um_soundSimulations_t;
+
+static void simulateSound(uint8_t simulationId)
+{
+  //if (static_cast<AudioReactive*>(UsermodManager::lookup(USERMOD_ID_AUDIOREACTIVE))->isEnabled()) return;
+  if (AudioReactive::getInstance()->isEnabled()) return;
+
+  uint32_t ms = millis();
+  switch (simulationId) {
+    default:
+    case UMS_BeatSin:
+      for (int i = 0; i<16; i++) fftResult[i] = beatsin8_t(120 / (i+1), 0, 255);
+      volumeSmth = fftResult[8];
+      break;
+    case UMS_WeWillRockYou:
+      if (ms%2000 < 200) {
+        volumeSmth = hw_random8();
+        for (int i = 0; i<5; i++) fftResult[i] = hw_random8();
+      } else if (ms%2000 < 400) {
+        volumeSmth = 0;
+        for (int i = 0; i<16; i++) fftResult[i] = 0;
+      } else if (ms%2000 < 600) {
+        volumeSmth = hw_random8();
+        for (int i = 5; i<11; i++) fftResult[i] = hw_random8();
+      } else if (ms%2000 < 800) {
+        volumeSmth = 0;
+        for (int i = 0; i<16; i++) fftResult[i] = 0;
+      } else if (ms%2000 < 1000) {
+        volumeSmth = hw_random8();
+        for (int i = 11; i<16; i++) fftResult[i] = hw_random8();
+      } else {
+        volumeSmth = 0;
+        for (int i = 0; i<16; i++) fftResult[i] = 0;
+      }
+      break;
+    case UMS_10_13:
+      for (int i = 0; i<16; i++) fftResult[i] = inoise8(beatsin8_t(90 / (i+1), 0, 200)*15 + (ms>>10), ms>>3);
+      volumeSmth = fftResult[8];
+      break;
+    case UMS_14_3:
+      for (int i = 0; i<16; i++) fftResult[i] = inoise8(beatsin8_t(120 / (i+1), 10, 30)*10 + (ms>>14), ms>>3);
+      volumeSmth = fftResult[8];
+      break;
+  }
+
+  samplePeak    = hw_random8() > 250;
+  FFT_MajorPeak = 21.0f + (volumeSmth*volumeSmth) / 8.0f; // walk through full range of 21hz...8200hz
+  maxVol        = 31;  // this gets feedback from UI
+  binNum        = 8;   // this gets feedback from UI
+  volumeRaw     = volumeSmth;
+  my_magnitude  = 10000.0f / 8.0f; //no idea if 10000 is a good value for FFT_Magnitude ???
+  if (volumeSmth < 1 ) my_magnitude = 0.001f;             // noise gate closed - mute
+}
+
+AudioReactive* AudioReactive::instance = nullptr;
 
 // strings to reduce flash memory usage (used more than twice)
 const char AudioReactive::_name[]       PROGMEM = "AudioReactive";

@@ -21,7 +21,7 @@ static const char s_accessdenied[]   PROGMEM = "Access Denied";
 static const char _common_js[]       PROGMEM = "/common.js";
 
 //Is this an IP?
-static bool isIp(String str) {
+static bool isIp(const String &str) {
   for (size_t i = 0; i < str.length(); i++) {
     int c = str.charAt(i);
     if (c != '.' && (c < '0' || c > '9')) {
@@ -152,9 +152,9 @@ static String msgProcessor(const String& var)
   return String();
 }
 
-static void handleUpload(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
+static void handleUpload(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool isFinal) {
   if (!correctPIN) {
-    if (final) request->send(401, FPSTR(CONTENT_TYPE_PLAIN), FPSTR(s_unlock_cfg));
+    if (isFinal) request->send(401, FPSTR(CONTENT_TYPE_PLAIN), FPSTR(s_unlock_cfg));
     return;
   }
   if (!index) {
@@ -170,13 +170,13 @@ static void handleUpload(AsyncWebServerRequest *request, const String& filename,
   if (len) {
     request->_tempFile.write(data,len);
   }
-  if (final) {
+  if (isFinal) {
     request->_tempFile.close();
     if (filename.indexOf(F("cfg.json")) >= 0) { // check for filename with or without slash
       doReboot = true;
       request->send(200, FPSTR(CONTENT_TYPE_PLAIN), F("Configuration restore successful.\nRebooting..."));
     } else {
-      if (filename.indexOf(F("palette")) >= 0 && filename.indexOf(F(".json")) >= 0) strip.loadCustomPalettes();
+      if (filename.indexOf(F("palette")) >= 0 && filename.indexOf(F(".json")) >= 0) loadCustomPalettes();
       request->send(200, FPSTR(CONTENT_TYPE_PLAIN), F("File Uploaded!"));
     }
     cacheInvalidate++;
@@ -359,13 +359,13 @@ void initServer()
 
   server.on(F("/upload"), HTTP_POST, [](AsyncWebServerRequest *request) {},
         [](AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data,
-                      size_t len, bool final) {handleUpload(request, filename, index, data, len, final);}
+                      size_t len, bool isFinal) {handleUpload(request, filename, index, data, len, isFinal);}
   );
 
   createEditHandler(correctPIN);
 
   static const char _update[] PROGMEM = "/update";
-#ifndef WLED_DISABLE_OTA
+//#ifndef WLED_DISABLE_OTA
   //init ota page
   server.on(_update, HTTP_GET, [](AsyncWebServerRequest *request){
     if (otaLock) {
@@ -389,9 +389,9 @@ void initServer()
       serveMessage(request, 200, F("Update successful!"), F("Rebooting..."), 131);
       doReboot = true;
     }
-  },[](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+  },[](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool isFinal){
     if (!correctPIN || otaLock) return;
-    if(!index){
+    if (!index) {
       DEBUG_PRINTLN(F("OTA Update Start"));
       #if WLED_WATCHDOG_TIMEOUT > 0
       WLED::instance().disableWatchdog();
@@ -405,9 +405,9 @@ void initServer()
       #endif
       Update.begin((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000);
     }
-    if(!Update.hasError()) Update.write(data, len);
-    if(final){
-      if(Update.end(true)){
+    if (!Update.hasError()) Update.write(data, len);
+    if (isFinal) {
+      if (Update.end(true)) {
         DEBUG_PRINTLN(F("Update Success"));
       } else {
         DEBUG_PRINTLN(F("Update Failed"));
@@ -419,11 +419,11 @@ void initServer()
       }
     }
   });
-#else
-  server.on(_update, HTTP_GET, [](AsyncWebServerRequest *request){
-    serveMessage(request, 501, FPSTR(s_notimplemented), F("OTA updating is disabled in this build."), 254);
-  });
-#endif
+//#else
+//  server.on(_update, HTTP_GET, [](AsyncWebServerRequest *request){
+//    serveMessage(request, 501, FPSTR(s_notimplemented), F("OTA updating is disabled in this build."), 254);
+//  });
+//#endif
 
 
 #ifdef WLED_ENABLE_DMX

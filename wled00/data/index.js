@@ -57,7 +57,7 @@ function handleVisibilityChange() {if (!d.hidden && new Date () - lastUpdate > 3
 function sCol(na, col) {d.documentElement.style.setProperty(na, col);}
 function gId(c) {return d.getElementById(c);}
 function gEBCN(c) {return d.getElementsByClassName(c);}
-function isEmpty(o) {return Object.keys(o).length === 0;}
+function isEmpty(o) {for (const i in o) return false; return true;}
 function isObj(i) {return (i && typeof i === 'object' && !Array.isArray(i));}
 function isNumeric(n) {return !isNaN(parseFloat(n)) && isFinite(n);}
 
@@ -805,6 +805,26 @@ function populateSegments(s)
 							`<option value="4" ${inst.m12==4?' selected':''}>Pinwheel</option>`+
 						`</select></div>`+
 					`</div>`;
+		let blend = `<div class="lbl-l">Blend mode<br>`+
+						`<div class="sel-p"><select class="sel-ple" id="seg${i}bm" onchange="setBm(${i})">`+
+							`<option value="0" ${inst.bm==0?' selected':''}>Top/Default</option>`+
+							`<option value="1" ${inst.bm==1?' selected':''}>Bottom/None</option>`+
+							`<option value="2" ${inst.bm==2?' selected':''}>Add</option>`+
+							`<option value="3" ${inst.bm==3?' selected':''}>Subtract</option>`+
+							`<option value="4" ${inst.bm==4?' selected':''}>Difference</option>`+
+							`<option value="5" ${inst.bm==5?' selected':''}>Average</option>`+
+							`<option value="6" ${inst.bm==6?' selected':''}>Multiply</option>`+
+							`<option value="7" ${inst.bm==7?' selected':''}>Divide</option>`+
+							`<option value="8" ${inst.bm==8?' selected':''}>Lighten</option>`+
+							`<option value="9" ${inst.bm==9?' selected':''}>Darken</option>`+
+							`<option value="10" ${inst.bm==10?' selected':''}>Screen</option>`+
+							`<option value="11" ${inst.bm==11?' selected':''}>Overlay</option>`+
+							`<option value="12" ${inst.bm==12?' selected':''}>Hard Light</option>`+
+							`<option value="13" ${inst.bm==13?' selected':''}>Soft Light</option>`+
+							`<option value="14" ${inst.bm==14?' selected':''}>Dodge</option>`+
+							`<option value="15" ${inst.bm==15?' selected':''}>Burn</option>`+
+						`</select></div>`+
+					`</div>`;
 		let sndSim = `<div data-snd="si" class="lbl-s hide">Sound sim<br>`+
 						`<div class="sel-p"><select class="sel-p" id="seg${i}si" onchange="setSi(${i})">`+
 							`<option value="0" ${inst.si==0?' selected':''}>BeatSin</option>`+
@@ -860,6 +880,7 @@ function populateSegments(s)
 					`</tr>`+
 					`</table>`+
 					`<div class="h bp" id="seg${i}len"></div>`+
+					blend +
 					(!isMSeg ? rvXck : '') +
 					(isMSeg&&stoY-staY>1&&stoX-staX>1 ? map2D : '') +
 					(s.AudioReactive && s.AudioReactive.on ? "" : sndSim) +
@@ -1448,41 +1469,32 @@ function readState(s,command=false)
 	else gId('bsp').classList.remove('hide')
 
 	populateSegments(s);
-	var selc=0;
-	var sellvl=0; // 0: selc is invalid, 1: selc is mainseg, 2: selc is first selected
 	hasRGB = hasWhite = hasCCT = has2D = false;
-	segLmax = 0;
-	for (let i = 0; i < (s.seg||[]).length; i++)
-	{
-		if (sellvl == 0 && s.seg[i].id == s.mainseg) {
-			selc = i;
-			sellvl = 1;
-		}
-		if (s.seg[i].sel) {
-			if (sellvl < 2) selc = i; // get first selected segment
-			sellvl = 2;
-			let w  = (s.seg[i].stop - s.seg[i].start);
-			let h  = s.seg[i].stopY ? (s.seg[i].stopY - s.seg[i].startY) : 1;
-			let lc = lastinfo.leds.seglc[i];
+	let i = {};
+	// determine light capabilities from selected segments
+	for (let seg of (s.seg||[])) {
+		let w  = (seg.stop - seg.start);
+		let h  = seg.stopY ? (seg.stopY - seg.startY) : 1;
+		let lc = seg.lc;
+		if (w*h > segLmax) segLmax = w*h;
+		if (seg.sel) {
+			if (isEmpty(i) || (i.id == s.mainseg && !i.sel)) i = seg; // get first selected segment (and replace mainseg if it is not selected)
 			hasRGB   |= !!(lc & 0x01);
 			hasWhite |= !!(lc & 0x02);
 			hasCCT   |= !!(lc & 0x04);
 			has2D    |= w > 1 && h > 1;
-			if (w*h > segLmax) segLmax = w*h;
-		}
+		} else if (isEmpty(i) && seg.id == s.mainseg) i = seg; // assign mainseg if no segments are selected
 	}
-	var i=s.seg[selc];
-	if (sellvl == 1) {
-		let lc = lastinfo.leds.seglc[selc];
-		hasRGB   = !!(lc & 0x01);
-		hasWhite = !!(lc & 0x02);
-		hasCCT   = !!(lc & 0x04);
-		has2D    = (i.stop - i.start) > 1 && (i.stopY ? (i.stopY - i.startY) : 1) > 1;
-	}
-	if (!i) {
-		showToast('No Segments!', true);
+	if (isEmpty(i)) {
+		showToast('No segments!', true);
 		updateUI();
 		return true;
+	} else if (i.id == s.mainseg) {
+		// fallback if no segments are selected but we have mainseg
+		hasRGB   |= !!(i.lc & 0x01);
+		hasWhite |= !!(i.lc & 0x02);
+		hasCCT   |= !!(i.lc & 0x04);
+		has2D    |= (i.stop - i.start) > 1 && (i.stopY ? (i.stopY - i.startY) : 1) > 1;
 	}
 
 	var cd = gId('csl').querySelectorAll("button");
@@ -2339,6 +2351,13 @@ function setSi(s)
 	requestJson(obj);
 }
 
+function setBm(s)
+{
+	var value = gId(`seg${s}bm`).selectedIndex;
+	var obj = {"seg": {"id": s, "bm": value}};
+	requestJson(obj);
+}
+
 function setTp(s)
 {
 	var tp = gId(`seg${s}tp`).checked;
@@ -2690,28 +2709,28 @@ function fromRgb()
 	var g = gId('sliderG').value;
 	var b = gId('sliderB').value;
 	setPicker(`rgb(${r},${g},${b})`);
-	let cd = gId('csl').children; // color slots
-	cd[csel].dataset.r = r;
-	cd[csel].dataset.g = g;
-	cd[csel].dataset.b = b;
-	setCSL(cd[csel]);
+	let cd = gId('csl').children[csel]; // color slots
+	cd.dataset.r = r;
+	cd.dataset.g = g;
+	cd.dataset.b = b;
+	setCSL(cd);
 }
 
 function fromW()
 {
 	let w = gId('sliderW');
-	let cd = gId('csl').children; // color slots
-	cd[csel].dataset.w = w.value;
-	setCSL(cd[csel]);
+	let cd = gId('csl').children[csel]; // color slots
+	cd.dataset.w = w.value;
+	setCSL(cd);
 	updateTrail(w);
 }
 
 // sr 0: from RGB sliders, 1: from picker, 2: from hex
 function setColor(sr)
 {
-	var cd = gId('csl').children; // color slots
-	let cdd = cd[csel].dataset;
-	let w = 0, r,g,b;
+	var cd = gId('csl').children[csel]; // color slots
+	let cdd = cd.dataset;
+	let w = parseInt(cdd.w), r = parseInt(cdd.r), g = parseInt(cdd.g), b = parseInt(cdd.b);
 	if (sr == 1 && isRgbBlack(cdd)) cpick.color.setChannel('hsv', 'v', 100);
 	if (sr != 2 && hasWhite) w = parseInt(gId('sliderW').value);
 	var col = cpick.color.rgb;
@@ -2719,7 +2738,7 @@ function setColor(sr)
 	cdd.g = g = hasRGB ? col.g : w;
 	cdd.b = b = hasRGB ? col.b : w;
 	cdd.w = w;
-	setCSL(cd[csel]);
+	setCSL(cd);
 	var obj = {"seg": {"col": [[],[],[]]}};
 	obj.seg.col[csel] = [r, g, b, w];
 	requestJson(obj);
@@ -3158,7 +3177,7 @@ function mergeDeep(target, ...sources)
 function tooltip(cont=null)
 {
 	d.querySelectorAll((cont?cont+" ":"")+"[title]").forEach((element)=>{
-		element.addEventListener("mouseover", ()=>{
+		element.addEventListener("pointerover", ()=>{
 			// save title
 			element.setAttribute("data-title", element.getAttribute("title"));
 			const tooltip = d.createElement("span");
@@ -3183,7 +3202,7 @@ function tooltip(cont=null)
 			tooltip.classList.add("visible");
 		});
 
-		element.addEventListener("mouseout", ()=>{
+		element.addEventListener("pointerout", ()=>{
 			d.querySelectorAll('.tooltip').forEach((tooltip)=>{
 				tooltip.classList.remove("visible");
 				d.body.removeChild(tooltip);

@@ -176,7 +176,7 @@ static void writeSpace(size_t l)
   if (knownLargestSpace < l) knownLargestSpace = l;
 }
 
-bool appendObjectToFile(const char* key, JsonDocument* content, uint32_t s, uint32_t contentLen = 0)
+static bool appendObjectToFile(const char* key, const JsonDocument* content, uint32_t s, uint32_t contentLen = 0)
 {
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINTLN(F("Append"));
@@ -255,14 +255,14 @@ bool appendObjectToFile(const char* key, JsonDocument* content, uint32_t s, uint
   return true;
 }
 
-bool writeObjectToFileUsingId(const char* file, uint16_t id, JsonDocument* content)
+bool writeObjectToFileUsingId(const char* file, uint16_t id, const JsonDocument* content)
 {
   char objKey[10];
   sprintf(objKey, "\"%d\":", id);
   return writeObjectToFile(file, objKey, content);
 }
 
-bool writeObjectToFile(const char* file, const char* key, JsonDocument* content)
+bool writeObjectToFile(const char* file, const char* key, const JsonDocument* content)
 {
   uint32_t s = 0; //timing
   #ifdef WLED_DEBUG_FS
@@ -325,15 +325,15 @@ bool writeObjectToFile(const char* file, const char* key, JsonDocument* content)
   return true;
 }
 
-bool readObjectFromFileUsingId(const char* file, uint16_t id, JsonDocument* dest)
+bool readObjectFromFileUsingId(const char* file, uint16_t id, JsonDocument* dest, const JsonDocument* filter)
 {
   char objKey[10];
   sprintf(objKey, "\"%d\":", id);
-  return readObjectFromFile(file, objKey, dest);
+  return readObjectFromFile(file, objKey, dest, filter);
 }
 
 //if the key is a nullptr, deserialize entire object
-bool readObjectFromFile(const char* file, const char* key, JsonDocument* dest)
+bool readObjectFromFile(const char* file, const char* key, JsonDocument* dest, const JsonDocument* filter)
 {
   if (doCloseFile) closeFile();
   #ifdef WLED_DEBUG_FS
@@ -352,7 +352,8 @@ bool readObjectFromFile(const char* file, const char* key, JsonDocument* dest)
     return false;
   }
 
-  deserializeJson(*dest, f);
+  if (filter) deserializeJson(*dest, f, DeserializationOption::Filter(*filter));
+  else        deserializeJson(*dest, f);
 
   f.close();
   DEBUGFS_PRINTF("Read, took %lu ms\n", millis() - s);
@@ -391,7 +392,7 @@ static const uint8_t *getPresetCache(size_t &size) {
 
   if ((presetsModifiedTime != presetsCachedTime) || (presetsCachedValidate != cacheInvalidate)) {
     if (presetsCached) {
-      free(presetsCached);
+      w_free(presetsCached);
       presetsCached = nullptr;
     }
   }
@@ -402,7 +403,7 @@ static const uint8_t *getPresetCache(size_t &size) {
       presetsCachedTime = presetsModifiedTime;
       presetsCachedValidate = cacheInvalidate;
       presetsCachedSize = 0;
-      presetsCached = (uint8_t*)ps_malloc(file.size() + 1);
+      presetsCached = (uint8_t*)w_malloc(file.size() + 1);
       if (presetsCached) {
         presetsCachedSize = file.size();
         file.read(presetsCached, presetsCachedSize);

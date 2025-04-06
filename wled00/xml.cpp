@@ -11,7 +11,7 @@ void XML_response(Print& dest)
   dest.printf_P(PSTR("<?xml version=\"1.0\" ?><vs><ac>%d</ac>"), (nightlightActive && nightlightMode > NL_MODE_SET) ? briT : bri);
   for (int i = 0; i < 3; i++)
   {
-   dest.printf_P(PSTR("<cl>%d</cl>"), col[i]);
+   dest.printf_P(PSTR("<cl>%d</cl>"), colPri[i]);
   }
   for (int i = 0; i < 3; i++)
   {
@@ -20,13 +20,13 @@ void XML_response(Print& dest)
   dest.printf_P(PSTR("<ns>%d</ns><nr>%d</nr><nl>%d</nl><nf>%d</nf><nd>%d</nd><nt>%d</nt><fx>%d</fx><sx>%d</sx><ix>%d</ix><fp>%d</fp><wv>%d</wv><ws>%d</ws><ps>%d</ps><cy>%d</cy><ds>%s%s</ds><ss>%d</ss></vs>"),
     notifyDirect, receiveGroups!=0, nightlightActive, nightlightMode > NL_MODE_SET, nightlightDelayMins,
     nightlightTargetBri, effectCurrent, effectSpeed, effectIntensity, effectPalette,
-    strip.hasWhiteChannel() ? col[3] : -1, colSec[3], currentPreset, currentPlaylist >= 0,
+    strip.hasWhiteChannel() ? colPri[3] : -1, colSec[3], currentPreset, currentPlaylist >= 0,
     serverDescription, realtimeMode ? PSTR(" (live)") : "",
     strip.getFirstSelectedSegId()
   );
 }
 
-static void extractPin(Print& settingsScript, JsonObject &obj, const char *key) {
+static void extractPin(Print& settingsScript, const JsonObject &obj, const char *key) {
   if (obj[key].is<JsonArray>()) {
     JsonArray pins = obj[key].as<JsonArray>();
     for (JsonVariant pv : pins) {
@@ -38,7 +38,7 @@ static void extractPin(Print& settingsScript, JsonObject &obj, const char *key) 
 }
 
 // print used pins by scanning JsonObject (1 level deep)
-static void fillUMPins(Print& settingsScript, JsonObject &mods)
+static void fillUMPins(Print& settingsScript, const JsonObject &mods)
 {
   for (JsonPair kv : mods) {
     // kv.key() is usermod name or subobject key
@@ -178,9 +178,12 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       char fpass[l+1]; //fill password field with ***
       fpass[l] = 0;
       memset(fpass,'*',l);
-      settingsScript.printf_P(PSTR("addWiFi(\"%s\",\"%s\",0x%X,0x%X,0x%X);"),
+      char bssid[13];
+      fillMAC2Str(bssid, multiWiFi[n].bssid);
+      settingsScript.printf_P(PSTR("addWiFi(\"%s\",\"%s\",\"%s\",0x%X,0x%X,0x%X);"),
         multiWiFi[n].clientSSID,
         fpass,
+        bssid,
         (uint32_t) multiWiFi[n].staticIP, // explicit cast required as this is a struct
         (uint32_t) multiWiFi[n].staticGW,
         (uint32_t) multiWiFi[n].staticSN);
@@ -212,6 +215,8 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormCheckbox(settingsScript,PSTR("WS"),noWifiSleep);
 
     #ifndef WLED_DISABLE_ESPNOW
+    char linked_remote[13];
+    fillMAC2Str(linked_remote, masterESPNow);
     printSetFormCheckbox(settingsScript,PSTR("RE"),enableESPNow);
     printSetFormValue(settingsScript,PSTR("RMAC"),linked_remote);
     #else
@@ -253,7 +258,9 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     }
 
     #ifndef WLED_DISABLE_ESPNOW
-    if (strlen(last_signal_src) > 0) { //Have seen an ESP-NOW Remote
+    if (senderESPNow[0] | senderESPNow[1] | senderESPNow[2] | senderESPNow[3] | senderESPNow[4] | senderESPNow[5]) { //Have seen an ESP-NOW Remote
+      char last_signal_src[13];
+      fillMAC2Str(last_signal_src, senderESPNow);
       printSetClassElementHTML(settingsScript,PSTR("rlid"),0,last_signal_src);
     } else if (!enableESPNow) {
       printSetClassElementHTML(settingsScript,PSTR("rlid"),0,(char*)F("(Enable ESP-NOW to listen)"));
@@ -272,7 +279,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     // set limits
     settingsScript.printf_P(PSTR("bLimits(%d,%d,%d,%d,%d,%d,%d,%d);"),
       WLED_MAX_BUSSES,
-      WLED_MIN_VIRTUAL_BUSSES,
+      WLED_MIN_VIRTUAL_BUSSES, // irrelevant, but kept to distinguish S2/S3 in UI
       MAX_LEDS_PER_BUS,
       MAX_LED_MEMORY,
       MAX_LEDS,
@@ -288,13 +295,13 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormValue(settingsScript,PSTR("CB"),Bus::getCCTBlend());
     printSetFormValue(settingsScript,PSTR("FR"),strip.getTargetFps());
     printSetFormValue(settingsScript,PSTR("AW"),Bus::getGlobalAWMode());
-    printSetFormCheckbox(settingsScript,PSTR("LD"),useGlobalLedBuffer);
+    printSetFormCheckbox(settingsScript,PSTR("PR"),BusManager::hasParallelOutput());  // get it from bus manager not global variable
 
     unsigned sumMa = 0;
-    for (int s = 0; s < BusManager::getNumBusses(); s++) {
-      Bus* bus = BusManager::getBus(s);
-      if (bus == nullptr) continue;
-      int offset = s < 10 ? 48 : 55;
+    for (size_t s = 0; s < BusManager::getNumBusses(); s++) {
+      const Bus *bus = BusManager::getBus(s);
+      if (!bus || !bus->isOk()) break; // should not happen but for safety
+      int offset = s < 10 ? '0' : 'A';
       char lp[4] = "L0"; lp[2] = offset+s; lp[3] = 0; //ascii 0-9 //strip data pin
       char lc[4] = "LC"; lc[2] = offset+s; lc[3] = 0; //strip length
       char co[4] = "CO"; co[2] = offset+s; co[3] = 0; //strip color order
@@ -357,7 +364,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     const ColorOrderMap& com = BusManager::getColorOrderMap();
     for (int s = 0; s < com.count(); s++) {
       const ColorOrderMapEntry* entry = com.get(s);
-      if (entry == nullptr) break;
+      if (!entry || !entry->len) break;
       settingsScript.printf_P(PSTR("addCOM(%d,%d,%d);"), entry->start, entry->len, entry->colorOrder);
     }
 
@@ -376,7 +383,8 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormValue(settingsScript,PSTR("TB"),nightlightTargetBri);
     printSetFormValue(settingsScript,PSTR("TL"),nightlightDelayMinsDefault);
     printSetFormValue(settingsScript,PSTR("TW"),nightlightMode);
-    printSetFormIndex(settingsScript,PSTR("PB"),strip.paletteBlend);
+    printSetFormIndex(settingsScript,PSTR("PB"),paletteBlend);
+    printSetFormCheckbox(settingsScript,PSTR("RW"),useRainbowWheel);
     printSetFormValue(settingsScript,PSTR("RL"),rlyPin);
     printSetFormCheckbox(settingsScript,PSTR("RM"),rlyMde);
     printSetFormCheckbox(settingsScript,PSTR("RO"),rlyOpenDrain);
@@ -579,6 +587,10 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     snprintf_P(tmp_buf,sizeof(tmp_buf),PSTR("WLED %s (build %d)"),versionString,build);
     printSetClassElementHTML(settingsScript,PSTR("sip"),0,tmp_buf);
     settingsScript.printf_P(PSTR("sd=\"%s\";"), serverDescription);
+    #ifdef WLED_DISABLE_OTA
+    //hide settings if not compiled
+    settingsScript.print(F("toggle('aOTA');"));  // hide ArduinoOTA checkbox
+    #endif
   }
 
   #ifdef WLED_ENABLE_DMX // include only if DMX is enabled
@@ -650,16 +662,14 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     #ifndef WLED_DISABLE_2D
     settingsScript.printf_P(PSTR("maxPanels=%d;resetPanels();"),WLED_MAX_PANELS);
     if (strip.isMatrix) {
-      if(strip.panels>0){
-        printSetFormValue(settingsScript,PSTR("PW"),strip.panel[0].width); //Set generator Width and Height to first panel size for convenience
-        printSetFormValue(settingsScript,PSTR("PH"),strip.panel[0].height);
-      }
-      printSetFormValue(settingsScript,PSTR("MPC"),strip.panels);
+      printSetFormValue(settingsScript,PSTR("PW"),strip.panel.size()>0?strip.panel[0].width:8); //Set generator Width and Height to first panel size for convenience
+      printSetFormValue(settingsScript,PSTR("PH"),strip.panel.size()>0?strip.panel[0].height:8);
+      printSetFormValue(settingsScript,PSTR("MPC"),strip.panel.size());
       // panels
-      for (unsigned i=0; i<strip.panels; i++) {
+      for (unsigned i=0; i<strip.panel.size(); i++) {
         settingsScript.printf_P(PSTR("addPanel(%d);"), i);
         char pO[8] = { '\0' };
-        snprintf_P(pO, 7, PSTR("P%d"), i);       // WLED_MAX_PANELS is 18 so pO will always only be 4 characters or less
+        snprintf_P(pO, 7, PSTR("P%d"), i);       // WLED_WLED_MAX_PANELS is less than 100 so pO will always only be 4 characters or less
         pO[7] = '\0';
         unsigned l = strlen(pO);
         // create P0B, P1B, ..., P63B, etc for other PxxX

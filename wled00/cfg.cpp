@@ -24,7 +24,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   JsonObject ethernet = doc[F("eth")];
   CJSON(ethernetType, ethernet["type"]);
   // NOTE: Ethernet configuration takes priority over other use of pins
-  WLED::instance().initEthernet();
+  initEthernet();
 #endif
 
   JsonObject id = doc["id"];
@@ -38,24 +38,26 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   JsonObject nw = doc["nw"];
 #ifndef WLED_DISABLE_ESPNOW
   CJSON(enableESPNow, nw[F("espnow")]);
-  getStringFromJson(linked_remote, nw[F("linked_remote")], 13);
-  linked_remote[12] = '\0';
+  fillStr2MAC(masterESPNow, nw[F("linked_remote")].as<const char*>());
+  DEBUG_PRINTF_P(PSTR("ESP-NOW linked remote: " MACSTR "\n"), MAC2STR(masterESPNow));
 #endif
 
   size_t n = 0;
   JsonArray nw_ins = nw["ins"];
   if (!nw_ins.isNull()) {
     // as password are stored separately in wsec.json when reading configuration vector resize happens there, but for dynamic config we need to resize if necessary
-    if (nw_ins.size() > 1 && nw_ins.size() > multiWiFi.size()) multiWiFi.resize(nw_ins.size()); // resize constructs objects while resizing
+    if (nw_ins.size() > 1 && nw_ins.size() > multiWiFi.size()) multiWiFi.resize(min(nw_ins.size(), (size_t)WLED_MAX_WIFI_COUNT)); // resize constructs objects while resizing
     for (JsonObject wifi : nw_ins) {
       JsonArray ip = wifi["ip"];
       JsonArray gw = wifi["gw"];
       JsonArray sn = wifi["sn"];
       char ssid[33] = "";
       char pass[65] = "";
+      char bssid[13] = "";
       IPAddress nIP = (uint32_t)0U, nGW = (uint32_t)0U, nSN = (uint32_t)0x00FFFFFF; // little endian
       getStringFromJson(ssid, wifi[F("ssid")], 33);
       getStringFromJson(pass, wifi["psk"], 65); // password is not normally present but if it is, use it
+      getStringFromJson(bssid, wifi[F("bssid")], 13);
       for (size_t i = 0; i < 4; i++) {
         CJSON(nIP[i], ip[i]);
         CJSON(nGW[i], gw[i]);
@@ -63,6 +65,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       }
       if (strlen(ssid) > 0) strlcpy(multiWiFi[n].clientSSID, ssid, 33); // this will keep old SSID intact if not present in JSON
       if (strlen(pass) > 0) strlcpy(multiWiFi[n].clientPass, pass, 65); // this will keep old password intact if not present in JSON
+      if (strlen(bssid) > 0) fillStr2MAC(multiWiFi[n].bssid, bssid);
       multiWiFi[n].staticIP = nIP;
       multiWiFi[n].staticGW = nGW;
       multiWiFi[n].staticSN = nSN;
@@ -117,19 +120,22 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   uint8_t cctBlending = hw_led[F("cb")] | Bus::getCCTBlend();
   Bus::setCCTBlend(cctBlending);
   strip.setTargetFps(hw_led["fps"]); //NOP if 0, default 42 FPS
-  CJSON(useGlobalLedBuffer, hw_led[F("ld")]);
+  #if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+  CJSON(useParallelI2S, hw_led[F("prl")]);
+  #endif
 
   #ifndef WLED_DISABLE_2D
   // 2D Matrix Settings
   JsonObject matrix = hw_led[F("matrix")];
   if (!matrix.isNull()) {
     strip.isMatrix = true;
-    CJSON(strip.panels, matrix[F("mpc")]);
+    unsigned numPanels = matrix[F("mpc")] | 1;
+    numPanels = constrain(numPanels, 1, WLED_MAX_PANELS);
     strip.panel.clear();
     JsonArray panels = matrix[F("panels")];
-    int s = 0;
+    unsigned s = 0;
     if (!panels.isNull()) {
-      strip.panel.reserve(max(1U,min((size_t)strip.panels,(size_t)WLED_MAX_PANELS)));  // pre-allocate memory for panels
+      strip.panel.reserve(numPanels);  // pre-allocate default 8x8 panels
       for (JsonObject pnl : panels) {
         WS2812FX::Panel p;
         CJSON(p.bottomStart, pnl["b"]);
@@ -141,18 +147,12 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
         CJSON(p.height,      pnl["h"]);
         CJSON(p.width,       pnl["w"]);
         strip.panel.push_back(p);
-        if (++s >= WLED_MAX_PANELS || s >= strip.panels) break; // max panels reached
+        if (++s >= numPanels) break; // max panels reached
       }
-    } else {
-      // fallback
-      WS2812FX::Panel p;
-      strip.panels = 1;
-      p.height = p.width = 8;
-      p.xOffset = p.yOffset = 0;
-      p.options = 0;
-      strip.panel.push_back(p);
     }
-    // cannot call strip.setUpMatrix() here due to already locked JSON buffer
+    strip.panel.shrink_to_fit();  // release unused memory (just in case)
+    // cannot call strip.deserializeLedmap()/strip.setUpMatrix() here due to already locked JSON buffer
+    if (!fromFS) doInit |= INIT_2D; // if called at boot (fromFS==true), WLED::beginStrip() will take care of setting up matrix
   }
   #endif
 
@@ -161,38 +161,8 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   if (fromFS || !ins.isNull()) {
     DEBUG_PRINTF_P(PSTR("Heap before buses: %d\n"), ESP.getFreeHeap());
     int s = 0;  // bus iterator
-    if (fromFS) BusManager::removeAll(); // can't safely manipulate busses directly in network callback
-    unsigned mem = 0;
-
-    // determine if it is sensible to use parallel I2S outputs on ESP32 (i.e. more than 5 outputs = 1 I2S + 4 RMT)
-    bool useParallel = false;
-    #if defined(ARDUINO_ARCH_ESP32) && !defined(ARDUINO_ARCH_ESP32S2) && !defined(ARDUINO_ARCH_ESP32S3) && !defined(ARDUINO_ARCH_ESP32C3)
-    unsigned digitalCount = 0;
-    unsigned maxLedsOnBus = 0;
-    unsigned maxChannels = 0;
     for (JsonObject elm : ins) {
-      unsigned type = elm["type"] | TYPE_WS2812_RGB;
-      unsigned len = elm["len"] | DEFAULT_LED_COUNT;
-      if (!Bus::isDigital(type)) continue;
-      if (!Bus::is2Pin(type)) {
-        digitalCount++;
-        unsigned channels = Bus::getNumberOfChannels(type);
-        if (len > maxLedsOnBus)     maxLedsOnBus = len;
-        if (channels > maxChannels) maxChannels  = channels;
-      }
-    }
-    DEBUG_PRINTF_P(PSTR("Maximum LEDs on a bus: %u\nDigital buses: %u\n"), maxLedsOnBus, digitalCount);
-    // we may remove 300 LEDs per bus limit when NeoPixelBus is updated beyond 2.9.0
-    if (maxLedsOnBus <= 300 && digitalCount > 5) {
-      DEBUG_PRINTLN(F("Switching to parallel I2S."));
-      useParallel = true;
-      BusManager::useParallelOutput();
-      mem = BusManager::memUsage(maxChannels, maxLedsOnBus, 8); // use alternate memory calculation
-    }
-    #endif
-
-    for (JsonObject elm : ins) {
-      if (s >= WLED_MAX_BUSSES+WLED_MIN_VIRTUAL_BUSSES) break;
+      if (s >= WLED_MAX_BUSSES) break;
       uint8_t pins[5] = {255, 255, 255, 255, 255};
       JsonArray pinArr = elm["pin"];
       if (pinArr.size() == 0) continue;
@@ -220,26 +190,13 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
         maMax = 0;
       }
       ledType |= refresh << 7; // hack bit 7 to indicate strip requires off refresh
-      if (fromFS) {
-        BusConfig bc = BusConfig(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz, useGlobalLedBuffer, maPerLed, maMax);
-        if (useParallel && s < 8) {
-          // if for some unexplained reason the above pre-calculation was wrong, update
-          unsigned memT = BusManager::memUsage(bc); // includes x8 memory allocation for parallel I2S
-          if (memT > mem) mem = memT; // if we have unequal LED count use the largest
-        } else
-          mem += BusManager::memUsage(bc); // includes global buffer
-        if (mem <= MAX_LED_MEMORY) if (BusManager::add(bc) == -1) break;  // finalization will be done in WLED::beginStrip()
-      } else {
-        if (busConfigs[s] != nullptr) delete busConfigs[s];
-        busConfigs[s] = new BusConfig(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz, useGlobalLedBuffer, maPerLed, maMax);
-        doInitBusses = true;  // finalization done in beginStrip()
-      }
-      s++;
+
+      busConfigs.emplace_back(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz, maPerLed, maMax);
+      doInit |= INIT_BUS;  // finalization done in beginStrip()
+      if (!Bus::isVirtual(ledType)) s++; // have as many virtual buses as you want
     }
-    DEBUG_PRINTF_P(PSTR("LED buffer size: %uB\n"), mem);
-    DEBUG_PRINTF_P(PSTR("Heap after buses: %d\n"), ESP.getFreeHeap());
   }
-  if (hw_led["rev"]) BusManager::getBus(0)->setReversed(true); //set 0.11 global reversed setting for first bus
+  if (hw_led["rev"] && BusManager::getNumBusses()) BusManager::getBus(0)->setReversed(true); //set 0.11 global reversed setting for first bus
 
   // read color order map configuration
   JsonArray hw_com = hw[F("com")];
@@ -426,8 +383,9 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 
   JsonObject light = doc[F("light")];
   CJSON(briMultiplier, light[F("scale-bri")]);
-  CJSON(strip.paletteBlend, light[F("pal-mode")]);
+  CJSON(paletteBlend, light[F("pal-mode")]);
   CJSON(strip.autoSegments, light[F("aseg")]);
+  CJSON(useRainbowWheel, light[F("rw")]);
 
   CJSON(gammaCorrectVal, light["gc"]["val"]); // default 2.8
   float light_gc_bri = light["gc"]["bri"];
@@ -666,7 +624,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   if (fromFS) return needsSave;
   // if from /json/cfg
   doReboot = doc[F("rb")] | doReboot;
-  if (doInitBusses) return false; // no save needed, will do after bus init in wled.cpp loop
+  if (doInit & INIT_BUS) return false; // no save needed, will do after bus init in wled.cpp loop
   return (doc["sv"] | true);
 }
 
@@ -700,7 +658,7 @@ void deserializeConfigFromFS() {
     serializeConfig();
     // init Ethernet (in case default type is set at compile time)
     #ifdef WLED_USE_ETHERNET
-    WLED::instance().initEthernet();
+    initEthernet();
     #endif
     return;
   }
@@ -740,6 +698,8 @@ void serializeConfig() {
   JsonObject nw = root.createNestedObject("nw");
 #ifndef WLED_DISABLE_ESPNOW
   nw[F("espnow")] = enableESPNow;
+  char linked_remote[13];
+  fillMAC2Str(linked_remote, masterESPNow);
   nw[F("linked_remote")] = linked_remote;
 #endif
 
@@ -748,6 +708,9 @@ void serializeConfig() {
     JsonObject wifi = nw_ins.createNestedObject();
     wifi[F("ssid")] = multiWiFi[n].clientSSID;
     wifi[F("pskl")] = strlen(multiWiFi[n].clientPass);
+    char bssid[13];
+    fillMAC2Str(bssid, multiWiFi[n].bssid);
+    wifi[F("bssid")] = bssid;
     JsonArray wifi_ip = wifi.createNestedArray("ip");
     JsonArray wifi_gw = wifi.createNestedArray("gw");
     JsonArray wifi_sn = wifi.createNestedArray("sn");
@@ -812,20 +775,21 @@ void serializeConfig() {
   JsonObject hw_led = hw.createNestedObject("led");
   hw_led[F("total")] = strip.getLengthTotal(); //provided for compatibility on downgrade and per-output ABL
   hw_led[F("maxpwr")] = BusManager::ablMilliampsMax();
-  hw_led[F("ledma")] = 0; // no longer used
   hw_led["cct"] = strip.correctWB;
   hw_led[F("cr")] = strip.cctFromRgb;
   hw_led[F("ic")] = cctICused;
   hw_led[F("cb")] = Bus::getCCTBlend();
   hw_led["fps"] = strip.getTargetFps();
   hw_led[F("rgbwm")] = Bus::getGlobalAWMode(); // global auto white mode override
-  hw_led[F("ld")] = useGlobalLedBuffer;
+  #if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+  hw_led[F("prl")] = BusManager::hasParallelOutput();
+  #endif
 
   #ifndef WLED_DISABLE_2D
   // 2D Matrix Settings
   if (strip.isMatrix) {
     JsonObject matrix = hw_led.createNestedObject(F("matrix"));
-    matrix[F("mpc")] = strip.panels;
+    matrix[F("mpc")] = strip.panel.size();
     JsonArray panels = matrix.createNestedArray(F("panels"));
     for (size_t i = 0; i < strip.panel.size(); i++) {
       JsonObject pnl = panels.createNestedObject();
@@ -844,32 +808,42 @@ void serializeConfig() {
   JsonArray hw_led_ins = hw_led.createNestedArray("ins");
 
   for (size_t s = 0; s < BusManager::getNumBusses(); s++) {
-    Bus *bus = BusManager::getBus(s);
-    if (!bus || bus->getLength()==0) break;
+    DEBUG_PRINTF_P(PSTR("Cfg: Saving bus #%u\n"), s);
+    const Bus *bus = BusManager::getBus(s);
+    if (!bus || !bus->isOk()) break;
+    DEBUG_PRINTF_P(PSTR("  (%d-%d, type:%d, CO:%d, rev:%d, skip:%d, AW:%d kHz:%d, mA:%d/%d)\n"),
+      (int)bus->getStart(), (int)(bus->getStart()+bus->getLength()),
+      (int)(bus->getType() & 0x7F),
+      (int)bus->getColorOrder(),
+      (int)bus->isReversed(),
+      (int)bus->skippedLeds(),
+      (int)bus->getAutoWhiteMode(),
+      (int)bus->getFrequency(),
+      (int)bus->getLEDCurrent(), (int)bus->getMaxCurrent()
+    );
     JsonObject ins = hw_led_ins.createNestedObject();
     ins["start"] = bus->getStart();
-    ins["len"] = bus->getLength();
+    ins["len"]   = bus->getLength();
     JsonArray ins_pin = ins.createNestedArray("pin");
     uint8_t pins[5];
     uint8_t nPins = bus->getPins(pins);
     for (int i = 0; i < nPins; i++) ins_pin.add(pins[i]);
-    ins[F("order")] = bus->getColorOrder();
-    ins["rev"] = bus->isReversed();
-    ins[F("skip")] = bus->skippedLeds();
-    ins["type"] = bus->getType() & 0x7F;
-    ins["ref"] = bus->isOffRefreshRequired();
-    ins[F("rgbwm")] = bus->getAutoWhiteMode();
-    ins[F("freq")] = bus->getFrequency();
+    ins[F("order")]  = bus->getColorOrder();
+    ins["rev"]       = bus->isReversed();
+    ins[F("skip")]   = bus->skippedLeds();
+    ins["type"]      = bus->getType() & 0x7F;
+    ins["ref"]       = bus->isOffRefreshRequired();
+    ins[F("rgbwm")]  = bus->getAutoWhiteMode();
+    ins[F("freq")]   = bus->getFrequency();
     ins[F("maxpwr")] = bus->getMaxCurrent();
-    ins[F("ledma")] = bus->getLEDCurrent();
+    ins[F("ledma")]  = bus->getLEDCurrent();
   }
 
   JsonArray hw_com = hw.createNestedArray(F("com"));
   const ColorOrderMap& com = BusManager::getColorOrderMap();
   for (size_t s = 0; s < com.count(); s++) {
     const ColorOrderMapEntry *entry = com.get(s);
-    if (!entry) break;
-
+    if (!entry || !entry->len) break;
     JsonObject co = hw_com.createNestedObject();
     co["start"] = entry->start;
     co["len"] = entry->len;
@@ -925,8 +899,9 @@ void serializeConfig() {
 
   JsonObject light = root.createNestedObject(F("light"));
   light[F("scale-bri")] = briMultiplier;
-  light[F("pal-mode")] = strip.paletteBlend;
+  light[F("pal-mode")] = paletteBlend;
   light[F("aseg")] = strip.autoSegments;
+  light[F("rw")] = useRainbowWheel;
 
   JsonObject light_gc = light.createNestedObject("gc");
   light_gc["bri"] = (gammaCorrectBri) ? gammaCorrectVal : 1.0f;  // keep compatibility

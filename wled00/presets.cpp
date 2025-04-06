@@ -29,14 +29,15 @@ bool presetNeedsSaving() {
 static void doSaveState() {
   bool persist = (presetToSave < 251);
 
-  unsigned long start = millis();
-  while (strip.isUpdating() && millis()-start < (2*FRAMETIME_FIXED)+1) yield(); // wait 2 frames
+  unsigned long maxWait = millis() + strip.getFrameTime();
+  while (strip.isUpdating() && millis() < maxWait) delay(1); // wait for strip to finish updating, accessing FS during sendout causes glitches
+
   if (!requestJSONBufferLock(10)) return;
 
   initPresetsFile(); // just in case if someone deleted presets.json using /edit
   JsonObject sObj = pDoc->to<JsonObject>();
 
-  DEBUG_PRINTLN(F("Serialize current state"));
+  DEBUG_PRINTLN(F("Preset: Serialize current state"));
   if (playlistSave) {
     serializePlaylist(sObj);
     if (includeBri) sObj["on"] = true;
@@ -56,14 +57,10 @@ static void doSaveState() {
 */
   #if defined(ARDUINO_ARCH_ESP32)
   if (!persist) {
-    if (tmpRAMbuffer!=nullptr) free(tmpRAMbuffer);
+    w_free(tmpRAMbuffer);
     size_t len = measureJson(*pDoc) + 1;
-    DEBUG_PRINTLN(len);
     // if possible use SPI RAM on ESP32
-    if (psramSafe && psramFound())
-      tmpRAMbuffer = (char*) ps_malloc(len);
-    else
-      tmpRAMbuffer = (char*) malloc(len);
+    tmpRAMbuffer = (char*)w_malloc(len);
     if (tmpRAMbuffer!=nullptr) {
       serializeJson(*pDoc, tmpRAMbuffer, len);
     } else {
@@ -80,8 +77,8 @@ static void doSaveState() {
   // clean up
   saveLedmap   = -1;
   presetToSave = 0;
-  delete[] saveName;
-  delete[] quickLoad;
+  w_free(saveName);
+  w_free(quickLoad);
   saveName = nullptr;
   quickLoad = nullptr;
   playlistSave = false;
@@ -168,6 +165,11 @@ void handlePresets()
 
   DEBUG_PRINTF_P(PSTR("Applying preset: %u\n"), (unsigned)tmpPreset);
 
+  #if defined(ARDUINO_ARCH_ESP32S2) || defined(ARDUINO_ARCH_ESP32C3)
+  unsigned long maxWait = millis() + strip.getFrameTime();
+  while (strip.isUpdating() && millis() < maxWait) delay(1); // wait for strip to finish updating, accessing FS during sendout causes glitches
+  #endif
+
   #ifdef ARDUINO_ARCH_ESP32
   if (tmpPreset==255 && tmpRAMbuffer!=nullptr) {
     deserializeJson(*pDoc,tmpRAMbuffer);
@@ -201,7 +203,7 @@ void handlePresets()
   #if defined(ARDUINO_ARCH_ESP32)
   //Aircoookie recommended not to delete buffer
   if (tmpPreset==255 && tmpRAMbuffer!=nullptr) {
-    free(tmpRAMbuffer);
+    w_free(tmpRAMbuffer);
     tmpRAMbuffer = nullptr;
   }
   #endif
@@ -215,8 +217,8 @@ void handlePresets()
 //called from handleSet(PS=) [network callback (sObj is empty), IR (irrational), deserializeState, UDP] and deserializeState() [network callback (filedoc!=nullptr)]
 void savePreset(byte index, const char* pname, JsonObject sObj)
 {
-  if (!saveName) saveName = new char[33];
-  if (!quickLoad) quickLoad = new char[9];
+  if (!saveName) saveName = static_cast<char*>(w_malloc(33));
+  if (!quickLoad) quickLoad = static_cast<char*>(w_malloc(9));
   if (!saveName || !quickLoad) return;
 
   if (index == 0 || (index > 250 && index < 255)) return;
@@ -262,8 +264,8 @@ void savePreset(byte index, const char* pname, JsonObject sObj)
         presetsModifiedTime = toki.second(); //unix time
         updateFSInfo();
       }
-      delete[] saveName;
-      delete[] quickLoad;
+      w_free(saveName);
+      w_free(quickLoad);
       saveName = nullptr;
       quickLoad = nullptr;
     } else {

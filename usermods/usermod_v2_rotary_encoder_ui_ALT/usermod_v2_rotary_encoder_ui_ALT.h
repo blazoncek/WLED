@@ -392,30 +392,30 @@ byte RotaryEncoderUIUsermod::readPin(uint8_t pin) {
  * modes_alpha_indexes and palettes_alpha_indexes.
  */
 void RotaryEncoderUIUsermod::sortModesAndPalettes() {
-  DEBUGUM_PRINT(F("Sorting modes: ")); DEBUGUM_PRINTLN(strip.getModeCount());
+  DEBUGUM_PRINTF_P(PSTR("Sorting modes: %d\n"), (int)strip.getModeCount());
   //modes_qstrings = re_findModeStrings(JSON_mode_names, strip.getModeCount());
   modes_qstrings = strip.getModeDataSrc();
   modes_alpha_indexes = re_initIndexArray(strip.getModeCount());
   re_sortModes(modes_qstrings, modes_alpha_indexes, strip.getModeCount(), MODE_SORT_SKIP_COUNT);
 
-  DEBUGUM_PRINT(F("Sorting palettes: ")); DEBUGUM_PRINT(strip.getPaletteCount()); DEBUGUM_PRINT('/'); DEBUGUM_PRINTLN(strip.customPalettes.size());
-  palettes_qstrings = re_findModeStrings(JSON_palette_names, strip.getPaletteCount());
-  palettes_alpha_indexes = re_initIndexArray(strip.getPaletteCount());
-  if (strip.customPalettes.size()) {
-    for (int i=0; i<strip.customPalettes.size(); i++) {
-      palettes_alpha_indexes[strip.getPaletteCount()-strip.customPalettes.size()+i] = 255-i;
-      palettes_qstrings[strip.getPaletteCount()-strip.customPalettes.size()+i] = PSTR("~Custom~");
+  DEBUGUM_PRINTF_P(PSTR("Sorting palettes: %d (%u)\n"), getPaletteCount(), customPalettes.size());
+  palettes_qstrings = re_findModeStrings(JSON_palette_names, getPaletteCount()-customPalettes.size());
+  palettes_alpha_indexes = re_initIndexArray(getPaletteCount()-customPalettes.size());
+  if (customPalettes.size()) {
+    for (int i=0; i<customPalettes.size(); i++) {
+      palettes_alpha_indexes[getPaletteCount()-customPalettes.size()+i] = 255-i;
+      palettes_qstrings[getPaletteCount()-customPalettes.size()+i] = PSTR("~Custom~");
     }
   }
   // How many palette names start with '*' and should not be sorted?
   // (Also skipping the first one, 'Default').
   int skipPaletteCount = 1;
   while (pgm_read_byte_near(palettes_qstrings[skipPaletteCount]) == '*') skipPaletteCount++;
-  re_sortModes(palettes_qstrings, palettes_alpha_indexes, strip.getPaletteCount()-strip.customPalettes.size(), skipPaletteCount);
+  re_sortModes(palettes_qstrings, palettes_alpha_indexes, getPaletteCount()-customPalettes.size(), skipPaletteCount);
 }
 
 byte *RotaryEncoderUIUsermod::re_initIndexArray(int numModes) {
-  byte *indexes = (byte *)malloc(sizeof(byte) * numModes);
+  byte *indexes = (byte *)w_malloc(sizeof(byte) * numModes);
   for (unsigned i = 0; i < numModes; i++) {
     indexes[i] = i;
   }
@@ -427,7 +427,7 @@ byte *RotaryEncoderUIUsermod::re_initIndexArray(int numModes) {
  * They don't end in '\0', they end in '"'. 
  */
 const char **RotaryEncoderUIUsermod::re_findModeStrings(const char json[], int numModes) {
-  const char **modeStrings = (const char **)malloc(sizeof(const char *) * numModes);
+  const char **modeStrings = (const char **)w_malloc(sizeof(const char *) * numModes);
   uint8_t modeIndex = 0;
   bool insideQuotes = false;
   // advance past the mark for markLineNum that may exist.
@@ -518,7 +518,7 @@ void RotaryEncoderUIUsermod::setup()
 
   loopTime = millis();
 
-  currentCCT = (approximateKelvinFromRGB(RGBW32(col[0], col[1], col[2], col[3])) - 1900) >> 5;
+  currentCCT = (approximateKelvinFromRGB(RGBW32(colPri[0], colPri[1], colPri[2], colPri[3])) - 1900) >> 5;
 
   if (!initDone) sortModesAndPalettes();
 
@@ -700,7 +700,7 @@ void RotaryEncoderUIUsermod::findCurrentEffectAndPalette() {
 
   effectPaletteIndex = 0;
   DEBUGUM_PRINTLN(effectPalette);
-  for (unsigned i = 0; i < strip.getPaletteCount()+strip.customPalettes.size(); i++) {
+  for (unsigned i = 0; i < getPaletteCount(); i++) {
     if (palettes_alpha_indexes[i] == effectPalette) {
       effectPaletteIndex = i;
       DEBUGUM_PRINTLN(F("Found palette."));
@@ -890,7 +890,7 @@ void RotaryEncoderUIUsermod::changePalette(bool increase) {
   }
   display->updateRedrawTime();
 #endif
-  effectPaletteIndex = max(min((unsigned)(increase ? effectPaletteIndex+1 : effectPaletteIndex-1), strip.getPaletteCount()+strip.customPalettes.size()-1), 0U);
+  effectPaletteIndex = max(min((unsigned)(increase ? effectPaletteIndex+1 : effectPaletteIndex-1), getPaletteCount()-1), 0U);
   effectPalette = palettes_alpha_indexes[effectPaletteIndex];
   stateChanged = true;
   if (applyToAll) {
@@ -920,17 +920,17 @@ void RotaryEncoderUIUsermod::changeHue(bool increase){
   display->updateRedrawTime();
 #endif
   currentHue1 = max(min((increase ? currentHue1+fadeAmount : currentHue1-fadeAmount), 255), 0);
-  colorHStoRGB(currentHue1*256, currentSat1, col);
+  colorHStoRGB(currentHue1*256, currentSat1, colPri);
   stateChanged = true; 
   if (applyToAll) {
     for (unsigned i=0; i<strip.getSegmentsNum(); i++) {
       Segment& seg = strip.getSegment(i);
       if (!seg.isActive()) continue;
-      seg.colors[0] = RGBW32(col[0], col[1], col[2], col[3]);
+      seg.colors[0] = RGBW32(colPri[0], colPri[1], colPri[2], colPri[3]);
     }
   } else {
     Segment& seg = strip.getSegment(strip.getMainSegmentId());
-    seg.colors[0] = RGBW32(col[0], col[1], col[2], col[3]);
+    seg.colors[0] = RGBW32(colPri[0], colPri[1], colPri[2], colPri[3]);
   }
   lampUdated();
 #ifdef USERMOD_FOUR_LINE_DISPLAY
@@ -950,16 +950,16 @@ void RotaryEncoderUIUsermod::changeSat(bool increase){
   display->updateRedrawTime();
 #endif
   currentSat1 = max(min((increase ? currentSat1+fadeAmount : currentSat1-fadeAmount), 255), 0);
-  colorHStoRGB(currentHue1*256, currentSat1, col);
+  colorHStoRGB(currentHue1*256, currentSat1, colPri);
   if (applyToAll) {
     for (unsigned i=0; i<strip.getSegmentsNum(); i++) {
       Segment& seg = strip.getSegment(i);
       if (!seg.isActive()) continue;
-      seg.colors[0] = RGBW32(col[0], col[1], col[2], col[3]);
+      seg.colors[0] = RGBW32(colPri[0], colPri[1], colPri[2], colPri[3]);
     }
   } else {
     Segment& seg = strip.getSegment(strip.getMainSegmentId());
-    seg.colors[0] = RGBW32(col[0], col[1], col[2], col[3]);
+    seg.colors[0] = RGBW32(colPri[0], colPri[1], colPri[2], colPri[3]);
   }
   lampUdated();
 #ifdef USERMOD_FOUR_LINE_DISPLAY

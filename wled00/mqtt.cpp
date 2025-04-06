@@ -68,8 +68,8 @@ static void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProp
   }
 
   if (index == 0) {                       // start (1st partial packet or the only packet)
-    if (payloadStr) delete[] payloadStr;  // fail-safe: release buffer
-    payloadStr = new char[total+1];       // allocate new buffer
+    w_free(payloadStr);                   // release buffer if it exists
+    payloadStr = static_cast<char*>(w_malloc(total+1)); // allocate new buffer
   }
   if (payloadStr == nullptr) return;      // buffer not allocated
 
@@ -94,7 +94,7 @@ static void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProp
     } else {
       // Non-Wled Topic used here. Probably a usermod subscribed to this topic.
       UsermodManager::onMqttMessage(topic, payloadStr);
-      delete[] payloadStr;
+      w_free(payloadStr);
       payloadStr = nullptr;
       return;
     }
@@ -103,7 +103,7 @@ static void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProp
   //Prefix is stripped from the topic at this point
 
   if (strcmp_P(topic, PSTR("/col")) == 0) {
-    colorFromDecOrHexString(col, payloadStr);
+    colorFromDecOrHexString(colPri, payloadStr);
     colorUpdated(CALL_MODE_DIRECT_CHANGE);
   } else if (strcmp_P(topic, PSTR("/api")) == 0) {
     if (requestJSONBufferLock(15)) {
@@ -124,7 +124,7 @@ static void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProp
     // topmost topic (just wled/MAC)
     parseMQTTBriPayload(payloadStr);
   }
-  delete[] payloadStr;
+  w_free(payloadStr);
   payloadStr = nullptr;
 }
 
@@ -169,7 +169,7 @@ void publishMqtt()
   strcat_P(subuf, PSTR("/g"));
   mqtt->publish(subuf, 0, retainMqttMsg, s);         // optionally retain message (#2263)
 
-  sprintf_P(s, PSTR("#%06X"), (col[3] << 24) | (col[0] << 16) | (col[1] << 8) | (col[2]));
+  sprintf_P(s, PSTR("#%06X"), (colPri[3] << 24) | (colPri[0] << 16) | (colPri[1] << 8) | (colPri[2]));
   strlcpy(subuf, mqttDeviceTopic, MQTT_MAX_TOPIC_LEN + 1);
   strcat_P(subuf, PSTR("/c"));
   mqtt->publish(subuf, 0, retainMqttMsg, s);         // optionally retain message (#2263)
@@ -196,7 +196,8 @@ bool initMqtt()
   if (!mqttEnabled || mqttServer[0] == 0 || !WLED_CONNECTED) return false;
 
   if (mqtt == nullptr) {
-    mqtt = new AsyncMqttClient();
+    void *ptr = w_malloc(sizeof(AsyncMqttClient));
+    mqtt = new (ptr) AsyncMqttClient(); // use placement new (into PSRAM), client will never be deleted
     if (!mqtt) return false;
     mqtt->onMessage(onMqttMessage);
     mqtt->onConnect(onMqttConnect);

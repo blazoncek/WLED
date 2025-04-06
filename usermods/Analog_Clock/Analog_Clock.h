@@ -90,7 +90,7 @@ private:
 
     bool hexStringToColor(String const& s, uint32_t& c, uint32_t def) {
         char *ep;
-        unsigned long long r = strtoull(s.c_str(), &ep, 16);
+        uint32_t r = strtoul(s.c_str(), &ep, 16);
         if (*ep == 0) {
             c = r;
             return true;
@@ -102,10 +102,10 @@ private:
 
     void secondsEffectSineFade(int16_t secondLed, Toki::Time const& time) {
         uint32_t ms = time.ms % 1000;
-        uint8_t b0 = (cos8(ms * 64 / 1000) - 128) * 2;
-        setPixelColor(secondLed, gamma32(scale32(secondColor, b0)));
-        uint8_t b1 = (sin8(ms * 64 / 1000) - 128) * 2;
-        setPixelColor(inc(secondLed, 1, secondsSegment), gamma32(scale32(secondColor, b1)));
+        uint8_t b0 = (cos8_t(ms * 64 / 1000) - 128) * 2;
+        setPixelColor(secondLed, scale32(secondColor, b0));
+        uint8_t b1 = (sin8_t(ms * 64 / 1000) - 128) * 2;
+        setPixelColor(inc(secondLed, 1, secondsSegment), scale32(secondColor, b1));
     }
 
     static inline uint32_t qadd32(uint32_t c1, uint32_t c2) {
@@ -192,7 +192,7 @@ public:
             // for (uint16_t i = 1; i < secondsTrail + 1; ++i) {
             //     uint16_t trailLed = dec(secondLed, i, secondsSegment);
             //     uint8_t trailBright = 255 / (secondsTrail + 1) * (secondsTrail - i + 1);
-            //     setPixelColor(trailLed, gamma32(scale32(secondColor, trailBright)));
+            //     setPixelColor(trailLed, scale32(secondColor, trailBright));
             // }
         }
 

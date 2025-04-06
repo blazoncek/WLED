@@ -1,6 +1,5 @@
 #include "src/dependencies/timezone/Timezone.h"
 #include "wled.h"
-#include "fcn_declare.h"
 
 // WARNING: may cause errors in sunset calculations on ESP8266, see #3400
 // building with `-D WLED_USE_REAL_MATH` will prevent those errors at the expense of flash and RAM
@@ -224,7 +223,7 @@ void sendNTPPacket()
   ntpUdp.endPacket();
 }
 
-static bool isValidNtpResponse(byte * ntpPacket) {
+static bool isValidNtpResponse(const byte * ntpPacket) {
   // Perform a few validity checks on the packet
   //   based on https://github.com/taranais/NTPClient/blob/master/NTPClient.cpp
   if((ntpPacket[0] & 0b11000000) == 0b11000000) return false; //reject LI=UNSYNC
