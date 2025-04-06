@@ -22,7 +22,7 @@ uint32_t color_blend(uint32_t color1, uint32_t color2, uint8_t blend) {
 
 /*
  * color add function that preserves ratio
- * original idea: https://github.com/Aircoookie/WLED/pull/2465 by https://github.com/Proto-molecule
+ * original idea: https://github.com/wled/WLED/pull/2465 by https://github.com/Proto-molecule
  * speed optimisations by @dedehai
  */
 uint32_t color_add(uint32_t c1, uint32_t c2, bool preserveCR)

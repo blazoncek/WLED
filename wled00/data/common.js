@@ -2,7 +2,7 @@ var d=document;
 var loc = false, locip, locproto = "http:";
 
 function H(pg="")   { window.open("https://kno.wled.ge/"+pg); }
-function GH()       { window.open("https://github.com/Aircoookie/WLED"); }
+function GH()       { window.open("https://github.com/wled/WLED"); }
 function gId(c)     { return d.getElementById(c); } // getElementById
 function cE(e)      { return d.createElement(e); } // createElement
 function gEBCN(c)   { return d.getElementsByClassName(c); } // getElementsByClassName

@@ -2905,7 +2905,7 @@ static const char _data_FX_MODE_BOUNCINGBALLS[] PROGMEM = "Bouncing Balls@Gravit
 /*
  *  bouncing balls on a track track Effect modified from Aircoookie's bouncing balls
  *  Courtesy of pjhatch (https://github.com/pjhatch)
- *  https://github.com/Aircoookie/WLED/pull/1039
+ *  https://github.com/wled/WLED/pull/1039
  */
 // modified for balltrack mode
 typedef struct RollingBall {

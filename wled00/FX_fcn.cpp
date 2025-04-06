@@ -685,7 +685,7 @@ bool IRAM_ATTR Segment::isPixelClipped(int i) const {
       return progress() <= pos;
     }
     const bool iInside = (i >= start && i < stop);
-    return !iInside ^ invert; // thanks @willmmiles (https://github.com/Aircoookie/WLED/pull/3877#discussion_r1554633876)
+    return !iInside ^ invert; // thanks @willmmiles (https://github.com/wled/WLED/pull/3877#discussion_r1554633876)
   }
   return false;
 }
