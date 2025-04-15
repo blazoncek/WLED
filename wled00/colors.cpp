@@ -27,37 +27,48 @@ uint32_t color_blend(uint32_t color1, uint32_t color2, uint8_t blend) {
  */
 uint32_t color_add(uint32_t c1, uint32_t c2, bool preserveCR)
 {
+  if (preserveCR) { fast_color_add(c1, c2); return c1; }
   if (c1 == BLACK) return c2;
   if (c2 == BLACK) return c1;
   const uint32_t TWO_CHANNEL_MASK = 0x00FF00FF; // mask for R and B channels or W and G if negated
   uint32_t rb = ( c1     & TWO_CHANNEL_MASK) + ( c2     & TWO_CHANNEL_MASK); // mask and add two colors at once
   uint32_t wg = ((c1>>8) & TWO_CHANNEL_MASK) + ((c2>>8) & TWO_CHANNEL_MASK);
-  uint32_t r = rb >> 16; // extract single color values
-  uint32_t b = rb & 0xFFFF;
-  uint32_t w = wg >> 16;
-  uint32_t g = wg & 0xFFFF;
+  // saturate overflows
+  if (rb & 0xFF000000) rb |= 0x00FF0000;
+  if (wg & 0x0000FF00) wg |= 0x000000FF;
+  if (rb & 0x0000FF00) rb |= 0x000000FF;
+  if (wg & 0xFF000000) wg |= 0x00FF0000;
+  rb &= TWO_CHANNEL_MASK;
+  wg &= TWO_CHANNEL_MASK;
+  return rb | (wg<<8);
+}
 
-  if (preserveCR) { // preserve color ratios
-    uint32_t max = std::max(r,g); // check for overflow note
-    max = std::max(max,b);
-    max = std::max(max,w);
-    //unsigned max = r; // check for overflow note
-    //max = g > max ? g : max;
-    //max = b > max ? b : max;
-    //max = w > max ? w : max;
-    if (max > 255) {
-      const uint32_t scale = (uint32_t(255)<<8) / max; // division of two 8bit (shifted) values does not work -> use bit shifts and multiplaction instead
-      rb = ((rb * scale) >> 8) &  TWO_CHANNEL_MASK;
-      wg =  (wg * scale)       & ~TWO_CHANNEL_MASK;
-    } else wg <<= 8; //shift white and green back to correct position
-    return rb | wg;
-  } else {
-    r = r > 255 ? 255 : r;
-    g = g > 255 ? 255 : g;
-    b = b > 255 ? 255 : b;
-    w = w > 255 ? 255 : w;
-    return RGBW32(r,g,b,w);
-  }
+__attribute__((optimize("-O2"))) void fast_color_scale(uint32_t &c1, uint8_t scale) {
+  //if (scale == 255) return;
+  if (scale == 0) { c1 = BLACK; return; }
+  const uint32_t TWO_CHANNEL_MASK = 0x00FF00FF; // mask for R and B channels or W and G if negated
+  uint32_t rb = ((( c1     & TWO_CHANNEL_MASK) * scale) >> 8) &  TWO_CHANNEL_MASK;
+  uint32_t wg =  (((c1>>8) & TWO_CHANNEL_MASK) * scale)       & ~TWO_CHANNEL_MASK;
+  c1 = rb | wg;
+}
+
+__attribute__((optimize("-O2"))) void fast_color_add(uint32_t &c1, uint32_t c2, uint8_t scale) {
+  if (c2 == BLACK) return;                              // adding black does nothing
+  if (scale < 255) fast_color_scale(c2, scale);         // scale added color
+  if (c1 == BLACK) { c1 = c2; return; }                 // source is black, just assign c2
+  const uint32_t TWO_CHANNEL_MASK = 0x00FF00FF;         // mask for R and B channels or W and G if negated
+  auto max = [](uint32_t a, uint32_t b){ return a > b ? a : b; };
+  uint32_t rb = ( c1     & TWO_CHANNEL_MASK) + ( c2     & TWO_CHANNEL_MASK); // mask and add two colors at once
+  uint32_t wg = ((c1>>8) & TWO_CHANNEL_MASK) + ((c2>>8) & TWO_CHANNEL_MASK); // mask and add two colors at once
+  uint32_t maxC = max(rb >> 16, rb & 0xFFFF);  // check for overflow
+  maxC = max(maxC, wg & 0xFFFF);
+  maxC = max(maxC, wg >> 16);
+  if (maxC > 255U) {                                    // maxC cannot be greater than 0x1FE (0xFF+0xFF)
+    maxC = (255U<<8) / maxC;                            // 0x80 - 0xFF (0x1FE - 0x100)
+    rb = ((rb * maxC) >> 8) &  TWO_CHANNEL_MASK;        // mask out unused lower bits
+    wg =  (wg * maxC)       & ~TWO_CHANNEL_MASK;        // mask out unused lower bits
+  } else wg <<= 8;
+  c1 = rb | wg;
 }
 
 /*
@@ -67,23 +78,15 @@ uint32_t color_add(uint32_t c1, uint32_t c2, bool preserveCR)
 
 uint32_t color_fade(uint32_t c1, uint8_t amount, bool video)
 {
-  if (amount == 255) return c1;
-  if (c1 == BLACK || amount == 0) return BLACK;
-  uint32_t scaledcolor; // color order is: W R G B from MSB to LSB
-  uint32_t scale = amount; // 32bit for faster calculation
   uint32_t addRemains = 0;
-  if (!video) scale++; // add one for correct scaling using bitshifts
-  else { // video scaling: make sure colors do not dim to zero if they started non-zero
+  if (video && amount) { // video scaling: make sure colors do not dim to zero if they started non-zero
     addRemains  = R(c1) ? 0x00010000 : 0;
     addRemains |= G(c1) ? 0x00000100 : 0;
     addRemains |= B(c1) ? 0x00000001 : 0;
     addRemains |= W(c1) ? 0x01000000 : 0;
   }
-  const uint32_t TWO_CHANNEL_MASK = 0x00FF00FF;
-  uint32_t rb = (((c1 &  TWO_CHANNEL_MASK) * scale) >> 8) &  TWO_CHANNEL_MASK; // scale red and blue
-  uint32_t wg = (((c1 & ~TWO_CHANNEL_MASK) >> 8) * scale) & ~TWO_CHANNEL_MASK; // scale white and green
-  scaledcolor = (rb | wg) + addRemains;
-  return scaledcolor;
+  fast_color_scale(c1, amount);
+  return c1 + addRemains;
 }
 
 // 1:1 replacement of fastled function optimized for ESP, slightly faster, more accurate and uses less flash (~ -200bytes)
