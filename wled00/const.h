@@ -77,6 +77,16 @@
 #endif
 #define WLED_MAX_BUSSES (WLED_MAX_DIGITAL_CHANNELS+WLED_MAX_ANALOG_CHANNELS)
 
+// Maximum number of pins per output. 5 for RGBCCT analog LEDs.
+#define OUTPUT_MAX_PINS 5
+
+// for pin manager
+#ifdef ESP8266
+#define WLED_NUM_PINS (GPIO_PIN_COUNT+1) // somehow they forgot GPIO 16 (0-16==17)
+#else
+#define WLED_NUM_PINS (GPIO_PIN_COUNT)
+#endif
+
 #ifndef WLED_MAX_BUTTONS
   #ifdef ESP8266
     #define WLED_MAX_BUTTONS 2
@@ -307,18 +317,6 @@
 #define TYPE_NET_ARTNET_RGBW     89            //network ArtNet RGB bus (master broadcast bus, unused)
 #define TYPE_VIRTUAL_MAX         95
 
-/*
-// old macros that have been moved to Bus class
-#define IS_TYPE_VALID(t) ((t) > 15 && (t) < 128)
-#define IS_DIGITAL(t)    (((t) > 15 && (t) < 40) || ((t) > 47 && (t) < 64)) //digital are 16-39 and 48-63
-#define IS_2PIN(t)       ((t) > 47 && (t) < 64)
-#define IS_16BIT(t)      ((t) == TYPE_UCS8903 || (t) == TYPE_UCS8904)
-#define IS_ONOFF(t)      ((t) == 40)
-#define IS_PWM(t)        ((t) > 40 && (t) < 46)     //does not include on/Off type
-#define NUM_PWM_PINS(t)  ((t) - 40)                 //for analog PWM 41-45 only
-#define IS_VIRTUAL(t)    ((t) >= 80 && (t) < 96)    //this was a poor choice a better would be 96-111
-*/
-
 //Color orders
 #define COL_ORDER_GRB             0           //GRB(w),defaut
 #define COL_ORDER_RGB             1           //common for WS2811
@@ -449,9 +447,6 @@
 #define INIT_BUS      0x01
 #define INIT_2D       0x02
 #define INIT_RESERVED 0xFC
-
-// Maximum number of pins per output. 5 for RGBCCT analog LEDs.
-#define OUTPUT_MAX_PINS 5
 
 //maximum number of rendered LEDs - this does not have to match max. physical LEDs, e.g. if there are virtual busses
 #ifndef MAX_LEDS

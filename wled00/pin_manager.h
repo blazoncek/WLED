@@ -28,12 +28,6 @@
   #define DEBUGPM_PRINTF_P(x...)
 #endif
 
-#ifdef ESP8266
-#define WLED_NUM_PINS (GPIO_PIN_COUNT+1) // somehow they forgot GPIO 16 (0-16==17)
-#else
-#define WLED_NUM_PINS (GPIO_PIN_COUNT)
-#endif
-
 typedef struct PinManagerPinType {
   int8_t pin;
   bool   isOutput;
