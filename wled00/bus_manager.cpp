@@ -485,39 +485,40 @@ BusPwm::BusPwm(const BusConfig &bc)
 
   managed_pin_type pins[numPins];
   for (unsigned i = 0; i < numPins; i++) pins[i] = {(int8_t)bc.pins[i], true};
-  if (!PinManager::allocateMultiplePins(pins, numPins, PinOwner::BusPwm)) return;
-
-#ifdef ESP8266
-  analogWriteRange((1<<_depth)-1);
-  analogWriteFreq(_frequency);
-#else
-  // for 2 pin PWM CCT strip pinManager will make sure both LEDC channels are in the same speed group and sharing the same timer
-  _ledcStart = PinManager::allocateLedc(numPins);
-  if (_ledcStart == 255) { //no more free LEDC channels
-    PinManager::deallocateMultiplePins(pins, numPins, PinOwner::BusPwm);
-    return;
-  }
-  // if _needsRefresh is true (UI hack) we are using dithering (credit @dedehai & @zalatnaicsongor)
-  if (dithering) _depth = 12; // fixed 8 bit depth PWM with 4 bit dithering (ESP8266 has no hardware to support dithering)
-#endif
-
-  for (unsigned i = 0; i < numPins; i++) {
-    _pins[i] = bc.pins[i]; // store only after allocateMultiplePins() succeeded
+  if (PinManager::allocateMultiplePins(pins, numPins, PinOwner::BusPwm)) {
     #ifdef ESP8266
-    pinMode(_pins[i], OUTPUT);
+    analogWriteRange((1<<_depth)-1);
+    analogWriteFreq(_frequency);
     #else
-    unsigned channel = _ledcStart + i;
-    ledcSetup(channel, _frequency, _depth - (dithering*4)); // with dithering _frequency doesn't really matter as resolution is 8 bit
-    ledcAttachPin(_pins[i], channel);
-    // LEDC timer reset credit @dedehai
-    uint8_t group = (channel / 8), timer = ((channel / 2) % 4); // same fromula as in ledcSetup()
-    ledc_timer_rst((ledc_mode_t)group, (ledc_timer_t)timer); // reset timer so all timers are almost in sync (for phase shift)
+    // for 2 pin PWM CCT strip pinManager will make sure both LEDC channels are in the same speed group and sharing the same timer
+    _ledcStart = PinManager::allocateLedc(numPins);
+    if (_ledcStart == 255) { //no more free LEDC channels
+      PinManager::deallocateMultiplePins(pins, numPins, PinOwner::BusPwm);
+      DEBUGBUS_PRINTLN(F("No more free LEDC channels!"));
+      return;
+    }
+    // if _needsRefresh is true (UI hack) we are using dithering (credit @dedehai & @zalatnaicsongor)
+    if (dithering) _depth = 12; // fixed 8 bit depth PWM with 4 bit dithering (ESP8266 has no hardware to support dithering)
     #endif
+
+    for (unsigned i = 0; i < numPins; i++) {
+      _pins[i] = bc.pins[i]; // store only after allocateMultiplePins() succeeded
+      #ifdef ESP8266
+      pinMode(_pins[i], OUTPUT);
+      #else
+      unsigned channel = _ledcStart + i;
+      ledcSetup(channel, _frequency, _depth - (dithering*4)); // with dithering _frequency doesn't really matter as resolution is 8 bit
+      ledcAttachPin(_pins[i], channel);
+      // LEDC timer reset credit @dedehai
+      uint8_t group = (channel / 8), timer = ((channel / 2) % 4); // same fromula as in ledcSetup()
+      ledc_timer_rst((ledc_mode_t)group, (ledc_timer_t)timer); // reset timer so all timers are almost in sync (for phase shift)
+      #endif
+    }
+    _hasRgb = hasRGB(bc.type);
+    _hasWhite = hasWhite(bc.type);
+    _hasCCT = hasCCT(bc.type);
+    _valid = true;
   }
-  _hasRgb = hasRGB(bc.type);
-  _hasWhite = hasWhite(bc.type);
-  _hasCCT = hasCCT(bc.type);
-  _valid = true;
   DEBUGBUS_PRINTF_P(PSTR("%successfully inited PWM strip with type %u, frequency %u, bit depth %u and pins %u,%u,%u,%u,%u\n"), _valid?"S":"Uns", bc.type, _frequency, _depth, _pins[0], _pins[1], _pins[2], _pins[3], _pins[4]);
 }
 
