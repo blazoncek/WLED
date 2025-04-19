@@ -6,6 +6,35 @@
  * The structure of the JSON is not to be considered an official API and may change without notice.
  */
 
+#ifndef PIXEL_COUNTS
+  #define PIXEL_COUNTS DEFAULT_LED_COUNT
+#endif
+
+#ifndef DATA_PINS
+  #define DATA_PINS DEFAULT_LED_PIN
+#endif
+
+#ifndef LED_TYPES
+  #define LED_TYPES DEFAULT_LED_TYPE
+#endif
+
+#ifndef DEFAULT_LED_COLOR_ORDER
+  #define DEFAULT_LED_COLOR_ORDER COL_ORDER_GRB  //default to GRB
+#endif
+
+static constexpr unsigned sumPinsRequired(const unsigned* current, size_t count) {
+  return (count > 0) ? (Bus::getNumberOfPins(*current) + sumPinsRequired(current+1,count-1)) : 0;
+}
+
+static constexpr bool validatePinsAndTypes(const unsigned* types, unsigned numTypes, unsigned numPins ) {
+  // Pins provided < pins required -> always invalid
+  // Pins provided = pins required -> always valid
+  // Pins provided > pins required -> valid if excess pins are a product of last type pins since it will be repeated
+  return (sumPinsRequired(types, numTypes) > numPins) ? false :
+          (numPins - sumPinsRequired(types, numTypes)) % Bus::getNumberOfPins(types[numTypes-1]) == 0;
+}
+
+
 //simple macro for ArduinoJSON's or syntax
 #define CJSON(a,b) a = b | a
 
@@ -156,13 +185,12 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   }
   #endif
 
+  DEBUG_PRINTF_P(PSTR("Heap before buses: %d\n"), ESP.getFreeHeap());
   JsonArray ins = hw_led["ins"];
-
-  if (fromFS || !ins.isNull()) {
-    DEBUG_PRINTF_P(PSTR("Heap before buses: %d\n"), ESP.getFreeHeap());
+  if (!ins.isNull()) {
     int s = 0;  // bus iterator
     for (JsonObject elm : ins) {
-      if (s >= WLED_MAX_BUSSES) break;
+      if (s >= WLED_MAX_BUSSES) break; // only counts physical buses
       uint8_t pins[5] = {255, 255, 255, 255, 255};
       JsonArray pinArr = elm["pin"];
       if (pinArr.size() == 0) continue;
@@ -195,6 +223,97 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       doInit |= INIT_BUS;  // finalization done in beginStrip()
       if (!Bus::isVirtual(ledType)) s++; // have as many virtual buses as you want
     }
+  } else if (fromFS) {
+    //if busses failed to load, add default (fresh install, FS issue, ...)
+    BusManager::removeAll();
+    busConfigs.clear();
+
+    DEBUG_PRINTLN(F("No busses, init default"));
+    constexpr unsigned defDataTypes[] = {LED_TYPES};
+    constexpr unsigned defDataPins[] = {DATA_PINS};
+    constexpr unsigned defCounts[] = {PIXEL_COUNTS};
+    constexpr unsigned defNumTypes = (sizeof(defDataTypes) / sizeof(defDataTypes[0]));
+    constexpr unsigned defNumPins = (sizeof(defDataPins) / sizeof(defDataPins[0]));
+    constexpr unsigned defNumCounts = (sizeof(defCounts) / sizeof(defCounts[0]));
+
+    static_assert(validatePinsAndTypes(defDataTypes, defNumTypes, defNumPins),
+                  "The default pin list defined in DATA_PINS does not match the pin requirements for the default buses defined in LED_TYPES");
+
+    unsigned mem = 0;
+    unsigned pinsIndex = 0;
+    unsigned digitalCount = 0;
+    for (unsigned i = 0; i < WLED_MAX_BUSSES; i++) {
+      uint8_t defPin[OUTPUT_MAX_PINS];
+      // if we have less types than requested outputs and they do not align, use last known type to set current type
+      unsigned dataType = defDataTypes[(i < defNumTypes) ? i : defNumTypes -1];
+      unsigned busPins = Bus::getNumberOfPins(dataType);
+
+      // if we need more pins than available all outputs have been configured
+      if (pinsIndex + busPins > defNumPins) break;
+
+      // Assign all pins first so we can check for conflicts on this bus
+      for (unsigned j = 0; j < busPins && j < OUTPUT_MAX_PINS; j++) defPin[j] = defDataPins[pinsIndex + j];
+
+      for (unsigned j = 0; j < busPins && j < OUTPUT_MAX_PINS; j++) {
+        bool validPin = true;
+        // When booting without config (1st boot) we need to make sure GPIOs defined for LED output don't clash with hardware
+        // i.e. DEBUG (GPIO1), DMX (2), SPI RAM/FLASH (16&17 on ESP32-WROVER/PICO), read/only pins, etc.
+        // Pin should not be already allocated, read/only or defined for current bus
+        while (PinManager::isPinAllocated(defPin[j]) || !PinManager::isPinOk(defPin[j],true)) {
+          if (validPin) {
+            DEBUG_PRINTLN(F("Some of the provided pins cannot be used to configure this LED output."));
+            defPin[j] = 1; // start with GPIO1 and work upwards
+            validPin = false;
+          } else if (defPin[j] < WLED_NUM_PINS) {
+            defPin[j]++;
+          } else {
+            DEBUG_PRINTLN(F("No available pins left! Can't configure output."));
+            break;
+          }
+          // is the newly assigned pin already defined or used previously?
+          // try next in line until there are no clashes or we run out of pins
+          bool clash;
+          do {
+            clash = false;
+            // check for conflicts on current bus
+            for (const auto &pin : defPin) {
+              if (&pin != &defPin[j] && pin == defPin[j]) {
+                clash = true;
+                break;
+              }
+            }
+            // We already have a clash on current bus, no point checking next buses
+            if (!clash) {
+              // check for conflicts in defined pins
+              for (const auto &pin : defDataPins) {
+                if (pin == defPin[j]) {
+                  clash = true;
+                  break;
+                }
+              }
+            }
+            if (clash) defPin[j]++;
+            if (defPin[j] >= WLED_NUM_PINS) break;
+          } while (clash);
+        }
+      }
+      pinsIndex += busPins;
+
+      // if we have less counts than pins and they do not align, use last known count to set current count
+      unsigned count = defCounts[(i < defNumCounts) ? i : defNumCounts -1];
+      unsigned start = 0;
+      // analog always has length 1
+      if (Bus::isPWM(dataType) || Bus::isOnOff(dataType)) count = 1;
+      BusConfig defCfg = BusConfig(dataType, defPin, start, count, DEFAULT_LED_COLOR_ORDER, false, 0, RGBW_MODE_MANUAL_ONLY, 0);
+      mem += defCfg.memUsage(Bus::isDigital(dataType) && !Bus::is2Pin(dataType) ? digitalCount++ : 0);
+      if (mem > MAX_LED_MEMORY) {
+        DEBUG_PRINTF_P(PSTR("Out of LED memory! Bus %d (%d) #%u not created."), (int)dataType, (int)count, digitalCount);
+        break;
+      }
+      busConfigs.push_back(defCfg); // use push_back for simplification as we needed defCfg to calculate memory usage
+      doInit |= INIT_BUS;  // finalization done in beginStrip()
+    }
+    DEBUG_PRINTF_P(PSTR("LED buffer size: %uB/%uB\n"), mem, BusManager::memUsage());
   }
   if (hw_led["rev"] && BusManager::getNumBusses()) BusManager::getBus(0)->setReversed(true); //set 0.11 global reversed setting for first bus
 
@@ -283,30 +402,28 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       macroLongPress[s]   = 0;
       macroDoublePress[s] = 0;
     }
-  } else {
+  } else if (fromFS) {
     // new install/missing configuration (button 0 has defaults)
-    if (fromFS) {
-      // relies upon only being called once with fromFS == true, which is currently true.
-      for (size_t s = 0; s < WLED_MAX_BUTTONS; s++) {
-        if (buttonType[s] == BTN_TYPE_NONE || btnPin[s] < 0 || !PinManager::allocatePin(btnPin[s], false, PinOwner::Button)) {
-          btnPin[s]     = -1;
-          buttonType[s] = BTN_TYPE_NONE;
-        }
-        if (btnPin[s] >= 0) {
-          if (disablePullUp) {
-            pinMode(btnPin[s], INPUT);
-          } else {
-            #ifdef ESP32
-            pinMode(btnPin[s], buttonType[s]==BTN_TYPE_PUSH_ACT_HIGH ? INPUT_PULLDOWN : INPUT_PULLUP);
-            #else
-            pinMode(btnPin[s], INPUT_PULLUP);
-            #endif
-          }
-        }
-        macroButton[s]      = 0;
-        macroLongPress[s]   = 0;
-        macroDoublePress[s] = 0;
+    // relies upon only being called once with fromFS == true, which is currently true.
+    for (size_t s = 0; s < WLED_MAX_BUTTONS; s++) {
+      if (buttonType[s] == BTN_TYPE_NONE || btnPin[s] < 0 || !PinManager::allocatePin(btnPin[s], false, PinOwner::Button)) {
+        btnPin[s]     = -1;
+        buttonType[s] = BTN_TYPE_NONE;
       }
+      if (btnPin[s] >= 0) {
+        if (disablePullUp) {
+          pinMode(btnPin[s], INPUT);
+        } else {
+          #ifdef ESP32
+          pinMode(btnPin[s], buttonType[s]==BTN_TYPE_PUSH_ACT_HIGH ? INPUT_PULLDOWN : INPUT_PULLUP);
+          #else
+          pinMode(btnPin[s], INPUT_PULLUP);
+          #endif
+        }
+      }
+      macroButton[s]      = 0;
+      macroLongPress[s]   = 0;
+      macroDoublePress[s] = 0;
     }
   }
 
@@ -632,11 +749,10 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 static const char s_cfg_json[] PROGMEM = "/cfg.json";
 
 void deserializeConfigFromFS() {
-  bool success = deserializeConfigSec();
+  [[maybe_unused]] bool success = deserializeConfigSec();
   #ifdef WLED_ADD_EEPROM_SUPPORT
   if (!success) { //if file does not exist, try reading from EEPROM
     deEEPSettings();
-    return;
   }
   #endif
 
@@ -645,23 +761,6 @@ void deserializeConfigFromFS() {
   DEBUG_PRINTLN(F("Reading settings from /cfg.json..."));
 
   success = readObjectFromFile(s_cfg_json, nullptr, pDoc);
-  if (!success) { // if file does not exist, optionally try reading from EEPROM and then save defaults to FS
-    releaseJSONBufferLock();
-    #ifdef WLED_ADD_EEPROM_SUPPORT
-    deEEPSettings();
-    #endif
-
-    // save default values to /cfg.json
-    // call readFromConfig() with an empty object so that usermods can initialize to defaults prior to saving
-    JsonObject empty = JsonObject();
-    UsermodManager::readFromConfig(empty);
-    serializeConfig();
-    // init Ethernet (in case default type is set at compile time)
-    #ifdef WLED_USE_ETHERNET
-    initEthernet();
-    #endif
-    return;
-  }
 
   // NOTE: This routine deserializes *and* applies the configuration
   //       Therefore, must also initialize ethernet from this function

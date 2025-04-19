@@ -4,13 +4,15 @@
  * Color conversion & utility methods
  */
 
+constexpr uint32_t TWO_CHANNEL_MASK = 0x00FF00FF;     // mask for R and B channels or W and G if negated (poorman's SIMD; https://github.com/wled/WLED/pull/4568#discussion_r1986587221)
+
 /*
  * color blend function, based on FastLED blend function
  * the calculation for each color is: result = (A*(amountOfA) + A + B*(amountOfB) + B) / 256 with amountOfA = 255 - amountOfB
  */
-uint32_t color_blend(uint32_t color1, uint32_t color2, uint8_t blend) {
+uint32_t color_blend(uint32_t color1, uint32_t color2, uint8_t blend)
+{
   // min / max blend checking is omitted: calls with 0 or 255 are rare, checking lowers overall performance
-  const uint32_t TWO_CHANNEL_MASK = 0x00FF00FF;     // mask for R and B channels or W and G if negated (poorman's SIMD; https://github.com/wled/WLED/pull/4568#discussion_r1986587221)
   uint32_t rb1 =  color1       & TWO_CHANNEL_MASK;  // extract R & B channels from color1
   uint32_t wg1 = (color1 >> 8) & TWO_CHANNEL_MASK;  // extract W & G channels from color1 (shifted for multiplication later)
   uint32_t rb2 =  color2       & TWO_CHANNEL_MASK;  // extract R & B channels from color2
@@ -30,7 +32,6 @@ uint32_t color_add(uint32_t c1, uint32_t c2, bool preserveCR)
   if (preserveCR) { fast_color_add(c1, c2); return c1; }
   if (c1 == BLACK) return c2;
   if (c2 == BLACK) return c1;
-  const uint32_t TWO_CHANNEL_MASK = 0x00FF00FF; // mask for R and B channels or W and G if negated
   uint32_t rb = ( c1     & TWO_CHANNEL_MASK) + ( c2     & TWO_CHANNEL_MASK); // mask and add two colors at once
   uint32_t wg = ((c1>>8) & TWO_CHANNEL_MASK) + ((c2>>8) & TWO_CHANNEL_MASK);
   // saturate overflows
@@ -43,24 +44,26 @@ uint32_t color_add(uint32_t c1, uint32_t c2, bool preserveCR)
   return rb | (wg<<8);
 }
 
-__attribute__((optimize("-O2"))) void fast_color_scale(uint32_t &c1, uint8_t scale) {
+// fast color scale function (scales c1 as c1 * scale / 256)
+__attribute__((optimize("-O2"))) void fast_color_scale(uint32_t &c1, uint8_t scale)
+{
   //if (scale == 255) return;
   if (scale == 0) { c1 = BLACK; return; }
-  const uint32_t TWO_CHANNEL_MASK = 0x00FF00FF; // mask for R and B channels or W and G if negated
   uint32_t rb = ((( c1     & TWO_CHANNEL_MASK) * scale) >> 8) &  TWO_CHANNEL_MASK;
   uint32_t wg =  (((c1>>8) & TWO_CHANNEL_MASK) * scale)       & ~TWO_CHANNEL_MASK;
   c1 = rb | wg;
 }
 
-__attribute__((optimize("-O2"))) void fast_color_add(uint32_t &c1, uint32_t c2, uint8_t scale) {
+// fast color add function that preserves ratio
+__attribute__((optimize("-O2"))) void fast_color_add(uint32_t &c1, uint32_t c2, uint8_t scale)
+{
   if (c2 == BLACK) return;                              // adding black does nothing
   if (scale < 255) fast_color_scale(c2, scale);         // scale added color
   if (c1 == BLACK) { c1 = c2; return; }                 // source is black, just assign c2
-  const uint32_t TWO_CHANNEL_MASK = 0x00FF00FF;         // mask for R and B channels or W and G if negated
   auto max = [](uint32_t a, uint32_t b){ return a > b ? a : b; };
   uint32_t rb = ( c1     & TWO_CHANNEL_MASK) + ( c2     & TWO_CHANNEL_MASK); // mask and add two colors at once
   uint32_t wg = ((c1>>8) & TWO_CHANNEL_MASK) + ((c2>>8) & TWO_CHANNEL_MASK); // mask and add two colors at once
-  uint32_t maxC = max(rb >> 16, rb & 0xFFFF);  // check for overflow
+  uint32_t maxC = max(rb >> 16, rb & 0xFFFF);           // check for overflow
   maxC = max(maxC, wg & 0xFFFF);
   maxC = max(maxC, wg >> 16);
   if (maxC > 255U) {                                    // maxC cannot be greater than 0x1FE (0xFF+0xFF)
@@ -75,9 +78,9 @@ __attribute__((optimize("-O2"))) void fast_color_add(uint32_t &c1, uint32_t c2, 
  * fades color toward black
  * if using "video" method the resulting color will never become black unless it is already black
  */
-
 uint32_t color_fade(uint32_t c1, uint8_t amount, bool video)
 {
+  if (amount == 255) return c1; // no fading
   uint32_t addRemains = 0;
   if (video && amount) { // video scaling: make sure colors do not dim to zero if they started non-zero
     addRemains  = R(c1) ? 0x00010000 : 0;
