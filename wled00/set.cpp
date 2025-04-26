@@ -91,8 +91,19 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     bool oldESPNow = enableESPNow;
     enableESPNow = request->hasArg(F("RE"));
     if (oldESPNow != enableESPNow) forceReconnect = true;
-    fillStr2MAC(masterESPNow, request->arg(F("RMAC")).c_str());
-    DEBUG_PRINTF_P(PSTR("ESP-NOW linked remote: " MACSTR "\n"), MAC2STR(masterESPNow));
+    masterRemotes.clear();  // clear old remotes
+    for (size_t n = 0; n < 10; n++) {
+      char rm[4];
+      snprintf(rm, sizeof(rm), "RM%d", n); // "RM0" to "RM9"
+      if (request->hasArg(rm)) {
+        std::array<uint8_t, 6> entry{};
+        fillStr2MAC(entry.data(), request->arg(rm).c_str());
+        if (entry[0] != '\0') {
+          masterRemotes.push_back(entry);
+          DEBUG_PRINTF_P(PSTR("ESP-NOW linked remote: " MACSTR "\n"), MAC2STR(entry));
+        } else break;
+      } else break;
+    }
     #endif
 
     #ifdef WLED_USE_ETHERNET

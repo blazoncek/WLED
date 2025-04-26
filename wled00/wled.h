@@ -69,6 +69,11 @@
 //This is generally a terrible idea, but improves boot success on boards with a 3.3v regulator + cap setup that can't provide 400mA peaks
 //#define WLED_DISABLE_BROWNOUT_DET
 
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+#include <memory>
+
 // Library inclusions.
 #include <Arduino.h>
 #ifdef ESP8266
@@ -528,7 +533,7 @@ WLED_GLOBAL bool     serialCanTX _INIT(false);
 WLED_GLOBAL bool enableESPNow        _INIT(false);                  // global on/off for ESP-NOW
 WLED_GLOBAL byte statusESPNow        _INIT(ESP_NOW_STATE_UNINIT);   // state of ESP-NOW stack (0 uninitialised, 1 initialised, 2 error)
 WLED_GLOBAL bool useESPNowSync       _INIT(false);                  // use ESP-NOW wireless technology for sync
-WLED_GLOBAL byte masterESPNow[6]     _INIT_N(({0,0,0,0,0,0}));      // MAC of ESP-NOW sync master or linked remote (Wiz Mote)
+WLED_GLOBAL std::vector<std::array<uint8_t, 6>> masterRemotes;      // MAC of ESP-NOW sync masters or remotes (Wiz Mote)
 WLED_GLOBAL byte senderESPNow[6]     _INIT_N(({0,0,0,0,0,0}));      // last seen ESP-NOW sender
 WLED_GLOBAL byte channelESPNow       _INIT(1);                      // last channel used when searching for master
 WLED_GLOBAL unsigned long scanESPNow _INIT(0UL);                    // timestamp (in ms) of next ESP-NOW channel scan

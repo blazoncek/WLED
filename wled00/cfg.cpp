@@ -67,8 +67,27 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   JsonObject nw = doc["nw"];
 #ifndef WLED_DISABLE_ESPNOW
   CJSON(enableESPNow, nw[F("espnow")]);
-  fillStr2MAC(masterESPNow, nw[F("linked_remote")].as<const char*>());
-  DEBUG_PRINTF_P(PSTR("ESP-NOW linked remote: " MACSTR "\n"), MAC2STR(masterESPNow));
+  masterRemotes.clear();
+  JsonVariant lrem = nw[F("linked_remote")];
+  if (!lrem.isNull()) {
+     if (lrem.is<JsonArray>()) {
+      for (const auto &remote : lrem.as<JsonArray>()) {
+        std::array<uint8_t, 6> entry{};
+        fillStr2MAC(entry.data(), remote.as<const char*>());
+        if (entry[0] != '\0') {
+          masterRemotes.push_back(entry);
+          DEBUG_PRINTF_P(PSTR("ESP-NOW linked remote: " MACSTR "\n"), MAC2STR(entry.data()));
+        } else break; // invalid MAC address
+      }
+    } else { // legacy support for single MAC address in config
+      std::array<uint8_t, 6> entry{};
+      fillStr2MAC(entry.data(), lrem.as<const char*>());
+      if (entry[0] != '\0') {
+        masterRemotes.push_back(entry);
+        DEBUG_PRINTF_P(PSTR("ESP-NOW linked remote: " MACSTR "\n"), MAC2STR(entry.data()));
+      }
+    }
+  }
 #endif
 
   size_t n = 0;
@@ -798,8 +817,11 @@ void serializeConfig() {
 #ifndef WLED_DISABLE_ESPNOW
   nw[F("espnow")] = enableESPNow;
   char linked_remote[13];
-  fillMAC2Str(linked_remote, masterESPNow);
-  nw[F("linked_remote")] = linked_remote;
+  JsonArray lrem = nw.createNestedArray(F("linked_remote"));
+  for (const auto &remote : masterRemotes) {
+    fillMAC2Str(linked_remote, remote.data());
+    lrem.add(linked_remote);
+  }
 #endif
 
   JsonArray nw_ins = nw.createNestedArray("ins");

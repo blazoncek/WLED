@@ -3257,13 +3257,16 @@ void AudioReactive::fillAudioPalettes() {
 }
 
 #ifndef WLED_DISABLE_ESPNOW
-bool AudioReactive::onEspNowMessage(uint8_t *senderESPNow, uint8_t *data, uint8_t len) {
+bool AudioReactive::onEspNowMessage(uint8_t *address, uint8_t *data, uint8_t len) {
   // only handle messages from linked master/remote (ignore PING messages) or any master/remote if 0xFFFFFFFFFFFF
-  uint8_t anyMaster[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-  if (memcmp(senderESPNow, masterESPNow, 6) != 0 && memcmp(masterESPNow, anyMaster, 6) != 0) {
-    //DEBUGSR_PRINTF("ESP-NOW unpaired remote sender (expected " MACSTR ").\n", MAC2STR(masterESPNow));
-    return false;
+  bool knownRemote = false;
+  for (const auto& mac : masterRemotes) {
+    if (memcmp(address, mac.data(), 6) == 0 || memcmp(mac.data(), ESPNOW_BROADCAST_ADDRESS, 6) == 0) {
+      knownRemote = true;
+      break;
+    }
   }
+  if (!knownRemote) return false;
 
   EspNowPartialPacket *buffer = reinterpret_cast<EspNowPartialPacket *>(data);
   if (len < 6 || !(audioSyncEnabled & 0x02) || !useESPNowSync || memcmp(buffer->magic, "WLED", 4) != 0 || WLED_CONNECTED) {

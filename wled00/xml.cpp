@@ -216,9 +216,14 @@ void getSettingsJS(byte subPage, Print& settingsScript)
 
     #ifndef WLED_DISABLE_ESPNOW
     char linked_remote[13];
-    fillMAC2Str(linked_remote, masterESPNow);
     printSetFormCheckbox(settingsScript,PSTR("RE"),enableESPNow);
-    printSetFormValue(settingsScript,PSTR("RMAC"),linked_remote);
+    settingsScript.printf_P(PSTR("rstR();"));
+    for (const auto &remote : masterRemotes) {
+      char mac[13];
+      fillMAC2Str(mac, remote.data());
+      settingsScript.printf_P(PSTR("aR(\"%s\");"), mac);
+    }
+    settingsScript.print(F("tE();")); // fill fields
     #else
     //hide remote settings if not compiled
     settingsScript.print(F("toggle('ESPNOW');"));  // hide ESP-NOW setting

@@ -923,12 +923,6 @@ uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const
 // if used with unicast messages (PING to master) status will contain success of delivery. this can be used to find master's channel
 void espNowSentCB(uint8_t* address, uint8_t status) {
   DEBUG_PRINTF_P(PSTR("Message sent to " MACSTR ", status: %d (wifi: %d)\n"), MAC2STR(address), status, WiFi.channel());
-//  if (!sendNotificationsRT && status == ESP_NOW_SEND_SUCCESS) {
-//    if (memcmp(address, masterESPNow, 6) == 0) {
-//      // we sent message to master successfully, use current channel
-//      scanESPNow = millis() + 30000; // disable scanning for a few seconds
-//    }
-//  }
 }
 
 // ESP-NOW message receive callback function
@@ -949,8 +943,15 @@ void espNowReceiveCB(uint8_t* address, uint8_t* data, uint8_t len, signed int rs
 
   // only handle messages from linked master/remote (ignore PING messages) or any master/remote if 0xFFFFFFFFFFFF
   //uint8_t anyMaster[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-  if (memcmp(senderESPNow, masterESPNow, 6) != 0 && memcmp(masterESPNow, ESPNOW_BROADCAST_ADDRESS, 6) != 0) {
-    DEBUG_PRINTF_P(PSTR("ESP-NOW unpaired remote sender (expected " MACSTR ").\n"), MAC2STR(masterESPNow));
+  bool knownRemote = false;
+  for (const auto& mac : masterRemotes) {
+    if (memcmp(senderESPNow, mac.data(), 6) == 0 || memcmp(mac.data(), ESPNOW_BROADCAST_ADDRESS, 6) == 0) {
+      knownRemote = true;
+      break;
+    }
+  }
+  if (!knownRemote) {
+    DEBUG_PRINTF_P(PSTR("ESP-NOW unpaired remote sender.\n"));
     return;
   }
 
