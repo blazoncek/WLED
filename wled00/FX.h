@@ -547,6 +547,7 @@ class Segment {
       clearName();
       deallocateData();
       d_free(pixels);
+      if (_t) stopTransition();
     }
 
     Segment& operator= (const Segment &orig); // copy assignment
