@@ -392,7 +392,7 @@ static const uint8_t *getPresetCache(size_t &size) {
 
   if ((presetsModifiedTime != presetsCachedTime) || (presetsCachedValidate != cacheInvalidate)) {
     if (presetsCached) {
-      w_free(presetsCached);
+      p_free(presetsCached);
       presetsCached = nullptr;
     }
   }
@@ -403,7 +403,7 @@ static const uint8_t *getPresetCache(size_t &size) {
       presetsCachedTime = presetsModifiedTime;
       presetsCachedValidate = cacheInvalidate;
       presetsCachedSize = 0;
-      presetsCached = (uint8_t*)w_malloc(file.size() + 1);
+      presetsCached = (uint8_t*)p_malloc(file.size() + 1);
       if (presetsCached) {
         presetsCachedSize = file.size();
         file.read(presetsCached, presetsCachedSize);

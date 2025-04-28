@@ -378,9 +378,9 @@ public:
   void setup() {
     umSSDRLength = strip.getLengthTotal();
     if (umSSDRMask != 0) {
-      umSSDRMask = (bool*) w_realloc(umSSDRMask, umSSDRLength * sizeof(bool));
+      umSSDRMask = (bool*) p_realloc(umSSDRMask, umSSDRLength * sizeof(bool));
     } else {
-      umSSDRMask = (bool*) w_malloc(umSSDRLength * sizeof(bool));
+      umSSDRMask = (bool*) p_malloc(umSSDRLength * sizeof(bool));
     }
     _setAllFalse();
 

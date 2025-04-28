@@ -534,19 +534,21 @@ uint32_t hw_random(uint32_t lowerlimit, uint32_t upperlimit);
 
 // PSRAM allocation wrappers
 #ifndef ESP8266
-void *w_malloc(size_t);           // prefer PSRAM over DRAM
-void *w_calloc(size_t, size_t);   // prefer PSRAM over DRAM
-void *w_realloc(void *, size_t);  // prefer PSRAM over DRAM
-inline void w_free(void *ptr) { heap_caps_free(ptr); }
-void *d_malloc(size_t);           // prefer DRAM over PSRAM
-void *d_calloc(size_t, size_t);   // prefer DRAM over PSRAM
-void *d_realloc(void *, size_t);  // prefer DRAM over PSRAM
-inline void d_free(void *ptr) { heap_caps_free(ptr); }
+extern "C" {
+  void *p_malloc(size_t);           // prefer PSRAM over DRAM
+  void *p_calloc(size_t, size_t);   // prefer PSRAM over DRAM
+  void *p_realloc(void *, size_t);  // prefer PSRAM over DRAM
+  inline void p_free(void *ptr) { heap_caps_free(ptr); }
+  void *d_malloc(size_t);           // prefer DRAM over PSRAM
+  void *d_calloc(size_t, size_t);   // prefer DRAM over PSRAM
+  void *d_realloc(void *, size_t);  // prefer DRAM over PSRAM
+  inline void d_free(void *ptr) { heap_caps_free(ptr); }
+}
 #else
-#define w_malloc malloc
-#define w_calloc calloc
-#define w_realloc realloc
-#define w_free free
+#define p_malloc malloc
+#define p_calloc calloc
+#define p_realloc realloc
+#define p_free free
 #define d_malloc malloc
 #define d_calloc calloc
 #define d_realloc realloc

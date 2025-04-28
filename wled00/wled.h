@@ -182,9 +182,9 @@
 #if defined(ARDUINO_ARCH_ESP32)
 extern bool psramSafe;
 struct PSRAM_Allocator {
-  static inline void* allocate(size_t size)                  { return w_malloc(size); }
-  static inline void* reallocate(void* ptr, size_t new_size) { return w_realloc(ptr, new_size); }
-  static inline void  deallocate(void* pointer)              { w_free(pointer); }
+  static inline void* allocate(size_t size)                  { return p_malloc(size); }
+  static inline void* reallocate(void* ptr, size_t new_size) { return p_realloc(ptr, new_size); }
+  static inline void  deallocate(void* pointer)              { p_free(pointer); }
 };
 using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
 #else

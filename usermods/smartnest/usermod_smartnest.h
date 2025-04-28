@@ -65,7 +65,7 @@ private:
     int position = 0;
 
     // We need to copy the string in order to keep it read only as strtok_r function requires mutable string
-    color_ = (char *)w_malloc(strlen(color) + 1);
+    color_ = (char *)p_malloc(strlen(color) + 1);
     if (NULL == color_) {
       return -1;
     }
@@ -78,7 +78,7 @@ private:
       rgb[position++] = (int)strtoul(token, NULL, 10);
       token = strtok_r(NULL, delim, &cxt);
     }
-    w_free(color_);
+    p_free(color_);
 
     return position;
   }

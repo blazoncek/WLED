@@ -86,7 +86,7 @@ void WS2812FX::setUpMatrix() {
           JsonArray map = pDoc->as<JsonArray>();
           gapSize = map.size();
           if (!map.isNull() && gapSize >= matrixSize) { // not an empty map
-            gapTable = static_cast<int8_t*>(w_malloc(gapSize));
+            gapTable = static_cast<int8_t*>(p_malloc(gapSize));
             if (gapTable) for (size_t i = 0; i < gapSize; i++) {
               gapTable[i] = constrain(map[i], -1, 1);
             }
@@ -113,7 +113,7 @@ void WS2812FX::setUpMatrix() {
       }
 
       // delete gap array as we no longer need it
-      w_free(gapTable);
+      p_free(gapTable);
       resume();
 
       #ifdef WLED_DEBUG_FX

@@ -421,7 +421,7 @@ void enumerateLedmaps() {
 
     #ifndef ESP8266
     if (ledmapNames[i-1]) { //clear old name
-      w_free(ledmapNames[i-1]);
+      p_free(ledmapNames[i-1]);
       ledmapNames[i-1] = nullptr;
     }
     #endif
@@ -439,7 +439,7 @@ void enumerateLedmaps() {
             const char *name = root["n"].as<const char*>();
             if (name != nullptr) len = strlen(name);
             if (len > 0 && len < 33) {
-              ledmapNames[i-1] = static_cast<char*>(w_malloc(len+1));
+              ledmapNames[i-1] = static_cast<char*>(p_malloc(len+1));
               if (ledmapNames[i-1]) strlcpy(ledmapNames[i-1], name, 33);
             }
           }
@@ -447,7 +447,7 @@ void enumerateLedmaps() {
             char tmp[33];
             snprintf_P(tmp, 32, s_ledmap_tmpl, i);
             len = strlen(tmp);
-            ledmapNames[i-1] = static_cast<char*>(w_malloc(len+1));
+            ledmapNames[i-1] = static_cast<char*>(p_malloc(len+1));
             if (ledmapNames[i-1]) strlcpy(ledmapNames[i-1], tmp, 33);
           }
         }
@@ -499,7 +499,7 @@ uint32_t hw_random(uint32_t lowerlimit, uint32_t upperlimit) {
 }
 
 #ifndef ESP8266
-void *w_malloc(size_t size) {
+void *p_malloc(size_t size) {
   int caps1 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
   int caps2 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
   if (psramSafe) {
@@ -509,7 +509,7 @@ void *w_malloc(size_t size) {
   return heap_caps_malloc(size, caps2);
 }
 
-void *w_realloc(void *ptr, size_t size) {
+void *p_realloc(void *ptr, size_t size) {
   int caps1 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
   int caps2 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
   if (psramSafe) {
@@ -519,7 +519,7 @@ void *w_realloc(void *ptr, size_t size) {
   return heap_caps_realloc(ptr, size, caps2);
 }
 
-void *w_calloc(size_t count, size_t size) {
+void *p_calloc(size_t count, size_t size) {
   int caps1 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
   int caps2 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
   if (psramSafe) {
