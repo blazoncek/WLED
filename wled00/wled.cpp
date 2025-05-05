@@ -930,6 +930,9 @@ ESP-NOW  inited in AP mode (channel: 6/1).
     improvActive = 2;
   }
 
+  const bool isSTAmode = WiFi.getMode() & WIFI_MODE_STA;
+  const bool isAPmode  = WiFi.getMode() & WIFI_MODE_AP;
+
   if (!apActive) {
     // WiFi is not configured and soft AP is not yet open
     if (!wifiConfigured && apBehavior != AP_BEHAVIOR_BUTTON_ONLY) {
@@ -943,6 +946,12 @@ ESP-NOW  inited in AP mode (channel: 6/1).
       DEBUG_PRINTF_P(PSTR("WiFi: Opening AP in STA mode (%d) @ %lus.\n"), (int)(apBehavior == AP_BEHAVIOR_ALWAYS), now/1000);
       WiFi.mode(WIFI_MODE_APSTA);
       initAP();
+      return;
+    }
+    if (wifiConfigured && isSTAmode && wifiState == WL_NO_SSID_AVAIL && now - lastReconnectAttempt > 600000) {
+      // last wifi scan was unssucessful and wifi is unavailable for 10 minutes, try to reconnect
+      findWiFi(true);
+      forceReconnect = true;
       return;
     }
   } else {
@@ -974,8 +983,6 @@ ESP-NOW  inited in AP mode (channel: 6/1).
     }
   }
 
-  const bool isSTAmode = WiFi.getMode() & WIFI_MODE_STA;
-  const bool isAPmode  = WiFi.getMode() & WIFI_MODE_AP;
 #ifndef WLED_DISABLE_ESPNOW
   const bool isESPNowMasterDefined = masterRemotes.size() > 0;
 
