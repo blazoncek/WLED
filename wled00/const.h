@@ -38,6 +38,35 @@
   #define WLED_RELEASE_NAME "dev_release"
 #endif
 
+#ifndef CLIENT_SSID
+  #define CLIENT_SSID DEFAULT_CLIENT_SSID
+#endif
+
+#ifndef CLIENT_PASS
+  #define CLIENT_PASS ""
+#endif
+
+#ifndef MDNS_NAME
+  #define MDNS_NAME DEFAULT_MDNS_NAME
+#endif
+
+#if defined(WLED_AP_PASS) && !defined(WLED_AP_SSID)
+  #error WLED_AP_PASS is defined but WLED_AP_SSID is still the default. \
+         Please change WLED_AP_SSID to something unique.
+#endif
+
+#ifndef WLED_AP_SSID
+  #define WLED_AP_SSID DEFAULT_AP_SSID
+#endif
+
+#ifndef WLED_AP_PASS
+  #define WLED_AP_PASS DEFAULT_AP_PASS
+#endif
+
+#ifndef WLED_PIN
+  #define WLED_PIN ""
+#endif
+
 //increase if you need more
 #ifndef WLED_MAX_WIFI_COUNT
   #define WLED_MAX_WIFI_COUNT 3

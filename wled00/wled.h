@@ -190,35 +190,6 @@ using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
 #define PSRAMDynamicJsonDocument DynamicJsonDocument
 #endif
 
-#ifndef CLIENT_SSID
-  #define CLIENT_SSID DEFAULT_CLIENT_SSID
-#endif
-
-#ifndef CLIENT_PASS
-  #define CLIENT_PASS ""
-#endif
-
-#ifndef MDNS_NAME
-  #define MDNS_NAME DEFAULT_MDNS_NAME
-#endif
-
-#if defined(WLED_AP_PASS) && !defined(WLED_AP_SSID)
-  #error WLED_AP_PASS is defined but WLED_AP_SSID is still the default. \
-         Please change WLED_AP_SSID to something unique.
-#endif
-
-#ifndef WLED_AP_SSID
-  #define WLED_AP_SSID DEFAULT_AP_SSID
-#endif
-
-#ifndef WLED_AP_PASS
-  #define WLED_AP_PASS DEFAULT_AP_PASS
-#endif
-
-#ifndef WLED_PIN
-  #define WLED_PIN ""
-#endif
-
 #ifndef SPIFFS_EDITOR_AIRCOOOKIE
   #error You are not using the Aircoookie fork of the ESPAsyncWebserver library.\
   Using upstream puts your WiFi password at risk of being served by the filesystem.\
@@ -265,13 +236,6 @@ using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
 
 #define STRINGIFY(X) #X
 #define TOSTRING(X) STRINGIFY(X)
-
-#ifndef WLED_VERSION
-  #define WLED_VERSION dev
-#endif
-#ifndef WLED_RELEASE_NAME
-  #define WLED_RELEASE_NAME "dev_release"
-#endif
 
 // Global Variable definitions
 WLED_GLOBAL char versionString[] _INIT(TOSTRING(WLED_VERSION));
