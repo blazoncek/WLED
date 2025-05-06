@@ -1,5 +1,15 @@
 #include "wled.h"
 
+#ifdef WLED_DEBUG_FS
+  #define DEBUGFS_PRINT(x) DEBUGOUT.print(x)
+  #define DEBUGFS_PRINTLN(x) DEBUGOUT.println(x)
+  #define DEBUGFS_PRINTF(x...) DEBUGOUT.printf(x)
+#else
+  #define DEBUGFS_PRINT(x)
+  #define DEBUGFS_PRINTLN(x)
+  #define DEBUGFS_PRINTF(x...)
+#endif
+
 /*
  * Utility for SPIFFS filesystem
  */
@@ -438,4 +448,19 @@ bool handleFileRead(AsyncWebServerRequest* request, String path){
     return true;
   }
   return false;
+}
+
+bool initFS() {
+  bool fsinit = false;
+  DEBUGFS_PRINTLN(F("Mount FS"));
+  #ifdef ARDUINO_ARCH_ESP32
+  fsinit = WLED_FS.begin(true);
+  #else
+  fsinit = WLED_FS.begin();
+  #endif
+  if (!fsinit) {
+    DEBUGFS_PRINTLN(F("FS failed!"));
+    errorFlag = ERR_FS_BEGIN;
+  }
+  return fsinit;
 }

@@ -124,9 +124,6 @@
 #endif
 
 #include <ESPAsyncWebServer.h>
-#ifdef WLED_ADD_EEPROM_SUPPORT
-  #include <EEPROM.h>
-#endif
 #include <WiFiUdp.h>
 #include <DNSServer.h>
 #ifndef WLED_DISABLE_OTA
@@ -169,9 +166,11 @@
 #include "FastLED.h"
 #include "const.h"
 #include "fcn_declare.h"
+#include "network.h"
 #include "NodeStruct.h"
 #include "pin_manager.h"
 #include "bus_manager.h"
+#include "um_manager.h"
 #include "FX.h"
 
 // ESP32-WROVER features SPI RAM (aka PSRAM) which can be allocated using ps_malloc()
@@ -498,31 +497,20 @@ WLED_GLOBAL unsigned long lastMqttReconnectAttempt _INIT(0);  // used for other 
   #ifndef MQTT_MAX_SERVER_LEN
     #define MQTT_MAX_SERVER_LEN 32
   #endif
-WLED_GLOBAL AsyncMqttClient *mqtt _INIT(NULL);
-WLED_GLOBAL bool mqttEnabled _INIT(false);
-WLED_GLOBAL char mqttStatusTopic[MQTT_MAX_TOPIC_LEN + 8] _INIT("");         // this must be global because of async handlers
-WLED_GLOBAL char mqttDeviceTopic[MQTT_MAX_TOPIC_LEN + 1] _INIT("");         // main MQTT topic (individual per device, default is wled/mac)
-WLED_GLOBAL char mqttGroupTopic[MQTT_MAX_TOPIC_LEN + 1]  _INIT("wled/all"); // second MQTT topic (for example to group devices)
-WLED_GLOBAL char mqttServer[MQTT_MAX_SERVER_LEN + 1]     _INIT("");         // both domains and IPs should work (no SSL)
-WLED_GLOBAL char mqttUser[41] _INIT("");                   // optional: username for MQTT auth
-WLED_GLOBAL char mqttPass[65] _INIT("");                   // optional: password for MQTT auth
-WLED_GLOBAL char mqttClientID[41] _INIT("");               // override the client ID
-WLED_GLOBAL uint16_t mqttPort _INIT(1883);
-WLED_GLOBAL bool retainMqttMsg _INIT(false);               // retain brightness and color
-#define WLED_MQTT_CONNECTED (mqtt != nullptr && mqtt->connected())
+  WLED_GLOBAL AsyncMqttClient *mqtt _INIT(NULL);
+  WLED_GLOBAL bool mqttEnabled _INIT(false);
+  WLED_GLOBAL char mqttStatusTopic[MQTT_MAX_TOPIC_LEN + 8] _INIT("");         // this must be global because of async handlers
+  WLED_GLOBAL char mqttDeviceTopic[MQTT_MAX_TOPIC_LEN + 1] _INIT("");         // main MQTT topic (individual per device, default is wled/mac)
+  WLED_GLOBAL char mqttGroupTopic[MQTT_MAX_TOPIC_LEN + 1]  _INIT("wled/all"); // second MQTT topic (for example to group devices)
+  WLED_GLOBAL char mqttServer[MQTT_MAX_SERVER_LEN + 1]     _INIT("");         // both domains and IPs should work (no SSL)
+  WLED_GLOBAL char mqttUser[41] _INIT("");                   // optional: username for MQTT auth
+  WLED_GLOBAL char mqttPass[65] _INIT("");                   // optional: password for MQTT auth
+  WLED_GLOBAL char mqttClientID[41] _INIT("");               // override the client ID
+  WLED_GLOBAL uint16_t mqttPort _INIT(1883);
+  WLED_GLOBAL bool retainMqttMsg _INIT(false);               // retain brightness and color
+  #define WLED_MQTT_CONNECTED (mqtt != nullptr && mqtt->connected())
 #else
-#define WLED_MQTT_CONNECTED false
-#endif
-
-#ifndef WLED_DISABLE_HUESYNC
-WLED_GLOBAL bool huePollingEnabled _INIT(false);           // poll hue bridge for light state
-WLED_GLOBAL uint16_t huePollIntervalMs _INIT(2500);        // low values (< 1sec) may cause lag but offer quicker response
-WLED_GLOBAL char hueApiKey[47] _INIT("api");               // key token will be obtained from bridge
-WLED_GLOBAL byte huePollLightId _INIT(1);                  // ID of hue lamp to sync to. Find the ID in the hue app ("about" section)
-WLED_GLOBAL IPAddress hueIP _INIT_N(((0, 0, 0, 0))); // IP address of the bridge
-WLED_GLOBAL bool hueApplyOnOff _INIT(true);
-WLED_GLOBAL bool hueApplyBri _INIT(true);
-WLED_GLOBAL bool hueApplyColor _INIT(true);
+  #define WLED_MQTT_CONNECTED false
 #endif
 
 WLED_GLOBAL uint16_t serialBaud _INIT(1152); // serial baud rate, multiply by 100
@@ -782,6 +770,14 @@ WLED_GLOBAL bool showWelcomePage _INIT(false);
 
 // hue
 #ifndef WLED_DISABLE_HUESYNC
+WLED_GLOBAL bool huePollingEnabled _INIT(false);           // poll hue bridge for light state
+WLED_GLOBAL uint16_t huePollIntervalMs _INIT(2500);        // low values (< 1sec) may cause lag but offer quicker response
+WLED_GLOBAL char hueApiKey[47] _INIT("api");               // key token will be obtained from bridge
+WLED_GLOBAL byte huePollLightId _INIT(1);                  // ID of hue lamp to sync to. Find the ID in the hue app ("about" section)
+WLED_GLOBAL IPAddress hueIP _INIT_N(((0, 0, 0, 0))); // IP address of the bridge
+WLED_GLOBAL bool hueApplyOnOff _INIT(true);
+WLED_GLOBAL bool hueApplyBri _INIT(true);
+WLED_GLOBAL bool hueApplyColor _INIT(true);
 WLED_GLOBAL byte hueError _INIT(HUE_ERROR_INACTIVE);
 // WLED_GLOBAL uint16_t hueFailCount _INIT(0);
 WLED_GLOBAL float hueXLast _INIT(0), hueYLast _INIT(0);
@@ -994,28 +990,6 @@ WLED_GLOBAL volatile uint8_t jsonBufferLock _INIT(0);
   #define DEBUG_PRINTLN(x)
   #define DEBUG_PRINTF(x...)
   #define DEBUG_PRINTF_P(x...)
-#endif
-
-#ifdef WLED_DEBUG_USERMODS
-  #define DEBUGUM_PRINT(x) DEBUGOUT.print(x)
-  #define DEBUGUM_PRINTLN(x) DEBUGOUT.println(x)
-  #define DEBUGUM_PRINTF(x...) DEBUGOUT.printf(x)
-  #define DEBUGUM_PRINTF_P(x...) DEBUGOUT.printf_P(x)
-#else
-  #define DEBUGUM_PRINT(x)
-  #define DEBUGUM_PRINTLN(x)
-  #define DEBUGUM_PRINTF(x...)
-  #define DEBUGUM_PRINTF_P(x...)
-#endif
-
-#ifdef WLED_DEBUG_FS
-  #define DEBUGFS_PRINT(x) DEBUGOUT.print(x)
-  #define DEBUGFS_PRINTLN(x) DEBUGOUT.println(x)
-  #define DEBUGFS_PRINTF(x...) DEBUGOUT.printf(x)
-#else
-  #define DEBUGFS_PRINT(x)
-  #define DEBUGFS_PRINTLN(x)
-  #define DEBUGFS_PRINTF(x...)
 #endif
 
 // debug macro variable definitions

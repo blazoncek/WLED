@@ -339,14 +339,6 @@ writeChunks(
   "wled00/data",
   [
     {
-      file: "usermod.htm",
-      name: "PAGE_usermod",
-      method: "gzip",
-      filter: "html-minify",
-      mangle: (str) =>
-        str.replace(/fetch\("http\:\/\/.*\/win/gms, 'fetch("/win'),
-    },
-    {
       file: "msg.htm",
       name: "PAGE_msg",
       prepend: "=====(",

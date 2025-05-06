@@ -31,6 +31,13 @@
 #define DEFAULT_OTA_PASS    "wledota"
 #define DEFAULT_MDNS_NAME   "x"
 
+#ifndef WLED_VERSION
+  #define WLED_VERSION dev
+#endif
+#ifndef WLED_RELEASE_NAME
+  #define WLED_RELEASE_NAME "dev_release"
+#endif
+
 //increase if you need more
 #ifndef WLED_MAX_WIFI_COUNT
   #define WLED_MAX_WIFI_COUNT 3

@@ -1,5 +1,4 @@
 #include "wled.h"
-#include "wled_ethernet.h"
 
 /*
  * Sending XML status files to client
@@ -215,7 +214,6 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormCheckbox(settingsScript,PSTR("WS"),noWifiSleep);
 
     #ifndef WLED_DISABLE_ESPNOW
-    char linked_remote[13];
     printSetFormCheckbox(settingsScript,PSTR("RE"),enableESPNow);
     settingsScript.printf_P(PSTR("rstR();"));
     for (const auto &remote : masterRemotes) {

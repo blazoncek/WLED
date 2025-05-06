@@ -1,5 +1,4 @@
 #include "wled.h"
-#include "wled_ethernet.h"
 
 /*
  * Serializes and parses the cfg.json and wsec.json settings files, stored in internal FS.
@@ -768,18 +767,13 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 static const char s_cfg_json[] PROGMEM = "/cfg.json";
 
 void deserializeConfigFromFS() {
-  [[maybe_unused]] bool success = deserializeConfigSec();
-  #ifdef WLED_ADD_EEPROM_SUPPORT
-  if (!success) { //if file does not exist, try reading from EEPROM
-    deEEPSettings();
-  }
-  #endif
+  deserializeConfigSec();
 
   if (!requestJSONBufferLock(1)) return;
 
   DEBUG_PRINTLN(F("Reading settings from /cfg.json..."));
 
-  success = readObjectFromFile(s_cfg_json, nullptr, pDoc);
+  readObjectFromFile(s_cfg_json, nullptr, pDoc);
 
   // NOTE: This routine deserializes *and* applies the configuration
   //       Therefore, must also initialize ethernet from this function

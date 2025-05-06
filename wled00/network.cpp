@@ -1,6 +1,4 @@
 #include "wled.h"
-#include "wled_ethernet.h"
-
 
 #if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
 // The following six pins are neither configurable nor

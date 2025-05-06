@@ -1,7 +1,5 @@
 #define WLED_DEFINE_GLOBAL_VARS //only in one source file, wled.cpp!
 #include "wled.h"
-#include "wled_ethernet.h"
-#include <Arduino.h>
 
 #if defined(ARDUINO_ARCH_ESP32) && defined(WLED_DISABLE_BROWNOUT_DET)
 #include "soc/soc.h"
@@ -71,7 +69,6 @@ void WLED::loop()
   #ifdef WLED_DEBUG
   unsigned long usermodMillis = millis();
   #endif
-  userLoop();
   UsermodManager::loop();
   #ifdef WLED_DEBUG
   usermodMillis = millis() - usermodMillis;
@@ -409,22 +406,8 @@ void WLED::setup()
 
   DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
 
-  bool fsinit = false;
-  DEBUGFS_PRINTLN(F("Mount FS"));
-#ifdef ARDUINO_ARCH_ESP32
-  fsinit = WLED_FS.begin(true);
-#else
-  fsinit = WLED_FS.begin();
-#endif
-  if (!fsinit) {
-    DEBUGFS_PRINTLN(F("FS failed!"));
-    errorFlag = ERR_FS_BEGIN;
-  }
-#ifdef WLED_ADD_EEPROM_SUPPORT
-  else deEEP();
-#else
+  initFS();
   initPresetsFile();
-#endif
   updateFSInfo();
 
   // generate module IDs must be done before AP setup
@@ -454,7 +437,6 @@ void WLED::setup()
   DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
 
   DEBUG_PRINTLN(F("Usermods setup"));
-  userSetup();
   UsermodManager::setup();
   DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
 
@@ -803,7 +785,6 @@ void WLED::handleConnection()
         if (improvActive > 1) sendImprovIPRPCResult(ImprovRPCType::Command_Wifi);
       }
       connected();
-      userConnected();
       UsermodManager::connected();
       // shut down AP
       if (apBehavior != AP_BEHAVIOR_ALWAYS && apActive) {
