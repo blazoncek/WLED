@@ -559,6 +559,7 @@ Segment &Segment::setName(const char *newName) {
   if (newName) {
     const int newLen = min(strlen(newName), (size_t)WLED_MAX_SEGNAME_LEN);
     if (newLen) {
+      if (mode == FX_MODE_2DSCROLLTEXT) startTransition(strip.getTransition(), true); // if the name changes in scrolling text mode, we need to copy the segment for blending
       if (name) name = static_cast<char*>(d_realloc(name, newLen+1));
       else      name = static_cast<char*>(d_malloc(newLen+1));
       if (name) strlcpy(name, newName, newLen+1);
@@ -1232,7 +1233,8 @@ void WS2812FX::service() {
         // if segment is in transition and no old segment exists we don't need to run the old mode
         // (blendSegments() takes care of On/Off transitions and clipping)
         Segment *segO = seg.getOldSegment();
-        if (segO && (seg.mode != segO->mode || blendingStyle != BLEND_STYLE_FADE)) {
+        if (segO && (seg.mode != segO->mode || blendingStyle != BLEND_STYLE_FADE
+                    || (segO->name != seg.name && segO->name && seg.name && strncmp(segO->name, seg.name, WLED_MAX_SEGNAME_LEN) != 0))) {
           Segment::modeBlend(true);         // set semaphore for beginDraw() to blend colors and palette
           segO->beginDraw(prog);            // set up palette & colors (also sets draw dimensions), parent segment has transition progress
           _currentSegment = segO;           // set current segment
@@ -1423,8 +1425,10 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       }
       uint32_t c_a = BLACK;
       if (x < vCols && y < vRows) c_a = seg->getPixelColorRaw(x + y*vCols); // will get clipped pixel from old segment or unclipped pixel from new segment
-      if (segO && blendingStyle == BLEND_STYLE_FADE && topSegment.mode != segO->mode && x < oCols && y < oRows) {
-        // we need to blend old segment using fade as pixels ae not clipped
+      if (segO && blendingStyle == BLEND_STYLE_FADE
+        && (topSegment.mode != segO->mode || (segO->name != topSegment.name && segO->name && topSegment.name && strncmp(segO->name, topSegment.name, WLED_MAX_SEGNAME_LEN) != 0))
+        && x < oCols && y < oRows) {
+        // we need to blend old segment using fade as pixels are not clipped
         c_a = color_blend16(c_a, segO->getPixelColorRaw(x + y*oCols), progInv);
       } else if (blendingStyle != BLEND_STYLE_FADE) {
         // workaround for On/Off transition
