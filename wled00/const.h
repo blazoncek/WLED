@@ -67,6 +67,13 @@
   #define WLED_PIN ""
 #endif
 
+#ifndef BTNPIN
+  #define BTNPIN 0
+#endif
+#ifndef BTNTYPE
+  #define BTNTYPE BTN_TYPE_PUSH
+#endif
+
 //increase if you need more
 #ifndef WLED_MAX_WIFI_COUNT
   #define WLED_MAX_WIFI_COUNT 3
