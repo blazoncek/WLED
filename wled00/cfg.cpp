@@ -418,7 +418,6 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     // check if the number of pins and types are valid; count of pins must be greater than or equal to types
     static_assert(numTypes <= numPins, "The default button pins defined in BTNPIN do not match the button types defined in BTNTYPE");
 
-    int8_t  pin = -1;
     uint8_t type = BTN_TYPE_NONE;
     buttons.clear(); // clear existing buttons (just in case)
     for (size_t s = 0; s < WLED_MAX_BUTTONS && s < numPins; s++) {
