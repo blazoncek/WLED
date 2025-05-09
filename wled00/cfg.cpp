@@ -412,7 +412,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     // new install/missing configuration (button 0 has defaults)
     // relies upon only being called once with fromFS == true, which is currently true.
     constexpr uint8_t  defTypes[] = {BTNTYPE};
-    constexpr uint8_t  defPins[]  = {BTNPIN};
+    constexpr int8_t   defPins[]  = {BTNPIN};
     constexpr unsigned numTypes   = (sizeof(defTypes) / sizeof(defTypes[0]));
     constexpr unsigned numPins    = (sizeof(defPins) / sizeof(defPins[0]));
     // check if the number of pins and types are valid; count of pins must be greater than or equal to types
