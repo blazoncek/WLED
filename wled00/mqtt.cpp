@@ -27,7 +27,7 @@ static void parseMQTTBriPayload(char* payload)
 static void onMqttConnect(bool sessionPresent)
 {
   //(re)subscribe to required topics
-  char subuf[MQTT_MAX_TOPIC_LEN + 6];
+  char subuf[MQTT_MAX_TOPIC_LEN + 9];
 
   if (mqttDeviceTopic[0] != 0) {
     strlcpy(subuf, mqttDeviceTopic, MQTT_MAX_TOPIC_LEN + 1);
@@ -52,6 +52,11 @@ static void onMqttConnect(bool sessionPresent)
   UsermodManager::onMqttConnect(sessionPresent);
 
   DEBUG_PRINTLN(F("MQTT ready"));
+
+  strlcpy(mqttStatusTopic, mqttDeviceTopic, MQTT_MAX_TOPIC_LEN + 1);
+  strcat_P(mqttStatusTopic, PSTR("/status"));
+  mqtt->setWill(mqttStatusTopic, 0, true, "offline"); // LWT message
+
   publishMqtt();
 }
 
@@ -215,9 +220,6 @@ bool initMqtt()
   mqtt->setClientId(mqttClientID);
   if (mqttUser[0] && mqttPass[0]) mqtt->setCredentials(mqttUser, mqttPass);
 
-  strlcpy(mqttStatusTopic, mqttDeviceTopic, MQTT_MAX_TOPIC_LEN + 1);
-  strcat_P(mqttStatusTopic, PSTR("/status"));
-  mqtt->setWill(mqttStatusTopic, 0, true, "offline"); // LWT message
   mqtt->setKeepAlive(MQTT_KEEP_ALIVE_TIME);
   mqtt->connect();
   return true;
