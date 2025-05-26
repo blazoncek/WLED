@@ -407,7 +407,7 @@ void initServer()
     }
   },[](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool isFinal){
     IPAddress client  = request->client()->remoteIP();
-    if ((otaSameSubnet && !inSameSubnet(client)) || (!otaSameSubnet && !inLocalSubnet(client))) {
+    if (((otaSameSubnet && !inSameSubnet(client)) && !strlen(settingsPIN)) || (!otaSameSubnet && !inLocalSubnet(client))) {
       DEBUG_PRINTLN(F("Attempted OTA update from different/non-local subnet!"));
       request->send(401, FPSTR(CONTENT_TYPE_PLAIN), FPSTR(s_accessdenied));
       return;
