@@ -33,7 +33,7 @@ static bool isIp(const String &str) {
 }
 
 static bool inSubnet(const IPAddress &ip, const IPAddress &subnet, const IPAddress &mask) {
-  return ((ip & mask) == (subnet & mask));
+  return (((uint32_t)ip & (uint32_t)mask) == ((uint32_t)subnet & (uint32_t)mask));
 }
 
 static bool inSameSubnet(const IPAddress &client) {
@@ -653,6 +653,7 @@ void serveSettings(AsyncWebServerRequest* request, bool post) {
 #endif
     case SUBPAGE_UM      :  content = PAGE_settings_um;   len = PAGE_settings_um_length;   break;
     case SUBPAGE_UPDATE  :  content = PAGE_update;        len = PAGE_update_length;
+      #ifdef ARDUINO_ARCH_ESP32
       if (request->hasArg(F("revert")) && inLocalSubnet(request->client()->remoteIP()) && Update.canRollBack()) {
         doReboot = Update.rollBack();
         if (doReboot) {
@@ -662,6 +663,7 @@ void serveSettings(AsyncWebServerRequest* request, bool post) {
         }
         return;
       }
+      #endif
       break;
 #ifndef WLED_DISABLE_2D
     case SUBPAGE_2D      :  content = PAGE_settings_2D;   len = PAGE_settings_2D_length;   break;

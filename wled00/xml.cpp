@@ -661,6 +661,9 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       build);
 
     printSetClassElementHTML(settingsScript,PSTR("sip"),0,tmp_buf);
+    #ifndef ARDUINO_ARCH_ESP32
+    settingsScript.print(F("toggle('rev');"));  // hide revert button on ESP8266
+    #endif
   }
 
   if (subPage == SUBPAGE_2D) // 2D matrices
