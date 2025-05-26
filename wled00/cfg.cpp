@@ -726,6 +726,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     CJSON(wifiLock, ota[F("lock-wifi")]);
     CJSON(aOtaEnabled, ota[F("aota")]);
     getStringFromJson(otaPass, pwd, 33); //normally not present due to security
+    CJSON(otaSameSubnet, ota[F("same-subnet")]);
   }
 
   #ifdef WLED_ENABLE_DMX
@@ -1181,6 +1182,7 @@ void serializeConfig() {
   ota[F("lock-wifi")] = wifiLock;
   ota[F("pskl")] = strlen(otaPass);
   ota[F("aota")] = aOtaEnabled;
+  ota[F("same-subnet")] = otaSameSubnet;
 
   #ifdef WLED_ENABLE_DMX
   JsonObject dmx = root.createNestedObject("dmx");

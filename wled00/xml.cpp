@@ -589,6 +589,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormCheckbox(settingsScript,PSTR("NO"),otaLock);
     printSetFormCheckbox(settingsScript,PSTR("OW"),wifiLock);
     printSetFormCheckbox(settingsScript,PSTR("AO"),aOtaEnabled);
+    printSetFormCheckbox(settingsScript,PSTR("SU"),otaSameSubnet);
     char tmp_buf[128];
     snprintf_P(tmp_buf,sizeof(tmp_buf),PSTR("WLED %s (build %d)"),versionString,build);
     printSetClassElementHTML(settingsScript,PSTR("sip"),0,tmp_buf);

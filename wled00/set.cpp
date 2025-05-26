@@ -601,6 +601,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       wifiLock = request->hasArg(F("OW"));
       aOtaEnabled = request->hasArg(F("AO"));
       //createEditHandler(correctPIN && !otaLock);
+      otaSameSubnet = request->hasArg(F("SU"));
     }
   }
 
