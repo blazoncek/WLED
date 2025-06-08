@@ -656,6 +656,12 @@ const uint8_t candy2_gp[] PROGMEM = {
   211, 109, 102, 102,
   255,  20,  19,  13};
 
+const byte trafficlight_gp[] PROGMEM = {
+    0,   0,   0, 0,   //black
+   85,   0, 255, 0,   //green
+  170, 255, 255, 0,   //yellow
+  255, 255,   0, 0};  //red
+
 const byte Aurora2_gp[] PROGMEM = {
     0,  17, 177,  13,    //Greenish
     64, 121, 242,   5,    //Greenish
@@ -759,7 +765,8 @@ const uint8_t* const gGradientPalettes[] PROGMEM = {
   blink_red_gp,                 //67-54 Blink Red
   red_shift_gp,                 //68-55 Red Shift
   red_tide_gp,                  //69-56 Red Tide
-  candy2_gp                     //70-57 Candy2
+  candy2_gp,                    //70-57 Candy2
+  trafficlight_gp               //71-58 Traffic Lights
 };
 
 #endif
