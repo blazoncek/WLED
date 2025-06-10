@@ -4682,7 +4682,7 @@ static const char _data_FX_MODE_WAVESINS[] PROGMEM = "Wavesins@!,Brightness vari
 //////////////////////////////
 //     Flow Stripe          //
 //////////////////////////////
-// By: ldirko  https://editor.soulmatelights.com/gallery/392-flow-led-stripe , modifed by: Andrew Tuline
+// By: ldirko  https://editor.soulmatelights.com/gallery/392-flow-led-stripe , modifed by: Andrew Tuline, fixed by @DedeHai
 uint16_t mode_FlowStripe(void) {
   if (SEGLEN <= 1) return mode_static();
   const auto abs  = [](int x) { return x<0 ? -x : x; };
@@ -4691,7 +4691,7 @@ uint16_t mode_FlowStripe(void) {
   uint32_t t = strip.now / (((255-SEGMENT.intensity)>>3)+1);
 
   for (unsigned i = 0; i < SEGLEN; i++) {
-    int c = (abs((int)i - hl) / hl) * 127;
+    int c = ((abs((int)i - hl) * 127) / hl);
     c = sin8_t(c);
     c = sin8_t(c / 2 + t);
     byte b = sin8_t(c + t/8);
