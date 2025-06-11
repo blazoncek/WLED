@@ -333,8 +333,11 @@ bool initEthernet(); // result is informational
 int  getSignalQuality(int rssi);
 void fillMAC2Str(char *str, const uint8_t *mac);
 void fillStr2MAC(uint8_t *mac, const char *str);
+#ifndef WLED_DISABLE_ESPNOW
 void initESPNow(bool resetAP = false);
+void stopESPNow();
 void sendESPNowHeartBeat();
+#endif
 int  findWiFi(bool doScan = false);
 bool isWiFiConfigured();
 void WiFiEvent(WiFiEvent_t event);
@@ -360,7 +363,7 @@ size_t printSetFormValue(Print& settingsScript, const char* key, int val);
 size_t printSetFormValue(Print& settingsScript, const char* key, const char* val);
 size_t printSetFormIndex(Print& settingsScript, const char* key, int index);
 size_t printSetClassElementHTML(Print& settingsScript, const char* key, const int index, const char* val);
-void prepareHostname(char* hostname);
+void prepareHostname(char* hostname, size_t maxLen = 32);
 [[gnu::pure]] bool isAsterisksOnly(const char* str, byte maxLen);
 bool requestJSONBufferLock(uint8_t module=255);
 void releaseJSONBufferLock();

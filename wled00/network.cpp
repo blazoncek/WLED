@@ -277,18 +277,17 @@ void fillStr2MAC(uint8_t *mac, const char *str) {
 }
 
 
-void initESPNow(bool resetAP) {
 #ifndef WLED_DISABLE_ESPNOW
+void initESPNow(bool resetAP) {
   if (enableESPNow) {
-    if (statusESPNow == ESP_NOW_STATE_ON) quickEspNow.stop();
-    statusESPNow = ESP_NOW_STATE_UNINIT;
+    stopESPNow(); // stop ESP-NOW if it was running
 
     if (resetAP) {
       DEBUG_PRINTLN(F("ESP-NOW init hidden AP."));
-      WiFi.disconnect(true);                            // stop STA mode (also stop connecting to WiFi)
+      WiFi.disconnect();                                // stop STA mode (stop connecting to WiFi)
       delay(5);
       WiFi.mode(WIFI_MODE_AP);                          // force AP mode to fix channel
-      if (!WiFi.softAP(apSSID, apPass, channelESPNow, true)) DEBUG_PRINTLN(F("WARNING! softAP failed.")); // hide AP (do not bother with initialising interfaces)
+      if (!WiFi.softAP(apSSID, apPass, apChannel, true)) DEBUG_PRINTLN(F("WARNING! softAP failed.")); // hide AP (do not bother with initialising interfaces)
       delay(100);
     }
 
@@ -327,22 +326,29 @@ void initESPNow(bool resetAP) {
     channelESPNow = apChannel;
     DEBUG_PRINTF_P(PSTR("ESP-NOW %s inited in %s mode (channel: %d/%d).\n"), espNowOK ? "" : "NOT", wifiModeStr, WiFi.channel(), (int)apChannel);
   }
-#endif
+}
+
+void stopESPNow() {
+  if (statusESPNow == ESP_NOW_STATE_ON) {
+    quickEspNow.stop();
+    statusESPNow = ESP_NOW_STATE_UNINIT;
+    DEBUG_PRINTLN(F("ESP-NOW stopped."));
+  }
 }
 
 void sendESPNowHeartBeat() {
-#ifndef WLED_DISABLE_ESPNOW
   const unsigned long now = millis();
   // send ESP-NOW beacon every 2s if we are in sync mode (AKA master device) regardless of STA or AP mode
   // beacon will contain current/intended channel and local time (for loose synchronisation purposes)
+  if (WiFi.status() == WL_NO_SHIELD || WiFi.status() == WL_IDLE_STATUS) return; // no WiFi or not trying to connect, do not send heartbeat
   if (enableESPNow && useESPNowSync && sendNotificationsRT && statusESPNow == ESP_NOW_STATE_ON && now > scanESPNow) {
     EspNowBeacon buffer = {{'W','L','E','D'}, 0, (uint8_t)WiFi.channel(), toki.second(), {0}};
     quickEspNow.send(ESPNOW_BROADCAST_ADDRESS, reinterpret_cast<uint8_t*>(&buffer), sizeof(buffer));
     scanESPNow = now + 2000; // we will use scanESPNow as a timer for heartbeat (will also help when disconnect happens)
     DEBUG_PRINTF_P(PSTR("ESP-NOW beacon on channel %d.\n"), WiFi.channel());
   }
-#endif
 }
+#endif
 
 
 // performs asynchronous scan for available networks (which may take couple of seconds to finish)
@@ -483,26 +489,28 @@ void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_WIFI_AP_STOP:
       DEBUG_PRINTF_P(PSTR("WiFi-E: AP Stopped. @ %lus\n"), millis()/1000);
       break;
-    #if defined(WLED_USE_ETHERNET)
+    #ifdef WLED_USE_ETHERNET
     case ARDUINO_EVENT_ETH_START:
       DEBUG_PRINTF_P(PSTR("ETH-E: Started. @ %lus\n"), millis()/1000);
       break;
     case ARDUINO_EVENT_ETH_GOT_IP:
       DEBUG_PRINTF_P(PSTR("ETH-E: Got IP. @ %lus\n"), millis()/1000);
+      // ethernet is incompatible with WiFi/ESP-NOW, see #4703
+      // so we need to stop WiFi circuitry
       if (apActive) WLED::instance().stopAP(true);  // stop AP & ESP-NOW
-      else          WiFi.disconnect(true);          // disable SSID scanning
+      else {
+        #ifndef WLED_DISABLE_ESPNOW
+        stopESPNow();
+        #endif
+        WiFi.disconnect(true);          // disable SSID scanning
+        staActive = false;              // disable STA mode
+      }
       delay(5);
       break;
-    case ARDUINO_EVENT_ETH_CONNECTED:
-      {
+    case ARDUINO_EVENT_ETH_CONNECTED: {
       DEBUG_PRINTF_P(PSTR("ETH-E: Connected. @ %lus\n"), millis()/1000);
-      //if (apActive) WLED::instance().stopAP(true);  // stop AP & ESP-NOW
-      //else          WiFi.disconnect(true);          // disable SSID scanning
-      //delay(5);
-      // WLED::connected() will take care of ESP-NOW
-      // convert the "serverDescription" into a valid DNS hostname (alphanumeric)
-      char hostname[64];
-      prepareHostname(hostname);
+      char hostname[33];
+      prepareHostname(hostname, sizeof(hostname)-1);
       ETH.setHostname(hostname);
       if (multiWiFi[0].staticIP != (uint32_t)0x00000000 && multiWiFi[0].staticGW != (uint32_t)0x00000000) {
         ETH.config(multiWiFi[0].staticIP, multiWiFi[0].staticGW, multiWiFi[0].staticSN, dnsAddress);

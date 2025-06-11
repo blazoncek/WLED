@@ -142,6 +142,7 @@ Static subnet mask:<br>
 			//const e = d.querySelector('input[name="RE"]').checked;
 			// keep the hidden input with MAC addresses, only toggle visibility of the list UI
 			gId('rlc').style.display = d.Sf.RE.checked ? 'block' : 'none';
+			if (d.Sf.RE.checked) d.Sf.ETH.selectedIndex = 0; // disable Ethernet if ESPNOW is enabled
 		}
 		// reset remotes: initialize empty list (called from xml.cpp)
 		function rstR() {
@@ -198,6 +199,9 @@ Static subnet mask:<br>
 			gId('+').style.display = gId("rml").childElementCount < 10 ? 'inline' : 'none';
 			return true; // Allow form submission to continue
 		}
+		function vI(i) {
+			i.style.color = (i.value.match(/^[a-zA-Z0-9_\-]*$/)) ? 'white' : 'red';
+		}
 	</script>
 	<style>@import url("style.css");</style>
 </head>
@@ -208,6 +212,9 @@ Static subnet mask:<br>
 		<button type="button" onclick="B()">Back</button><button type="submit">Save & Connect</button><hr>
 		</div>
 		<h2>WiFi setup</h2>
+		Hostname/mDNS address (empty for no mDNS):<br>
+		http://<input type="text" name="CM" maxlength="32" pattern="[a-zA-Z0-9_\-]*" oninput="vI(this)">.local<br>
+		Client IP: <span class="sip"> Not connected </span><br>
 		<h3>Connect to existing network</h3>
 		<button type="button" id="scan" onclick="N()">Scan</button><br>
 		<div id="wifi">
@@ -219,14 +226,10 @@ Static subnet mask:<br>
 		</div>
 		DNS server address:<br>
 		<input name="D0" type="number" class="s" min="0" max="255" required>.<input name="D1" type="number" class="s" min="0" max="255" required>.<input name="D2" type="number" class="s" min="0" max="255" required>.<input name="D3" type="number" class="s" min="0" max="255" required><br>
-		<br>
-		mDNS address (leave empty for no mDNS):<br>
-		http:// <input type="text" name="CM" maxlength="32"> .local<br>
-		Client IP: <span class="sip"> Not connected </span> <br>
 		<h3>Configure Access Point</h3>
-		AP SSID (leave empty for no AP):<br> <input type="text" name="AS" maxlength="32"><br>
+		AP SSID (empty for no AP):<br> <input type="text" name="AS" maxlength="32" pattern="[a-zA-Z0-9_\-]*" oninput="vI(this)"><br>
 		Hide AP name: <input type="checkbox" name="AH"><br>
-		AP password (leave empty for open):<br> <input type="password" name="AP" maxlength="63" pattern="(.{8,63})|()" title="Empty or min. 8 characters"><br>
+		AP password (empty for open):<br> <input type="password" name="AP" maxlength="63" pattern="(.{8,63})|()" title="Empty or min. 8 characters"><br>
 		Access Point WiFi channel: <input name="AC" type="number" class="xs" min="1" max="13" required><br>
 		AP opens:
 		<select name="AB">
@@ -277,7 +280,7 @@ Static subnet mask:<br>
 
 		<div id="ethd">
 			<h3>Ethernet Type</h3>
-			<select name="ETH">
+			<select name="ETH" onchange="if(this.selectedIndex!=0)d.Sf.RE.checked=false;">
 				<option value="0">None</option>
 				<option value="9">ABC! WLED V43 & compatible</option>
 				<option value="2">ESP32-POE</option>
@@ -291,7 +294,8 @@ Static subnet mask:<br>
 				<option value="5">TwilightLord-ESP32</option>
 				<option value="3">WESP32</option>
 				<option value="1">WT32-ETH01</option>
-			</select><br><br>
+			</select><br>
+			<i class="warn">ESP-NOW is incompatible with Ethernet.</i>
 		</div>
 		<hr>
 		<button type="button" onclick="B()">Back</button><button type="submit">Save & Connect</button>
