@@ -441,9 +441,10 @@ void WLED::setup()
   DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
 
   DEBUG_PRINTLN(F("Initializing WiFi"));
-  // convert the "serverDescription" into a valid DNS hostname (alphanumeric)
-  char hostname[64];
-  prepareHostname(hostname);
+  // convert the "cmDNS" or "serverDescription" into a valid DNS hostname (alphanumeric)
+  char hostname[25];
+  prepareHostname(hostname, sizeof(hostname)-1);
+
   WiFi.persistent(false);
   //WiFi.enableLongRange(true);
   WiFi.onEvent(WiFiEvent);
@@ -484,13 +485,6 @@ void WLED::setup()
   #endif
   DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
 
-  // fill in unique mdns default
-  if (strcmp(cmDNS, DEFAULT_MDNS_NAME) == 0) sprintf_P(cmDNS, PSTR("wled-%*s"), 6, escapedMac.c_str() + 6);
-#ifndef WLED_DISABLE_MQTT
-  if (mqttDeviceTopic[0] == 0) sprintf_P(mqttDeviceTopic, PSTR("wled/%*s"), 6, escapedMac.c_str() + 6);
-  if (mqttClientID[0] == 0)    sprintf_P(mqttClientID, PSTR("WLED-%*s"), 6, escapedMac.c_str() + 6);
-#endif
-
 #ifndef WLED_DISABLE_OTA
   if (aOtaEnabled) {
     ArduinoOTA.onStart([]() {
@@ -508,7 +502,7 @@ void WLED::setup()
       WLED::instance().enableWatchdog();
       #endif
     });
-    ArduinoOTA.setHostname(strlen(cmDNS) > 0 ? cmDNS : hostname);
+    ArduinoOTA.setHostname(hostname);
   }
 #endif
 #ifdef WLED_ENABLE_DMX
@@ -587,18 +581,14 @@ void WLED::beginStrip()
 }
 
 // stop AP (optionally also stop ESP-NOW)
-void WLED::stopAP(bool stopESPNow) {
+void WLED::stopAP(bool stop) {
   DEBUG_PRINTF_P(PSTR("WiFi: Stopping AP. @ %lus\n"), millis()/1000);
-#ifndef WLED_DISABLE_ESPNOW
+  #ifndef WLED_DISABLE_ESPNOW
   // we need to stop ESP-NOW as we are stopping AP
-  if (stopESPNow && statusESPNow == ESP_NOW_STATE_ON) {
-    DEBUG_PRINTLN(F("ESP-NOW stopping on AP stop."));
-    quickEspNow.stop();
-    statusESPNow = ESP_NOW_STATE_UNINIT;
-  }
-#endif
+  if (stop) stopESPNow();
+  #endif
   dnsServer.stop();
-  WiFi.softAPdisconnect(true);  // disengage AP mode on stop
+  WiFi.softAPdisconnect(stop);  // disengage AP mode on stop
   delay(5);                     // wait for hardware to be ready
   apActive = false;
 }
@@ -608,13 +598,10 @@ void WLED::initAP(bool resetAP)
   if (apBehavior == AP_BEHAVIOR_BUTTON_ONLY && !resetAP)
     return;
 
-#ifndef WLED_DISABLE_ESPNOW
-  if (statusESPNow == ESP_NOW_STATE_ON) {
-    DEBUG_PRINTLN(F("ESP-NOW stopping on AP start."));
-    quickEspNow.stop();
-    statusESPNow = ESP_NOW_STATE_UNINIT;
-  }
-#endif
+  #ifndef WLED_DISABLE_ESPNOW
+  DEBUG_PRINTLN(F("ESP-NOW stopping on AP start."));
+  stopESPNow(); // stop ESP-NOW if it was running
+  #endif
 
   if (resetAP) {
     WLED_SET_AP_SSID();
@@ -651,7 +638,9 @@ void WLED::initAP(bool resetAP)
     WiFi.setTxPower(wifi_power_t(txPower));
     #endif
 
+    #ifndef WLED_DISABLE_ESPNOW
     initESPNow();
+    #endif
   }
   apActive = success;
   DEBUG_PRINTF_P(PSTR("WiFi: AP (%s) %s opened.\n"), apSSID, success ? "" : "NOT");
@@ -669,6 +658,7 @@ void WLED::initConnection()
 
   if (isWiFiConfigured()) {
     DEBUG_PRINTF_P(PSTR("WiFi: Connecting to %s... @ %lus\n"), multiWiFi[selectedWiFi].clientSSID, millis()/1000);
+    staActive = true;
 
     // determine if using DHCP or static IP address, will also engage STA mode if not already
     if (multiWiFi[selectedWiFi].staticIP != IPAddress() && multiWiFi[selectedWiFi].staticGW != IPAddress()) {
@@ -685,9 +675,9 @@ void WLED::initConnection()
     delay(5);            // wait for hardware to be ready
     // once WiFi is configured and begin() called, ESP will keep connecting to the specified SSID in the background
     // until connection is established or new configuration is submitted or disconnect() is called
-#ifndef WLED_DISABLE_ESPNOW
+    #ifndef WLED_DISABLE_ESPNOW
     scanESPNow = millis() + 30000;
-#endif
+    #endif
   }
 }
 
@@ -702,11 +692,8 @@ void WLED::connected()
 #endif
 
 #ifndef WLED_DISABLE_ESPNOW
-  if (statusESPNow == ESP_NOW_STATE_ON) {
-    DEBUG_PRINTLN(F("ESP-NOW stopping on connect."));
-    quickEspNow.stop();
-    statusESPNow = ESP_NOW_STATE_UNINIT;
-  }
+  DEBUG_PRINTLN(F("ESP-NOW stopping on connect."));
+  stopESPNow(); // stop ESP-NOW if it was running
 #endif
 
 #ifndef WLED_DISABLE_HUESYNC
@@ -725,8 +712,7 @@ void WLED::connected()
 #endif
 
 #ifndef WLED_DISABLE_OTA
-  if (aOtaEnabled)
-    ArduinoOTA.begin();
+  if (aOtaEnabled) ArduinoOTA.begin();
 #endif
 
   // Set up mDNS responder:
@@ -759,12 +745,11 @@ void WLED::connected()
 #ifndef WLED_DISABLE_HUESYNC
   reconnectHue();
 #endif
-#ifndef WLED_DISABLE_MQTT
-  initMqtt();
-#endif
   lastMqttReconnectAttempt = 0; // force immediate update (MQTT & node broadcast)
 
-  initESPNow(!WiFi.isConnected());  // if we are connected using Ethernet force hidden AP mode
+#ifndef WLED_DISABLE_ESPNOW
+  if (WiFi.isConnected()) initESPNow(); // if we are connected using Ethernet do not init ESP-NOW
+#endif
 
   showWelcomePage = false;
   interfacesInited = true;
@@ -776,15 +761,14 @@ void WLED::handleConnection()
   const unsigned long now = millis();
   // if we are connected and interfaces are initialised do nothing
   if (Network.isConnected() && !forceReconnect) {
-    if (interfacesInited) sendESPNowHeartBeat();
-    else {
+    if (!interfacesInited) {
       // newly connected
       if (improvActive) {
         if (improvError == 3) sendImprovStateResponse(0x00, true);
         sendImprovStateResponse(0x04);
         if (improvActive > 1) sendImprovIPRPCResult(ImprovRPCType::Command_Wifi);
       }
-      connected();
+      connected();  // will init ESP-NOW
       UsermodManager::connected();
       // shut down AP
       if (apBehavior != AP_BEHAVIOR_ALWAYS && apActive) {
@@ -792,6 +776,9 @@ void WLED::handleConnection()
         DEBUG_PRINTF_P(PSTR("WiFi: AP disabled (connected). @ %lus\n"), now/1000);
       }
     }
+#ifndef WLED_DISABLE_ESPNOW
+    sendESPNowHeartBeat();
+#endif
     return;
   }
 
@@ -850,6 +837,13 @@ ESP-NOW  inited in AP mode (channel: 6/1).
   // WL_CONNECTION_LOST  = 5
   // WL_DISCONNECTED     = 6
   // WL_NO_SHIELD        = 255
+
+  if (wifiConfigured && !staActive && wifiState == WL_DISCONNECTED) {
+#ifndef WLED_DISABLE_ESPNOW
+    sendESPNowHeartBeat();  // send heartbeat to ESP-NOW master if we have WiFi configured but STA is not active
+#endif
+    return; // do not attempt to connect if WiFi is not enabled
+  }
 
 #ifndef WLED_DISABLE_ESPNOW
   // WL_NO_SHIELD means WiFi is turned off while WL_IDLE_STATUS means we are not trying to connect to SSID (but we may be in AP mode)
@@ -980,10 +974,10 @@ ESP-NOW  inited in AP mode (channel: 6/1).
     forceReconnect = true;
     return;
   }
-#endif
 
   // we need to send heartbeat if we are in AP/APSTA mode
   if (isAPmode) sendESPNowHeartBeat();
+#endif
 
   // WiFi is configured (with multiple networks); try to reconnect if not connected after 12s (or 300s if clients are connected to AP)
   // this will cycle through all configured SSIDs (findWiFi() will select strongest)

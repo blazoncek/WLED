@@ -544,12 +544,25 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   JsonObject wifi = root[F("wifi")];
   if (!wifi.isNull()) {
     bool apMode = getBoolVal(wifi[F("ap")], apActive);
-    if (!apActive && apMode) WLED::instance().initAP();  // start AP mode immediately
-    else if (apActive && !apMode) { // stop AP mode immediately
-      WLED::instance().stopAP();
+    if      (!apActive && apMode) WLED::instance().initAP();      // start AP mode immediately
+    else if (apActive && !apMode) WLED::instance().stopAP(false); // stop AP mode immediately (but do not stop ESP-NOW)
+
+    if (!wifi[F("on")].isNull() && wifi[F("ap")].isNull()) {
+      // if "on" is set but "ap" is not, we assume we want to control station mode
+      bool on = getBoolVal(wifi[F("on")], staActive);
+      bool pwrOff = getBoolVal(wifi[F("pwrOff")], false);
+      if (!on) {
+        if (apActive) WLED::instance().stopAP(pwrOff);
+        else if (Network.isConnected() && !on) {
+          #ifndef WLED_DISABLE_ESPNOW
+          if (pwrOff) stopESPNow();
+          #endif
+          WiFi.disconnect(pwrOff);
+        }
+      } else
+        forceReconnect = true;
+      staActive = on;
     }
-    //bool restart = wifi[F("restart")] | false;
-    //if (restart) forceReconnect = true;
   }
 
   if (stateChanged) stateUpdated(callMode);
