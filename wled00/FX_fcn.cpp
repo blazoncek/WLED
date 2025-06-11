@@ -986,7 +986,8 @@ void Segment::fade_out(uint8_t rate) const {
   if (!isActive()) return; // not active
   rate = (256-rate) >> 1;
   const int mappedRate = 256 / (rate + 1);
-  for (unsigned j = 0; j < vLength(); j++) {
+  // always fade all pixels (blending will take care of grouping, spacing and clipping)
+  for (unsigned j = 0; j < length(); j++) {
     uint32_t color = getPixelColorRaw(j);
     if (color == colors[1]) continue; // already at target color
     for (int i = 0; i < 32; i += 8) {
@@ -1007,13 +1008,15 @@ void Segment::fade_out(uint8_t rate) const {
 // fades all pixels to secondary color
 void Segment::fadeToSecondaryBy(uint8_t fadeBy) const {
   if (!isActive() || fadeBy == 0) return;   // optimization - no scaling to apply
-  for (unsigned i = 0; i < vLength(); i++) setPixelColorRaw(i, color_blend(getPixelColorRaw(i), colors[1], fadeBy));
+  // always fade all pixels (blending will take care of grouping, spacing and clipping)
+  for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, color_blend(getPixelColorRaw(i), colors[1], fadeBy));
 }
 
 // fades all pixels to black using nscale8()
 void Segment::fadeToBlackBy(uint8_t fadeBy) const {
   if (!isActive() || fadeBy == 0) return;   // optimization - no scaling to apply
-  for (unsigned i = 0; i < vLength(); i++) setPixelColorRaw(i, color_fade(getPixelColorRaw(i), 255-fadeBy));
+  // always fade all pixels (blending will take care of grouping, spacing and clipping)
+  for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, color_fade(getPixelColorRaw(i), 255-fadeBy));
 }
 
 /*
@@ -1037,6 +1040,7 @@ void Segment::blur(uint8_t blur_amount, bool smear) const {
   uint32_t lastnew;
   uint32_t last;
   uint32_t curnew = BLACK;
+  // we can use get/setPixelColorRaw() and vLength() since is2D() handles possible 1D->2D mapping (blurs entire 2D segment)
   for (unsigned i = 0; i < vlength; i++) {
     uint32_t cur = getPixelColorRaw(i);
     uint32_t part = color_fade(cur, seep);
@@ -1453,7 +1457,8 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
         const int maxX = std::min(x + topSegment.grouping, width);
         const int maxY = std::min(y + topSegment.grouping, height);
         while (y < maxY) {
-          while (x < maxX) setMirroredPixel(x++, y, c_a, opacity);
+          int _x = x;
+          while (_x < maxX) setMirroredPixel(_x++, y, c_a, opacity);
           y++;
         }
       }
