@@ -546,7 +546,7 @@ void BusPwm::show() {
     analogWrite(_pins[i], duty);
     #else
     int deadTime = 0;
-    if (_type == TYPE_ANALOG_2CH && Bus::getCCTBlend() == 0) {
+    if (_type == TYPE_ANALOG_2CH && Bus::_cctBlend == 0) {
       // add dead time between signals (when using dithering, two full 8bit pulses are required)
       deadTime = (1+dithering) << bitShift;
       // we only need to take care of shortening the signal at (almost) full brightness otherwise pulses may overlap
