@@ -263,7 +263,6 @@ class BusDigital : public Bus {
     uint16_t _frequencykHz;
     uint8_t  _milliAmpsPerLed;
     uint16_t _milliAmpsMax;
-    //uint8_t *_data;
     void    *_busPtr;
 
     static uint16_t _milliAmpsTotal; // is overwitten/recalculated on each show()
@@ -367,11 +366,10 @@ struct BusConfig {
   uint8_t autoWhite;
   uint8_t pins[5] = {255, 255, 255, 255, 255};
   uint16_t frequency;
-//  bool doubleBuffer;
   uint8_t milliAmpsPerLed;
   uint16_t milliAmpsMax;
 
-  BusConfig(uint8_t busType, uint8_t* ppins, uint16_t pstart, uint16_t len = 1, uint8_t pcolorOrder = COL_ORDER_GRB, bool rev = false, uint8_t skip = 0, byte aw=RGBW_MODE_MANUAL_ONLY, uint16_t clock_kHz=0U, /*bool dblBfr=false,*/ uint8_t maPerLed=LED_MILLIAMPS_DEFAULT, uint16_t maMax=ABL_MILLIAMPS_DEFAULT)
+  BusConfig(uint8_t busType, uint8_t* ppins, uint16_t pstart, uint16_t len = 1, uint8_t pcolorOrder = COL_ORDER_GRB, bool rev = false, uint8_t skip = 0, byte aw=RGBW_MODE_MANUAL_ONLY, uint16_t clock_kHz=0U, uint8_t maPerLed=LED_MILLIAMPS_DEFAULT, uint16_t maMax=ABL_MILLIAMPS_DEFAULT)
   : count(std::max(len,(uint16_t)1))
   , start(pstart)
   , colorOrder(pcolorOrder)
@@ -379,7 +377,6 @@ struct BusConfig {
   , skipAmount(skip)
   , autoWhite(aw)
   , frequency(clock_kHz)
-//  , doubleBuffer(dblBfr)
   , milliAmpsPerLed(maPerLed)
   , milliAmpsMax(maMax)
   {
@@ -443,7 +440,6 @@ namespace BusManager {
 
   size_t          memUsage();
   inline uint16_t currentMilliamps()            { return _gMilliAmpsUsed + MA_FOR_ESP; }
-  //inline uint16_t ablMilliampsMax()             { unsigned sum = 0; for (auto &bus : busses) sum += bus->getMaxCurrent(); return sum; }
   inline uint16_t ablMilliampsMax()             { return _gMilliAmpsMax; }  // used for compatibility reasons (and enabling virtual global ABL)
   inline void     setMilliampsMax(uint16_t max) { _gMilliAmpsMax = max;}
 
