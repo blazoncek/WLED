@@ -1591,7 +1591,11 @@ void WS2812FX::show() {
   size_t diff = showNow - _lastShow;
 
   size_t totalLen = getLengthTotal();
-  _pixelCCT = static_cast<uint8_t*>(d_malloc(totalLen * sizeof(uint8_t))); // allocate CCT buffer if necessary
+  // WARNING: as WLED doesn't handle CCT on pixel level but on Segment level instead
+  // we need to keep track of each pixel's CCT when blending segments (if CCT is present)
+  // and then set appropriate CCT from that pixel during paint (see below).
+  if ((hasCCTBus() || correctWB) && !cctFromRgb)
+    _pixelCCT = static_cast<uint8_t*>(d_malloc(totalLen * sizeof(uint8_t))); // allocate CCT buffer if necessary
   if (_pixelCCT) memset(_pixelCCT, 127, totalLen); // set neutral (50:50) CCT
 
   if (realtimeMode == REALTIME_MODE_INACTIVE || useMainSegmentOnly || realtimeOverride > REALTIME_OVERRIDE_NONE) {
@@ -1612,16 +1616,14 @@ void WS2812FX::show() {
   if (newBri != _brightness) BusManager::setBrightness(newBri);
 
   // paint actuall pixels
-  // WARNING: as WLED doesn't handle CCT on pixel level but on Segment level instead
-  // we need to determine to which segment a pixel belongs (may belong to several!!!)
-  // and then set appropriate CCT from that segment for a particular pixel.
   int oldCCT = Bus::getCCT(); // store original CCT value (since it is global)
+  // when cctFromRgb is true we implicitly calculate WW and CW from RGB values (cct==-1)
+  if (cctFromRgb) BusManager::setSegmentCCT(-1);
   for (size_t i = 0; i < totalLen; i++) {
-    // when cctFromRgb is true we implicitly calculate WW and CW from RGB values (cct==-1)
     // when correctWB is true setSegmentCCT() will convert CCT into K with which we can then
     // correct/adjust RGB value according to desired CCT value, it will still affect actual WW/CW ratio
-    if (_pixelCCT) {
-      if (i == 0 || _pixelCCT[i-1] != _pixelCCT[i]) BusManager::setSegmentCCT(cctFromRgb ? -1 : _pixelCCT[i], correctWB);
+    if (_pixelCCT) { // cctFromRgb already exluded at allocation
+      if (i == 0 || _pixelCCT[i-1] != _pixelCCT[i]) BusManager::setSegmentCCT(_pixelCCT[i], correctWB);
     }
     BusManager::setPixelColor(getMappedPixelIndex(i), realtimeMode && arlsDisableGammaCorrection ? _pixels[i] : gamma32(_pixels[i]));
   }
