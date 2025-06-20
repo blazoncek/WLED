@@ -18,7 +18,11 @@
 #define PALETTE_FIXED  (false) // i.e. never moving
 #define PALETTE_MOVING (SEGMENT.speed > 0)
 
-#define indexToVStrip(index, stripNr) ((index) | (int((stripNr)+1)<<16))
+#ifndef WLED_DISABLE_2D
+  #define indexToVStrip(index, stripNr) ((index) | (int((stripNr)+1)<<16))
+#else
+  #define indexToVStrip(index, stripNr) (index) // since stripNr will never be > 0
+#endif
 
 // effect utility functions
 uint8_t sin_gap(uint16_t in) {

@@ -666,21 +666,13 @@ void IRAM_ATTR Segment::setPixelColor(int i, uint32_t col) const
 {
   if (!isActive() || i < 0) return; // not active or invalid index
 #ifndef WLED_DISABLE_2D
-  int vStrip = 0;
+  int vStrip = i>>16; // hack to allow running on virtual strips (2D segment columns/rows)
 #endif
   const int vL = vLength();
   // if the 1D effect is using virtual strips "i" will have virtual strip id stored in upper 16 bits
   // in such case "i" will be > virtualLength()
-  if (i >= vL) {
-    // check if this is a virtual strip
-    #ifndef WLED_DISABLE_2D
-    vStrip = i>>16; // hack to allow running on virtual strips (2D segment columns/rows)
-    i &= 0xFFFF;    //truncate vstrip index
-    if (i >= vL) return;  // if pixel would still fall out of segment just exit
-    #else
-    return;
-    #endif
-  }
+  i &= 0xFFFF;          // truncate vStrip index
+  if (i >= vL) return;  // if pixel would still fall out of segment just exit
 
 #ifndef WLED_DISABLE_2D
   if (is2D()) {
@@ -883,8 +875,8 @@ uint32_t IRAM_ATTR Segment::getPixelColor(int i) const
 
 #ifndef WLED_DISABLE_2D
   int vStrip = i>>16; // virtual strips are only relevant in Bar expansion mode
-  i &= 0xFFFF;
 #endif
+  i &= 0xFFFF;
   if (i >= (int)vLength()) return 0;
 
 #ifndef WLED_DISABLE_2D

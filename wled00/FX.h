@@ -643,7 +643,7 @@ class Segment {
     unsigned virtualHeight() const;       // segment height in virtual pixels (accounts for groupping and spacing)
     inline unsigned nrOfVStrips() const { // returns number of virtual vertical strips in 2D matrix (used to expand 1D effects into 2D)
     #ifndef WLED_DISABLE_2D
-      return (is2D() &&  map1D2D == M12_pBar) ? virtualWidth() : 1;
+      return (is2D() && map1D2D == M12_pBar) ? vWidth() : 1;
     #else
       return 1;
     #endif
@@ -688,7 +688,7 @@ class Segment {
     inline void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGB c, CRGB c2 = CRGB::Black, int8_t rotate = 0) const { drawCharacter(chr, x, y, w, h, RGBW32(c.r,c.g,c.b,0), RGBW32(c2.r,c2.g,c2.b,0), rotate); } // automatic inline
     inline void fill_solid(CRGB c) const { fill(RGBW32(c.r,c.g,c.b,0)); }
   #else
-    inline constexpr bool is2D() const                                            { return false; }
+    inline bool is2D() const                                                      { return false; }
     inline void setPixelColorXY(int x, int y, uint32_t c) const                   { setPixelColor(x, c); }
     inline void setPixelColorXY(unsigned x, unsigned y, uint32_t c) const         { setPixelColor(int(x), c); }
     inline void setPixelColorXY(int x, int y, byte r, byte g, byte b, byte w = 0) const { setPixelColor(x, RGBW32(r,g,b,w)); }
