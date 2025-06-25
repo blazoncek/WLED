@@ -1,5 +1,9 @@
 #define WLED_DEFINE_GLOBAL_VARS //only in one source file, wled.cpp!
 #include "wled.h"
+#ifdef WLED_ENABLE_AOTA
+  #define NO_OTA_PORT
+  #include <ArduinoOTA.h>
+#endif
 
 #if defined(ARDUINO_ARCH_ESP32) && defined(WLED_DISABLE_BROWNOUT_DET)
 #include "soc/soc.h"
@@ -99,7 +103,7 @@ void WLED::loop()
   if (!realtimeMode || realtimeOverride || useMainSegmentOnly)  // block stuff if WARLS/Adalight is enabled
   {
     if (apActive) dnsServer.processNextRequest();
-    #ifndef WLED_DISABLE_OTA
+    #ifdef WLED_ENABLE_AOTA
     if (Network.isConnected() && aOtaEnabled && !otaLock && correctPIN) ArduinoOTA.handle();
     #endif
     handleNightlight();
@@ -485,7 +489,7 @@ void WLED::setup()
   #endif
   DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
 
-#ifndef WLED_DISABLE_OTA
+#ifdef WLED_ENABLE_AOTA
   if (aOtaEnabled) {
     ArduinoOTA.onStart([]() {
       #ifdef ESP8266
@@ -711,7 +715,7 @@ void WLED::connected()
     alexaInit();
 #endif
 
-#ifndef WLED_DISABLE_OTA
+#ifdef WLED_ENABLE_AOTA
   if (aOtaEnabled) ArduinoOTA.begin();
 #endif
 

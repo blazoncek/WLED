@@ -26,6 +26,9 @@
 
 // You are required to disable ArduinoOTA over-the-air updates:
 //#define WLED_DISABLE_OTA         // saves 14kb
+#ifdef WLED_ENABLE_AOTA
+  #undef WLED_DISABLE_OTA
+#endif
 
 // You can choose some of these features to disable:
 //#define WLED_DISABLE_ALEXA       // saves 11kb
@@ -126,10 +129,6 @@
 #include <ESPAsyncWebServer.h>
 #include <WiFiUdp.h>
 #include <DNSServer.h>
-#ifndef WLED_DISABLE_OTA
-  #define NO_OTA_PORT
-  #include <ArduinoOTA.h>
-#endif
 #include <SPIFFSEditor.h>
 #include "src/dependencies/time/TimeLib.h"
 #include "src/dependencies/timezone/Timezone.h"
@@ -522,7 +521,7 @@ WLED_GLOBAL byte macroAlexaOn _INIT(0), macroAlexaOff _INIT(0);
 // Security CONFIG
 WLED_GLOBAL bool otaLock        _INIT(false);     // prevents OTA firmware updates without password. ALWAYS enable if system exposed to any public networks
 WLED_GLOBAL bool wifiLock       _INIT(false);     // prevents access to WiFi settings when OTA lock is enabled
-#ifndef WLED_DISABLE_OTA
+#ifdef WLED_ENABLE_AOTA
 WLED_GLOBAL bool aOtaEnabled    _INIT(true);      // ArduinoOTA allows easy updates directly from the IDE. Careful, it does not auto-disable when OTA lock is on
 #else
 WLED_GLOBAL bool aOtaEnabled    _INIT(false);     // ArduinoOTA allows easy updates directly from the IDE. Careful, it does not auto-disable when OTA lock is on
