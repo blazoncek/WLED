@@ -27,6 +27,9 @@
 // You are required to disable ArduinoOTA over-the-air updates:
 //#define WLED_DISABLE_OTA         // saves 14kb
 #ifdef WLED_ENABLE_AOTA
+  #if defined(WLED_DISABLE_OTA)
+    #warning WLED_DISABLE_OTA was defined but it will be ignored due to WLED_ENABLE_AOTA.
+  #endif
   #undef WLED_DISABLE_OTA
 #endif
 
