@@ -3,9 +3,9 @@
  */
 
 #include <Arduino.h>
-#include <ESPmDNS.h>
 #include <IPAddress.h>
 #ifdef ARDUINO_ARCH_ESP32
+#include <ESPmDNS.h>
 #include "driver/ledc.h"
 #include "soc/ledc_struct.h"
   #if !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
@@ -16,6 +16,8 @@
     #define LEDC_MUTEX_LOCK()
     #define LEDC_MUTEX_UNLOCK()
   #endif
+#else
+#include <ESP8266mDNS.h>
 #endif
 #include "bus_manager.h"
 #include "bus_wrapper.h"
