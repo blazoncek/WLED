@@ -773,10 +773,10 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 
 static const char s_cfg_json[] PROGMEM = "/cfg.json";
 
-void deserializeConfigFromFS() {
+bool deserializeConfigFromFS() {
   deserializeConfigSec();
 
-  if (!requestJSONBufferLock(1)) return;
+  if (!requestJSONBufferLock(1)) return false;
 
   DEBUG_PRINTLN(F("Reading settings from /cfg.json..."));
 
@@ -788,7 +788,7 @@ void deserializeConfigFromFS() {
   bool needsSave = deserializeConfig(root, true);
   releaseJSONBufferLock();
 
-  if (needsSave) serializeConfig(); // usermods required new parameters
+  return needsSave;
 }
 
 void serializeConfig() {

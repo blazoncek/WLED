@@ -424,7 +424,7 @@ void WLED::setup()
   //for (int i=0; i<multiWiFi.size(); i++) DEBUG_PRINTF_P(PSTR("WiFi: configured SSID: %s\n"), multiWiFi[i].clientSSID);
 
   DEBUG_PRINTLN(F("Reading config"));
-  deserializeConfigFromFS();
+  bool needsCfgSave = deserializeConfigFromFS();
   DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
   //for (int i=0; i<multiWiFi.size(); i++) DEBUG_PRINTF_P(PSTR("WiFi: configured SSID: %s/%s\n"), multiWiFi[i].clientSSID, multiWiFi[i].clientPass);
 
@@ -443,6 +443,8 @@ void WLED::setup()
   DEBUG_PRINTLN(F("Usermods setup"));
   UsermodManager::setup();
   DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
+
+  if (needsCfgSave) serializeConfig(); // need to wait for strip to be initialised #4752
 
   DEBUG_PRINTLN(F("Initializing WiFi"));
   // convert the "cmDNS" or "serverDescription" into a valid DNS hostname (alphanumeric)
