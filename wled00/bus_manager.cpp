@@ -3,6 +3,7 @@
  */
 
 #include <Arduino.h>
+#include <ESPmDNS.h>
 #include <IPAddress.h>
 #ifdef ARDUINO_ARCH_ESP32
 #include "driver/ledc.h"
@@ -16,12 +17,11 @@
     #define LEDC_MUTEX_UNLOCK()
   #endif
 #endif
-#include "const.h"
-#include "pin_manager.h"
 #include "bus_manager.h"
 #include "bus_wrapper.h"
 #include <bits/unique_ptr.h>
 
+extern char cmDNS[];
 extern bool cctICused;
 extern bool useParallelI2S;
 
@@ -679,6 +679,11 @@ BusNetwork::BusNetwork(const BusConfig &bc)
   _hasCCT = false;
   _UDPchannels = _hasWhite + 3;
   _client = IPAddress(bc.pins[0],bc.pins[1],bc.pins[2],bc.pins[3]);
+  _hostname = bc.text;
+  if (_hostname.length() > 0 && strlen(cmDNS) > 0) {
+    IPAddress clnt = MDNS.queryHost(_hostname);
+    if (clnt != IPAddress()) _client = clnt;
+  }
   _data = (uint8_t*)d_calloc(_len, _UDPchannels);
   _valid = (_data != nullptr);
   DEBUGBUS_PRINTF_P(PSTR("%successfully inited virtual strip with type %u and IP %u.%u.%u.%u\n"), _valid?"S":"Uns", bc.type, bc.pins[0], bc.pins[1], bc.pins[2], bc.pins[3]);

@@ -215,7 +215,7 @@
 			const abl = d.Sf.ABL.checked;
 			maxB = oMaxB; // TODO make sure we start with all possible buses
 			let setPinConfig = (n,t) => {
-				let p0d = "GPIO:";
+				let p0d = "GPIO: ";
 				let p1d = "";
 				let off = "Off Refresh";
 				switch (gT(t).t.charAt(0)) {
@@ -226,14 +226,14 @@
 						p0d = "Data "+p0d;
 						break;
 					case 'A': // PWM analog
-						if (numPins(t) > 1) p0d = "GPIOs:";
+						if (numPins(t) > 1) p0d = "GPIOs: ";
 						off = "Dithering";
 						break;
 					case 'N': // network
-						p0d = "IP address:";
+						p0d = "IP address: ";
 						break;
 					case 'V': // virtual/non-GPIO based
-						p0d = "Config:"
+						p0d = "Config: "
 						break;
 				}
 				gId("p0d"+n).innerText = p0d;
@@ -282,6 +282,8 @@
 				gId("dig"+n+"l").style.display = (isD2P(t) || isPWM(t)) ? "inline":"none";  // bus clock speed / PWM speed (relative) (not On/Off)
 				gId("rev"+n).innerHTML = isAna(t) ? "Inverted output":"Reversed";           // change reverse text for analog else (rotated 180°)
 				//gId("psd"+n).innerHTML = isAna(t) ? "Index:":"Start:";                      // change analog start description
+				gId("net"+n+"h").style.display = isNet(t) ? "block" : "none";				// show host field for network types
+				if (!isNet(t)) d.Sf["HS"+n].value = "";										// cleart host field if not network typr
 			});
 			// display global white channel overrides
 			gId("wc").style.display = (gRGBW) ? 'inline':'none';
@@ -459,6 +461,7 @@ mA/LED: <select name="LAsel${s}" onchange="enLA(this,'${s}');UI();">
 <span id="p2d${s}"></span><input type="number" name="L2${s}" class="s" onchange="UI();pinUpd(this);"/>
 <span id="p3d${s}"></span><input type="number" name="L3${s}" class="s" onchange="UI();pinUpd(this);"/>
 <span id="p4d${s}"></span><input type="number" name="L4${s}" class="s" onchange="UI();pinUpd(this);"/>
+<div id="net${s}h" class="hide">Host: <input type="text" name="HS${s}" maxlength="32" pattern="[a-zA-Z0-9_\\-]*" oninput="vI(this)" onchange="UI()"/>.local</div>
 <div id="dig${s}r" style="display:inline"><br><span id="rev${s}">Reversed</span>: <input type="checkbox" name="CV${s}"></div>
 <div id="dig${s}s" style="display:inline"><br>Skip first LEDs: <input type="number" name="SL${s}" min="0" max="255" value="0" oninput="UI()"></div>
 <div id="dig${s}f" style="display:inline"><br><span id="off${s}">Off Refresh</span>: <input id="rf${s}" type="checkbox" name="RF${s}"></div>
@@ -782,6 +785,9 @@ Swap: <select id="xw${s}" name="XW${s}">
 				if (c.value == sel.dataset.val) sel.selectedIndex = i;
 			}
 			return opt;
+		}
+		function vI(i) {
+			i.style.color = (i.value.match(/^[a-zA-Z0-9_\-]*$/)) ? 'white' : 'red';
 		}
 	</script>
 	<style>@import url("style.css");</style>
