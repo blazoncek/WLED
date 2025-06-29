@@ -87,6 +87,7 @@
   #endif
 #endif
 
+// NOTE: These values are also used to determine ESP type in led_settings.htm 
 #ifdef ESP8266
   #define WLED_MAX_DIGITAL_CHANNELS 3
   #define WLED_MAX_ANALOG_CHANNELS 5

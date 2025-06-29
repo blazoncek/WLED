@@ -551,7 +551,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     }
 
     char k[3]; k[2] = 0;
-    for (int i = 0; i<10; i++) {
+    for (i = 0; i<10; i++) {
       k[1] = i+48;//ascii 0,1,2,3,...
       k[0] = 'H'; //timer hours
       timerHours[i] = request->arg(k).toInt();
