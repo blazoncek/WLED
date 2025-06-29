@@ -199,9 +199,6 @@ Static subnet mask:<br>
 			gId('+').style.display = gId("rml").childElementCount < 10 ? 'inline' : 'none';
 			return true; // Allow form submission to continue
 		}
-		function vI(i) {
-			i.style.color = (i.value.match(/^[a-zA-Z0-9_\-]*$/)) ? 'white' : 'red';
-		}
 	</script>
 	<style>@import url("style.css");</style>
 </head>
@@ -213,7 +210,7 @@ Static subnet mask:<br>
 		</div>
 		<h2>WiFi setup</h2>
 		Hostname/mDNS address (empty for no mDNS):<br>
-		http://<input type="text" name="CM" maxlength="32" pattern="[a-zA-Z0-9_\-]*" oninput="vI(this)">.local<br>
+		http://<input type="text" name="CM" maxlength="32" pattern="[a-zA-Z0-9_\-]*">.local<br>
 		Client IP: <span class="sip"> Not connected </span><br>
 		<h3>Connect to existing network</h3>
 		<button type="button" id="scan" onclick="N()">Scan</button><br>
@@ -227,7 +224,7 @@ Static subnet mask:<br>
 		DNS server address:<br>
 		<input name="D0" type="number" class="s" min="0" max="255" required>.<input name="D1" type="number" class="s" min="0" max="255" required>.<input name="D2" type="number" class="s" min="0" max="255" required>.<input name="D3" type="number" class="s" min="0" max="255" required><br>
 		<h3>Configure Access Point</h3>
-		AP SSID (empty for no AP):<br> <input type="text" name="AS" maxlength="32" pattern="[a-zA-Z0-9_\-]*" oninput="vI(this)"><br>
+		AP SSID (empty for no AP):<br> <input type="text" name="AS" maxlength="32" pattern="[a-zA-Z0-9_\-]*"><br>
 		Hide AP name: <input type="checkbox" name="AH"><br>
 		AP password (empty for open):<br> <input type="password" name="AP" maxlength="63" pattern="(.{8,63})|()" title="Empty or min. 8 characters"><br>
 		Access Point WiFi channel: <input name="AC" type="number" class="xs" min="1" max="13" required><br>
