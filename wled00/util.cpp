@@ -120,10 +120,10 @@ size_t printSetClassElementHTML(Print& settingsScript, const char* key, const in
 void prepareHostname(char* hostname, size_t maxLen)
 {
   // create a unique hostname based on the last 6 digits of the MAC address if no mDNS name or serverDescription is set
-  sprintf_P(hostname, PSTR("wled-%*s"), 6, escapedMac.c_str() + 6);
+  snprintf_P(hostname, maxLen, PSTR("wled-%*s"), 6, escapedMac.c_str() + 6);
   const char *pC = cmDNS;       // use cmDNS as hostname if set
   if (strlen(pC) == 0) pC = serverDescription;  // else use serverDescription
-  unsigned pos = 5;             // keep "wled-" from unique name
+  unsigned pos = strstr_P(pC, PSTR("wled-")) == pC ? 0 : 5; // keep "wled-" from unique name if cmDNS does not start with it
   while (*pC && pos < maxLen) { // while !null and not over length
     if (isalnum(*pC)) {         // if the current char is alpha-numeric append it to the hostname
       hostname[pos++] = *pC;
