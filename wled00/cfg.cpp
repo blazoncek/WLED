@@ -234,7 +234,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       uint8_t skipFirst = elm[F("skip")];
       uint16_t start = elm["start"] | 0;
       if (length==0 || start + length > MAX_LEDS) continue; // zero length or we reached max. number of LEDs, just stop
-      uint8_t ledType = elm["type"] | TYPE_WS2812_RGB;
+      uint8_t ledType = elm["type"] | DEFAULT_LED_TYPE;
       bool reversed = elm["rev"];
       bool refresh = elm["ref"] | false;
       uint16_t freqkHz = elm[F("freq")] | 0;  // will be in kHz for DotStar and Hz for PWM
