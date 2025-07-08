@@ -127,7 +127,6 @@ BusDigital::BusDigital(const BusConfig &bc, uint8_t nr)
 , _colorOrder(bc.colorOrder)
 , _milliAmpsPerLed(bc.milliAmpsPerLed)
 , _milliAmpsMax(bc.milliAmpsMax)
-//, _data(nullptr)
 {
   DEBUGBUS_PRINTLN(F("Bus: Creating digital bus."));
   if (!isDigital(bc.type) || !bc.count) { DEBUGBUS_PRINTLN(F("Not digial or empty bus!")); return; }
@@ -148,14 +147,14 @@ BusDigital::BusDigital(const BusConfig &bc, uint8_t nr)
   _hasRgb = hasRGB(bc.type);
   _hasWhite = hasWhite(bc.type);
   _hasCCT = hasCCT(bc.type);
-//  if (bc.doubleBuffer) {
-//    _data = (uint8_t*)d_calloc(_len, Bus::getNumberOfChannels(_type));
-//    if (!_data) DEBUGBUS_PRINTLN(F("Bus: Buffer allocation failed!"));
-//  }
   uint16_t lenToCreate = bc.count;
   if (bc.type == TYPE_WS2812_1CH_X3) lenToCreate = NUM_ICS_WS2812_1CH_3X(bc.count); // only needs a third of "RGB" LEDs for NeoPixelBus
   _busPtr = PolyBus::create(_iType, _pins, lenToCreate + _skip, nr);
   _valid = (_busPtr != nullptr) && bc.count > 0;
+  // fix for wled#4759
+  if (_valid) for (unsigned i = 0; i < _skip; i++) {
+    PolyBus::setPixelColor(_busPtr, _iType, i, 0, COL_ORDER_GRB); // set sacrificial pixels to black (CO does not matter here)
+  }
   DEBUGBUS_PRINTF_P(PSTR("Bus: %successfully inited #%u (len:%u, type:%u (RGB:%d, W:%d, CCT:%d), pins:%u,%u [itype:%u] mA=%d/%d)\n"),
     _valid?"S":"Uns",
     (int)nr,
@@ -245,7 +244,7 @@ void BusDigital::show() {
       PolyBus::setPixelColor(_busPtr, _iType, i, c, 0, (cctCW<<8) | cctWW); // repaint all pixels with new brightness
     }
   }
-  PolyBus::show(_busPtr, _iType/*, !_data*/); // faster if buffer consistency is not important
+  PolyBus::show(_busPtr, _iType, _skip); // faster if buffer consistency is not important (no skipped LEDs)
   // restore bus brightness to its original value
   // this is done right after show, so this is only OK if LED updates are completed before show() returns
   // or async show has a separate buffer (ESP32 RMT and I2S are ok)
@@ -330,7 +329,7 @@ size_t BusDigital::getPins(uint8_t* pinArray) const {
 }
 
 size_t BusDigital::getBusSize() const {
-  return sizeof(BusDigital) + (isOk() ? PolyBus::getDataSize(_busPtr, _iType) /*+ (_data ? _len * getNumberOfChannels() : 0)*/ : 0);
+  return sizeof(BusDigital) + (isOk() ? PolyBus::getDataSize(_busPtr, _iType) : 0);
 }
 
 void BusDigital::setColorOrder(uint8_t colorOrder) {
