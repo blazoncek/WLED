@@ -29,6 +29,9 @@ extern bool useParallelI2S;
 //colors.cpp
 uint32_t colorBalanceFromKelvin(uint16_t kelvin, uint32_t rgb);
 
+//network.cpp
+IPAddress resolveHostname(const String& hostname, bool useMDNS = false);
+
 //udp.cpp
 uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const byte *buffer, uint8_t bri=255, bool isRGBW=false);
 
@@ -720,12 +723,9 @@ size_t BusNetwork::getPins(uint8_t* pinArray) const {
 #ifdef ARDUINO_ARCH_ESP32
 void BusNetwork::resolveHostname() {
   static unsigned long nextResolve = 0;
-  if (Network.isConnected() && millis() > nextResolve && _hostname.length() > 0) {
+  if (millis() > nextResolve && _hostname.length() > 0) {
     nextResolve = millis() + 600000; // resolve only every 10 minutes
-    String fullHost = _hostname + F(".local");
-    IPAddress clnt;
-    if (strlen(cmDNS) > 0) clnt = MDNS.queryHost(_hostname);
-    else WiFi.hostByName(fullHost.c_str(), clnt);
+    IPAddress clnt = ::resolveHostname(_hostname, true);
     if (clnt != IPAddress()) _client = clnt;
   }
 }

@@ -262,6 +262,21 @@ int getSignalQuality(int rssi)
 }
 
 
+IPAddress resolveHostname(const String &hostname, bool useMDNS) {
+  IPAddress clnt;
+  if (Network.isConnected() && hostname.length() > 0) {
+    #ifdef ARDUINO_ARCH_ESP32
+    if (strlen(cmDNS) > 0 && useMDNS && hostname.indexOf('.') < 0) clnt = MDNS.queryHost(hostname);
+    if (clnt == IPAddress()) WiFi.hostByName(hostname.c_str(), clnt);
+    #else
+    // ESP8266 does not support host resolution via mDNS
+    WiFi.hostByName(hostname.c_str(), clnt);
+    #endif
+  }
+  return clnt;
+}
+
+// fill MAC address string with 6 bytes from mac array
 void fillMAC2Str(char *str, const uint8_t *mac) {
   sprintf_P(str, PSTR("%02x%02x%02x%02x%02x%02x"), MAC2STR(mac));
   byte nul = 0;
@@ -269,6 +284,7 @@ void fillMAC2Str(char *str, const uint8_t *mac) {
   if (!nul) str[0] = '\0';                    // empty string
 }
 
+// fill MAC address array with 6 bytes from string
 void fillStr2MAC(uint8_t *mac, const char *str) {
   for (int i = 0; i < 6; i++) *mac++ = 0;     // clear
   if (!str) return;                           // null string
