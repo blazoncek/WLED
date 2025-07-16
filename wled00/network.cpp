@@ -266,8 +266,12 @@ IPAddress resolveHostname(const String &hostname, bool useMDNS) {
   IPAddress clnt;
   if (Network.isConnected() && hostname.length() > 0) {
     #ifdef ARDUINO_ARCH_ESP32
-    if (strlen(cmDNS) > 0 && useMDNS && hostname.indexOf('.') < 0) clnt = MDNS.queryHost(hostname);
-    if (clnt == IPAddress()) WiFi.hostByName(hostname.c_str(), clnt);
+    String mqttMDNS = hostname;
+    mqttMDNS.toLowerCase(); // make sure we have a lowercase hostname
+    int pos = mqttMDNS.indexOf(F(".local"));
+    if (pos > 0) mqttMDNS.remove(pos); // remove .local domain if present (and anything following it)
+    if (strlen(cmDNS) > 0 && useMDNS && mqttMDNS.indexOf('.') < 0) clnt = MDNS.queryHost(mqttMDNS.c_str());
+    if (clnt == IPAddress()) WiFi.hostByName(hostname.c_str(), clnt); // use full hostname if MDNS failed
     #else
     // ESP8266 does not support host resolution via mDNS
     WiFi.hostByName(hostname.c_str(), clnt);
