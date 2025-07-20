@@ -111,9 +111,9 @@ size_t printSetClassElementHTML(Print& settingsScript, const char* key, const in
   return settingsScript.printf_P(PSTR("d.getElementsByClassName(\"%s\")[%d].innerHTML=\"%s\";"), key, index, val);
 }
 
-
+/*
 // prepare a unique hostname based on the last 6 digits of the MAC address
-// if no mDNS name or serverDescription is set, otherwise use cmDNS or serverDescription
+// if no mDNS name or serverDescription is set, otherwise use hostName or serverDescription
 // the hostname will be at most 24 characters long, starting with "wled-"
 // and containing only alphanumeric characters and hyphens
 // the hostname will not end with a hyphen and will be null-terminated
@@ -121,9 +121,9 @@ void prepareHostname(char* hostname, size_t maxLen)
 {
   // create a unique hostname based on the last 6 digits of the MAC address if no mDNS name or serverDescription is set
   snprintf_P(hostname, maxLen, PSTR("wled-%.*s"), 6, escapedMac.c_str() + 6);
-  const char *pC = cmDNS;       // use cmDNS as hostname if set
+  const char *pC = hostName;    // use hostName as hostname if set
   if (strlen(pC) == 0) pC = serverDescription;  // else use serverDescription
-  unsigned pos = strstr_P(pC, PSTR("wled-")) == pC ? 0 : 5; // keep "wled-" from unique name if cmDNS does not start with it
+  unsigned pos = strstr_P(pC, PSTR("wled-")) == pC ? 0 : 5; // keep "wled-" from unique name if hostName does not start with it
   while (*pC && pos < maxLen) { // while !null and not over length
     if (isalnum(*pC)) {         // if the current char is alpha-numeric append it to the hostname
       hostname[pos++] = *pC;
@@ -137,7 +137,7 @@ void prepareHostname(char* hostname, size_t maxLen)
   while (pos > 4 && hostname[pos-1] == '-') pos--;
   hostname[pos] = '\0'; // terminate string (leave at least "wled")
 }
-
+*/
 
 bool isAsterisksOnly(const char* str, byte maxLen)
 {

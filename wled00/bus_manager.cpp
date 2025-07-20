@@ -22,7 +22,7 @@
 #include "bus_wrapper.h"
 #include <bits/unique_ptr.h>
 
-extern char cmDNS[];
+extern char hostName[];
 extern bool cctICused;
 extern bool useParallelI2S;
 

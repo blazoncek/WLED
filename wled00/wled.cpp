@@ -136,7 +136,7 @@ void WLED::loop()
 
   yield();
 #ifdef ESP8266
-  if (strlen(cmDNS) > 0) MDNS.update();
+  if (mDNSenabled) MDNS.update();
 #endif
 
   //millis() rolls over every 50 days
@@ -419,9 +419,9 @@ void WLED::setup()
   escapedMac.replace(":", "");
   escapedMac.toLowerCase();
 
+  // generate host name if no compile time default is set
+  if (strcmp(hostName, DEFAULT_MDNS_NAME) == 0) sprintf_P(hostName, PSTR("wled-%.*s"), 6, escapedMac.c_str() + 6);
   WLED_SET_AP_SSID(); // otherwise it is empty on first boot until config is saved
-  //multiWiFi.emplace_back(CLIENT_SSID,CLIENT_PASS); // initialise vector with default WiFi
-  //for (int i=0; i<multiWiFi.size(); i++) DEBUG_PRINTF_P(PSTR("WiFi: configured SSID: %s\n"), multiWiFi[i].clientSSID);
 
   DEBUG_PRINTLN(F("Reading config"));
   bool needsCfgSave = deserializeConfigFromFS();
@@ -446,25 +446,13 @@ void WLED::setup()
 
   if (needsCfgSave) serializeConfig(); // need to wait for strip to be initialised #4752
 
-  DEBUG_PRINTLN(F("Initializing WiFi"));
-  // convert the "cmDNS" or "serverDescription" into a valid DNS hostname (alphanumeric)
-  char hostname[25];
-  prepareHostname(hostname, sizeof(hostname)-1);
-
+  DEBUG_PRINTLN(F("Starting WiFi"));
+  // configurable WiFi options are set in cfg.cpp
   WiFi.persistent(false);
   //WiFi.enableLongRange(true);
   WiFi.onEvent(WiFiEvent);
-#ifdef ARDUINO_ARCH_ESP32
-  WiFi.setSleep(!noWifiSleep);
-  WiFi.setHostname(hostname);
-  WiFi.setTxPower(wifi_power_t(txPower));
-  #if ESP_IDF_VERSION_MAJOR==4 && !defined(CONFIG_IDF_TARGET_ESP32S2)
+#if defined(ARDUINO_ARCH_ESP32) && ESP_IDF_VERSION_MAJOR==4 && !defined(CONFIG_IDF_TARGET_ESP32S2)
   WiFi.useStaticBuffers(true);    // use preallocated buffers (for speed)
-  #endif
-#else
-  WiFi.setPhyMode(force802_3g ? WIFI_PHY_MODE_11G : WIFI_PHY_MODE_11N);
-  wifi_set_sleep_type((noWifiSleep) ? NONE_SLEEP_T : MODEM_SLEEP_T);
-  WiFi.hostname(hostname);
 #endif
   delay(15);                      // wait for hardware to be ready
 
@@ -508,7 +496,7 @@ void WLED::setup()
       WLED::instance().enableWatchdog();
       #endif
     });
-    ArduinoOTA.setHostname(hostname);
+    ArduinoOTA.setHostname(hostName);
   }
 #endif
 #ifdef WLED_ENABLE_DMX
@@ -722,11 +710,11 @@ void WLED::connected()
 #endif
 
   // Set up mDNS responder:
-  if (strlen(cmDNS) > 0) {
+  if (mDNSenabled) {
     // "end" must be called before "begin" is called a 2nd time
     // see https://github.com/esp8266/Arduino/issues/7213
     MDNS.end();
-    MDNS.begin(cmDNS);
+    MDNS.begin(hostName);
 
     DEBUG_PRINTLN(F("mDNS started"));
     MDNS.addService("http", "tcp", 80);

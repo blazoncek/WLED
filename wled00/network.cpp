@@ -266,16 +266,15 @@ IPAddress resolveHostname(const String &hostname, bool useMDNS) {
   IPAddress clnt;
   if (Network.isConnected() && hostname.length() > 0) {
     #ifdef ARDUINO_ARCH_ESP32
-    String mqttMDNS = hostname;
-    mqttMDNS.toLowerCase(); // make sure we have a lowercase hostname
-    int pos = mqttMDNS.indexOf(F(".local"));
-    if (pos > 0) mqttMDNS.remove(pos); // remove .local domain if present (and anything following it)
-    if (strlen(cmDNS) > 0 && useMDNS && mqttMDNS.indexOf('.') < 0) clnt = MDNS.queryHost(mqttMDNS.c_str());
-    if (clnt == IPAddress()) WiFi.hostByName(hostname.c_str(), clnt); // use full hostname if MDNS failed
-    #else
-    // ESP8266 does not support host resolution via mDNS
-    WiFi.hostByName(hostname.c_str(), clnt);
+    if (mDNSenabled && useMDNS) {
+      String mDNSname = hostname;
+      mDNSname.toLowerCase(); // make sure we have a lowercase hostname
+      int pos = mDNSname.indexOf(F(".local"));
+      if (pos > 0) mDNSname.remove(pos); // remove .local domain if present (and anything following it)
+      if (mDNSname.indexOf('.') < 0) clnt = MDNS.queryHost(mDNSname.c_str());
+    }
     #endif
+    if (clnt == IPAddress()) WiFi.hostByName(hostname.c_str(), clnt); // use full hostname if MDNS failed
   }
   return clnt;
 }
@@ -529,9 +528,7 @@ void WiFiEvent(WiFiEvent_t event)
       break;
     case ARDUINO_EVENT_ETH_CONNECTED: {
       DEBUG_PRINTF_P(PSTR("ETH-E: Connected. @ %lus\n"), millis()/1000);
-      char hostname[33];
-      prepareHostname(hostname, sizeof(hostname)-1);
-      ETH.setHostname(hostname);
+      ETH.setHostname(hostName);
       if (multiWiFi[0].staticIP != (uint32_t)0x00000000 && multiWiFi[0].staticGW != (uint32_t)0x00000000) {
         ETH.config(multiWiFi[0].staticIP, multiWiFi[0].staticGW, multiWiFi[0].staticSN, dnsAddress);
       } else {
