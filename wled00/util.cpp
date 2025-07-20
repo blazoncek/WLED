@@ -512,13 +512,29 @@ void *p_malloc(size_t size) {
 }
 
 void *p_realloc(void *ptr, size_t size) {
+  #ifdef WLED_SIMPLE_REALLOC
+  p_free(ptr); // free old buffer
+  return p_malloc(size); // use malloc
+  #else
   int caps1 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
   int caps2 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
+  void *newbuf = nullptr;
   if (psramSafe) {
     if (heap_caps_get_free_size(caps2) > 3*MIN_HEAP_SIZE && size < 512) std::swap(caps1, caps2);  // use DRAM for small alloactions & when heap is plenty
-    return heap_caps_realloc_prefer(ptr, size, 2, caps1, caps2); // otherwise prefer PSRAM if it exists
+    newbuf = heap_caps_realloc_prefer(ptr, size, 2, caps1, caps2); // otherwise prefer PSRAM if it exists
+    if (newbuf) return newbuf; // realloc successful
+    else {
+      p_free(ptr); // free old buffer if realloc failed (to keep consumer allocation logic simple)
+      return p_malloc(size); // fallback to malloc if realloc failed (buffer will not be copied!!!)
+    }
   }
-  return heap_caps_realloc(ptr, size, caps2);
+  newbuf = heap_caps_realloc(ptr, size, caps2); // fallback to default realloc
+  if (newbuf) return newbuf; // realloc successful
+  else {
+    p_free(ptr); // free old buffer if realloc failed
+    return heap_caps_malloc(size, caps2); // fallback to malloc if realloc failed
+  }
+  #endif
 }
 
 void *p_calloc(size_t count, size_t size) {
@@ -532,8 +548,8 @@ void *p_calloc(size_t count, size_t size) {
 }
 
 void *d_malloc(size_t size) {
-  int caps1 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
-  int caps2 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
+  int caps1 = MALLOC_CAP_DEFAULT | MALLOC_CAP_32BIT;
+  int caps2 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_32BIT;
   if (psramSafe) {
     if (size > MIN_HEAP_SIZE) std::swap(caps1, caps2);  // prefer PSRAM for large alloactions
     return heap_caps_malloc_prefer(size, 2, caps1, caps2); // otherwise prefer DRAM
@@ -542,22 +558,44 @@ void *d_malloc(size_t size) {
 }
 
 void *d_realloc(void *ptr, size_t size) {
-  int caps1 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
-  int caps2 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
+  #ifdef WLED_SIMPLE_REALLOC
+  d_free(ptr); // free old buffer
+  return d_malloc(size); // use malloc
+  #else
+  int caps1 = MALLOC_CAP_DEFAULT | MALLOC_CAP_32BIT;
+  int caps2 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_32BIT;
+  void *newbuf = nullptr;
   if (psramSafe) {
     if (size > MIN_HEAP_SIZE) std::swap(caps1, caps2);  // prefer PSRAM for large alloactions
-    return heap_caps_realloc_prefer(ptr, size, 2, caps1, caps2); // otherwise prefer DRAM
+    newbuf = heap_caps_realloc_prefer(ptr, size, 2, caps1, caps2); // otherwise prefer DRAM
+    if (newbuf) return newbuf; // realloc successful
+    else {
+      d_free(ptr); // free old buffer if realloc failed (to keep consumer allocation logic simple)
+      return d_malloc(size); // fallback to malloc if realloc failed (buffer will not be copied!!!)
+    }
   }
-  return heap_caps_realloc(ptr, size, caps1);
+  newbuf = heap_caps_realloc(ptr, size, caps1);
+  if (newbuf) return newbuf; // realloc successful
+  else {
+    d_free(ptr); // free old buffer if realloc failed
+    return heap_caps_malloc(size, caps1); // fallback to malloc if realloc failed
+  }
+  #endif
 }
 
 void *d_calloc(size_t count, size_t size) {
-  int caps1 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
-  int caps2 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
+  int caps1 = MALLOC_CAP_DEFAULT | MALLOC_CAP_32BIT;
+  int caps2 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_32BIT;
   if (psramSafe) {
     if (size > MIN_HEAP_SIZE) std::swap(caps1, caps2);  // prefer PSRAM for large alloactions
     return heap_caps_calloc_prefer(count, size, 2, caps1, caps2); // otherwise prefer DRAM
   }
   return heap_caps_calloc(count, size, caps1);
+}
+#else
+// keep same logic for ESP8266, but use malloc/free
+void *d_realloc(void *ptr, size_t size) {
+  d_free(ptr); // free old buffer
+  return d_malloc(size); // use malloc
 }
 #endif
