@@ -136,7 +136,7 @@ private:
     
     StaticJsonDocument<600> doc;
     
-    doc[F("name")] = String(serverDescription) + " " + name;
+    doc["name"] = String(serverDescription) + " " + name;
     doc[F("state_topic")] = topic;
     doc[F("unique_id")] = String(mqttClientID) + name;
     if (unitOfMeasurement != "")
@@ -146,7 +146,7 @@ private:
     doc[F("expire_after")] = 1800;
 
     JsonObject device = doc.createNestedObject(F("device")); // attach the sensor to the same device
-    device[F("name")] = serverDescription;
+    device["name"] = serverDescription;
     device[F("identifiers")] = "wled-sensor-" + String(mqttClientID);
     device[F("manufacturer")] = F(WLED_BRAND);
     device[F("model")] = F(WLED_PRODUCT_NAME);

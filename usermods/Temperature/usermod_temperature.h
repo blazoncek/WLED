@@ -200,7 +200,7 @@ void UsermodTemperature::publishHomeAssistantAutodiscovery() {
   StaticJsonDocument<1024> json;
 
   sprintf_P(buf, PSTR("%s Temperature"), serverDescription);
-  json[F("name")] = buf;
+  json["name"] = buf;
   strcpy(buf, mqttDeviceTopic);
   strcat_P(buf, _Temperature);
   json[F("state_topic")] = buf;

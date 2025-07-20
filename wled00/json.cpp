@@ -753,7 +753,7 @@ void serializeInfo(JsonObject root)
 
   root[F("str")] = false; //syncToggleReceive;
 
-  root[F("name")] = serverDescription;
+  root["name"] = serverDescription;
   root[F("udpport")] = udpPort;
   root[F("simplifiedui")] = simplifiedUI;
   root["live"] = (bool)realtimeMode;
@@ -1038,7 +1038,7 @@ void serializeNodes(JsonObject root)
     if (it->second.ip[0] != 0)
     {
       JsonObject node = nodes.createNestedObject();
-      node[F("name")] = it->second.nodeName;
+      node["name"]    = it->second.nodeName;
       node["type"]    = it->second.nodeType;
       node["ip"]      = it->second.ip.toString();
       node[F("age")]  = it->second.age;

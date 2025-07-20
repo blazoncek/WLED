@@ -297,7 +297,7 @@ void PIRsensorSwitch::publishHomeAssistantAutodiscovery()
     char uid[24], json_str[1024], buf[128];
 
     sprintf_P(buf, PSTR("%s Motion"), serverDescription); //max length: 33 + 7 = 40
-    doc[F("name")] = buf;
+    doc["name"] = buf;
     sprintf_P(buf, PSTR("%s/motion"), mqttDeviceTopic);   //max length: 33 + 7 = 40
     doc[F("stat_t")] = buf;
     doc[F("pl_on")]  = "on";
@@ -308,7 +308,7 @@ void PIRsensorSwitch::publishHomeAssistantAutodiscovery()
     doc[F("exp_aft")] = 1800;
 
     JsonObject device = doc.createNestedObject(F("device")); // attach the sensor to the same device
-    device[F("name")] = serverDescription;
+    device["name"] = serverDescription;
     device[F("ids")]  = String(F("wled-sensor-")) + mqttClientID;
     device[F("mf")]   = F(WLED_BRAND);
     device[F("mdl")]  = F(WLED_PRODUCT_NAME);

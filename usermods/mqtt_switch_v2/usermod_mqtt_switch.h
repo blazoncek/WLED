@@ -97,7 +97,7 @@ inline void UsermodMqttSwitch::onMqttConnect(bool sessionPresent)
         char buf[128];
         StaticJsonDocument<1024> json;
         sprintf(buf, "%s Switch %d", serverDescription, pinNr + 1);
-        json[F("name")] = buf;
+        json["name"] = buf;
 
         sprintf(buf, "%s/switch/%d", mqttDeviceTopic, pinNr);
         json["~"] = buf;

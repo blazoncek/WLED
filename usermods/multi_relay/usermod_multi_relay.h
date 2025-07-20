@@ -469,7 +469,7 @@ void MultiRelay::publishHomeAssistantAutodiscovery() {
     if (_relay[i].pin >= 0 && _relay[i].external) {
       StaticJsonDocument<1024> json;
       sprintf_P(buf, PSTR("%s Switch %d"), serverDescription, i); //max length: 33 + 8 + 3 = 44
-      json[F("name")] = buf;
+      json["name"] = buf;
 
       sprintf_P(buf, PSTR("%s/relay/%d"), mqttDeviceTopic, i); //max length: 33 + 7 + 3 = 43
       json["~"] = buf;

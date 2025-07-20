@@ -169,7 +169,7 @@ void ShtUsermod::publishHomeAssistantAutodiscovery() {
   StaticJsonDocument<1024> json;
 
   snprintf_P(buf, 127, PSTR("%s Temperature"), serverDescription);
-  json[F("name")] = buf;
+  json["name"] = buf;
   snprintf_P(buf, 127, PSTR("%s/temperature"), mqttDeviceTopic);
   json[F("stat_t")] = buf;
   json[F("dev_cla")] = F("temperature");
@@ -185,7 +185,7 @@ void ShtUsermod::publishHomeAssistantAutodiscovery() {
   json.clear();
 
   snprintf_P(buf, 127, PSTR("%s Humidity"), serverDescription);
-  json[F("name")] = buf;
+  json["name"] = buf;
   snprintf_P(buf, 127, PSTR("%s/humidity"), mqttDeviceTopic);
   json[F("stat_t")] = buf;
   json[F("dev_cla")] = F("humidity");
@@ -209,7 +209,7 @@ void ShtUsermod::publishHomeAssistantAutodiscovery() {
 void ShtUsermod::appendDeviceToMqttDiscoveryMessage(JsonDocument& root) {
   JsonObject device = root.createNestedObject(F("dev"));
   device[F("ids")] = escapedMac.c_str();
-  device[F("name")] = serverDescription;
+  device["name"] = serverDescription;
   device[F("sw")] = versionString;
   device[F("mdl")] = ESP.getChipModel();
   device[F("mf")] = F("espressif");
