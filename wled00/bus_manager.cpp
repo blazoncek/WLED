@@ -37,7 +37,7 @@ uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const
 
 //util.cpp
 // PSRAM allocation wrappers
-#ifndef ESP8266
+#if defined(ARDUINO_ARCH_ESP32) && !defined(ARDUINO_ARCH_ESP32C3)
 extern "C" {
   void *p_malloc(size_t);           // prefer PSRAM over DRAM
   void *p_calloc(size_t, size_t);   // prefer PSRAM over DRAM
@@ -49,14 +49,17 @@ extern "C" {
   inline void d_free(void *ptr) { heap_caps_free(ptr); }
 }
 #else
-#define p_malloc malloc
-#define p_calloc calloc
-#define p_realloc realloc
-#define p_free free
+#define p_malloc d_malloc
+#define p_calloc d_calloc
+#define p_realloc d_realloc
+#define p_free d_free
 #define d_malloc malloc
 #define d_calloc calloc
-#define d_realloc realloc
+//#define d_realloc realloc
 #define d_free free
+extern "C" {
+  void *d_realloc(void *, size_t); // implement free + malloc to be consistent with ESP32
+}
 #endif
 
 //color mangling macros

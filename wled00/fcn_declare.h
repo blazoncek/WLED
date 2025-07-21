@@ -402,7 +402,7 @@ uint32_t hw_random(uint32_t lowerlimit, uint32_t upperlimit);
 //template <typename T> T hw_random(T lowerlimit, T upperlimit) { return static_cast<T>(hw_random((uint32_t)lowerlimit, (uint32_t)upperlimit)); }
 
 // PSRAM allocation wrappers
-#ifndef ESP8266
+#if defined(ARDUINO_ARCH_ESP32) && !defined(ARDUINO_ARCH_ESP32C3)
 extern "C" {
   void *p_malloc(size_t);           // prefer PSRAM over DRAM
   void *p_calloc(size_t, size_t);   // prefer PSRAM over DRAM

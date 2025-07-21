@@ -1527,6 +1527,9 @@ function readState(s,command=false)
 			case  3:
 				errstr = "Buffer locked!";
 				break;
+			case  7:
+				errstr = "Buffer allocation failed!";
+				break;
 			case  8:
 				errstr = "Effect RAM depleted!";
 				break;

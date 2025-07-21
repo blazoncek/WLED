@@ -113,6 +113,7 @@ Segment& Segment::operator= (const Segment &orig) {
       if (pixels) memcpy(pixels, orig.pixels, sizeof(uint32_t) * orig.length());
       else {
         DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
+        deallocateData();
         errorFlag = ERR_NORAM_PX;
         stop = 0; // mark segment as inactive/invalid
       }
@@ -153,12 +154,12 @@ bool Segment::allocateData(size_t len) {
   //DEBUGFX_PRINTF_P(PSTR("--   Allocating data (%d): %p\n"), len, this);
   if (Segment::getUsedSegmentData() + len - _dataLen > MAX_SEGMENT_DATA) {
     // not enough memory
-    DEBUGFX_PRINTF_P(PSTR("!!! Not enough RAM: %d/%d !!!\n"), len, Segment::getUsedSegmentData());
+    DEBUGFX_PRINTF_P(PSTR("!!! FX data overallocation attempt: %d/%d !!!\n"), len, Segment::getUsedSegmentData());
     errorFlag = ERR_NORAM;
     return false;
   }
   // prefer DRAM over SPI RAM on ESP32 since it is slow
-  if (data) data = (byte*)d_realloc(data, len);
+  if (data) data = (byte*)d_realloc(data, len); // WLED's realloc works like malloc (if returned pointer is nullptr, old pointer is freed)
   else      data = (byte*)d_malloc(len);
   if (data) {
     memset(data, 0, len);  // erase buffer
@@ -168,7 +169,7 @@ bool Segment::allocateData(size_t len) {
     return true;
   }
   // allocation failed
-  DEBUGFX_PRINTLN(F("!!! Allocation failed. !!!"));
+  DEBUGFX_PRINTLN(F("!!! FX data allocation failed. !!!"));
   Segment::addUsedSegmentData(-_dataLen); // subtract original buffer size
   errorFlag = ERR_NORAM;
   return false;
@@ -421,6 +422,7 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
 
   // apply change immediately
   if (i2 <= i1) { //disable segment
+    deallocateData();
     d_free(pixels);
     pixels = nullptr;
     stop = 0;
@@ -438,6 +440,7 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
   #endif
   // safety check
   if (start >= stop || startY >= stopY) {
+    deallocateData();
     d_free(pixels);
     pixels = nullptr;
     stop = 0;
@@ -449,6 +452,7 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
     else        pixels = static_cast<uint32_t*>(d_malloc(sizeof(uint32_t) * length()));
     if (!pixels) {
       DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
+      deallocateData();
       errorFlag = ERR_NORAM_PX;
       stop = 0;
       return;
@@ -560,10 +564,9 @@ Segment &Segment::setName(const char *newName) {
     const int newLen = min(strlen(newName), (size_t)WLED_MAX_SEGNAME_LEN);
     if (newLen) {
       if (mode == FX_MODE_2DSCROLLTEXT) startTransition(strip.getTransition(), true); // if the name changes in scrolling text mode, we need to copy the segment for blending
-      if (name) name = static_cast<char*>(d_realloc(name, newLen+1));
+      if (name) name = static_cast<char*>(d_realloc(name, newLen+1)); // if WLED's realloc fails it will free old buffer
       else      name = static_cast<char*>(d_malloc(newLen+1));
       if (name) strlcpy(name, newName, newLen+1);
-      name[newLen] = 0;
       return *this;
     }
   }
@@ -1189,8 +1192,7 @@ void WS2812FX::finalizeInit() {
   // allocate frame buffer after matrix has been set up (gaps!)
   if (_pixels) _pixels = static_cast<uint32_t*>(d_realloc(_pixels, getLengthTotal() * sizeof(uint32_t)));
   else         _pixels = static_cast<uint32_t*>(d_malloc(getLengthTotal() * sizeof(uint32_t)));
-  DEBUG_PRINTF_P(PSTR("strip buffer size: %uB\n"), getLengthTotal() * sizeof(uint32_t));
-
+  DEBUG_PRINTF_P(PSTR("strip buffer %p size: %uB\n"), _pixels, getLengthTotal() * sizeof(uint32_t));
   DEBUG_PRINTF_P(PSTR("Heap after strip init: %uB\n"), ESP.getFreeHeap());
 }
 
@@ -1585,6 +1587,8 @@ static uint8_t estimateCurrentAndLimitBri(uint8_t brightness, uint32_t *pixels) 
 }
 
 void WS2812FX::show() {
+  if (!_pixels) return; // no pixels allocated, nothing to show
+
   unsigned long showNow = millis();
   size_t diff = showNow - _lastShow;
 

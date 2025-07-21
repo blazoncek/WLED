@@ -500,7 +500,7 @@ uint32_t hw_random(uint32_t lowerlimit, uint32_t upperlimit) {
   return hw_random(diff) + lowerlimit;
 }
 
-#ifndef ESP8266
+#if defined(ARDUINO_ARCH_ESP32) && !defined(ARDUINO_ARCH_ESP32C3)
 void *p_malloc(size_t size) {
   int caps1 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
   int caps2 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
@@ -593,7 +593,7 @@ void *d_calloc(size_t count, size_t size) {
   return heap_caps_calloc(count, size, caps1);
 }
 #else
-// keep same logic for ESP8266, but use malloc/free
+// keep same logic for ESP8266/C3, but use malloc/free
 void *d_realloc(void *ptr, size_t size) {
   d_free(ptr); // free old buffer
   return d_malloc(size); // use malloc
