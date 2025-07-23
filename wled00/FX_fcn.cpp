@@ -65,12 +65,13 @@ Segment::Segment(const Segment &orig) {
   _dataLen = 0;
   pixels = nullptr;
   if (!stop) return;  // nothing to do if segment is inactive/invalid
-  if (orig.name) { name = static_cast<char*>(d_malloc(strlen(orig.name)+1)); if (name) strcpy(name, orig.name); }
-  if (orig.data) { if (allocateData(orig._dataLen)) memcpy(data, orig.data, orig._dataLen); }
   if (orig.pixels) {
     pixels = static_cast<uint32_t*>(d_malloc(sizeof(uint32_t) * orig.length()));
-    if (pixels) memcpy(pixels, orig.pixels, sizeof(uint32_t) * orig.length());
-    else {
+    if (pixels) {
+      memcpy(pixels, orig.pixels, sizeof(uint32_t) * orig.length());
+      if (orig.name) { name = static_cast<char*>(d_malloc(strlen(orig.name)+1)); if (name) strcpy(name, orig.name); }
+      if (orig.data) { if (allocateData(orig._dataLen)) memcpy(data, orig.data, orig._dataLen); }
+    } else {
       DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
       errorFlag = ERR_NORAM_PX;
       stop = 0; // mark segment as inactive/invalid
@@ -106,14 +107,14 @@ Segment& Segment::operator= (const Segment &orig) {
     pixels = nullptr;
     if (!stop) return *this;  // nothing to do if segment is inactive/invalid
     // copy source data
-    if (orig.name) { name = static_cast<char*>(d_malloc(strlen(orig.name)+1)); if (name) strcpy(name, orig.name); }
-    if (orig.data) { if (allocateData(orig._dataLen)) memcpy(data, orig.data, orig._dataLen); }
     if (orig.pixels) {
       pixels = static_cast<uint32_t*>(d_malloc(sizeof(uint32_t) * orig.length()));
-      if (pixels) memcpy(pixels, orig.pixels, sizeof(uint32_t) * orig.length());
-      else {
+      if (pixels) {
+        memcpy(pixels, orig.pixels, sizeof(uint32_t) * orig.length());
+        if (orig.name) { name = static_cast<char*>(d_malloc(strlen(orig.name)+1)); if (name) strcpy(name, orig.name); }
+        if (orig.data) { if (allocateData(orig._dataLen)) memcpy(data, orig.data, orig._dataLen); }
+      } else {
         DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
-        deallocateData();
         errorFlag = ERR_NORAM_PX;
         stop = 0; // mark segment as inactive/invalid
       }
@@ -158,19 +159,19 @@ bool Segment::allocateData(size_t len) {
     errorFlag = ERR_NORAM;
     return false;
   }
+  Segment::addUsedSegmentData(-_dataLen); // subtract original buffer size (is 0 if no buffer was allocated)
   // prefer DRAM over SPI RAM on ESP32 since it is slow
   if (data) data = (byte*)d_realloc(data, len); // WLED's realloc works like malloc (if returned pointer is nullptr, old pointer is freed)
   else      data = (byte*)d_malloc(len);
   if (data) {
     memset(data, 0, len);  // erase buffer
-    Segment::addUsedSegmentData(len - _dataLen);
+    Segment::addUsedSegmentData(len);
     _dataLen = len;
     //DEBUGFX_PRINTF_P(PSTR("---  Allocated data (%p): %d/%d -> %p\n"), this, len, Segment::getUsedSegmentData(), data);
     return true;
   }
   // allocation failed
   DEBUGFX_PRINTLN(F("!!! FX data allocation failed. !!!"));
-  Segment::addUsedSegmentData(-_dataLen); // subtract original buffer size
   errorFlag = ERR_NORAM;
   return false;
 }
@@ -417,8 +418,8 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
 
   DEBUGFX_PRINTF_P(PSTR("Segment geometry: %d,%d -> %d,%d [%d,%d]\n"), (int)i1, (int)i2, (int)i1Y, (int)i2Y, (int)grp, (int)spc);
   markForReset();
-  startTransition(strip.getTransition()); // start transition prior to change (if segment is deactivated (start>stop) no transition will happen)
-  stateChanged = true; // send UDP/WS broadcast
+  if (_t) stopTransition(); // we can't use transition if segment dimensions changed
+  stateChanged = true;      // send UDP/WS broadcast
 
   // apply change immediately
   if (i2 <= i1) { //disable segment

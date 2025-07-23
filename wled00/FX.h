@@ -339,7 +339,7 @@ typedef enum mapping1D2D {
 
 class WS2812FX;
 
-// segment, 76 bytes
+// segment, 72 bytes
 class Segment {
   public:
     uint32_t colors[NUM_COLORS];
@@ -395,7 +395,7 @@ class Segment {
 
   private:
     uint32_t *pixels;                 // pixel data
-    unsigned _dataLen;
+    uint16_t _dataLen;                // size of FX data buffer (in bytes, max 64k)
     uint8_t  _default_palette;        // palette number that gets assigned to pal0
     union {
       mutable uint8_t _capabilities;  // determines segment capabilities in terms of what is available: RGB, W, CCT, manual W, etc.
