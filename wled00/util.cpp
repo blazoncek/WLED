@@ -595,16 +595,11 @@ void *d_calloc(size_t count, size_t size) {
 #else
 // keep same logic for ESP8266/C3, but use malloc/free
 void *d_realloc(void *ptr, size_t size) {
-  #ifdef WLED_SIMPLE_REALLOC
-  d_free(ptr); // free old buffer
-  return d_malloc(size); // use malloc
-  #else
+  #ifndef WLED_SIMPLE_REALLOC
   void *newbuf = realloc(ptr, size);
   if (newbuf) return newbuf; // realloc successful
-  else {
-    d_free(ptr); // free old buffer if realloc failed
-    return d_malloc(size); // fallback to malloc if realloc failed
-  }
   #endif
+  d_free(ptr); // free old buffer
+  return d_malloc(size); // use malloc
 }
 #endif
