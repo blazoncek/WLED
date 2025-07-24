@@ -502,8 +502,8 @@ uint32_t hw_random(uint32_t lowerlimit, uint32_t upperlimit) {
 
 #if defined(ARDUINO_ARCH_ESP32) && !defined(ARDUINO_ARCH_ESP32C3)
 void *p_malloc(size_t size) {
-  int caps1 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
-  int caps2 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
+  int caps1 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
+  int caps2 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
   if (psramSafe) {
     if (heap_caps_get_free_size(caps2) > 3*MIN_HEAP_SIZE && size < 512) std::swap(caps1, caps2);  // use DRAM for small alloactions & when heap is plenty
     return heap_caps_malloc_prefer(size, 2, caps1, caps2); // otherwise prefer PSRAM if it exists
@@ -516,8 +516,8 @@ void *p_realloc(void *ptr, size_t size) {
   p_free(ptr); // free old buffer
   return p_malloc(size); // use malloc
   #else
-  int caps1 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
-  int caps2 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
+  int caps1 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
+  int caps2 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
   void *newbuf = nullptr;
   if (psramSafe) {
     if (heap_caps_get_free_size(caps2) > 3*MIN_HEAP_SIZE && size < 512) std::swap(caps1, caps2);  // use DRAM for small alloactions & when heap is plenty
@@ -538,8 +538,8 @@ void *p_realloc(void *ptr, size_t size) {
 }
 
 void *p_calloc(size_t count, size_t size) {
-  int caps1 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
-  int caps2 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
+  int caps1 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
+  int caps2 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
   if (psramSafe) {
     if (heap_caps_get_free_size(caps2) > 3*MIN_HEAP_SIZE && size < 512) std::swap(caps1, caps2);  // use DRAM for small alloactions & when heap is plenty
     return heap_caps_calloc_prefer(count, size, 2, caps1, caps2); // otherwise prefer PSRAM if it exists
@@ -548,8 +548,8 @@ void *p_calloc(size_t count, size_t size) {
 }
 
 void *d_malloc(size_t size) {
-  int caps1 = MALLOC_CAP_DEFAULT | MALLOC_CAP_32BIT;
-  int caps2 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_32BIT;
+  int caps1 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+  int caps2 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
   if (psramSafe) {
     if (size > MIN_HEAP_SIZE) std::swap(caps1, caps2);  // prefer PSRAM for large alloactions
     return heap_caps_malloc_prefer(size, 2, caps1, caps2); // otherwise prefer DRAM
@@ -562,8 +562,8 @@ void *d_realloc(void *ptr, size_t size) {
   d_free(ptr); // free old buffer
   return d_malloc(size); // use malloc
   #else
-  int caps1 = MALLOC_CAP_DEFAULT | MALLOC_CAP_32BIT;
-  int caps2 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_32BIT;
+  int caps1 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+  int caps2 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
   void *newbuf = nullptr;
   if (psramSafe) {
     if (size > MIN_HEAP_SIZE) std::swap(caps1, caps2);  // prefer PSRAM for large alloactions
@@ -584,8 +584,8 @@ void *d_realloc(void *ptr, size_t size) {
 }
 
 void *d_calloc(size_t count, size_t size) {
-  int caps1 = MALLOC_CAP_DEFAULT | MALLOC_CAP_32BIT;
-  int caps2 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_32BIT;
+  int caps1 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+  int caps2 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
   if (psramSafe) {
     if (size > MIN_HEAP_SIZE) std::swap(caps1, caps2);  // prefer PSRAM for large alloactions
     return heap_caps_calloc_prefer(count, size, 2, caps1, caps2); // otherwise prefer DRAM
@@ -595,7 +595,16 @@ void *d_calloc(size_t count, size_t size) {
 #else
 // keep same logic for ESP8266/C3, but use malloc/free
 void *d_realloc(void *ptr, size_t size) {
+  #ifdef WLED_SIMPLE_REALLOC
   d_free(ptr); // free old buffer
   return d_malloc(size); // use malloc
+  #else
+  void *newbuf = realloc(ptr, size);
+  if (newbuf) return newbuf; // realloc successful
+  else {
+    d_free(ptr); // free old buffer if realloc failed
+    return d_malloc(size, caps1); // fallback to malloc if realloc failed
+  }
+  #endif
 }
 #endif
