@@ -603,7 +603,7 @@ void *d_realloc(void *ptr, size_t size) {
   if (newbuf) return newbuf; // realloc successful
   else {
     d_free(ptr); // free old buffer if realloc failed
-    return d_malloc(size, caps1); // fallback to malloc if realloc failed
+    return d_malloc(size); // fallback to malloc if realloc failed
   }
   #endif
 }
