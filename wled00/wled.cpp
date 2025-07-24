@@ -842,7 +842,7 @@ ESP-NOW  inited in AP mode (channel: 6/1).
 #ifndef WLED_DISABLE_ESPNOW
   // WL_NO_SHIELD means WiFi is turned off while WL_IDLE_STATUS means we are not trying to connect to SSID (but we may be in AP mode)
   // so need to occasionally check if we can reconnect to restart WiFi
-  if (wifiState == WL_NO_SHIELD || (wifiState == WL_IDLE_STATUS && lastReconnectAttempt > 0 && !apClients && !apActive)) {
+  if ((wifiState == WL_NO_SHIELD && !apActive) || (wifiState == WL_IDLE_STATUS && lastReconnectAttempt > 0 && !apClients && !apActive)) {
     // if we haven't heard master & 5 minutes have passes since last reconect
     if (now > WLED_AP_TIMEOUT/2 + heartbeatESPNow && now > WLED_AP_TIMEOUT + lastReconnectAttempt) { // 2.5/5min timeout
       DEBUG_PRINTF_P(PSTR("WiFi: Not initialised %d (%d) @ %lus\n"), (int)wifiState, (int)WiFi.getMode(), now/1000);
