@@ -371,7 +371,7 @@ WLED_GLOBAL byte bootPreset   _INIT(0);                   // save preset to load
 //if false, only one segment spanning the total LEDs is created,
 //but not on LED settings save if there is more than one segment currently
 #if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
-WLED_GLOBAL bool useParallelI2S     _INIT(false); // parallel I2S for ESP32
+WLED_GLOBAL bool useParallelI2S     _INIT(true);  // parallel I2S for ESP32
 #endif
 #ifdef WLED_USE_IC_CCT
 WLED_GLOBAL bool cctICused          _INIT(true);  // CCT IC used (Athom 15W bulbs)

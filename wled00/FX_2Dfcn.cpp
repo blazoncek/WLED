@@ -58,10 +58,9 @@ void WS2812FX::setUpMatrix() {
       customMappingSize = getLengthTotal();
 
       // fill with empty in case we don't fill the entire matrix
-      unsigned matrixSize = Segment::maxWidth * Segment::maxHeight;
-      for (unsigned i = 0; i<matrixSize; i++) customMappingTable[i] = 0xFFFFU;
-      for (unsigned i = matrixSize; i<getLengthTotal(); i++) customMappingTable[i] = i; // trailing LEDs for ledmap (after matrix) if it exist
-
+      unsigned matrixSize = Segment::maxWidth * Segment::maxHeight; // less or equal to getLengthTotal()
+      for (unsigned i = 0; i < matrixSize; i++) customMappingTable[i] = 0xFFFFU;
+      for (unsigned i = matrixSize; i < customMappingSize; i++) customMappingTable[i] = i; // trailing LEDs for ledmap (after matrix) if it exist
       // we will try to load a "gap" array (a JSON file)
       // the array has to have the same amount of values as mapping array (or larger)
       // "gap" array is used while building ledmap (mapping array)
