@@ -1206,6 +1206,8 @@ void WS2812FX::service() {
   _isServicing = true;
   _segment_index = 0;
 
+  applySegmentGeometryUpdates(); // apply any geometry updates (e.g. segment length changes) before servicing segments
+
   for (Segment &seg : _segments) {
     if (_suspend) break; // immediately stop processing segments if suspend requested during service()
 
@@ -1711,6 +1713,39 @@ void WS2812FX::setBrightness(uint8_t b, bool direct) {
     unsigned long t = millis();
     if (_segments[0].next_time > t + 22 && t - _lastShow > MIN_SHOW_DELAY) trigger(); //apply brightness change immediately if no refresh soon
   }
+}
+
+typedef struct {
+  uint8_t  id;      // segment id
+  uint16_t start;   // segment start
+  uint16_t stop;    // segment stop
+  uint8_t  grp;     // grouping
+  uint8_t  spc;     // spacing
+  uint16_t off;     // offset/phase
+  uint16_t startY;  // start Y (for 2D segments)
+  uint16_t stopY;   // stop Y (for 2D segments)
+  uint8_t  m12;     // 1D -> 2D mapping
+} SegmentGeometryUpdate;
+static std::vector<SegmentGeometryUpdate> segUpdates;
+
+void WS2812FX::addSegmentGeometryUpdate(uint8_t id, uint16_t sStart, uint16_t sStop, uint8_t grp, uint8_t spc, uint16_t ofs, uint16_t sStartY, uint16_t sStopY, uint8_t m12) {
+  if (id >= _segments.size()) return; // invalid segment id
+  segUpdates.push_back({id, sStart, sStop, grp, spc, ofs, sStartY, sStopY, m12});
+}
+
+void WS2812FX::applySegmentGeometryUpdates() {
+  if (segUpdates.size() == 0) return; // nothing to update
+  for (auto upd: segUpdates) {
+    if (upd.id >= _segments.size()) continue; // invalid segment id
+    Segment &seg = _segments[upd.id];
+    seg.setGeometry(upd.start, upd.stop, upd.grp, upd.spc, upd.off, upd.startY, upd.stopY, upd.m12);
+    seg.refreshLightCapabilities();
+    if (seg.reset && seg.stop == 0) {
+      if (upd.id == getMainSegmentId()) setMainSegmentId(getFirstSelectedSegId());
+    }
+  }
+  segUpdates.clear();         // clear updates for next time
+  segUpdates.shrink_to_fit(); // free memory
 }
 
 uint8_t WS2812FX::getActiveSegsLightCapabilities(bool selectedOnly) const {

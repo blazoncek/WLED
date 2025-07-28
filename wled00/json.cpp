@@ -177,14 +177,17 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   }
   if (stop > start && of > len -1) of = len -1;
 
-  // update segment (delete if necessary)
-  seg.setGeometry(start, stop, grp, spc, of, startY, stopY, map1D2D); // strip needs to be suspended for this to work without issues
-
-  if (newSeg) seg.refreshLightCapabilities(); // fix for #3403
-
-  if (seg.reset && seg.stop == 0) {
-    if (id == strip.getMainSegmentId()) strip.setMainSegmentId(0); // fix for #3403
-    return true; // segment was deleted & is marked for reset, no need to change anything else
+  if (newSeg) {
+    // update new segment
+    seg.setGeometry(start, stop, grp, spc, of, startY, stopY, map1D2D);
+    seg.refreshLightCapabilities(); // fix for #3403
+  } else {
+    // schedule segment geometry update (to prevent issues if effect is running)
+    if (seg.start != start || seg.stop != stop || seg.startY != startY || seg.stopY != stopY ||
+        seg.grouping != grp || seg.spacing != spc || seg.offset != of || seg.map1D2D != map1D2D) {
+      strip.addSegmentGeometryUpdate(id, start, stop, grp, spc, of, startY, stopY, map1D2D);
+    }
+    if (stop == 0) return true;
   }
 
   byte segbri = seg.opacity;

@@ -829,6 +829,7 @@ class WS2812FX {
 
     void restartRuntime();
     void setTransitionMode(bool t);
+    void addSegmentGeometryUpdate(uint8_t id, uint16_t sStart, uint16_t sStop, uint8_t grp = 1, uint8_t spc = 0, uint16_t ofs = UINT16_MAX, uint16_t sStartY = 0, uint16_t sStopY = 1, uint8_t m12 = 0);
 
     bool checkSegmentAlignment() const;
     bool hasRGBWBus() const;
@@ -964,6 +965,8 @@ class WS2812FX {
     uint16_t  customMappingSize;
 
     unsigned long _lastShow;
+
+    void applySegmentGeometryUpdates(); // applies segment geometry updates (if any) to all segments
 
     friend class Segment;
 };
