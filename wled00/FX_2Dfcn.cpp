@@ -51,11 +51,13 @@ void WS2812FX::setUpMatrix() {
 
     customMappingSize = 0; // prevent use of mapping if anything goes wrong
 
-    d_free(customMappingTable);
-    customMappingTable = static_cast<uint16_t*>(d_malloc(sizeof(uint16_t)*getLengthTotal())); // prefer to not use SPI RAM
+    DEBUGFX_PRINTLN(F("Creating 2D ledmap"));
+    p_free(customMappingTable);
+    customMappingTable = static_cast<uint16_t*>(p_malloc(sizeof(uint16_t)*getLengthTotal()));
 
     if (customMappingTable) {
       customMappingSize = getLengthTotal();
+      DEBUGFX_PRINTF_P(PSTR("ledmap allocated: %uB @ %p\n"), customMappingSize * sizeof(uint16_t), customMappingTable);
 
       // fill with empty in case we don't fill the entire matrix
       unsigned matrixSize = Segment::maxWidth * Segment::maxHeight; // less or equal to getLengthTotal()

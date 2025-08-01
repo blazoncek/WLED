@@ -166,7 +166,7 @@ void WLED::loop()
 
   // reconnect WiFi to clear stale allocations if heap gets too low
   if (millis() - heapTime > 15000) {
-    uint32_t heap = ESP.getFreeHeap();
+    uint32_t heap = getFreeHeapSize();
     if (heap < MIN_HEAP_SIZE && lastHeap < MIN_HEAP_SIZE) {
       DEBUG_PRINTF_P(PSTR("Heap too low! %u\n"), heap);
       forceReconnect = true;
@@ -249,7 +249,11 @@ void WLED::loop()
     DEBUG_PRINTLN(F("---DEBUG INFO---"));
     DEBUG_PRINTF_P(PSTR("Runtime: %lus\n"),  now/1000);
     DEBUG_PRINTF_P(PSTR("Unix time: %u,%03u\n"), toki.getTime().sec, toki.getTime().ms);
-    DEBUG_PRINTF_P(PSTR("Free heap: %u\n"), ESP.getFreeHeap());
+    DEBUG_PRINTF_P(PSTR("Free heap/contiguous: %u/%u\n"), getFreeHeapSize(), getContiguousFreeHeap());
+    #if defined(CONFIG_IDF_TARGET_ESP32)
+    int dram32_free = heap_caps_get_free_size(MALLOC_CAP_32BIT|MALLOC_CAP_INTERNAL) - getFreeHeapSize();
+    DEBUG_PRINTF_P(PSTR("Free 32bit-heap: %d\n"), dram32_free);
+    #endif
     #if defined(ARDUINO_ARCH_ESP32)
     if (psramFound()) {
       DEBUG_PRINTF_P(PSTR("PSRAM: %dkB/%dkB\n"), ESP.getFreePsram()/1024, ESP.getPsramSize()/1024);
@@ -378,14 +382,10 @@ void WLED::setup()
   DEBUG_PRINTF_P(PSTR("esp8266 @ %u MHz.\nCore: %s\n"), ESP.getCpuFreqMHz(), ESP.getCoreVersion());
   DEBUG_PRINTF_P(PSTR("FLASH: %u MB\n"), (ESP.getFlashChipSize()/1024)/1024);
 #endif
-  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 
 #if defined(ARDUINO_ARCH_ESP32)
-  // BOARD_HAS_PSRAM also means that a compiler flag "-mfix-esp32-psram-cache-issue" was used and so PSRAM is safe to use on rev.1 ESP32
-  #if !defined(BOARD_HAS_PSRAM) && !(defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3))
-  if (psramFound() && ESP.getChipRevision() < 3) psramSafe = false;
-  if (!psramSafe) DEBUG_PRINTLN(F("Not using PSRAM."));
-  #endif
+  if (psramFound() && !psramSafe) DEBUG_PRINTLN(F("Not using PSRAM."));
   pDoc = new PSRAMDynamicJsonDocument((psramSafe && psramFound() ? 2 : 1)*JSON_BUFFER_SIZE);
   DEBUG_PRINTF_P(PSTR("JSON buffer allocated: %u\n"), (psramSafe && psramFound() ? 2 : 1)*JSON_BUFFER_SIZE);
   // if the above fails requestJsonBufferLock() will always return false preventing crashes
@@ -408,7 +408,7 @@ void WLED::setup()
   DEBUG_PRINTLN(F("Registering usermods ..."));
   registerUsermods();
 
-  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 
   initFS();
   initPresetsFile();
@@ -425,7 +425,7 @@ void WLED::setup()
 
   DEBUG_PRINTLN(F("Reading config"));
   bool needsCfgSave = deserializeConfigFromFS();
-  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
   //for (int i=0; i<multiWiFi.size(); i++) DEBUG_PRINTF_P(PSTR("WiFi: configured SSID: %s/%s\n"), multiWiFi[i].clientSSID, multiWiFi[i].clientPass);
 
 #if defined(STATUSLED) && STATUSLED>=0
@@ -438,11 +438,11 @@ void WLED::setup()
 
   DEBUG_PRINTLN(F("Initializing strip"));
   beginStrip();
-  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 
   DEBUG_PRINTLN(F("Usermods setup"));
   UsermodManager::setup();
-  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 
   if (needsCfgSave) serializeConfig(); // need to wait for strip to be initialised #4752
 
@@ -477,7 +477,7 @@ void WLED::setup()
     Serial.println(F("Ada"));
   }
   #endif
-  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 
 #ifdef WLED_ENABLE_AOTA
   if (aOtaEnabled) {
@@ -508,13 +508,13 @@ void WLED::setup()
   // HTTP server page init
   DEBUG_PRINTLN(F("initServer"));
   initServer();
-  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 
 #ifndef WLED_DISABLE_INFRARED
   // init IR
   DEBUG_PRINTLN(F("initIR"));
   initIR();
-  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 #endif
 
   // Seed FastLED random functions with an esp random value, which already works properly at this point.
@@ -678,7 +678,7 @@ void WLED::initConnection()
 // connected() is called when WiFi connection is established
 void WLED::connected()
 {
-  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
   DEBUG_PRINTLN(F("Init STA interfaces"));
 
 #ifdef WLED_ENABLE_WEBSOCKETS
@@ -747,7 +747,7 @@ void WLED::connected()
 
   showWelcomePage = false;
   interfacesInited = true;
-  DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 }
 
 void WLED::handleConnection()

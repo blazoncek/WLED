@@ -66,7 +66,8 @@ Segment::Segment(const Segment &orig) {
   pixels = nullptr;
   if (!stop) return;  // nothing to do if segment is inactive/invalid
   if (orig.pixels) {
-    pixels = static_cast<uint32_t*>(d_malloc(sizeof(uint32_t) * orig.length()));
+    // allocate pixel buffer: prefer IRAM/PSRAM
+    pixels = static_cast<uint32_t*>(allocate_buffer(orig.length() * sizeof(uint32_t), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS));
     if (pixels) {
       memcpy(pixels, orig.pixels, sizeof(uint32_t) * orig.length());
       if (orig.name) { name = static_cast<char*>(d_malloc(strlen(orig.name)+1)); if (name) strcpy(name, orig.name); }
@@ -98,7 +99,7 @@ Segment& Segment::operator= (const Segment &orig) {
     if (name) { d_free(name); name = nullptr; }
     if (_t) stopTransition(); // also erases _t
     deallocateData();
-    d_free(pixels);
+    p_free(pixels);
     // copy source
     memcpy((void*)this, (void*)&orig, sizeof(Segment));
     // erase pointers to allocated data
@@ -108,7 +109,8 @@ Segment& Segment::operator= (const Segment &orig) {
     if (!stop) return *this;  // nothing to do if segment is inactive/invalid
     // copy source data
     if (orig.pixels) {
-      pixels = static_cast<uint32_t*>(d_malloc(sizeof(uint32_t) * orig.length()));
+      // allocate pixel buffer: prefer IRAM/PSRAM
+      pixels = static_cast<uint32_t*>(allocate_buffer(orig.length() * sizeof(uint32_t), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS));
       if (pixels) {
         memcpy(pixels, orig.pixels, sizeof(uint32_t) * orig.length());
         if (orig.name) { name = static_cast<char*>(d_malloc(strlen(orig.name)+1)); if (name) strcpy(name, orig.name); }
@@ -130,7 +132,7 @@ Segment& Segment::operator= (Segment &&orig) noexcept {
     if (name) { d_free(name); name = nullptr; } // free old name
     if (_t) stopTransition(); // also erases _t
     deallocateData(); // free old runtime data
-    d_free(pixels);   // free old pixel buffer
+    p_free(pixels);   // free old pixel buffer
     // move source data
     memcpy((void*)this, (void*)&orig, sizeof(Segment));
     orig.name = nullptr;
@@ -144,12 +146,9 @@ Segment& Segment::operator= (Segment &&orig) noexcept {
 
 // allocates effect data buffer on heap and initialises (erases) it
 bool Segment::allocateData(size_t len) {
-  if (len == 0) return false; // nothing to do
-  if (data && _dataLen >= len) {          // already allocated enough (reduce fragmentation)
-    if (call == 0) {
-      //DEBUGFX_PRINTF_P(PSTR("--   Clearing data (%d): %p\n"), len, this);
-      memset(data, 0, len);  // erase buffer if called during effect initialisation
-    }
+  if (len == 0) return false;    // nothing to do
+  if (data && _dataLen >= len) { // already allocated enough (reduce fragmentation)
+    if (call == 0) memset(data, 0, len);  // erase buffer if called during effect initialisation
     return true;
   }
   //DEBUGFX_PRINTF_P(PSTR("--   Allocating data (%d): %p\n"), len, this);
@@ -160,11 +159,12 @@ bool Segment::allocateData(size_t len) {
     return false;
   }
   Segment::addUsedSegmentData(-_dataLen); // subtract original buffer size (is 0 if no buffer was allocated)
-  // prefer DRAM over SPI RAM on ESP32 since it is slow
-  if (data) data = (byte*)d_realloc(data, len); // WLED's realloc works like malloc (if returned pointer is nullptr, old pointer is freed)
-  else      data = (byte*)d_malloc(len);
+  d_free(data); // free data and try to allocate again (segment buffer may be blocking contiguous heap)
+  // prefer DRAM over PSRAM on ESP32 since it is faster
+  //data = static_cast<byte*>(d_calloc(len));
+  // these two are effectively the same
+  data = static_cast<byte*>(allocate_buffer(len, BFRALLOC_PREFER_PSRAM | BFRALLOC_CLEAR));
   if (data) {
-    memset(data, 0, len);  // erase buffer
     Segment::addUsedSegmentData(len);
     _dataLen = len;
     //DEBUGFX_PRINTF_P(PSTR("---  Allocated data (%p): %d/%d -> %p\n"), this, len, Segment::getUsedSegmentData(), data);
@@ -200,6 +200,7 @@ void Segment::resetIfRequired() {
   if (!reset || !isActive()) return;
   //DEBUGFX_PRINTF_P(PSTR("-- Segment reset: %p\n"), this);
   if (data && _dataLen > 0) memset(data, 0, _dataLen);  // prevent heap fragmentation (just erase buffer instead of deallocateData())
+  if (_dataLen > FAIR_DATA_PER_SEG) deallocateData();   // do not keep large allocations
   if (pixels) for (size_t i = 0; i < length(); i++) pixels[i] = BLACK; // clear pixel buffer
   next_time = 0; step = 0; call = 0; aux0 = 0; aux1 = 0;
   reset = false;
@@ -424,7 +425,7 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
   // apply change immediately
   if (i2 <= i1) { //disable segment
     deallocateData();
-    d_free(pixels);
+    p_free(pixels);
     pixels = nullptr;
     stop = 0;
     return;
@@ -442,15 +443,16 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
   // safety check
   if (start >= stop || startY >= stopY) {
     deallocateData();
-    d_free(pixels);
+    p_free(pixels);
     pixels = nullptr;
     stop = 0;
     return;
   }
-  // re-allocate FX render buffer
+  // allocate FX render buffer
   if (length() != oldLength) {
-    if (pixels) pixels = static_cast<uint32_t*>(d_realloc(pixels, sizeof(uint32_t) * length()));
-    else        pixels = static_cast<uint32_t*>(d_malloc(sizeof(uint32_t) * length()));
+    // allocate render buffer (always entire segment), prefer IRAM/PSRAM. Note: impact on FPS with PSRAM buffer is low (<2% with QSPI PSRAM) on S2/S3
+    p_free(pixels);
+    pixels = static_cast<uint32_t*>(allocate_buffer(length() * sizeof(uint32_t), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
     if (!pixels) {
       DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
       deallocateData();
@@ -458,6 +460,7 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
       stop = 0;
       return;
     }
+
   }
   refreshLightCapabilities();
 }
@@ -1179,7 +1182,7 @@ void WS2812FX::finalizeInit() {
     bus->begin();
     bus->setBrightness(bri);
   }
-  DEBUG_PRINTF_P(PSTR("Heap after buses: %d\n"), ESP.getFreeHeap());
+  DEBUG_PRINTF_P(PSTR("Heap after buses: %d\n"), getFreeHeapSize());
 
   Segment::maxWidth  = _length;
   Segment::maxHeight = 1;
@@ -1191,10 +1194,11 @@ void WS2812FX::finalizeInit() {
   deserializeMap();     // (re)load default ledmap (will also setUpMatrix() if ledmap does not exist)
 
   // allocate frame buffer after matrix has been set up (gaps!)
-  if (_pixels) _pixels = static_cast<uint32_t*>(d_realloc(_pixels, getLengthTotal() * sizeof(uint32_t)));
-  else         _pixels = static_cast<uint32_t*>(d_malloc(getLengthTotal() * sizeof(uint32_t)));
-  DEBUG_PRINTF_P(PSTR("strip buffer %p size: %uB\n"), _pixels, getLengthTotal() * sizeof(uint32_t));
-  DEBUG_PRINTF_P(PSTR("Heap after strip init: %uB\n"), ESP.getFreeHeap());
+  // use IRAM/PSRAM if available: there is no measurable perfomance impact between PSRAM and DRAM on S2/S3 with QSPI PSRAM for this buffer
+  p_free(_pixels);
+  _pixels = static_cast<uint32_t*>(allocate_buffer(getLengthTotal() * sizeof(uint32_t), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+  DEBUG_PRINTF_P(PSTR("strip buffer %uB @ %p\n"), getLengthTotal() * sizeof(uint32_t), _pixels);
+  DEBUG_PRINTF_P(PSTR("Heap after strip init: %uB\n"), getFreeHeapSize());
 }
 
 void WS2812FX::service() {
@@ -2019,11 +2023,11 @@ bool WS2812FX::deserializeMap(unsigned n) {
     isMatrix = true;
   }
 
-  d_free(customMappingTable);
-  customMappingTable = static_cast<uint16_t*>(d_malloc(sizeof(uint16_t)*getLengthTotal())); // do not use SPI RAM
+  p_free(customMappingTable);
+  customMappingTable = static_cast<uint16_t*>(p_malloc(sizeof(uint16_t)*getLengthTotal()));
 
   if (customMappingTable) {
-    DEBUG_PRINTF_P(PSTR("ledmap allocated: %uB\n"), sizeof(uint16_t)*getLengthTotal());
+    DEBUG_PRINTF_P(PSTR("ledmap allocated: %uB @ %p\n"), sizeof(uint16_t)*getLengthTotal(), customMappingTable);
     File f = WLED_FS.open(fileName, "r");
     f.find("\"map\":[");
     while (f.available()) { // f.position() < f.size() - 1

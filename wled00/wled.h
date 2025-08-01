@@ -857,7 +857,13 @@ WLED_GLOBAL byte optionType;
 WLED_GLOBAL bool doSerializeConfig _INIT(false);        // flag to initiate saving of config
 WLED_GLOBAL bool doReboot          _INIT(false);        // flag to initiate reboot from async handlers
 
+#if defined(ESP8266) || defined(CONFIG_IDF_TARGET_ESP32C3) || (defined(CONFIG_IDF_TARGET_ESP32) && !defined(BOARD_HAS_PSRAM))
+// BOARD_HAS_PSRAM also means that a compiler flag "-mfix-esp32-psram-cache-issue" was used for ESP32 and so PSRAM is safe to use on rev.1 ESP32
+// if the flag is not used it will cause crashes on ESP32 rev.1 boards
+WLED_GLOBAL bool psramSafe         _INIT(false);        // is it safe to use PSRAM (on ESP32 rev.1; compiler fix used "-mfix-esp32-psram-cache-issue")
+#else
 WLED_GLOBAL bool psramSafe         _INIT(true);         // is it safe to use PSRAM (on ESP32 rev.1; compiler fix used "-mfix-esp32-psram-cache-issue")
+#endif
 
 // status led
 #if defined(STATUSLED)

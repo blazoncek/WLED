@@ -501,14 +501,20 @@ uint32_t hw_random(uint32_t lowerlimit, uint32_t upperlimit) {
 }
 
 #if defined(ARDUINO_ARCH_ESP32) && !defined(ARDUINO_ARCH_ESP32C3)
+// p_x prefer PSRAM, d_x prefer DRAM
 void *p_malloc(size_t size) {
   int caps1 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
   int caps2 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
-  if (psramSafe) {
-    if (heap_caps_get_free_size(caps2) > 3*MIN_HEAP_SIZE && size < 512) std::swap(caps1, caps2);  // use DRAM for small alloactions & when heap is plenty
-    return heap_caps_malloc_prefer(size, 2, caps1, caps2); // otherwise prefer PSRAM if it exists
+  void *buffer = nullptr;
+  if (psramSafe) buffer = heap_caps_malloc_prefer(size, 2, caps1, caps2); // prefer PSRAM if it exists
+  else           buffer = heap_caps_malloc(size, caps2); // regular malloc, use DRAM
+  if ((uintptr_t)buffer >= SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && getContiguousFreeHeap() < MIN_HEAP_SIZE) {
+    // allocation used DRAM and left less than MIN_HEAP_SIZE (12k) free
+    DEBUG_PRINTF_P(PSTR("p_malloc(%u) released, not enough DRAM free (%u)\n"), size, getContiguousFreeHeap());
+    heap_caps_free(buffer); // free old buffer
+    buffer = nullptr; // not enough DRAM free
   }
-  return heap_caps_malloc(size, caps2);
+  return buffer; // return allocated buffer
 }
 
 void *p_realloc(void *ptr, size_t size) {
@@ -518,43 +524,42 @@ void *p_realloc(void *ptr, size_t size) {
   #else
   int caps1 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
   int caps2 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
-  void *newbuf = nullptr;
-  if (psramSafe) {
-    if (heap_caps_get_free_size(caps2) > 3*MIN_HEAP_SIZE && size < 512) std::swap(caps1, caps2);  // use DRAM for small alloactions & when heap is plenty
-    newbuf = heap_caps_realloc_prefer(ptr, size, 2, caps1, caps2); // otherwise prefer PSRAM if it exists
-    if (newbuf) return newbuf; // realloc successful
-    else {
-      p_free(ptr); // free old buffer if realloc failed (to keep consumer allocation logic simple)
-      return p_malloc(size); // fallback to malloc if realloc failed (buffer will not be copied!!!)
-    }
+  void *buffer = nullptr;
+  if (psramSafe) buffer = heap_caps_realloc_prefer(ptr, size, 2, caps1, caps2); // otherwise prefer PSRAM if it exists
+  else           buffer = heap_caps_realloc(ptr, size, caps2); // fallback to default realloc
+  if ((uintptr_t)buffer >= SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && getContiguousFreeHeap() < MIN_HEAP_SIZE) {
+    DEBUG_PRINTF_P(PSTR("p_realloc(%u) released, not enough DRAM free (%u)\n"), size, getContiguousFreeHeap());
+    heap_caps_free(buffer); // free old buffer
+    return nullptr; // not enough DRAM free
   }
-  newbuf = heap_caps_realloc(ptr, size, caps2); // fallback to default realloc
-  if (newbuf) return newbuf; // realloc successful
+  if (buffer) return buffer; // realloc successful
   else {
-    p_free(ptr); // free old buffer if realloc failed
-    return heap_caps_malloc(size, caps2); // fallback to malloc if realloc failed
+    p_free(ptr); // free old buffer if realloc failed (to keep consumer allocation logic simple)
+    return p_malloc(size); // fallback to malloc if realloc failed (buffer will not be copied!!!)
   }
   #endif
 }
 
 void *p_calloc(size_t count, size_t size) {
-  int caps1 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
-  int caps2 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
-  if (psramSafe) {
-    if (heap_caps_get_free_size(caps2) > 3*MIN_HEAP_SIZE && size < 512) std::swap(caps1, caps2);  // use DRAM for small alloactions & when heap is plenty
-    return heap_caps_calloc_prefer(count, size, 2, caps1, caps2); // otherwise prefer PSRAM if it exists
-  }
-  return heap_caps_calloc(count, size, caps2);
+  void *buffer = p_malloc(count * size);
+  if (buffer) memset(buffer, 0, count * size); // clear allocated buffer
+  return buffer;
 }
 
 void *d_malloc(size_t size) {
   int caps1 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
   int caps2 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
   if (psramSafe) {
-    if (size > MIN_HEAP_SIZE) std::swap(caps1, caps2);  // prefer PSRAM for large alloactions
+    // if heap would fall below MIN_HEAP_SIZE (12k) or size is larger than PSRAM_THRESHOLD, prefer PSRAM
+    if (getContiguousFreeHeap() < (MIN_HEAP_SIZE + size) || size > PSRAM_THRESHOLD) std::swap(caps1, caps2);
     return heap_caps_malloc_prefer(size, 2, caps1, caps2); // otherwise prefer DRAM
   }
-  return heap_caps_malloc(size, caps1);
+  // refuse to allocate DRAM if it would leave less than MIN_HEAP_SIZE (12k) free
+  if (getContiguousFreeHeap() < (MIN_HEAP_SIZE + size)) {
+    DEBUG_PRINTF_P(PSTR("d_malloc(%u) refused, not enough DRAM free (%u)\n"), size, getContiguousFreeHeap());
+    return nullptr; // not enough DRAM free
+  }
+  return heap_caps_malloc(size, caps1); // regular malloc, prefer DRAM
 }
 
 void *d_realloc(void *ptr, size_t size) {
@@ -564,18 +569,19 @@ void *d_realloc(void *ptr, size_t size) {
   #else
   int caps1 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
   int caps2 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
-  void *newbuf = nullptr;
+  void *buffer = nullptr;
   if (psramSafe) {
-    if (size > MIN_HEAP_SIZE) std::swap(caps1, caps2);  // prefer PSRAM for large alloactions
-    newbuf = heap_caps_realloc_prefer(ptr, size, 2, caps1, caps2); // otherwise prefer DRAM
-    if (newbuf) return newbuf; // realloc successful
+    // if heap would fall below MIN_HEAP_SIZE (12k) or size is larger than PSRAM_THRESHOLD, prefer PSRAM
+    if (getContiguousFreeHeap() < (MIN_HEAP_SIZE + size) || size > PSRAM_THRESHOLD) std::swap(caps1, caps2);
+    buffer = heap_caps_realloc_prefer(ptr, size, 2, caps1, caps2); // otherwise prefer DRAM
+    if (buffer) return buffer; // realloc successful
     else {
       d_free(ptr); // free old buffer if realloc failed (to keep consumer allocation logic simple)
       return d_malloc(size); // fallback to malloc if realloc failed (buffer will not be copied!!!)
     }
   }
-  newbuf = heap_caps_realloc(ptr, size, caps1);
-  if (newbuf) return newbuf; // realloc successful
+  buffer = heap_caps_realloc(ptr, size, caps1);
+  if (buffer) return buffer; // realloc successful
   else {
     d_free(ptr); // free old buffer if realloc failed
     return heap_caps_malloc(size, caps1); // fallback to malloc if realloc failed
@@ -584,22 +590,52 @@ void *d_realloc(void *ptr, size_t size) {
 }
 
 void *d_calloc(size_t count, size_t size) {
-  int caps1 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
-  int caps2 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
-  if (psramSafe) {
-    if (size > MIN_HEAP_SIZE) std::swap(caps1, caps2);  // prefer PSRAM for large alloactions
-    return heap_caps_calloc_prefer(count, size, 2, caps1, caps2); // otherwise prefer DRAM
-  }
-  return heap_caps_calloc(count, size, caps1);
+  void *buffer = d_malloc(count * size);
+  if (buffer) memset(buffer, 0, count * size); // clear allocated buffer
+  return buffer;
 }
 #else
 // keep same logic for ESP8266/C3, but use malloc/free
 void *d_realloc(void *ptr, size_t size) {
   #ifndef WLED_SIMPLE_REALLOC
-  void *newbuf = realloc(ptr, size);
-  if (newbuf) return newbuf; // realloc successful
+  void *buffer = realloc(ptr, size);
+  if (buffer) return buffer; // realloc successful
   #endif
   d_free(ptr); // free old buffer
   return d_malloc(size); // use malloc
 }
 #endif
+
+
+// allocation function for large buffers like pixel-buffers and segment data
+// ensures that a contiguous block of MIN_HEAP_SIZE remains to keep the UI working, otherwise returns nullptr
+void *allocate_buffer(size_t size, uint32_t type) {
+  void *buffer = nullptr;
+  #if defined(ESP8266) || defined(CONFIG_IDF_TARGET_ESP32C3) // ESP8266 does not support PSRAM, ESP32-C3 does not have PSRAM
+  if (getContiguousFreeHeap() > MIN_HEAP_SIZE + size) buffer = malloc(size); // use malloc for ESP8266 and ESP32-C3
+  #else
+  if (type & BFRALLOC_ENFORCE_DRAM) {
+    buffer = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // use DRAM only
+  } else if (psramSafe && (type & BFRALLOC_ENFORCE_PSRAM)) {
+    buffer = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); // use PSRAM if available
+  } else {
+    // we will try to allocate memory in a single call using fallbacks
+    int caps1 = (psramSafe && (type & BFRALLOC_PREFER_PSRAM) ? MALLOC_CAP_SPIRAM : MALLOC_CAP_INTERNAL) | MALLOC_CAP_8BIT; // prefer PSRAM if requested, otherwise use DRAM
+    int caps2 = ((type & BFRALLOC_NOBYTEACCESS) ? MALLOC_CAP_32BIT : MALLOC_CAP_8BIT) | MALLOC_CAP_INTERNAL; // prefer 32bit access if requested, otherwise use 8bit DRAM;
+    if (type & BFRALLOC_NOBYTEACCESS) std::swap(caps1, caps2); // swap if we want 32bit access to prioritise it
+    buffer = heap_caps_malloc_prefer(size, 3, caps1, caps2, MALLOC_CAP_8BIT); // if caps1 and caps2 fail, use 8bit fallback in any memory type available
+    #ifdef CONFIG_IDF_TARGET_ESP32
+    // ESP32 (classic) has a special 32bit DRAM region (accessible only in 32-bit chunks; MALLOC_CAP_32BIT)
+    // check if it succeeded (stuff everything in debug statement to avoid code bloat)
+    DEBUG_PRINTF_P(((type & BFRALLOC_NOBYTEACCESS) && (uintptr_t)buffer < SOC_DRAM_HIGH) ? PSTR("WARN: buffer (%u @ %p) did not fit into 32bit DRAM region, using 8bit RAM\n") : "", size, buffer);
+    #endif
+    if ((uintptr_t)buffer >= SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && getContiguousFreeHeap() < MIN_HEAP_SIZE) {
+      DEBUG_PRINTLN(F("WARN: heap too low after allocation! Releasing."));
+      heap_caps_free(buffer); // free buffer if heap is too low
+      return nullptr; // not enough heap free
+    }
+  }
+  #endif
+  if (buffer && (type & BFRALLOC_CLEAR)) memset(buffer, 0, size); // clear allocated buffer
+  return buffer;
+}

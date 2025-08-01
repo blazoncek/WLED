@@ -236,8 +236,8 @@ void FFTcode(void * parameter)
   DEBUGSR_PRINT("FFT started on core: "); DEBUGSR_PRINTLN(xPortGetCoreID());
 
   // allocate FFT buffers on first call
-  if (vReal == nullptr) vReal = (float*) d_calloc(sizeof(float), samplesFFT);
-  if (vImag == nullptr) vImag = (float*) d_calloc(sizeof(float), samplesFFT);
+  if (vReal == nullptr) vReal = (float*) d_calloc(samplesFFT, sizeof(float));
+  if (vImag == nullptr) vImag = (float*) d_calloc(samplesFFT, sizeof(float));
   if ((vReal == nullptr) || (vImag == nullptr)) {
     // something went wrong
     d_free(vReal); vReal = nullptr;
