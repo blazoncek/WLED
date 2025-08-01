@@ -1750,6 +1750,7 @@ void WS2812FX::applySegmentGeometryUpdates() {
   }
   segUpdates.clear();         // clear updates for next time
   segUpdates.shrink_to_fit(); // free memory
+  interfaceUpdateCallMode = CALL_MODE_WS_SEND; // schedule WS update (to inform UI)
 }
 
 uint8_t WS2812FX::getActiveSegsLightCapabilities(bool selectedOnly) const {

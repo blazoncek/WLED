@@ -177,15 +177,15 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   }
   if (stop > start && of > len -1) of = len -1;
 
-  if (newSeg) {
-    // update new segment
+  if (newSeg || !strip.isServicing()) {
+    // update new segment or segment not being serviced
     seg.setGeometry(start, stop, grp, spc, of, startY, stopY, map1D2D);
     seg.refreshLightCapabilities(); // fix for #3403
   } else {
     // schedule segment geometry update (to prevent issues if effect is running)
     if (seg.start != start || seg.stop != stop || seg.startY != startY || seg.stopY != stopY ||
         seg.grouping != grp || seg.spacing != spc || seg.offset != of || seg.map1D2D != map1D2D) {
-      strip.addSegmentGeometryUpdate(id, start, stop, grp, spc, of, startY, stopY, map1D2D);
+      strip.addSegmentGeometryUpdate(id, start, stop, grp, spc, of, startY, stopY, map1D2D);  // needs to set interfaceUpdateCallMode to inform UI of change
     }
     if (stop == 0) return true;
   }
