@@ -5970,7 +5970,8 @@ uint16_t mode_2Dscrollingtext(void) {
   }
 
   char text[WLED_MAX_SEGNAME_LEN+1] = {'\0'};
-  if (SEGMENT.name) for (size_t i=0,j=0; i<strlen(SEGMENT.name); i++) if (SEGMENT.name[i]>31 && SEGMENT.name[i]<128) text[j++] = SEGMENT.name[i];
+  if (SEGMENT.name) for (size_t i=0,j=0; i<strlen(SEGMENT.name) && i<WLED_MAX_SEGNAME_LEN; i++) if (SEGMENT.name[i]>31 && SEGMENT.name[i]<128) text[j++] = SEGMENT.name[i];
+  text[WLED_MAX_SEGNAME_LEN] = '\0'; // ensure null-termination
   const bool zero = strchr(text, '0') != nullptr;
 
   char sec[5];

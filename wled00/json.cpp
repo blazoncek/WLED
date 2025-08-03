@@ -181,6 +181,7 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     // update new segment or segment not being serviced
     seg.setGeometry(start, stop, grp, spc, of, startY, stopY, map1D2D);
     seg.refreshLightCapabilities(); // fix for #3403
+    if (seg.stop == 0) return true;
   } else {
     // schedule segment geometry update (to prevent issues if effect is running)
     if (seg.start != start || seg.stop != stop || seg.startY != startY || seg.stopY != stopY ||
