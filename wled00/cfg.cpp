@@ -821,8 +821,8 @@ void serializeConfig() {
   id[F("sui")] = simplifiedUI;
 
   JsonObject nw = root.createNestedObject("nw");
-  id["name"] = hostName;
-  id[F("mdns")] = mDNSenabled;
+  nw["name"] = hostName;
+  nw[F("mdns")] = mDNSenabled;
 #ifndef WLED_DISABLE_ESPNOW
   nw[F("espnow")] = enableESPNow;
   char linked_remote[13];
