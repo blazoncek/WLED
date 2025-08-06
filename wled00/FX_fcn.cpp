@@ -1058,9 +1058,7 @@ void Segment::blur(uint8_t blur_amount, bool smear) const {
 }
 
 /*
- * Put a value 0 to 255 in to get a color value.
- * The colours are a transition r -> g -> b -> back to r
- * Inspired by the Adafruit examples.
+ * Put a value 0 to 255 in to get a color value from color wheel if using "default" palette.
  */
 uint32_t Segment::color_wheel(uint8_t pos) const {
   if (palette) return color_from_palette(pos, false, false, 0); // never wrap palette
@@ -1071,15 +1069,33 @@ uint32_t Segment::color_wheel(uint8_t pos) const {
     hsv2rgb_rainbow(CHSV(pos, 255, 255), rgb);
     return RGBW32(rgb.r, rgb.g, rgb.b, w);
   } else {
-    if (pos < 85) {
-      return RGBW32((255 - pos * 3), 0, (pos * 3), w);
-    } else if (pos < 170) {
-      pos -= 85;
-      return RGBW32(0, (pos * 3), (255 - pos * 3), w);
-    } else {
-      pos -= 170;
-      return RGBW32((pos * 3), (255 - pos * 3), 0, w);
+    unsigned r = 0, g = 0, b = 0;
+    // by @TripleWhy https://github.com/Aircoookie/WLED/pull/3681 (https://github.com/TripleWhy)
+    // HSV 2 RGB conversion, assuming H=pos*360°/256, S=1 and V=1. (see also hsv2rgb() for more universal approach)
+    const unsigned h = (pos * 3) >> 7;    // avoid division: s = (pos * 3) / 128;
+    const unsigned f = (pos * 6) & 0xFF;  // avoid modulus: f = (pos * 6) % 256
+    switch (h) {
+      case  0: r = 255;     g = f;       break;
+      case  1: r = 255 - f; g = 255;     break;
+      case  2: g = 255;     b = f;       break;
+      case  3: g = 255 - f; b = 255;     break;
+      case  4: r = f;       b = 255;     break;
+      default: r = 255;     b = 255 - f; break;
     }
+    // old behaviour, kept for posterity (Inspired by the Adafruit examples)
+    //if (pos <= 85) {
+    //  b = pos * 3;
+    //  r = 255 - b;
+    //} else if (pos <= 170) {
+    //  pos -= 85;
+    //  g = pos * 3;
+    //  b = 255 - g;
+    //} else {
+    //  pos -= 170;
+    //  r = pos * 3;
+    //  g = 255 - r;
+    //}
+    return RGBW32(r, g, b, w);
   }
 }
 

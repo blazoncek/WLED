@@ -290,32 +290,26 @@ void loadCustomPalettes() {
 
 void hsv2rgb(const CHSV32& hsv, uint32_t& rgb) // convert HSV (16bit hue) to RGB (32bit with white = 0)
 {
-  unsigned int remainder, region, p, q, t;
+  unsigned int sector, f, p, q, t;
   unsigned int h = hsv.h;
   unsigned int s = hsv.s;
   unsigned int v = hsv.v;
   if (s == 0) {
-      rgb = v << 16 | v << 8 | v;
-      return;
+    rgb = v << 16 | v << 8 | v;
+    return;
   }
-  region = h / 10923;  // 65536 / 6 = 10923
-  remainder = (h - (region * 10923)) * 6;
+  sector = h / 10923;             // 65536 / 6 = 10923
+  f = (h - (sector * 10923)) * 6; // fraction/remainder: f = (hue % 10923) * 65536 / 10923 
   p = (v * (255 - s)) >> 8;
-  q = (v * (255 - ((s * remainder) >> 16))) >> 8;
-  t = (v * (255 - ((s * (65535 - remainder)) >> 16))) >> 8;
-  switch (region) {
-    case 0:
-      rgb = v << 16 | t << 8 | p; break;
-    case 1:
-      rgb = q << 16 | v << 8 | p; break;
-    case 2:
-      rgb = p << 16 | v << 8 | t; break;
-    case 3:
-      rgb = p << 16 | q << 8 | v; break;
-    case 4:
-      rgb = t << 16 | p << 8 | v; break;
-    default:
-      rgb = v << 16 | p << 8 | q; break;
+  q = (v * (255 - ((s * f) >> 16))) >> 8;
+  t = (v * (255 - ((s * (65535 - f)) >> 16))) >> 8;
+  switch (sector) {
+    case  0: rgb = v << 16 | t << 8 | p; break;
+    case  1: rgb = q << 16 | v << 8 | p; break;
+    case  2: rgb = p << 16 | v << 8 | t; break;
+    case  3: rgb = p << 16 | q << 8 | v; break;
+    case  4: rgb = t << 16 | p << 8 | v; break;
+    default: rgb = v << 16 | p << 8 | q; break;
   }
 }
 
