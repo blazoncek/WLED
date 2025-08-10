@@ -1196,7 +1196,7 @@ void WS2812FX::finalizeInit() {
     if (busEnd > _length) _length = busEnd;
     // This must be done after all buses have been created, as some kinds (parallel I2S) interact
     bus->begin();
-    bus->setBrightness(bri);
+    bus->setBrightness(scaledBri(bri));
   }
   DEBUG_PRINTF_P(PSTR("Heap after buses: %d\n"), getFreeHeapSize());
 
@@ -1620,7 +1620,7 @@ void WS2812FX::show() {
   // we need to keep track of each pixel's CCT when blending segments (if CCT is present)
   // and then set appropriate CCT from that pixel during paint (see below).
   if ((hasCCTBus() || correctWB) && !cctFromRgb)
-    _pixelCCT = static_cast<uint8_t*>(d_malloc(totalLen * sizeof(uint8_t))); // allocate CCT buffer if necessary
+    _pixelCCT = static_cast<uint8_t*>(allocate_buffer(totalLen * sizeof(uint8_t), BFRALLOC_PREFER_PSRAM)); // allocate CCT buffer if necessary
   if (_pixelCCT) memset(_pixelCCT, 127, totalLen); // set neutral (50:50) CCT
 
   if (realtimeMode == REALTIME_MODE_INACTIVE || useMainSegmentOnly || realtimeOverride > REALTIME_OVERRIDE_NONE) {
@@ -1637,8 +1637,8 @@ void WS2812FX::show() {
   if (callback) callback(); // will call setPixelColor or setRealtimePixelColor
 
   // determine ABL brightness
-  uint8_t newBri = estimateCurrentAndLimitBri(_brightness, _pixels);
-  if (newBri != _brightness) BusManager::setBrightness(newBri);
+  uint8_t newBri = estimateCurrentAndLimitBri(scaledBri(_brightness), _pixels);
+  if (newBri != scaledBri(_brightness)) BusManager::setBrightness(newBri);
 
   // paint actuall pixels
   int oldCCT = Bus::getCCT(); // store original CCT value (since it is global)
@@ -1654,7 +1654,7 @@ void WS2812FX::show() {
   }
   Bus::setCCT(oldCCT);  // restore old CCT for ABL adjustments
 
-  d_free(_pixelCCT);
+  p_free(_pixelCCT);
   _pixelCCT = nullptr;
 
   // some buses send asynchronously and this method will return before
@@ -1663,7 +1663,7 @@ void WS2812FX::show() {
   BusManager::show();
 
   // restore brightness for next frame
-  if (newBri != _brightness) BusManager::setBrightness(_brightness);
+  if (newBri != scaledBri(_brightness)) BusManager::setBrightness(scaledBri(_brightness));
 
   if (diff > 0) { // skip calculation if no time has passed
     int fpsCurr = (1000 << FPS_CALC_SHIFT) / diff; // fixed point math (shift left for better precision)
@@ -1728,7 +1728,7 @@ void WS2812FX::setBrightness(uint8_t b, bool direct) {
   if (_brightness == 0) { //unfreeze all segments on power off
     for (const Segment &seg : _segments) seg.freeze = false; // freeze is mutable
   }
-  BusManager::setBrightness(b);
+  BusManager::setBrightness(scaledBri(b));
   if (!direct) {
     unsigned long t = millis();
     if (_segments[0].next_time > t + 22 && t - _lastShow > MIN_SHOW_DELAY) trigger(); //apply brightness change immediately if no refresh soon
