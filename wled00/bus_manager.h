@@ -435,9 +435,7 @@ struct BusConfig {
 namespace BusManager {
 
   extern std::vector<std::unique_ptr<Bus>> busses;
-  //extern std::vector<Bus*> busses;
   extern uint16_t _gMilliAmpsUsed;
-  extern uint16_t _gMilliAmpsMax;
 
   #ifdef ESP32_DATA_IDLE_HIGH
   void    esp32RMTInvertIdle() ;
@@ -449,9 +447,7 @@ namespace BusManager {
   }
 
   size_t          memUsage();
-  inline uint16_t currentMilliamps()            { return _gMilliAmpsUsed + MA_FOR_ESP; }
-  inline uint16_t ablMilliampsMax()             { return _gMilliAmpsMax; }  // used for compatibility reasons (and enabling virtual global ABL)
-  inline void     setMilliampsMax(uint16_t max) { _gMilliAmpsMax = max;}
+  inline uint16_t currentMilliamps()     { return _gMilliAmpsUsed; }
 
   void useParallelOutput(); // workaround for inaccessible PolyBus
   bool hasParallelOutput(); // workaround for inaccessible PolyBus

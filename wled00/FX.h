@@ -749,6 +749,8 @@ class WS2812FX {
 #endif
       correctWB(false),
       cctFromRgb(false),
+      milliAmpsMax(ABL_MILLIAMPS_DEFAULT),
+      milliAmpsAvg(0),
       // true private variables
       _pixels(nullptr),
       _pixelCCT(nullptr),
@@ -769,6 +771,7 @@ class WS2812FX {
       _callback(nullptr),
       customMappingTable(nullptr),
       customMappingSize(0),
+      _milliAmpsTotal(0),
       _lastShow(0)
     {
       _mode.reserve(_modeCount);     // allocate memory to prevent initial fragmentation (does not increase size())
@@ -824,6 +827,7 @@ class WS2812FX {
     inline void suspend()                                     { _suspend = true; }    // will suspend (and canacel) strip.service() execution
     inline void resume()                                      { _suspend = false; }   // will resume strip.service() execution
 
+    void calcMilliAmpsAvg();
     void restartRuntime();
     void setTransitionMode(bool t);
     void addSegmentGeometryUpdate(uint8_t id, uint16_t sStart, uint16_t sStop, uint8_t grp = 1, uint8_t spc = 0, uint16_t ofs = UINT16_MAX, uint16_t sStartY = 0, uint16_t sStopY = 1, uint8_t m12 = 0);
@@ -924,6 +928,9 @@ class WS2812FX {
       bool cctFromRgb   : 1;
     };
 
+    uint16_t milliAmpsMax;
+    uint16_t milliAmpsAvg;
+
     Segment *_currentSegment;
 
   private:
@@ -961,9 +968,12 @@ class WS2812FX {
     uint16_t* customMappingTable;
     uint16_t  customMappingSize;
 
+    uint16_t _milliAmpsTotal;
+
     unsigned long _lastShow;
 
     void applySegmentGeometryUpdates(); // applies segment geometry updates (if any) to all segments
+    uint8_t estimateCurrentAndLimitBri(uint8_t brightness); // estimates current and limit brightness based on milliAmps consumption
 
     friend class Segment;
 };

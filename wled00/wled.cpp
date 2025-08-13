@@ -123,10 +123,12 @@ void WLED::loop()
 
     if (!offMode || strip.isOffRefreshRequired() || strip.needsUpdate())
       strip.service();
-    #ifdef ESP8266
-    else if (!noWifiSleep)
-      delay(1); //required to make sure ESP enters modem sleep (see #1184)
-    #endif
+    else {
+      strip.calcMilliAmpsAvg(); // calculate average milliAmps (fade out when not displaying effects)
+      #ifdef ESP8266
+      if (!noWifiSleep) delay(1); //required to make sure ESP enters modem sleep (see #1184)
+      #endif
+    }
   }
   #ifdef WLED_DEBUG
   stripMillis = millis() - stripMillis;

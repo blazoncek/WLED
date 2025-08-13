@@ -442,7 +442,7 @@ mA/LED: <select name="LAsel${s}" onchange="enLA(this,'${s}');UI();">
 <option value="0">Custom</option>
 </select><br>
 <div id="LAdis${s}" style="display: none;">max. mA/LED: <input name="LA${s}" type="number" min="1" max="255" oninput="UI()"> mA<br></div>
-<div id="PSU${s}">PSU: <input name="MA${s}" type="number" class="xl" min="250" max="65000" oninput="UI()" value="250"> mA<br></div>
+<div id="PSU${s}">PSU: <input name="MA${s}" type="number" class="xl" min="250" max="65500" oninput="UI()" value="250"> mA<br></div>
 </div>
 <div id="co${s}" style="display:inline">Color Order:
 <select name="CO${s}">
@@ -812,7 +812,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				Keep at &lt;1A if powering LEDs directly from the ESP 5V pin!<br>
 				If using multiple outputs it is recommended to use per-output limiter.<br>
 				Analog (PWM) and virtual LEDs cannot use automatic brightness limiter.<br></i>
-			<div id="psuMA">Maximum PSU Current: <input name="MA" type="number" class="xl" min="250" max="65000" oninput="UI()" required> mA<br></div>
+			<div id="psuMA">Maximum PSU Current: <input name="MA" type="number" class="xl" min="250" max="65500" oninput="UI()" required> mA<br></div>
 			Use per-output limiter: <input type="checkbox" name="PPL" onchange="UI()"><br>
 			<div id="ppldis" style="display:none;">
 				<i>Make sure you enter correct value for each LED output.<br>
@@ -881,9 +881,9 @@ Swap: <select id="xw${s}" name="XW${s}">
 		Turn LEDs on after power up/reset: <input type="checkbox" name="BO"><br>
 		Default brightness: <input name="CA" type="number" class="m" min="1" max="255" required> (1-255)<br><br>
 		Apply preset <input name="BP" type="number" class="m" min="0" max="250" required> at boot (0 uses values from above)<br><br>
-		Use Gamma correction for color: <input type="checkbox" name="GC"> (strongly recommended)<br>
+		Use Gamma correction for color: <input type="checkbox" name="GC"> (recommended)<br>
 		Use Gamma correction for brightness: <input type="checkbox" name="GB"> (not recommended)<br>
-		Use Gamma value: <input name="GV" type="number" class="m" placeholder="2.8" min="1" max="3" step="0.1" required><br><br>
+		Use Gamma value: <input name="GV" type="number" class="m" min="1" max="3" step="0.1" required><br><br>
 		Brightness factor: <input name="BF" type="number" class="m" min="1" max="255" required> %
 		<h3>Transitions</h3>
 		Default transition time: <input name="TD" type="number" class="xl" min="0" max="65500"> ms<br>

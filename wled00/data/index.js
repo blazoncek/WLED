@@ -712,9 +712,11 @@ function populateInfo(i)
 {
 	var cn="";
 	var pwr = i.leds.pwr;
+	var max = i.leds.maxpwr || 0;
 	var pwru = "Not calculated";
 	if (pwr > 1000) {pwr /= 1000; pwr = pwr.toFixed((pwr > 10) ? 0 : 1); pwru = pwr + " A";}
-	else if (pwr > 0) {pwr = 50 * Math.round(pwr/50); pwru = pwr + " mA";}
+	else if (pwr > 0) {pwru = pwr + " mA";}
+	if (max > 0) pwru += " / " + (max > 1000 ? (max/1000).toFixed(1) + " A" : max + " mA");
 	var urows="";
 	if (i.u) {
 		for (const [k, val] of Object.entries(i.u)) {

@@ -1136,6 +1136,13 @@ uint32_t Segment::color_from_palette(uint16_t i, bool mapping, bool moving, uint
 // WS2812FX class implementation
 ///////////////////////////////////////////////////////////////////////////////
 
+//scales the brightness with the briMultiplier factor
+static uint8_t scaledBri(uint8_t in) {
+  unsigned val = ((unsigned)in*briMultiplier)/100;
+  if (val > 255) val = 255;
+  return val;
+}
+
 //do not call this method from system context (network callback)
 void WS2812FX::finalizeInit() {
   //reset segment runtimes
@@ -1550,63 +1557,71 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
 }
 
 // To disable brightness limiter we either set output max current to 0 or single LED current to 0
-static uint8_t estimateCurrentAndLimitBri(uint8_t brightness, uint32_t *pixels) {
-  unsigned milliAmpsMax = BusManager::ablMilliampsMax();
+uint8_t WS2812FX::estimateCurrentAndLimitBri(uint8_t brightness) {
+  unsigned tmpMilliAmps = 0;
   if (milliAmpsMax > 0) {
-    unsigned milliAmpsTotal = 0;
     unsigned avgMilliAmpsPerLED = 0;
     unsigned lengthDigital = 0;
     bool useWackyWS2815PowerModel = false;
 
-    for (size_t i = 0; i < BusManager::getNumBusses(); i++) {
-      const Bus *bus = BusManager::getBus(i);
-      if (!(bus && bus->isDigital() && bus->isOk())) continue;
-      unsigned maPL = bus->getLEDCurrent();
-      if (maPL == 0 || bus->getMaxCurrent() > 0) continue; // skip buses with 0 mA per LED or max current per bus defined (PP-ABL)
-      if (maPL == 255) {
-        useWackyWS2815PowerModel = true;
-        maPL = 12; // WS2815 uses 12mA per channel
-      }
-      avgMilliAmpsPerLED += maPL * bus->getLength();
-      lengthDigital += bus->getLength();
-      // sum up the usage of each LED on digital bus
-      uint32_t busPowerSum = 0;
-      for (unsigned j = 0; j < bus->getLength(); j++) {
-        uint32_t c = pixels[j + bus->getStart()];
-        byte r = R(c), g = G(c), b = B(c), w = W(c);
-        if (useWackyWS2815PowerModel) { //ignore white component on WS2815 power calculation
-          busPowerSum += (max(max(r,g),b)) * 3;
-        } else {
-          busPowerSum += (r + g + b + w);
+    // we must traverse each pixel to determine if it belongs to actual digital bus
+    unsigned len = getLengthTotal();
+    for (unsigned x = 0; x < len; x++) {
+      unsigned index = getMappedPixelIndex(x); // convert logical address to physical
+      if (index == 0xFFFF) continue;  // invalid/missing  pixel
+      for (const auto &bus : BusManager::busses) {
+        if (bus->isOk() && bus->isDigital() && bus->containsPixel(index)) {
+          unsigned maPL = bus->getLEDCurrent();
+          // if bus has max current defined, it means per-port ABL is enabled and we don't limit brightness on strip level
+          if (maPL == 0 || bus->getMaxCurrent() > 0) break; // skip buses with 0 mA per LED or max current per bus defined (PP-ABL)
+          if (maPL == 255) {
+            useWackyWS2815PowerModel = true;
+            maPL = 12; // WS2815 uses 12mA per channel
+          }
+          avgMilliAmpsPerLED += maPL; // sum up the usage of each LED on digital bus
+          lengthDigital++;            // count all LEDs on digital bus
+          // sum up the power usage
+          uint32_t c = realtimeMode && arlsDisableGammaCorrection ? _pixels[x] : gamma32(_pixels[x]);
+          byte r = R(c), g = G(c), b = B(c), w = W(c);
+          unsigned tmpSum;
+          if (useWackyWS2815PowerModel) { // ignore white component on WS2815 power calculation
+            tmpSum = (max(max(r,g),b)) * 3;
+          } else {
+            tmpSum = (r + g + b + w);
+          }
+          if (bus->hasWhite()) tmpSum = (tmpSum * 3) >> 2; // RGBW: total output with white LEDs enabled is still 50mA, so each channel uses less
+          tmpMilliAmps += tmpSum * maPL;
+          break; // found the bus, no need to check others
         }
       }
-      // RGBW led total output with white LEDs enabled is still 50mA, so each channel uses less
-      if (bus->hasWhite()) {
-        busPowerSum *= 3;
-        busPowerSum >>= 2; //same as /= 4
-      }
-      // powerSum has all the values of channels summed (max would be getLength()*765 as white is excluded) so convert to milliAmps
-      milliAmpsTotal += (busPowerSum * maPL * brightness) / (765*255);
     }
+    _milliAmpsTotal = ((uint64_t)tmpMilliAmps * brightness) / (255*765); // convert to mA (unsigned may overflow with 8192 LEDs at 255 brightness)
+
     if (lengthDigital > 0) {
       avgMilliAmpsPerLED /= lengthDigital;
 
-      if (milliAmpsMax > MA_FOR_ESP && avgMilliAmpsPerLED > 0) { //0 mA per LED and too low numbers turn off calculation
-        unsigned powerBudget = (milliAmpsMax - MA_FOR_ESP); //80/120mA for ESP power
+      if (strip.milliAmpsMax > MA_FOR_ESP && avgMilliAmpsPerLED > 0) { //0 mA per LED and too low numbers turn off calculation
+        unsigned powerBudget = (strip.milliAmpsMax - MA_FOR_ESP); //80/120mA for ESP power
         if (powerBudget > lengthDigital) { //each LED uses about 1mA in standby, exclude that from power budget
           powerBudget -= lengthDigital;
         } else {
           powerBudget = 0;
         }
-        if (milliAmpsTotal > powerBudget) {
+        if (_milliAmpsTotal > powerBudget) {
           //scale brightness down to stay in current limit
-          unsigned scaleB = powerBudget * 255 / milliAmpsTotal;
+          unsigned scaleB = powerBudget * 255 / _milliAmpsTotal;
           brightness = ((brightness * scaleB) >> 8) + 1;
         }
       }
     }
   }
   return brightness;
+}
+
+void WS2812FX::calcMilliAmpsAvg() {
+  // apply PI control to milliAmpsAvg (amplifying by 10 for better precision)
+  int ma = (BusManager::currentMilliamps() + _milliAmpsTotal)*10;
+  milliAmpsAvg = (milliAmpsAvg*10 + (ma - milliAmpsAvg*10) / FPS_CALC_AVG) / 10; // simple PI controller over FPS_CALC_AVG frames
 }
 
 void WS2812FX::show() {
@@ -1634,11 +1649,12 @@ void WS2812FX::show() {
 
   // avoid race condition, capture _callback value
   show_callback callback = _callback;
-  if (callback) callback(); // will call setPixelColor or setRealtimePixelColor
+  if (callback) callback(); // will call strip.setPixelColor or strip.setRealtimePixelColor
 
   // determine ABL brightness
-  uint8_t newBri = estimateCurrentAndLimitBri(scaledBri(_brightness), _pixels);
-  if (newBri != scaledBri(_brightness)) BusManager::setBrightness(newBri);
+  uint8_t oldBri = scaledBri(_brightness);
+  uint8_t newBri = estimateCurrentAndLimitBri(oldBri);
+  if (newBri != oldBri) BusManager::setBrightness(newBri);
 
   // paint actuall pixels
   int oldCCT = Bus::getCCT(); // store original CCT value (since it is global)
@@ -1663,11 +1679,13 @@ void WS2812FX::show() {
   BusManager::show();
 
   // restore brightness for next frame
-  if (newBri != scaledBri(_brightness)) BusManager::setBrightness(scaledBri(_brightness));
+  if (newBri != oldBri) BusManager::setBrightness(oldBri);
 
   if (diff > 0) { // skip calculation if no time has passed
     int fpsCurr = (1000 << FPS_CALC_SHIFT) / diff; // fixed point math (shift left for better precision)
     _cumulativeFps += ((fpsCurr - (_cumulativeFps << FPS_CALC_SHIFT)) / FPS_CALC_AVG + ((1<<FPS_CALC_SHIFT)/FPS_CALC_AVG)) >> FPS_CALC_SHIFT; // simple PI controller over FPS_CALC_AVG frames
+    calcMilliAmpsAvg();   // calculate average milliAmps for this frame
+    _milliAmpsTotal = 0;  // reset total milliAmps for next frame
     _lastShow = showNow;
   }
 }

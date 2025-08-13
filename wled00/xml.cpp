@@ -363,9 +363,11 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       printSetFormValue(settingsScript,hs,bus->getCustomText().c_str());
       sumMa += bus->getMaxCurrent();
     }
-    printSetFormValue(settingsScript,PSTR("MA"),BusManager::ablMilliampsMax() ? BusManager::ablMilliampsMax() : sumMa);
-    printSetFormCheckbox(settingsScript,PSTR("ABL"),BusManager::ablMilliampsMax() || sumMa > 0);
-    printSetFormCheckbox(settingsScript,PSTR("PPL"),!BusManager::ablMilliampsMax() && sumMa > 0);
+    // strip.milliAmpsMax > 0 means per strip ABL is enabled
+    // sumMa > 0 means PP-ABL is enabled
+    printSetFormValue(settingsScript,PSTR("MA"),strip.milliAmpsMax ? strip.milliAmpsMax : sumMa);
+    printSetFormCheckbox(settingsScript,PSTR("ABL"),strip.milliAmpsMax || sumMa > 0);
+    printSetFormCheckbox(settingsScript,PSTR("PPL"),sumMa > 0);
 
     settingsScript.printf_P(PSTR("resetCOM(%d);"), WLED_MAX_COLOR_ORDER_MAPPINGS);
     const ColorOrderMap& com = BusManager::getColorOrderMap();

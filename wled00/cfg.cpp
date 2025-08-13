@@ -176,8 +176,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   JsonObject hw_led = hw["led"];
 
   uint16_t total = hw_led[F("total")] | strip.getLengthTotal();
-  uint16_t ablMilliampsMax = hw_led[F("maxpwr")] | BusManager::ablMilliampsMax();
-  BusManager::setMilliampsMax(ablMilliampsMax);
+  CJSON(strip.milliAmpsMax, hw_led[F("maxpwr")]); // milliAmps max for strip ABL, 0 means no ABL or PP-ABL
   Bus::setGlobalAWMode(hw_led[F("rgbwm")] | AW_GLOBAL_DISABLED);
   CJSON(strip.correctWB, hw_led["cct"]);
   CJSON(strip.cctFromRgb, hw_led[F("cr")]);
@@ -247,8 +246,8 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       uint16_t freqkHz = elm[F("freq")] | 0;  // will be in kHz for DotStar and Hz for PWM
       uint8_t AWmode = elm[F("rgbwm")] | RGBW_MODE_MANUAL_ONLY;
       uint8_t maPerLed = elm[F("ledma")] | LED_MILLIAMPS_DEFAULT;
-      uint16_t maMax = elm[F("maxpwr")] | (ablMilliampsMax * length) / total; // rough (incorrect?) per strip ABL calculation when no config exists
-      // To disable brightness limiter we either set output max current to 0 or single LED current to 0 (we choose output max current)
+      uint16_t maMax = elm[F("maxpwr")] | 0; // maMax > 0 means per bus PP-ABL is enabled (bus has its own maximum allowable current)
+      // To disable brightness limiter we either set output max current to 0 or single LED current to 0
       if (Bus::isPWM(ledType) || Bus::isOnOff(ledType) || Bus::isVirtual(ledType)) { // analog and virtual
         maPerLed = 0;
         maMax = 0;
@@ -904,7 +903,7 @@ void serializeConfig() {
 
   JsonObject hw_led = hw.createNestedObject("led");
   hw_led[F("total")] = strip.getLengthTotal(); //provided for compatibility on downgrade and per-output ABL
-  hw_led[F("maxpwr")] = BusManager::ablMilliampsMax();
+  hw_led[F("maxpwr")] = strip.milliAmpsMax;
   hw_led["cct"] = strip.correctWB;
   hw_led[F("cr")] = strip.cctFromRgb;
   hw_led[F("ic")] = cctICused;
@@ -937,10 +936,11 @@ void serializeConfig() {
 
   JsonArray hw_led_ins = hw_led.createNestedArray("ins");
 
-  for (size_t s = 0; s < BusManager::getNumBusses(); s++) {
-    DEBUG_PRINTF_P(PSTR("Cfg: Saving bus #%u\n"), s);
-    const Bus *bus = BusManager::getBus(s);
-    if (!bus || !bus->isOk()) break;
+  //for (size_t s = 0; s < BusManager::getNumBusses(); s++) {
+  size_t s = 0;
+  for (const auto &bus : BusManager::busses) {
+    DEBUG_PRINTF_P(PSTR("Cfg: Saving bus #%u\n"), s++);
+    if (!bus->isOk()) break;
     DEBUG_PRINTF_P(PSTR("  (%d-%d, type:%d, CO:%d, rev:%d, skip:%d, AW:%d kHz:%d, mA:%d/%d)\n"),
       (int)bus->getStart(), (int)(bus->getStart()+bus->getLength()),
       (int)(bus->getType() & 0x7F),
@@ -952,8 +952,8 @@ void serializeConfig() {
       (int)bus->getLEDCurrent(), (int)bus->getMaxCurrent()
     );
     JsonObject ins = hw_led_ins.createNestedObject();
-    ins["start"] = bus->getStart();
-    ins["len"]   = bus->getLength();
+    ins["start"]   = bus->getStart();
+    ins["len"]     = bus->getLength();
     JsonArray ins_pin = ins.createNestedArray("pin");
     uint8_t pins[5];
     uint8_t nPins = bus->getPins(pins);

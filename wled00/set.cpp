@@ -152,9 +152,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     String text;
 
     // this will set global ABL max current used when per-port ABL is not used
-    unsigned ablMilliampsMax = request->arg(F("MA")).toInt();
-    BusManager::setMilliampsMax(ablMilliampsMax);
-
+    strip.milliAmpsMax = request->arg(F("MA")).toInt(); // if PP-ABL is used, strip.milliAmpsMax is not used (== 0)
     strip.autoSegments = request->hasArg(F("MS"));
     strip.correctWB = request->hasArg(F("CCT"));
     strip.cctFromRgb = request->hasArg(F("CR"));
@@ -232,6 +230,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       } else {
         maPerLed = request->arg(la).toInt();
         maMax = request->arg(ma).toInt() * request->hasArg(F("PPL")); // if PP-ABL is disabled maMax (per bus) must be 0
+        if (maMax > 0 && maPerLed > 0) strip.milliAmpsMax = 0; // make sure strip ABL is off if per-port ABL is used
       }
       type |= request->hasArg(rf) << 7; // off refresh override
       text = request->arg(hs).substring(0,31);

@@ -54,16 +54,7 @@ void toggleOnOff()
 }
 
 
-//scales the brightness with the briMultiplier factor
-byte scaledBri(byte in)
-{
-  unsigned val = ((uint16_t)in*briMultiplier)/100;
-  if (val > 255) val = 255;
-  return (byte)val;
-}
-
-
-//applies global temporary brightness (briT) to strip
+//applies global temporary brightness (briT) to strip (during on/off transition)
 void applyBri() {
   if (realtimeOverride || !(realtimeMode && arlsForceMaxBri))
   {
