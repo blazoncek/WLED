@@ -1781,18 +1781,18 @@ uint16_t mode_colorwaves_pride_base(bool isPride2015) {
   unsigned sPseudotime = SEGENV.step;
   unsigned sHue16 = SEGENV.aux0;
 
-  uint8_t sat8 = isPride2015 ? beatsin88_t(87, 220, 250) : 255;
-  unsigned brightdepth = beatsin88_t(341, 96, 224);
-  unsigned brightnessthetainc16 = beatsin88_t(203, (25 * 256), (40 * 256));
-  unsigned msmultiplier = beatsin88_t(147, 23, 60);
+  uint8_t sat8 = isPride2015 ? beatsin88_t(87, 220, 250) : 255;             // 0.34 BPM [220, 250] : 255
+  unsigned brightdepth = beatsin88_t(341, 96, 224);                         // 1.226 BPM [96, 224]
+  unsigned brightnessthetainc16 = beatsin88_t(203, (25 * 256), (40 * 256)); // 0.79 BPM [6400, 10240] (~17°, ~28°)
+  unsigned msmultiplier = beatsin88_t(147, 23, 60);                         // 0.54 BPM [23, 60]
 
   unsigned hue16 = sHue16;
   unsigned hueinc16 = isPride2015 ? beatsin88_t(113, 1, 3000) : 
                                     beatsin88_t(113, 60, 300) * SEGMENT.intensity * 10 / 255;
 
   sPseudotime += duration * msmultiplier;
-  sHue16 += duration * beatsin88_t(400, 5, 9);
-  unsigned brightnesstheta16 = sPseudotime;
+  sHue16 += duration * beatsin88_t(400, 5, 9);  // 1.56 BPM [5, 9] * duration
+  uint16_t brightnesstheta16 = sPseudotime;
 
   for (unsigned i = 0; i < SEGLEN; i++) {
     hue16 += hueinc16;
@@ -1807,13 +1807,12 @@ uint16_t mode_colorwaves_pride_base(bool isPride2015) {
 
     brightnesstheta16 += brightnessthetainc16;
     unsigned b16 = sin16_t(brightnesstheta16) + 32768;
-    unsigned bri16 = (b16 * b16) / 65536;
-    uint8_t bri8 = (bri16 * brightdepth) / 65536;
+    b16 = (b16 * b16) / 65535; // square the sine wave to get a more pronounced effect
+    uint8_t bri8 = (b16 * brightdepth) / 65535; // bri8 in range of [0, 96-224]
     bri8 += (255 - brightdepth);
 
     if (isPride2015) {
-      CRGBW newcolor = CRGB(CHSV(hue8, sat8, bri8));
-      newcolor.color32 = gamma32inv(newcolor.color32);
+      CRGBW newcolor = CRGB(CHSV(hue8, sat8, gamma8inv(bri8))); // gamma8inv() to correct for new gamma introduced with segment blending
       SEGMENT.blendPixelColor(i, newcolor, 64);
     } else {
       SEGMENT.blendPixelColor(i, SEGMENT.color_from_palette(hue8, false, PALETTE_MOVING, 0, bri8), 128);

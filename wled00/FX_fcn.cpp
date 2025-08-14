@@ -1563,6 +1563,9 @@ uint8_t WS2812FX::estimateCurrentAndLimitBri(uint8_t brightness) {
     unsigned avgMilliAmpsPerLED = 0;
     unsigned lengthDigital = 0;
     bool useWackyWS2815PowerModel = false;
+    // using lambda functionn moves if statement out of loop
+    // this is used to apply gamma correction if enabled and not disabled in realtime mode
+    auto applyGamma = gammaCorrectCol && !(realtimeMode && arlsDisableGammaCorrection) ? [](uint32_t c){return gamma32(c);} : [](uint32_t c){return c;}; // use gamma correction if not disabled
 
     // we must traverse each pixel to determine if it belongs to actual digital bus
     unsigned len = getLengthTotal();
@@ -1581,7 +1584,7 @@ uint8_t WS2812FX::estimateCurrentAndLimitBri(uint8_t brightness) {
           avgMilliAmpsPerLED += maPL; // sum up the usage of each LED on digital bus
           lengthDigital++;            // count all LEDs on digital bus
           // sum up the power usage
-          uint32_t c = realtimeMode && arlsDisableGammaCorrection ? _pixels[x] : gamma32(_pixels[x]);
+          uint32_t c = applyGamma(_pixels[x]);
           byte r = R(c), g = G(c), b = B(c), w = W(c);
           unsigned tmpSum;
           if (useWackyWS2815PowerModel) { // ignore white component on WS2815 power calculation
@@ -1658,6 +1661,9 @@ void WS2812FX::show() {
 
   // paint actuall pixels
   int oldCCT = Bus::getCCT(); // store original CCT value (since it is global)
+  // using lambda functionn moves if statement out of loop
+  // this is used to apply gamma correction if enabled and not disabled in realtime mode
+  auto applyGamma = gammaCorrectCol && !(realtimeMode && arlsDisableGammaCorrection) ? [](uint32_t c){return gamma32(c);} : [](uint32_t c){return c;}; // use gamma correction if not disabled
   // when cctFromRgb is true we implicitly calculate WW and CW from RGB values (cct==-1)
   if (cctFromRgb) BusManager::setSegmentCCT(-1);
   for (size_t i = 0; i < totalLen; i++) {
@@ -1666,7 +1672,7 @@ void WS2812FX::show() {
     if (_pixelCCT) { // cctFromRgb already exluded at allocation
       if (i == 0 || _pixelCCT[i-1] != _pixelCCT[i]) BusManager::setSegmentCCT(_pixelCCT[i], correctWB);
     }
-    BusManager::setPixelColor(getMappedPixelIndex(i), realtimeMode && arlsDisableGammaCorrection ? _pixels[i] : gamma32(_pixels[i]));
+    BusManager::setPixelColor(getMappedPixelIndex(i), applyGamma(_pixels[i]));
   }
   Bus::setCCT(oldCCT);  // restore old CCT for ABL adjustments
 

@@ -574,41 +574,45 @@ uint8_t NeoGammaWLEDMethod::gammaT_inv[256];
 void NeoGammaWLEDMethod::calcGammaTable(float gamma)
 {
   float gamma_inv = 1.0f / gamma; // inverse gamma
-  for (size_t i = 0; i < 256; i++) {
-    gammaT[i] = (int)(powf((float)i / 255.0f, gamma) * 255.0f + 0.5f);
-    gammaT_inv[i] = (int)(powf((float)i / 255.0f, gamma_inv) * 255.0f + 0.5f);
+  for (size_t i = 1; i < 255; i++) {
+    gammaT[i]     = (int)(powf((float)i / 255.0f, gamma) * 255.0f + 0.5f);
+    gammaT_inv[i] = (int)(powf(((float)i - 0.5f) / 255.0f, gamma_inv) * 255.0f);
   }
-}
-
-uint8_t IRAM_ATTR NeoGammaWLEDMethod::Correct(uint8_t value)
-{
-  if (gammaCorrectCol) return gammaT[value];
-  return value;
+  gammaT[0]     = 0; // gammaT[0] is always 0
+  gammaT_inv[0] = 0; // gammaT_inv[0] is always 0
+  gammaT[255]     = 255; // gammaT[255] is always 255
+  gammaT_inv[255] = 255; // gammaT_inv[255] is always 255
+  #ifdef WLED_DEBUG
+  DEBUG_PRINT(F("Gamma table:"));
+  for (unsigned i=0; i<256; i++) {
+    if (!(i%16)) DEBUG_PRINTLN();
+    DEBUG_PRINTF_P(PSTR("%4d,"), gammaT[i]);
+  }
+  DEBUG_PRINTLN();
+  DEBUG_PRINT(F("Inverse gamma table:"));
+  for (unsigned i=0; i<256; i++) {
+    if (!(i%16)) DEBUG_PRINTLN();
+    DEBUG_PRINTF_P(PSTR("%4d,"), gammaT_inv[i]);
+  }
+  DEBUG_PRINTLN();
+  #endif
 }
 
 // used for color gamma correction
 uint32_t IRAM_ATTR NeoGammaWLEDMethod::Correct32(uint32_t color)
 {
-  if (gammaCorrectCol) {
-    uint8_t w = W(color);
-    uint8_t r = R(color);
-    uint8_t g = G(color);
-    uint8_t b = B(color);
-    color = RGBW32(gammaT[r], gammaT[g], gammaT[b], gammaT[w]);
-  }
-  return color;
-}
-
-uint32_t IRAM_ATTR NeoGammaWLEDMethod::inverseGamma32(uint32_t color)
-{
-  if (!gammaCorrectCol) return color;
   uint8_t w = W(color);
   uint8_t r = R(color);
   uint8_t g = G(color);
   uint8_t b = B(color);
-  w = gammaT_inv[w];
-  r = gammaT_inv[r];
-  g = gammaT_inv[g];
-  b = gammaT_inv[b];
-  return RGBW32(r, g, b, w);
+  return RGBW32(gammaT[r], gammaT[g], gammaT[b], gammaT[w]);
+}
+
+uint32_t IRAM_ATTR NeoGammaWLEDMethod::inverseGamma32(uint32_t color)
+{
+  uint8_t w = W(color);
+  uint8_t r = R(color);
+  uint8_t g = G(color);
+  uint8_t b = B(color);
+  return RGBW32(gammaT_inv[r], gammaT_inv[g], gammaT_inv[b], gammaT_inv[w]);
 }
