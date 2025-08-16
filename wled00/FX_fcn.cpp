@@ -270,6 +270,7 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
       _t->_oldSegment = new(std::nothrow) Segment(*this); // store/copy current segment settings
       _t->_start = millis();                              // restart countdown
       _t->_dur   = dur;
+      _t->_prevPaletteBlends = 0;                         // reset previous palette blends
       if (_t->_oldSegment) {
         _t->_oldSegment->palette = _t->_palette;          // restore original palette and colors (from start of transition)
         for (unsigned i = 0; i < NUM_COLORS; i++) _t->_oldSegment->colors[i] = _t->_colors[i];
