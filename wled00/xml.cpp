@@ -36,6 +36,21 @@ static void extractPin(Print& settingsScript, const JsonObject &obj, const char 
   }
 }
 
+void fillWLEDVersion(char *buf, size_t len) {
+  if (!buf || len == 0) return;
+
+  snprintf_P(buf,len,PSTR("WLED %s (%d)<br>\\\"%s\\\"<br>(CPU: %s)"),
+    versionString,
+    build,
+    releaseString,
+  #if defined(ARDUINO_ARCH_ESP32)
+    ESP.getChipModel()
+  #else
+    "ESP8266"
+  #endif
+  );
+}
+
 // print used pins by scanning JsonObject (1 level deep)
 static void fillUMPins(Print& settingsScript, const JsonObject &mods)
 {
@@ -596,7 +611,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormCheckbox(settingsScript,PSTR("AO"),aOtaEnabled);
     printSetFormCheckbox(settingsScript,PSTR("SU"),otaSameSubnet);
     char tmp_buf[128];
-    snprintf_P(tmp_buf,sizeof(tmp_buf),PSTR("WLED %s (build %d)"),versionString,build);
+    fillWLEDVersion(tmp_buf,sizeof(tmp_buf));
     printSetClassElementHTML(settingsScript,PSTR("sip"),0,tmp_buf);
     settingsScript.printf_P(PSTR("sd=\"%s\";"), serverDescription);
     //hide settings if not compiled
@@ -658,16 +673,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
   if (subPage == SUBPAGE_UPDATE) // update
   {
     char tmp_buf[128];
-    snprintf_P(tmp_buf,sizeof(tmp_buf),PSTR("WLED %s<br>%s<br>(%s build %d)"),
-      versionString,
-      releaseString,
-    #if defined(ARDUINO_ARCH_ESP32)
-      ESP.getChipModel(),
-    #else
-      "esp8266",
-    #endif
-      build);
-
+    fillWLEDVersion(tmp_buf,sizeof(tmp_buf));
     printSetClassElementHTML(settingsScript,PSTR("sip"),0,tmp_buf);
     #ifndef ARDUINO_ARCH_ESP32
     settingsScript.print(F("toggle('rev');"));  // hide revert button on ESP8266
