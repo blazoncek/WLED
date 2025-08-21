@@ -256,11 +256,12 @@ void WLED::loop()
     int dram32_free = heap_caps_get_free_size(MALLOC_CAP_32BIT|MALLOC_CAP_INTERNAL) - getFreeHeapSize();
     DEBUG_PRINTF_P(PSTR("Free 32bit-heap: %d\n"), dram32_free);
     #endif
-    #if defined(ARDUINO_ARCH_ESP32)
+    #ifdef BOARD_HAS_PSRAM
     if (psramFound()) {
       DEBUG_PRINTF_P(PSTR("PSRAM: %dkB/%dkB\n"), ESP.getFreePsram()/1024, ESP.getPsramSize()/1024);
-      if (!psramSafe) DEBUG_PRINTLN(F("Not using PSRAM."));
     }
+    #endif
+    #if defined(ARDUINO_ARCH_ESP32)
     DEBUG_PRINTF_P(PSTR("TX power: %d/%d\n"), WiFi.getTxPower(), txPower);
     #endif
     DEBUG_PRINTF_P(PSTR("WiFi: state:%d clnt: %d conn:%d, ch:%d, BSSID:%s, mode:%d, scan:%d @ %lus -> %lus\n"),
@@ -386,14 +387,13 @@ void WLED::setup()
 #endif
   DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 
-#if defined(ARDUINO_ARCH_ESP32)
-  if (psramFound() && !psramSafe) DEBUG_PRINTLN(F("Not using PSRAM."));
-  pDoc = new PSRAMDynamicJsonDocument((psramSafe && psramFound() ? 2 : 1)*JSON_BUFFER_SIZE);
-  DEBUG_PRINTF_P(PSTR("JSON buffer allocated: %u\n"), (psramSafe && psramFound() ? 2 : 1)*JSON_BUFFER_SIZE);
+#ifdef BOARD_HAS_PSRAM
+  pDoc = new PSRAMDynamicJsonDocument((psramFound() ? 2 : 1)*JSON_BUFFER_SIZE);
+  DEBUG_PRINTF_P(PSTR("JSON buffer allocated: %u\n"), (psramFound() ? 2 : 1)*JSON_BUFFER_SIZE);
   // if the above fails requestJsonBufferLock() will always return false preventing crashes
-  if (psramFound()) {
-    DEBUG_PRINTF_P(PSTR("PSRAM: %dkB/%dkB\n"), ESP.getFreePsram()/1024, ESP.getPsramSize()/1024);
-  }
+  DEBUG_PRINTF_P(PSTR("PSRAM: %dkB/%dkB\n"), ESP.getFreePsram()/1024, ESP.getPsramSize()/1024);
+#else
+  pDoc = &gDoc;
 #endif
 
 #ifdef ESP8266

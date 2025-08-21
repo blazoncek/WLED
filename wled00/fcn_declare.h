@@ -401,30 +401,27 @@ uint32_t hw_random(uint32_t lowerlimit, uint32_t upperlimit);
 //template <typename T> T hw_random(T lowerlimit, T upperlimit) { return static_cast<T>(hw_random((uint32_t)lowerlimit, (uint32_t)upperlimit)); }
 
 // memory allocation wrappers
-#if defined(ARDUINO_ARCH_ESP32) && !defined(ARDUINO_ARCH_ESP32C3)
 extern "C" {
+  #if defined(BOARD_HAS_PSRAM)
   void *p_malloc(size_t);           // prefer PSRAM over DRAM
   void *p_calloc(size_t, size_t);   // prefer PSRAM over DRAM
   void *p_realloc(void *, size_t);  // prefer PSRAM over DRAM
   inline void p_free(void *ptr) { heap_caps_free(ptr); }
+  #else
+  #define p_malloc d_malloc
+  #define p_calloc d_calloc
+  #define p_realloc d_realloc
+  #define p_free d_free
+  #endif
   void *d_malloc(size_t);           // prefer DRAM over PSRAM
   void *d_calloc(size_t, size_t);   // prefer DRAM over PSRAM
   void *d_realloc(void *, size_t);  // prefer DRAM over PSRAM
+  #ifdef ESP8266
+  inline void d_free(void *ptr) { free(ptr); }
+  #else
   inline void d_free(void *ptr) { heap_caps_free(ptr); }
+  #endif
 }
-#else
-#define p_malloc d_malloc
-#define p_calloc d_calloc
-#define p_realloc d_realloc
-#define p_free d_free
-#define d_malloc malloc
-#define d_calloc calloc
-//#define d_realloc realloc
-#define d_free free
-extern "C" {
-  void *d_realloc(void *, size_t); // implement free + malloc to be consistent with ESP32
-}
-#endif
 #ifndef ESP8266
 inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
 inline size_t getContiguousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest contiguous free block

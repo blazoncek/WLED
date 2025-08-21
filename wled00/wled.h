@@ -181,7 +181,6 @@
 // There is a code that will still not use PSRAM though:
 //    AsyncJsonResponse is a derived class that implements DynamicJsonDocument (AsyncJson-v6.h)
 #if defined(ARDUINO_ARCH_ESP32)
-extern bool psramSafe;
 struct PSRAM_Allocator {
   static inline void* allocate(size_t size)                  { return p_malloc(size); }
   static inline void* reallocate(void* ptr, size_t new_size) { return p_realloc(ptr, new_size); }
@@ -857,14 +856,6 @@ WLED_GLOBAL byte optionType;
 WLED_GLOBAL bool doSerializeConfig _INIT(false);        // flag to initiate saving of config
 WLED_GLOBAL bool doReboot          _INIT(false);        // flag to initiate reboot from async handlers
 
-#if defined(ESP8266) || defined(CONFIG_IDF_TARGET_ESP32C3) || (defined(CONFIG_IDF_TARGET_ESP32) && !defined(BOARD_HAS_PSRAM))
-// BOARD_HAS_PSRAM also means that a compiler flag "-mfix-esp32-psram-cache-issue" was used for ESP32 and so PSRAM is safe to use on rev.1 ESP32
-// if the flag is not used it will cause crashes on ESP32 rev.1 boards
-WLED_GLOBAL bool psramSafe         _INIT(false);        // is it safe to use PSRAM (on ESP32 rev.1; compiler fix used "-mfix-esp32-psram-cache-issue")
-#else
-WLED_GLOBAL bool psramSafe         _INIT(true);         // is it safe to use PSRAM (on ESP32 rev.1; compiler fix used "-mfix-esp32-psram-cache-issue")
-#endif
-
 // status led
 #if defined(STATUSLED)
 WLED_GLOBAL unsigned long ledStatusLastMillis _INIT(0);
@@ -937,12 +928,13 @@ WLED_GLOBAL int8_t spi_sclk  _INIT(SPISCLKPIN);
 #endif
 
 // global ArduinoJson buffer
-#if defined(ARDUINO_ARCH_ESP32)
+// we will allocate buffer in PSRAM if possible from setup() otherwise we will use heap
 WLED_GLOBAL JsonDocument *pDoc _INIT(nullptr);
-WLED_GLOBAL SemaphoreHandle_t jsonBufferLockMutex _INIT(xSemaphoreCreateRecursiveMutex());
-#else
+#ifndef BOARD_HAS_PSRAM
 WLED_GLOBAL StaticJsonDocument<JSON_BUFFER_SIZE> gDoc;
-WLED_GLOBAL JsonDocument *pDoc _INIT(&gDoc);
+#endif
+#if defined(ARDUINO_ARCH_ESP32)
+WLED_GLOBAL SemaphoreHandle_t jsonBufferLockMutex _INIT(xSemaphoreCreateRecursiveMutex());
 #endif
 WLED_GLOBAL volatile uint8_t jsonBufferLock _INIT(0);
 
