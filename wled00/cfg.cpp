@@ -935,7 +935,6 @@ void serializeConfig() {
 
   JsonArray hw_led_ins = hw_led.createNestedArray("ins");
 
-  //for (size_t s = 0; s < BusManager::getNumBusses(); s++) {
   size_t s = 0;
   for (const auto &bus : BusManager::busses) {
     DEBUG_PRINTF_P(PSTR("Cfg: Saving bus #%u\n"), s++);
@@ -971,7 +970,7 @@ void serializeConfig() {
 
   JsonArray hw_com = hw.createNestedArray(F("com"));
   const ColorOrderMap& com = BusManager::getColorOrderMap();
-  for (size_t s = 0; s < com.count(); s++) {
+  for (s = 0; s < com.count(); s++) {
     const ColorOrderMapEntry *entry = com.get(s);
     if (!entry || !entry->len) break;
     JsonObject co = hw_com.createNestedObject();
