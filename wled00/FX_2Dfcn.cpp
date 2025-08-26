@@ -36,7 +36,7 @@ void WS2812FX::setUpMatrix() {
 
     // safety check
     if (Segment::maxWidth * Segment::maxHeight > MAX_LEDS || Segment::maxWidth > 255 || Segment::maxHeight > 255 || Segment::maxWidth <= 1 || Segment::maxHeight <= 1) {
-      DEBUGFX_PRINTLN(F("2D Bounds error."));
+      DEBUG_PRINTLN(F("2D Bounds error."));
       isMatrix = false;
       Segment::maxWidth = _length;
       Segment::maxHeight = 1;
@@ -51,13 +51,13 @@ void WS2812FX::setUpMatrix() {
 
     customMappingSize = 0; // prevent use of mapping if anything goes wrong
 
-    DEBUGFX_PRINTLN(F("Creating 2D ledmap"));
+    DEBUG_PRINTLN(F("Creating 2D ledmap"));
     p_free(customMappingTable);
     customMappingTable = static_cast<uint16_t*>(p_malloc(sizeof(uint16_t)*getLengthTotal()));
 
     if (customMappingTable) {
       customMappingSize = getLengthTotal();
-      DEBUGFX_PRINTF_P(PSTR("ledmap allocated: %uB @ %p\n"), customMappingSize * sizeof(uint16_t), customMappingTable);
+      DEBUG_PRINTF_P(PSTR("ledmap allocated: %uB @ %p\n"), customMappingSize * sizeof(uint16_t), customMappingTable);
 
       // fill with empty in case we don't fill the entire matrix
       unsigned matrixSize = Segment::maxWidth * Segment::maxHeight; // less or equal to getLengthTotal()
@@ -76,8 +76,8 @@ void WS2812FX::setUpMatrix() {
       int8_t *gapTable = nullptr;
 
       if (isFile && requestJSONBufferLock(20)) {
-        DEBUGFX_PRINT(F("Reading LED gap from "));
-        DEBUGFX_PRINTLN(fileName);
+        DEBUG_PRINT(F("Reading LED gap from "));
+        DEBUG_PRINTLN(fileName);
         // read the array into global JSON buffer
         if (readObjectFromFile(fileName, nullptr, pDoc)) {
           // the array is similar to ledmap, except it has only 3 values:
@@ -93,7 +93,7 @@ void WS2812FX::setUpMatrix() {
             }
           }
         }
-        DEBUGFX_PRINTLN(F("Gaps loaded."));
+        DEBUG_PRINTLN(F("Gaps loaded."));
         releaseJSONBufferLock();
       }
 
@@ -117,16 +117,15 @@ void WS2812FX::setUpMatrix() {
       p_free(gapTable);
       resume();
 
-      #ifdef WLED_DEBUG_FX
-      DEBUGFX_PRINT(F("Matrix ledmap:"));
-      for (unsigned i=0; i<customMappingSize; i++) {
-        if (!(i%Segment::maxWidth)) DEBUGFX_PRINTLN();
-        DEBUGFX_PRINTF_P(PSTR("%4d,"), customMappingTable[i]);
+      #ifdef WLED_DEBUG
+      DEBUG_PRINT(F("Matrix ledmap:"));
+      for (unsigned i = 0; i < customMappingSize; i++) {
+        DEBUG_PRINTF_P(PSTR("%4d,%c"), (int)(int16_t)customMappingTable[i], i%Segment::maxWidth ? ' ' : '\n');
       }
-      DEBUGFX_PRINTLN();
+      DEBUG_PRINTLN();
       #endif
     } else { // memory allocation error
-      DEBUGFX_PRINTLN(F("ERROR 2D LED map allocation error."));
+      DEBUG_PRINTLN(F("ERROR 2D LED map allocation error."));
       isMatrix = false;
       panel.clear();
       Segment::maxWidth = _length;

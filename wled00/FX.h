@@ -860,21 +860,19 @@ class WS2812FX {
     inline uint8_t getModeCount() const     { return _modeCount; }        // returns number of registered modes/effects
 
     uint16_t getLengthPhysical() const;
-    uint16_t getLengthTotal() const; // will include virtual/nonexistent pixels in matrix
+    uint16_t getLengthTotal() const;                                      // will include virtual/nonexistent pixels in matrix
+    uint16_t getMappedPixelIndex(uint16_t index) const;                   // convert logical address to physical
 
     inline uint16_t getFps() const          { return (millis() - _lastShow > 2000) ? 0 : _cumulativeFps; } // Returns the refresh rate of the LED strip
     inline uint16_t getFrameTime() const    { return _frametime; }        // returns amount of time a frame should take (in ms)
     inline uint16_t getMinShowDelay() const { return MIN_SHOW_DELAY; }    // returns minimum amount of time strip.service() can be delayed (constant)
     inline uint16_t getLength() const       { return _length; }           // returns actual amount of LEDs on a strip (2D matrix may have less LEDs than W*H)
     inline uint16_t getTransition() const   { return _transitionDur; }    // returns currently set transition time (in ms)
-    inline uint16_t getMappedPixelIndex(uint16_t index) const {           // convert logical address to physical
-      if (index < customMappingSize && (realtimeMode == REALTIME_MODE_INACTIVE || realtimeRespectLedMaps)) index = customMappingTable[index];
-      return index;
-    };
 
     unsigned long now, timebase;
-    inline uint32_t getPixelColor(unsigned n) const { return (n < getLengthTotal()) ? _pixels[n] : 0; } // returns color of pixel n
-    inline uint32_t getLastShow() const             { return _lastShow; }                 // returns millis() timestamp of last strip.show() call
+    inline uint32_t getPixelColor(uint16_t n) const     { return (getMappedPixelIndex(n) < getLengthTotal()) ? _pixels[n] : 0; } // returns color of pixel n, excluding mapped out pixels
+    inline uint32_t getRawPixelColor(uint16_t n) const  { return (n < getLengthTotal()) ? _pixels[n] : 0; } // returns color of virtual pixel n
+    inline uint32_t getLastShow() const                 { return _lastShow; }             // returns millis() timestamp of last strip.show() call
 
     const char *getModeData(unsigned id = 0) const  { return (id && id < _modeCount) ? _modeData[id] : PSTR("Solid"); }
     inline const char **getModeDataSrc()            { return &(_modeData[0]); }           // vectors use arrays for underlying data

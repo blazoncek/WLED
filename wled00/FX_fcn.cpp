@@ -1697,6 +1697,12 @@ void WS2812FX::show() {
   }
 }
 
+// convert logical address to physical
+uint16_t WS2812FX::getMappedPixelIndex(uint16_t index) const {
+  if (index < customMappingSize && (realtimeMode == REALTIME_MODE_INACTIVE || realtimeRespectLedMaps)) index = customMappingTable[index];
+  return index;
+};
+
 void WS2812FX::setRealtimePixelColor(unsigned i, uint32_t c) {
   if (useMainSegmentOnly) {
     const Segment &seg = getMainSegment();
@@ -2058,58 +2064,93 @@ bool WS2812FX::deserializeMap(unsigned n) {
   waitForIt();
 
   JsonObject root = pDoc->as<JsonObject>();
+  #ifndef WLED_DISABLE_2D
   // if we are loading default ledmap (at boot) set matrix width and height from the ledmap (compatible with WLED MM ledmaps)
   if (n == 0 && (!root[F("width")].isNull() || !root[F("height")].isNull())) {
     Segment::maxWidth  = min(max(root[F("width")].as<int>(), 1), 255);
     Segment::maxHeight = min(max(root[F("height")].as<int>(), 1), 255);
     isMatrix = true;
   }
+  #endif
 
   p_free(customMappingTable);
   customMappingTable = static_cast<uint16_t*>(p_malloc(sizeof(uint16_t)*getLengthTotal()));
 
   if (customMappingTable) {
+    // initialize mapping table with invalid entries (2D part)
+    size_t minMappingSize = min(Segment::maxWidth * Segment::maxHeight, (int)getLengthTotal());
+    for (size_t i = 0; i < minMappingSize; i++) customMappingTable[i] = isMatrix ? 0xFFFF : i;
+    // pre-fill with direct mapping (1D part)
+    for (size_t i = minMappingSize; i < getLengthTotal(); i++) customMappingTable[i] = i;
+
     DEBUG_PRINTF_P(PSTR("ledmap allocated: %uB @ %p\n"), sizeof(uint16_t)*getLengthTotal(), customMappingTable);
     File f = WLED_FS.open(fileName, "r");
-    f.find("\"map\":[");
+    if (!f.find("\"map\":[")) { // stops after the '[' of "map":[...
+      DEBUG_PRINTF_P(PSTR("ERROR Invalid ledmap in %s: no map found\n"), fileName);
+      p_free(customMappingTable);
+      customMappingTable = nullptr;
+      f.close();
+      resume();
+      releaseJSONBufferLock();
+      return false;
+    }
+
+    #ifndef WLED_DISABLE_2D
+    int arrPos = f.position();  // remember position after "map":[
+    bool read2D = f.find('[');  // we found the beginning of the first 2D entry "map":[[x,y],...
+    f.seek(arrPos);             // go back to beginning of array
+    if (isMatrix && read2D) {
+      auto XY = [](unsigned x, unsigned y) { return (y * Segment::maxWidth) + x; };
+      int index = 0;
+      while (f.available()) {
+        String strRead = f.readStringUntil(']'); // will not include the closing bracket
+        #ifdef WLED_DEBUG
+        strRead.trim();           // remove whitespace for debug output
+        strRead.replace("\n",""); // remove newlines for debug output
+        strRead.replace("\r",""); // remove carriage returns for debug output
+        strRead.replace("\t",""); // replace tabs with spaces for debug output
+        #endif
+        strRead += ']';           // add closing bracket that was stripped by readStringUntil()
+        // process nested array as XY coordinate of a pixel with currently running index
+        // we can do it the hard way by manually parsing "[","," and "]" and numbers in between but ArduinoJson makes it easy and we'll borrow its parser
+        StaticJsonDocument<64> arrCoord;
+        DeserializationError err = deserializeJson(arrCoord, strRead);  // strRead is supposed to contain "[xxx,yyy]" with spaces allowed
+        if (err == DeserializationError::Ok) {
+          JsonArray entry = arrCoord.as<JsonArray>();
+          unsigned x = max(min(entry[0].as<int>(), Segment::maxWidth-1), 0);  // constrain to valid range (disallow negative values)
+          unsigned y = max(min(entry[1].as<int>(), Segment::maxHeight-1), 0); // constrain to valid range (disallow negative values)
+          DEBUG_PRINTF_P(PSTR("%d -> [%u,%u] (%s)\n"), index, x, y, strRead.c_str());
+          customMappingTable[XY(x,y)] = index;
+        } else {
+          DEBUG_PRINTF_P(PSTR("ERROR Invalid XY coordinate in %s: %s\n"), fileName, strRead.c_str());
+          int pos = strRead.toInt();
+          if (pos < 0 || pos > 16384) pos = 0xFFFF;
+          customMappingTable[index] = pos; // fallback to direct mapping
+        }
+        index++;      // always increase index for 2D entries
+        if (index >= getLengthTotal()) break;
+        f.find(',');  // skip to next entry
+      }
+      customMappingSize = getLengthTotal();
+    } else
+    #endif
     while (f.available()) { // f.position() < f.size() - 1
-      char number[32];
-      size_t numRead = f.readBytesUntil(',', number, sizeof(number)-1); // read a single number (may include array terminating "]" but not number separator ',')
-      number[numRead] = 0;
-      if (numRead > 0) {
-        char *end = strchr(number,']'); // we encountered end of array so stop processing if no digit found
-        bool foundDigit = (end == nullptr);
-        int i = 0;
-        if (end != nullptr) do {
-          if (number[i] >= '0' && number[i] <= '9') foundDigit = true;
-          if (foundDigit || &number[i++] == end) break;
-        } while (i < 32);
-        if (!foundDigit) break;
-        int index = atoi(number);
-        if (index < 0 || index > 16384) index = 0xFFFF;
-        customMappingTable[customMappingSize++] = index;
-        if (customMappingSize > getLengthTotal()) break;
-      } else break; // there was nothing to read, stop
+      String strRead = f.readStringUntil(','); // read a single number (may include array terminating "]" but not number separator ',')
+      int index = strRead.toInt();
+      if (index < 0 || index > 16384) index = 0xFFFF;
+      customMappingTable[customMappingSize++] = index;
+      if (customMappingSize >= getLengthTotal() || strRead.indexOf(']') >= 0) break;
     }
     currentLedmap = n;
     f.close();
 
     #ifdef WLED_DEBUG
     DEBUG_PRINT(F("Loaded ledmap:"));
-    for (unsigned i=0; i<customMappingSize; i++) {
-      if (!(i%Segment::maxWidth)) DEBUG_PRINTLN();
-      DEBUG_PRINTF_P(PSTR("%4d,"), customMappingTable[i]);
+    for (unsigned i = 0; i < customMappingSize; i++) {
+      DEBUG_PRINTF_P(PSTR("%4d,%c"), (int)(int16_t)customMappingTable[i], i%Segment::maxWidth ? ' ' : '\n');
     }
     DEBUG_PRINTLN();
     #endif
-/*
-    JsonArray map = root[F("map")];
-    if (!map.isNull() && map.size()) {  // not an empty map
-      customMappingSize = min((unsigned)map.size(), (unsigned)getLengthTotal());
-      for (unsigned i=0; i<customMappingSize; i++) customMappingTable[i] = (uint16_t) (map[i]<0 ? 0xFFFFU : map[i]);
-      currentLedmap = n;
-    }
-*/
   } else {
     DEBUG_PRINTLN(F("ERROR LED map allocation error."));
   }
