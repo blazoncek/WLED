@@ -611,13 +611,21 @@
 // Defaults pins, type and counts to configure LED output
 #if defined(ESP8266) || defined(CONFIG_IDF_TARGET_ESP32C3)
   #ifdef WLED_ENABLE_DMX
-    #define DEFAULT_LED_PIN 1
+    #define DEFAULT_LED_PIN 1   // may be used on some Ethernet boards, a better and still safe GPIO might be 3; but this is ESP8266 or C3 configuration
     #warning "Compiling with DMX. The default LED pin has been changed to pin 1."
   #else
-    #define DEFAULT_LED_PIN 2    // GPIO2 (D4) on Wemos D1 mini compatible boards, safe to use on any board
+    #define DEFAULT_LED_PIN 2   // GPIO2 (D4) on Wemos D1 mini compatible boards, safe to use on any board
   #endif
 #else
-  #define DEFAULT_LED_PIN 16   // aligns with GPIO2 (D4) on Wemos D1 mini32 compatible boards (if it is unusable it will be reassigned in WS2812FX::finalizeInit())
+  #ifdef WLED_USE_ETHERNET
+    #ifdef WLED_ENABLE_DMX
+      #define DEFAULT_LED_PIN 3 // safe to use on any board
+    #else
+      #define DEFAULT_LED_PIN 2 // safe to use on any board
+    #endif
+  #else
+    #define DEFAULT_LED_PIN 16  // aligns with GPIO2 (D4) on Wemos D1 mini32 compatible boards (if it is unusable it will be reassigned in WS2812FX::finalizeInit())
+  #endif
 #endif
 #define DEFAULT_LED_TYPE TYPE_WS2812_RGB
 #define DEFAULT_LED_COUNT 30
