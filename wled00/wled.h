@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2508010
+#define VERSION 2508280
 #else
 #define VERSION BUILD
 #endif
@@ -156,7 +156,7 @@
 
 #include "src/dependencies/e131/ESPAsyncE131.h"
 #ifndef WLED_DISABLE_MQTT
-#include "src/dependencies/async-mqtt-client/AsyncMqttClient.h"
+#include <AsyncMqttClient.h>
 #endif
 
 #define ARDUINOJSON_DECODE_UNICODE 0
