@@ -771,7 +771,6 @@ class WS2812FX {
       _callback(nullptr),
       customMappingTable(nullptr),
       customMappingSize(0),
-      _milliAmpsTotal(0),
       _lastShow(0)
     {
       _mode.reserve(_modeCount);     // allocate memory to prevent initial fragmentation (does not increase size())
@@ -966,12 +965,9 @@ class WS2812FX {
     uint16_t* customMappingTable;
     uint16_t  customMappingSize;
 
-    uint16_t _milliAmpsTotal;
-
     unsigned long _lastShow;
 
     void applySegmentGeometryUpdates(); // applies segment geometry updates (if any) to all segments
-    uint8_t estimateCurrentAndLimitBri(uint8_t brightness); // estimates current and limit brightness based on milliAmps consumption
 
     friend class Segment;
 };

@@ -123,6 +123,7 @@ class Bus {
     virtual void     setPixelColor(unsigned pix, uint32_t c)    = 0;
     virtual void     setBrightness(uint8_t b)                   { _bri = b; };
     virtual void     setColorOrder(uint8_t co)                  {}
+    virtual uint8_t  getBrightness() const                      { return _bri; }
     virtual uint32_t getPixelColor(unsigned pix) const          { return 0; }
     virtual size_t   getPins(uint8_t* pinArray = nullptr) const { return 0; }
     virtual uint16_t getLength() const                          { return isOk() ? _len : 0; }
@@ -238,7 +239,6 @@ class BusDigital : public Bus {
 
     void show() override;
     bool canShow() const override;
-    void setBrightness(uint8_t b) override;
     void setStatusPixel(uint32_t c) override;
     [[gnu::hot]] void setPixelColor(unsigned pix, uint32_t c) override;
     void setColorOrder(uint8_t colorOrder) override;
@@ -251,12 +251,19 @@ class BusDigital : public Bus {
     uint16_t getUsedCurrent() const override { return _milliAmpsTotal; }
     uint16_t getMaxCurrent() const override  { return _milliAmpsMax; }
     size_t   getBusSize() const override;
+
+    inline void setCurrentLimit(uint16_t milliAmps) { _milliAmpsLimit = milliAmps; DEBUGBUS_PRINTF_P(PSTR("Bus: Set current limit to %d mA\n"), (int)milliAmps); }
+    inline void addPixelCurrent(int sum)            { _busPowerSum += sum; }
+    inline void clearPixelsCurrent()                { _busPowerSum = 0; }
+
     void begin() override;
     void cleanup();
 
     static std::vector<LEDType> getLEDTypes();
 
   private:
+    void    *_busPtr;
+    uint32_t _busPowerSum;
     uint8_t  _skip;
     uint8_t  _colorOrder;
     uint8_t  _pins[2];
@@ -264,7 +271,7 @@ class BusDigital : public Bus {
     uint16_t _frequencykHz;
     uint8_t  _milliAmpsPerLed;
     uint16_t _milliAmpsMax;
-    void    *_busPtr;
+    uint16_t _milliAmpsLimit;
 
     static uint16_t _milliAmpsTotal; // is overwitten/recalculated on each show()
 
@@ -273,13 +280,13 @@ class BusDigital : public Bus {
         uint8_t* chan = (uint8_t*) &c;
         for (uint_fast8_t i=0; i<4; i++) {
           uint_fast16_t val = chan[i];
-          chan[i] = ((val << 8) + restoreBri) / (restoreBri + 1); //adding _bri slightly improves recovery / stops degradation on re-scale
+          chan[i] = ((val << 8) + restoreBri) / (restoreBri + 1); // adding restoreBri slightly improves recovery / stops degradation on re-scale
         }
       }
       return c;
     }
 
-    uint8_t  estimateCurrentAndLimitBri() const;
+    void estimateCurrentAndLimitBri();
 };
 
 
@@ -448,6 +455,7 @@ namespace BusManager {
 
   size_t          memUsage();
   inline uint16_t currentMilliamps()     { return _gMilliAmpsUsed; }
+  void            initializeABL(unsigned gMilliAmpsMax);  // setup per output ABL parameters, call once after buses are initialized
 
   void useParallelOutput(); // workaround for inaccessible PolyBus
   bool hasParallelOutput(); // workaround for inaccessible PolyBus

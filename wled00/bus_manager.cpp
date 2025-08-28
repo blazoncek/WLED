@@ -27,6 +27,7 @@ extern bool cctICused;
 extern bool useParallelI2S;
 
 //colors.cpp
+uint32_t color_fade(uint32_t c, uint8_t bri, bool video = false);
 uint32_t colorBalanceFromKelvin(uint16_t kelvin, uint32_t rgb);
 
 //network.cpp
@@ -129,10 +130,12 @@ uint32_t Bus::autoWhiteCalc(uint32_t c) const {
 
 BusDigital::BusDigital(const BusConfig &bc, uint8_t nr)
 : Bus(bc.type, bc.start, bc.autoWhite, bc.count, bc.reversed, (bc.refreshReq || bc.type == TYPE_TM1814))
+, _busPowerSum(0)
 , _skip(bc.skipAmount) //sacrificial pixels
 , _colorOrder(bc.colorOrder)
 , _milliAmpsPerLed(bc.milliAmpsPerLed)
 , _milliAmpsMax(bc.milliAmpsMax)
+, _milliAmpsLimit(0)
 {
   DEBUGBUS_PRINTLN(F("Bus: Creating digital bus."));
   if (!isDigital(bc.type) || !bc.count) { DEBUGBUS_PRINTLN(F("Not digial or empty bus!")); return; }
@@ -181,92 +184,64 @@ BusDigital::BusDigital(const BusConfig &bc, uint8_t nr)
 //I am NOT to be held liable for burned down garages or houses!
 
 // To disable brightness limiter we either set output max current to 0 or single LED current to 0
-uint8_t BusDigital::estimateCurrentAndLimitBri() const {
-  bool useWackyWS2815PowerModel = false;
-  byte actualMilliampsPerLed = _milliAmpsPerLed;
+void BusDigital::estimateCurrentAndLimitBri() {
+  if (_milliAmpsLimit == 0) return;
 
-  // if _millAmpsMax is too low or mA/LED == 0 turn off calculation
-  if (_milliAmpsMax < MA_FOR_ESP/BusManager::getNumBusses() || actualMilliampsPerLed == 0) {
-    return _bri;
-  }
+  byte actualMilliampsPerLed = getLEDCurrent() == 255 ? 12 : getLEDCurrent(); // from testing an actual WS2815 strip
 
-  if (_milliAmpsPerLed == 255) {
-    useWackyWS2815PowerModel = true;
-    actualMilliampsPerLed = 12; // from testing an actual strip
-  }
-
-  unsigned powerBudget = (_milliAmpsMax - MA_FOR_ESP/BusManager::getNumBusses()); //80/120mA for ESP power
-  if (powerBudget > getLength()) { //each LED uses about 1mA in standby, exclude that from power budget
-    powerBudget -= getLength();
-  } else {
-    powerBudget = 0;
-  }
-
+  // WARNING: _busPowerSum is accumulated/summed in setPixelColor() calls (if not, use the following)
+  /*
+  bool useWackyWS2815PowerModel = getLEDCurrent() == 255;
   uint32_t busPowerSum = 0;
-  for (unsigned i = 0; i < getLength(); i++) {  //sum up the usage of each LED
-    uint32_t c = getPixelColor(i); // always returns original or restored color without brightness scaling
+  for (unsigned i = 0; i < getLength(); i++) {  // sum up the usage of each LED
+    uint32_t c = getPixelColor(i);
     byte r = R(c), g = G(c), b = B(c), w = W(c);
-
-    if (useWackyWS2815PowerModel) { //ignore white component on WS2815 power calculation
+    if (useWackyWS2815PowerModel) {             // ignore white component on WS2815 power calculation
       busPowerSum += (max(max(r,g),b)) * 3;
     } else {
       busPowerSum += (r + g + b + w);
     }
   }
+  _busPowerSum = busPowerSum;
+  */
 
-  if (hasWhite()) { //RGBW led total output with white LEDs enabled is still 50mA, so each channel uses less
-    busPowerSum *= 3;
-    busPowerSum >>= 2; //same as /= 4
+  if (hasWhite()) {     // RGBW led total output with white LEDs enabled is still 50mA, so each channel uses less
+    _busPowerSum *= 3;
+    _busPowerSum >>= 2; // same as /= 4
   }
 
-  // powerSum has all the values of channels summed (max would be getLength()*765 as white is excluded) so convert to milliAmps
-  BusDigital::_milliAmpsTotal = (busPowerSum * actualMilliampsPerLed * _bri) / (765*255);
+  // _busPowerSum has all the values of channels summed (max would be getLength()*765 as white is excluded) so convert to milliAmps
+  BusDigital::_milliAmpsTotal = (_busPowerSum * actualMilliampsPerLed) / 765 + getLength(); // each LED uses about 1mA in standby, exclude that from power budget
 
-  uint8_t newBri = _bri;
-  if (BusDigital::_milliAmpsTotal > powerBudget) {
-    //scale brightness down to stay in current limit
-    unsigned scaleB = powerBudget * 255 / BusDigital::_milliAmpsTotal;
-    newBri = (_bri * scaleB) / 256 + 1;
-    BusDigital::_milliAmpsTotal = powerBudget;
-    //_milliAmpsTotal = (busPowerSum * actualMilliampsPerLed * newBri) / (765*255);
+  if (BusDigital::_milliAmpsTotal > _milliAmpsLimit) {
+    // scale brightness down to stay in current limit
+    uint8_t scaleB = max(1, _milliAmpsLimit * 255 / BusDigital::_milliAmpsTotal);
+    //DEBUGBUS_PRINTF_P(PSTR("Bus: ABL reducing brightness from: %d to: %d\n"), (int)_bri, (int)((_bri * scaleB) >> 8));
+    uint8_t cctWW = 0, cctCW = 0;
+    unsigned hwLen = _len;
+    if (_type == TYPE_WS2812_1CH_X3) hwLen = NUM_ICS_WS2812_1CH_3X(_len); // only needs a third of "RGB" LEDs for NeoPixelBus
+    for (unsigned i = 0; i < hwLen; i++) {
+      // TODO: fix CCT handling
+      uint32_t c = color_fade(PolyBus::getPixelColor(_busPtr, _iType, i, 0), scaleB, true);
+      if (hasCCT()) Bus::calculateCCT(c, cctWW, cctCW); // this will unfortunately corrupt CCT data
+      PolyBus::setPixelColor(_busPtr, _iType, i, c, 0, (cctCW<<8) | cctWW); // repaint all pixels with new brightness
+    }
+    BusDigital::_milliAmpsTotal = _milliAmpsLimit;
   }
-  return newBri;
 }
 
 void BusDigital::show() {
   BusDigital::_milliAmpsTotal = 0;
   if (!_valid) return;
-
   // per-port ABL (will not work well with CCT LEDs)
-  uint8_t cctWW = 0, cctCW = 0;
-  unsigned newBri = estimateCurrentAndLimitBri();  // will fill _milliAmpsTotal (TODO: could use PolyBus::CalcTotalMilliAmpere())
-  if (newBri < _bri) {
-    PolyBus::setBrightness(_busPtr, _iType, newBri); // limit brightness to stay within current limits
-    unsigned hwLen = _len;
-    if (_type == TYPE_WS2812_1CH_X3) hwLen = NUM_ICS_WS2812_1CH_3X(_len); // only needs a third of "RGB" LEDs for NeoPixelBus
-    for (unsigned i = 0; i < hwLen; i++) {
-      // use 0 as color order, actual order does not matter here as we just update the channel values as-is
-      uint32_t c = restoreColorLossy(PolyBus::getPixelColor(_busPtr, _iType, i, 0), _bri);
-      if (hasCCT()) Bus::calculateCCT(c, cctWW, cctCW); // this will unfortunately corrupt (segment) CCT data on every bus
-      PolyBus::setPixelColor(_busPtr, _iType, i, c, 0, (cctCW<<8) | cctWW); // repaint all pixels with new brightness
-    }
-  }
+  estimateCurrentAndLimitBri();  // will also fill _milliAmpsTotal
   PolyBus::show(_busPtr, _iType, _skip); // faster if buffer consistency is not important (no skipped LEDs)
-  // restore bus brightness to its original value
-  // this is done right after show, so this is only OK if LED updates are completed before show() returns
-  // or async show has a separate buffer (ESP32 RMT and I2S are ok)
-  if (newBri < _bri) PolyBus::setBrightness(_busPtr, _iType, _bri);
+  clearPixelsCurrent(); // reset for next show
 }
 
 bool BusDigital::canShow() const {
   if (!_valid) return true;
   return PolyBus::canShow(_busPtr, _iType);
-}
-
-void BusDigital::setBrightness(uint8_t b) {
-  if (_bri == b) return;
-  Bus::setBrightness(b);
-  PolyBus::setBrightness(_busPtr, _iType, b);
 }
 
 //If LEDs are skipped, it is possible to use the first as a status LED.
@@ -282,13 +257,23 @@ void IRAM_ATTR BusDigital::setPixelColor(unsigned pix, uint32_t c) {
   if (!_valid) return;
   if (hasWhite()) c = autoWhiteCalc(c);
   if (Bus::_cct >= 1900) c = colorBalanceFromKelvin(Bus::_cct, c); //color correction from CCT
+  c = color_fade(c, _bri, true);
+
+  // pre-calcualte power usage for per-output ABL (a single bus should never have over 2000 LEDs so uint32_t is enough for _busPowerSum)
+  // WARNING: assumes pixel is not modified agin until show() is called
+  if (_milliAmpsLimit > 0) {
+    uint8_t r = R(c), g = G(c), b = B(c), w = W(c);
+    int sum = getLEDCurrent() == 255 ? (max(max(r,g),b)) * 3 : (r + g + b + w);
+    addPixelCurrent(sum);
+  }
+
   if (_reversed) pix = _len - pix -1;
   pix += _skip;
-  unsigned co = _colorOrderMap.getPixelColorOrder(pix+_start, _colorOrder);
+  const uint8_t co = _colorOrderMap.getPixelColorOrder(pix+_start, _colorOrder);
   if (_type == TYPE_WS2812_1CH_X3) { // map to correct IC, each controls 3 LEDs
     unsigned pOld = pix;
     pix = IC_INDEX_WS2812_1CH_3X(pix);
-    uint32_t cOld = restoreColorLossy(PolyBus::getPixelColor(_busPtr, _iType, pix, co),_bri);
+    const uint32_t cOld = PolyBus::getPixelColor(_busPtr, _iType, pix, co); // no need for restoreColorLossy, we just need to modify single channel
     switch (pOld % 3) { // change only the single channel (TODO: this can cause loss because of get/set)
       case 0: c = RGBW32(R(cOld), W(c)   , B(cOld), 0); break;
       case 1: c = RGBW32(W(c)   , G(cOld), B(cOld), 0); break;
@@ -305,13 +290,13 @@ void IRAM_ATTR BusDigital::setPixelColor(unsigned pix, uint32_t c) {
   PolyBus::setPixelColor(_busPtr, _iType, pix, c, co, wwcw);
 }
 
-// returns original color if global buffering is enabled, else returns lossly restored color from bus
+// returns lossly restored color from bus (it was scaled by _bri in setPixelColor)
 uint32_t IRAM_ATTR BusDigital::getPixelColor(unsigned pix) const {
   if (!_valid) return 0;
   if (_reversed) pix = _len - pix -1;
   pix += _skip;
-  const unsigned co = _colorOrderMap.getPixelColorOrder(pix+_start, _colorOrder);
-  uint32_t c = restoreColorLossy(PolyBus::getPixelColor(_busPtr, _iType, (_type==TYPE_WS2812_1CH_X3) ? IC_INDEX_WS2812_1CH_3X(pix) : pix, co),_bri);
+  const uint8_t co = _colorOrderMap.getPixelColorOrder(pix+_start, _colorOrder);
+  uint32_t c = restoreColorLossy(PolyBus::getPixelColor(_busPtr, _iType, (_type==TYPE_WS2812_1CH_X3) ? IC_INDEX_WS2812_1CH_3X(pix) : pix, co), _bri);
   if (_type == TYPE_WS2812_1CH_X3) { // map to correct IC, each controls 3 LEDs
     unsigned r = R(c);
     unsigned g = _reversed ? B(c) : G(c); // should G and B be switched if _reversed?
@@ -954,12 +939,12 @@ void BusManager::show() {
     bus->show();
     _gMilliAmpsUsed += bus->getUsedCurrent();
   }
+  //DEBUGBUS_PRINTF_P(PSTR("Bus: Total current used: %u mA\n"), (unsigned)_gMilliAmpsUsed);
 }
 
 void IRAM_ATTR BusManager::setPixelColor(unsigned pix, uint32_t c) {
   for (auto &bus : busses) {
-    if (!bus->containsPixel(pix)) continue;
-    bus->setPixelColor(pix - bus->getStart(), c);
+    if (bus->containsPixel(pix)) bus->setPixelColor(pix - bus->getStart(), c);
   }
 }
 
@@ -983,6 +968,38 @@ uint32_t BusManager::getPixelColor(unsigned pix) {
 bool BusManager::canAllShow() {
   for (const auto &bus : busses) if (!bus->canShow()) return false;
   return true;
+}
+
+// per bus ABL initialization (idea by @dedehai)
+// handles global ABL and per bus ABL
+// gMilliAmpsMax = global ABL limit (0 = no global ABL)
+// must be called after all busses have been added and configured
+void BusManager::initializeABL(unsigned gMilliAmpsMax) {
+  unsigned numABLbuses = 0;
+  unsigned totalDemand = 0;
+  for (const auto &bus : busses) {
+    if (bus->isOk() && bus->isDigital() && bus->getLEDCurrent() > 0) {
+      unsigned actualMilliampsPerLed = bus->getLEDCurrent() == 255 ? 12 : bus->getLEDCurrent(); // from testing an actual WS2815 strip
+      numABLbuses++; // count ABL enabled buses
+      totalDemand += bus->getLength() * actualMilliampsPerLed; // total demand of all ABL enabled buses
+    }
+  }
+  if (numABLbuses == 0) return; // no ABL compatible bus found
+
+  unsigned ESPshare = MA_FOR_ESP / numABLbuses; // share of ESP current per ABL bus
+  // set bus brightness limit
+  for (auto &bus : busses) {
+    if (bus->isOk() && bus->isDigital() && bus->getLEDCurrent() > 0) {
+      BusDigital &busd = static_cast<BusDigital&>(*bus);
+      unsigned actualMilliampsPerLed = busd.getLEDCurrent() == 255 ? 12 : busd.getLEDCurrent(); // from testing an actual WS2815 strip
+      unsigned busLength = busd.getLength();
+      uint64_t busDemand = busLength * actualMilliampsPerLed; // must be uint64_t to prevent overflow when multiplied by gMilliAmpsMax
+      // global/strip ABL; divide max current per bus according to bus demand
+      unsigned fairAmount = gMilliAmpsMax > 0 ? busDemand * gMilliAmpsMax / totalDemand : busd.getMaxCurrent();
+      if (fairAmount > ESPshare) fairAmount -= ESPshare;      // subtract ESP share from bus ABL budget
+      busd.setCurrentLimit(fairAmount);
+    }
+  }
 }
 
 ColorOrderMap& BusManager::getColorOrderMap() { return _colorOrderMap; }

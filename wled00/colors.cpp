@@ -10,7 +10,7 @@ constexpr uint32_t TWO_CHANNEL_MASK = 0x00FF00FF;     // mask for R and B channe
  * color blend function, based on FastLED blend function
  * the calculation for each color is: result = (A*(amountOfA) + A + B*(amountOfB) + B) / 256 with amountOfA = 255 - amountOfB
  */
-uint32_t color_blend(uint32_t color1, uint32_t color2, uint8_t blend)
+uint32_t IRAM_ATTR color_blend(uint32_t color1, uint32_t color2, uint8_t blend)
 {
   // min / max blend checking is omitted: calls with 0 or 255 are rare, checking lowers overall performance
   uint32_t rb1 =  color1       & TWO_CHANNEL_MASK;  // extract R & B channels from color1
@@ -45,7 +45,7 @@ uint32_t color_add(uint32_t c1, uint32_t c2, bool preserveCR)
 }
 
 // fast color scale function (scales c1 as c1 * scale / 256)
-__attribute__((optimize("-O2"))) void fast_color_scale(uint32_t &c1, uint8_t scale)
+__attribute__((optimize("-O2"))) void IRAM_ATTR fast_color_scale(uint32_t &c1, uint8_t scale)
 {
   //if (scale == 255) return;
   if (scale == 0) { c1 = BLACK; return; }
@@ -78,7 +78,7 @@ __attribute__((optimize("-O2"))) void fast_color_add(uint32_t &c1, uint32_t c2, 
  * fades color toward black
  * if using "video" method the resulting color will never become black unless it is already black
  */
-uint32_t color_fade(uint32_t c1, uint8_t amount, bool video)
+uint32_t IRAM_ATTR color_fade(uint32_t c1, uint8_t amount, bool video)
 {
   if (amount == 255) return c1; // no fading
   uint32_t addRemains = 0;

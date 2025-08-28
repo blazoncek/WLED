@@ -1206,6 +1206,7 @@ void WS2812FX::finalizeInit() {
     bus->begin();
     bus->setBrightness(scaledBri(bri));
   }
+  BusManager::initializeABL(milliAmpsMax);  // if milliAmpsMax is 0, per output ABL will be enabled if supported by bus
   DEBUG_PRINTF_P(PSTR("Heap after buses: %d\n"), getFreeHeapSize());
 
   Segment::maxWidth  = _length;
@@ -1304,7 +1305,7 @@ static uint8_t _add       (uint8_t a, uint8_t b) { unsigned t = a + b; return t 
 static uint8_t _subtract  (uint8_t a, uint8_t b) { return b > a ? (b - a) : 0; }
 static uint8_t _difference(uint8_t a, uint8_t b) { return b > a ? (b - a) : (a - b); }
 static uint8_t _average   (uint8_t a, uint8_t b) { return (a + b) >> 1; }
-#ifdef CONFIG_IDF_TARGET_ESP32C3
+#if defined(ESP8266) || defined(CONFIG_IDF_TARGET_ESP32C3)
 static uint8_t _multiply  (uint8_t a, uint8_t b) { return ((a * b) + 255) >> 8; } // faster than division on C3 but slightly less accurate
 #else
 static uint8_t _multiply  (uint8_t a, uint8_t b) { return (a * b) / 255; } // origianl uses a & b in range [0,1]
@@ -1315,10 +1316,10 @@ static uint8_t _darken    (uint8_t a, uint8_t b) { return a < b ? a : b; }
 static uint8_t _screen    (uint8_t a, uint8_t b) { return 255 - _multiply(~a,~b); } // 255 - (255-a)*(255-b)/255
 static uint8_t _overlay   (uint8_t a, uint8_t b) { return b < 128 ? 2 * _multiply(a,b) : (255 - 2 * _multiply(~a,~b)); }
 static uint8_t _hardlight (uint8_t a, uint8_t b) { return a < 128 ? 2 * _multiply(a,b) : (255 - 2 * _multiply(~a,~b)); }
-#ifdef CONFIG_IDF_TARGET_ESP32C3
+#if defined(ESP8266) || defined(CONFIG_IDF_TARGET_ESP32C3)
 static uint8_t _softlight (uint8_t a, uint8_t b) { return (((b * b * (255 - 2 * a) + 255) >> 8) + 2 * a * b + 255) >> 8; } // Pegtop's formula (1 - 2a)b^2 + 2ab
 #else
-static uint8_t _softlight (uint8_t a, uint8_t b) { return (b * b * (255 - 2 * a) / 255 + 2 * a * b) / 255; } // Pegtop's formula (1 - 2a)b^2 + 2ab
+static uint8_t _softlight (uint8_t a, uint8_t b) { return (b * b * (255 - 2 * a) + 2*255 * a * b) / (255*255); } // Pegtop's formula (1 - 2a)b^2 + 2ab
 #endif
 static uint8_t _dodge     (uint8_t a, uint8_t b) { return _divide(~a,b); }
 static uint8_t _burn      (uint8_t a, uint8_t b) { return ~_divide(a,~b); }
@@ -1557,75 +1558,9 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
   Segment::setClippingRect(0, 0);             // disable clipping for overlays
 }
 
-// To disable brightness limiter we either set output max current to 0 or single LED current to 0
-uint8_t WS2812FX::estimateCurrentAndLimitBri(uint8_t brightness) {
-  unsigned tmpMilliAmps = 0;
-  if (milliAmpsMax > 0) {
-    unsigned avgMilliAmpsPerLED = 0;
-    unsigned lengthDigital = 0;
-    bool useWackyWS2815PowerModel = false;
-    // using lambda functionn moves if statement out of loop
-    // this is used to apply gamma correction if enabled and not disabled in realtime mode
-    auto applyGamma = gammaCorrectCol && !(realtimeMode && arlsDisableGammaCorrection) ? [](uint32_t c){return gamma32(c);} : [](uint32_t c){return c;}; // use gamma correction if not disabled
-
-    // we must traverse each pixel to determine if it belongs to actual digital bus
-    unsigned len = getLengthTotal();
-    for (unsigned x = 0; x < len; x++) {
-      unsigned index = getMappedPixelIndex(x); // convert logical address to physical
-      if (index == 0xFFFF) continue;  // invalid/missing  pixel
-      for (const auto &bus : BusManager::busses) {
-        if (bus->isOk() && bus->isDigital() && bus->containsPixel(index)) {
-          unsigned maPL = bus->getLEDCurrent();
-          // if bus has max current defined, it means per-port ABL is enabled and we don't limit brightness on strip level
-          if (maPL == 0 || bus->getMaxCurrent() > 0) break; // skip buses with 0 mA per LED or max current per bus defined (PP-ABL)
-          if (maPL == 255) {
-            useWackyWS2815PowerModel = true;
-            maPL = 12; // WS2815 uses 12mA per channel
-          }
-          avgMilliAmpsPerLED += maPL; // sum up the usage of each LED on digital bus
-          lengthDigital++;            // count all LEDs on digital bus
-          // sum up the power usage
-          uint32_t c = applyGamma(_pixels[x]);
-          byte r = R(c), g = G(c), b = B(c), w = W(c);
-          unsigned tmpSum;
-          if (useWackyWS2815PowerModel) { // ignore white component on WS2815 power calculation
-            tmpSum = (max(max(r,g),b)) * 3;
-          } else {
-            tmpSum = (r + g + b + w);
-          }
-          if (bus->hasWhite()) tmpSum = (tmpSum * 3) >> 2; // RGBW: total output with white LEDs enabled is still 50mA, so each channel uses less
-          tmpMilliAmps += tmpSum * maPL;
-          break; // found the bus, no need to check others
-        }
-      }
-    }
-    _milliAmpsTotal = ((uint64_t)tmpMilliAmps * brightness) / (255*765); // convert to mA (unsigned may overflow with 8192 LEDs at 255 brightness)
-
-    if (lengthDigital > 0) {
-      avgMilliAmpsPerLED /= lengthDigital;
-
-      if (strip.milliAmpsMax > MA_FOR_ESP && avgMilliAmpsPerLED > 0) { //0 mA per LED and too low numbers turn off calculation
-        unsigned powerBudget = (strip.milliAmpsMax - MA_FOR_ESP); //80/120mA for ESP power
-        if (powerBudget > lengthDigital) { //each LED uses about 1mA in standby, exclude that from power budget
-          powerBudget -= lengthDigital;
-        } else {
-          powerBudget = 0;
-        }
-        if (_milliAmpsTotal > powerBudget) {
-          //scale brightness down to stay in current limit
-          unsigned scaleB = powerBudget * 255 / _milliAmpsTotal;
-          brightness = ((brightness * scaleB) >> 8) + 1;
-        }
-      }
-    }
-  }
-  return brightness;
-}
-
 void WS2812FX::calcMilliAmpsAvg() {
   // apply PI control to milliAmpsAvg (amplifying by 10 for better precision)
-  int ma = (BusManager::currentMilliamps() + _milliAmpsTotal)*10;
-  milliAmpsAvg = (milliAmpsAvg*10 + (ma - milliAmpsAvg*10) / FPS_CALC_AVG) / 10; // simple PI controller over FPS_CALC_AVG frames
+  milliAmpsAvg = (milliAmpsAvg*10 + (BusManager::currentMilliamps()*10 - milliAmpsAvg*10) / FPS_CALC_AVG) / 10; // simple PI controller over FPS_CALC_AVG frames
 }
 
 void WS2812FX::show() {
@@ -1655,11 +1590,6 @@ void WS2812FX::show() {
   show_callback callback = _callback;
   if (callback) callback(); // will call strip.setPixelColor or strip.setRealtimePixelColor
 
-  // determine ABL brightness
-  uint8_t oldBri = scaledBri(_brightness);
-  uint8_t newBri = estimateCurrentAndLimitBri(oldBri);
-  if (newBri != oldBri) BusManager::setBrightness(newBri);
-
   // paint actuall pixels
   int oldCCT = Bus::getCCT(); // store original CCT value (since it is global)
   // using lambda functionn moves if statement out of loop
@@ -1673,6 +1603,8 @@ void WS2812FX::show() {
     if (_pixelCCT) { // cctFromRgb already exluded at allocation
       if (i == 0 || _pixelCCT[i-1] != _pixelCCT[i]) BusManager::setSegmentCCT(_pixelCCT[i], correctWB);
     }
+    // WARNING: BusDigital::setPixelColor() will pre-calculate sum of all channels for per-output ABL
+    // this means we cannot modify bus pixel values after this point and need to call BusManager::show() immediately after this loop
     BusManager::setPixelColor(getMappedPixelIndex(i), applyGamma(_pixels[i]));
   }
   Bus::setCCT(oldCCT);  // restore old CCT for ABL adjustments
@@ -1685,14 +1617,10 @@ void WS2812FX::show() {
   // See https://github.com/Makuna/NeoPixelBus/wiki/ESP32-NeoMethods#neoesp32rmt-methods
   BusManager::show();
 
-  // restore brightness for next frame
-  if (newBri != oldBri) BusManager::setBrightness(oldBri);
-
   if (diff > 0) { // skip calculation if no time has passed
     int fpsCurr = (1000 << FPS_CALC_SHIFT) / diff; // fixed point math (shift left for better precision)
     _cumulativeFps += ((fpsCurr - (_cumulativeFps << FPS_CALC_SHIFT)) / FPS_CALC_AVG + ((1<<FPS_CALC_SHIFT)/FPS_CALC_AVG)) >> FPS_CALC_SHIFT; // simple PI controller over FPS_CALC_AVG frames
     calcMilliAmpsAvg();   // calculate average milliAmps for this frame
-    _milliAmpsTotal = 0;  // reset total milliAmps for next frame
     _lastShow = showNow;
   }
 }
