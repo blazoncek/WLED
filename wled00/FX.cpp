@@ -5800,7 +5800,7 @@ uint16_t mode_2Dghostrider(void) {
 
     SEGMENT.fadeToBlackBy((SEGMENT.speed>>2)+64);
 
-    CRGB color = CRGB::White;
+    CRGBW color = ULTRAWHITE;
     SEGMENT.wu_pixel(lighter->gPosX * 256 / 10, lighter->gPosY * 256 / 10, color);
 
     lighter->gPosX += lighter->Vspeed * sin_t(radians(lighter->gAngle));

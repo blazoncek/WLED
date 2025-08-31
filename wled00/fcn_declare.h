@@ -132,7 +132,7 @@ class NeoGammaWLEDMethod {
 #define gamma32inv(c) NeoGammaWLEDMethod::inverseGamma32(c)
 #define gamma8inv(c)  NeoGammaWLEDMethod::rawInverseGamma8(c)
 [[gnu::hot, gnu::pure]] uint32_t color_blend(uint32_t c1, uint32_t c2 , uint8_t blend);
-inline uint32_t color_blend16(uint32_t c1, uint32_t c2, uint16_t b) { return color_blend(c1, c2, b >> 8); };
+inline uint32_t color_blend16(uint32_t c1, uint32_t c2, uint16_t b) { return color_blend(c1, c2, (b >> 8) + ((uint8_t)b >> 7)); }; // add a bit of rounding
 [[gnu::hot, gnu::pure]] uint32_t color_add(uint32_t,uint32_t, bool fast=false);
 [[gnu::hot]] void fast_color_add(uint32_t &c1, uint32_t c2, uint8_t scale = 255);
 [[gnu::hot]] void fast_color_scale(uint32_t &c1, uint8_t scale);

@@ -118,11 +118,11 @@ uint32_t ColorFromPaletteWLED(const CRGBPalette16& pal, unsigned index, uint8_t 
   if (brightness < 255) { // note: zero checking could be done to return black but that is hardly ever used so it is omitted
     // actually color_fade(c1, brightness)
     uint32_t scale = brightness + 1; // adjust for rounding (bitshift)
-    red1   = (red1 * scale) >> 8;
+    red1   = (red1   * scale) >> 8;
     green1 = (green1 * scale) >> 8;
-    blue1  = (blue1 * scale) >> 8;
+    blue1  = (blue1  * scale) >> 8;
   }
-  return RGBW32(red1,green1,blue1,0);
+  return RGBW32(red1, green1, blue1, 255); // white channel considered alpha (full opacity)
 }
 
 void setRandomColor(byte* rgb)

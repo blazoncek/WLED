@@ -679,10 +679,10 @@ function parseInfo(i) {
 	isM = mw>0 && mh>0;
 	if (!isM) {
 		gId("filter2D").classList.add('hide');
-		gId('bs').querySelectorAll('option[data-type="2D"]').forEach((o,i)=>{o.style.display='none';});
+		d.querySelectorAll('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='none';});
 	} else {
 		gId("filter2D").classList.remove('hide');
-		gId('bs').querySelectorAll('option[data-type="2D"]').forEach((o,i)=>{o.style.display='';});
+		d.querySelectorAll('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='';});
 	}
 	gId("updBt").style.display = (i.opt & 1) ? '':'none';
 //	if (i.noaudio) {
@@ -799,7 +799,7 @@ function populateSegments(s)
 			rvYck = `<label class="check revchkl">Reverse<input type="checkbox" id="seg${i}rY" onchange="setRevY(${i})" ${inst.rY?"checked":""}><span class="checkmark"></span></label>`;
 			miYck = `<label class="check revchkl">Mirror<input type="checkbox" id="seg${i}mY" onchange="setMiY(${i})" ${inst.mY?"checked":""}><span class="checkmark"></span></label>`;
 		}
-		let map2D = `<div id="seg${i}map2D" data-map="map2D" class="lbl-s hide">Expand 1D FX<br>`+
+		let map2D = `<div id="seg${i}map2D" data-map="map2D" data-fx="${inst.fx}" class="lbl-s hide">Expand 1D FX<br>`+
 						`<div class="sel-p"><select class="sel-p" id="seg${i}m12" onchange="setM12(${i})">`+
 							`<option value="0" ${inst.m12==0?' selected':''}>Pixels</option>`+
 							`<option value="1" ${inst.m12==1?' selected':''}>Bar</option>`+
@@ -826,6 +826,7 @@ function populateSegments(s)
 							`<option value="13" ${inst.bm==13?' selected':''}>Soft Light</option>`+
 							`<option value="14" ${inst.bm==14?' selected':''}>Dodge</option>`+
 							`<option value="15" ${inst.bm==15?' selected':''}>Burn</option>`+
+							`<option value="16" ${inst.bm==16?' selected':''}>Chroma</option>`+
 						`</select></div>`+
 					`</div>`;
 		let sndSim = `<div data-snd="si" class="lbl-s hide">Sound sim<br>`+
@@ -1212,12 +1213,12 @@ function updateLen(s)
 			if (stop-start>1 && stopY-startY>1) {
 				// 2D segment
 				if (tPL) tPL.classList.remove('hide'); // unhide transpose checkbox
-				let sE = gId('fxlist').querySelector(`.lstI[data-id="${selectedFx}"]`);
+				let sE = d.querySelector(`#fxlist .lstI[data-id="${selectedFx}"]`);
 				if (sE) {
 					let sN = sE.querySelector(".lstIname").innerText;
 					let seg = gId(`seg${s}map2D`);
 					if (seg) {
-						if(sN.indexOf("\u25A6")<0) seg.classList.remove('hide'); // unhide mapping for 1D effects (| in name)
+						if (sN.indexOf("\u25A6")<0) seg.classList.remove('hide'); // unhide mapping for 1D effects (| in name)
 						else seg.classList.add('hide');	// hide mapping otherwise
 					}
 				}
@@ -1384,10 +1385,12 @@ function updateSelectedFx()
 		}
 
 		// hide 2D mapping and/or sound simulation options
-		gId("segcont").querySelectorAll(`div[data-map="map2D"]`).forEach((seg)=>{
-			if (selectedName.indexOf("\u25A6")<0) seg.classList.remove('hide'); else seg.classList.add('hide');
+		d.querySelectorAll(`#segcont div[data-map="map2D"]`).forEach((seg)=>{
+			let not2Dfx = d.querySelector(`#fxlist div[data-id="${seg.dataset.fx}"] .lstIname`).innerText.indexOf("\u25A6") < 0;
+			if (not2Dfx) seg.classList.remove('hide');
+			else seg.classList.add('hide');
 		});
-		gId("segcont").querySelectorAll(`div[data-snd="si"]`).forEach((seg)=>{
+		d.querySelectorAll(`#segcont div[data-snd="si"]`).forEach((seg)=>{
 			if (selectedName.indexOf("\u266A")<0 && selectedName.indexOf("\u266B")<0) seg.classList.add('hide'); else seg.classList.remove('hide'); // also "♫ "?
 		});
 	}
@@ -1500,7 +1503,7 @@ function readState(s,command=false)
 		has2D    |= (i.stop - i.start) > 1 && (i.stopY ? (i.stopY - i.startY) : 1) > 1;
 	}
 
-	var cd = gId('csl').querySelectorAll("button");
+	var cd = d.querySelectorAll("#csl button");
 	for (let e = cd.length-1; e >= 0; e--) {
 		cd[e].dataset.r = i.col[e][0];
 		cd[e].dataset.g = i.col[e][1];
@@ -1702,7 +1705,7 @@ function setEffectParameters(idx)
 	pall.innerHTML = icon + text;
 	// not all color selectors shown, hide palettes created from color selectors
 	// NOTE: this will disallow user to select "* Color ..." palettes which may be undesirable in some cases or for some users
-	//for (let e of (gId('pallist').querySelectorAll('.lstI')||[])) {
+	//for (let e of (d.querySelectorAll('#pallist .lstI')||[])) {
 	//	let fltr = "* C";
 	//	if (cslCnt==1 && csel==0) fltr = "* Colors";
 	//	else if (cslCnt==2) fltr = "* Colors Only";
@@ -2237,7 +2240,7 @@ function selGrp(g)
 	event.stopPropagation();
 	var obj = {"seg":[]};
 	for (let i=0; i<=lSeg; i++) if (gId(`seg${i}`)) obj.seg.push({"id":i,"sel":false});
-	gId(`segcont`).querySelectorAll(`div[data-set="${g}"]`).forEach((s)=>{
+	d.querySelectorAll(`#segcont div[data-set="${g}"]`).forEach((s)=>{
 		let i = parseInt(s.id.substring(3));
 		obj.seg[i] = {"id":i,"sel":true};
 	});
@@ -2660,11 +2663,11 @@ function updatePSliders() {
 
 function hexEnter()
 {
-	if(event.keyCode == 13) fromHex();
+	if (event.keyCode == 13) fromHex();
 }
 
 function segEnter(s) {
-	if(event.keyCode == 13) setSeg(s);
+	if (event.keyCode == 13) setSeg(s);
 }
 
 function fromHex()
@@ -2676,7 +2679,7 @@ function fromHex()
 	} catch (e) {
 		setPicker("#ffaa00");
 	}
-	gId("csl").children[csel].dataset.w = isNaN(w) ? 0 : w;
+	gId("csl").children[csel].dataset.w = !hasWhite || isNaN(w) ? 0 : w;
 	setColor(2);
 }
 
@@ -2876,7 +2879,7 @@ function getPalettesData(page, callback)
 /*
 function hideModes(txt)
 {
-	for (let e of (gId('fxlist').querySelectorAll('.lstI')||[])) {
+	for (let e of (d.querySelectorAll('#fxlist .lstI')||[])) {
 		let iT = e.querySelector('.lstIname').innerText;
 		let f = false;
 		if (txt==="2D") f = iT.indexOf("\u25A6") >= 0 && iT.indexOf("\u22EE") < 0; // 2D && !1D
@@ -2904,11 +2907,11 @@ function search(field, listId = null) {
 
 	// clear filter if searching in fxlist
 	if (listId === 'fxlist' && search) {
-		gId("filters").querySelectorAll("input[type=checkbox]").forEach((e) => { e.checked = false; });
+		d.querySelectorAll("#filters input[type=checkbox]").forEach((e) => { e.checked = false; });
 	}
 
 	// do not search if filter is active
-	if (gId("filters").querySelectorAll("input[type=checkbox]:checked").length) return;
+	if (d.querySelectorAll("#filters input[type=checkbox]:checked").length) return;
 
 	// filter list items but leave (Default & Solid) always visible
 	const listItems = gId(listId).querySelectorAll('.lstI');
@@ -2957,7 +2960,7 @@ function clean(clearButton) {
 }
 
 function initFilters() {
-	gId("filters").querySelectorAll("input[type=checkbox]").forEach((e) => { e.checked = false; });
+	d.querySelectorAll("#filters input[type=checkbox]").forEach((e) => { e.checked = false; });
 }
 
 function filterFocus(e) {
@@ -2990,10 +2993,10 @@ function filterFx() {
 	inputField.value = '';
 	inputField.focus();
 	clean(inputField.nextElementSibling);
-	gId("fxlist").querySelectorAll('.lstI').forEach((listItem, i) => {
+	d.querySelectorAll('#fxlist .lstI').forEach((listItem, i) => {
 		const listItemName = listItem.querySelector('.lstIname').innerText;
 		let hide = false;
-		gId("filters").querySelectorAll("input[type=checkbox]").forEach((e) => { if (e.checked && !listItemName.includes(e.dataset.flt)) hide = i > 0 /*true*/; });
+		d.querySelectorAll("#filters input[type=checkbox]").forEach((e) => { if (e.checked && !listItemName.includes(e.dataset.flt)) hide = i > 0 /*true*/; });
 		listItem.style.display = hide && !listItem.classList.contains("selected") ? 'none' : '';
 	});
 }
@@ -3112,13 +3115,13 @@ function lock(e)
 //required by rangetouch.js
 function move(e)
 {
-	if(!locked || pcMode || simplifiedUI) return;
+	if (!locked || pcMode || simplifiedUI) return;
 	var clientX = unify(e).clientX;
 	var dx = clientX - x0;
 	var s = Math.sign(dx);
 	var f = +(s*dx/wW).toFixed(2);
 
-	if((clientX != 0) &&
+	if ((clientX != 0) &&
 		(iSlide > 0 || s < 0) && (iSlide < N - 1 || s > 0) &&
 		f > 0.12 &&
 		gEBCN("tabcontent")[iSlide].scrollTop == scrollS)

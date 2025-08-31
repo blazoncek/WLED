@@ -122,7 +122,7 @@
 		<p class="labels h" id="cslLabel"></p>
 		<div id="hexw">
 			<i class="icons sel-icon" onclick="tglRgb()">&#xe22d;</i>
-			<input id="hexc" title="Hex RGB" type="text" class="noslide" onkeydown="hexEnter()" autocomplete="off" maxlength="8" />
+			<input id="hexc" title="Hex RGB(W)" type="text" class="noslide" pattern="[a-fA-F0-9]*" onkeydown="hexEnter()" autocomplete="off" maxlength="8" />
 			<button id="hexcnf" class="btn btn-xs" onclick="fromHex();"><i class="icons btn-icon">&#xe390;</i></button>
 		</div>
 		<div style="padding: 8px 0;" id="btns">

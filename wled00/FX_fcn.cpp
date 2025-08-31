@@ -264,6 +264,16 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
     if (isInTransition()) _t->_dur = 0;
     return;
   }
+
+  // check if we ahve enough memory to store old segment if requested
+  unsigned freeMem = getFreeHeapSize() - MIN_HEAP_SIZE;
+  unsigned segMem = sizeof(uint32_t)*length() + _dataLen + sizeof(Segment) + sizeof(Transition); // pixel buffer + data buffer + segment + transition
+  if (segmentCopy && freeMem < segMem) {
+    DEBUGFX_PRINTLN(F("!!! Not enough RAM to store old segment for transition !!!"));
+    errorFlag = ERR_NORAM_PX;
+    segmentCopy = false; // try to continue without segment copy
+  }
+
   if (isInTransition()) {
     if (segmentCopy && !_t->_oldSegment) {
       // already in transition but segment copy requested and not yet created
@@ -974,6 +984,7 @@ void Segment::refreshLightCapabilities() const {
  */
 void Segment::fill(uint32_t c) const {
   if (!isActive()) return; // not active
+  if (!hasWhite()) c |= 0xFF000000; // if we have RGB strip, make sure alpha is 255
   for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i,c); // always fill all pixels (blending will take care of grouping, spacing and clipping)
 }
 
@@ -990,6 +1001,7 @@ void Segment::fade_out(uint8_t rate) const {
   for (unsigned j = 0; j < length(); j++) {
     uint32_t color = getPixelColorRaw(j);
     if (color == colors[1]) continue; // already at target color
+    uint8_t alpha = hasWhite() ? 255 : W(color); // if we have RGB only strip, white is considered opacity
     for (int i = 0; i < 32; i += 8) {
       uint8_t c2 = (colors[1]>>i);  // get background channel
       uint8_t c1 = (color>>i);      // get foreground channel
@@ -1001,6 +1013,7 @@ void Segment::fade_out(uint8_t rate) const {
       color &= ~(0xFF<<i);
       color |= ((c1 + delta) & 0xFF) << i;
     }
+    if (!hasWhite()) color = (color & 0x00FFFFFF) | (uint32_t(alpha) << 24); // restore original alpha for RGB only strip
     setPixelColorRaw(j, color);
   }
 }
@@ -1009,14 +1022,28 @@ void Segment::fade_out(uint8_t rate) const {
 void Segment::fadeToSecondaryBy(uint8_t fadeBy) const {
   if (!isActive() || fadeBy == 0) return;   // optimization - no scaling to apply
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
-  for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, color_blend(getPixelColorRaw(i), colors[1], fadeBy));
+  //for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, color_blend(getPixelColorRaw(i), colors[1], fadeBy));
+  for (unsigned i = 0; i < length(); i++) {
+    uint32_t color = getPixelColorRaw(i);
+    uint8_t alpha = hasWhite() ? 255 : W(color); // if we have RGB only strip, white is considered opacity
+    color = color_blend(color, colors[1], fadeBy);
+    if (!hasWhite()) color = (color & 0x00FFFFFF) | (uint32_t(alpha) << 24); // restore original alpha for RGB only strip
+    setPixelColorRaw(i, color);
+  }
 }
 
 // fades all pixels to black using nscale8()
 void Segment::fadeToBlackBy(uint8_t fadeBy) const {
   if (!isActive() || fadeBy == 0) return;   // optimization - no scaling to apply
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
-  for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, color_fade(getPixelColorRaw(i), 255-fadeBy));
+  //for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, color_fade(getPixelColorRaw(i), 255-fadeBy));
+  for (unsigned i = 0; i < length(); i++) {
+    uint32_t color = getPixelColorRaw(i);
+    uint8_t alpha = hasWhite() ? 255 : W(color); // if we have RGB only strip, white is considered opacity
+    color = color_fade(color, 255-fadeBy);
+    if (!hasWhite()) color = (color & 0x00FFFFFF) | (uint32_t(alpha) << 24); // restore original alpha for RGB only strip
+    setPixelColorRaw(i, color);
+  }
 }
 
 /*
@@ -1041,6 +1068,7 @@ void Segment::blur(uint8_t blur_amount, bool smear) const {
   uint32_t last;
   uint32_t curnew = BLACK;
   // we can use get/setPixelColorRaw() and vLength() since is2D() handles possible 1D->2D mapping (blurs entire 2D segment)
+  // we will also blur alpha channel if we have RGB only strip
   for (unsigned i = 0; i < vlength; i++) {
     uint32_t cur = getPixelColorRaw(i);
     uint32_t part = color_fade(cur, seep);
@@ -1063,7 +1091,7 @@ void Segment::blur(uint8_t blur_amount, bool smear) const {
  */
 uint32_t Segment::color_wheel(uint8_t pos) const {
   if (palette) return color_from_palette(pos, false, false, 0); // never wrap palette
-  uint8_t w = W(getCurrentColor(0));
+  uint8_t w = hasWhite() ? W(getCurrentColor(0)) : 255; //if we have RGB only strip, white is considered opacity
   pos = 255 - pos;
   if (useRainbowWheel) {
     CRGB rgb;
@@ -1111,6 +1139,7 @@ uint32_t Segment::color_wheel(uint8_t pos) const {
  */
 uint32_t Segment::color_from_palette(uint16_t i, bool mapping, bool moving, uint8_t mcol, uint8_t pbri) const {
   uint32_t color = getCurrentColor(mcol);
+  if (!hasWhite()) color |= 0xFF000000; // if we have RGB only strip, white is considered opacity
   // default palette or no RGB support on segment
   if ((palette == 0 && mcol < NUM_COLORS) || !_isRGB) {
     return color_fade(color, pbri, true);
@@ -1326,14 +1355,14 @@ void WS2812FX::service() {
 }
 
 // https://en.wikipedia.org/wiki/Blend_modes but using a for top layer & b for bottom layer
-static uint8_t _top       (uint8_t a, uint8_t b) { return a; }
-static uint8_t _bottom    (uint8_t a, uint8_t b) { return b; }
-static uint8_t _add       (uint8_t a, uint8_t b) { unsigned t = a + b; return t > 255 ? 255 : t; }
+static uint8_t _top       (uint8_t a, uint8_t b) { return a; } // not really used, but implemented for completeness
+static uint8_t _bottom    (uint8_t a, uint8_t b) { return b; } // not really used, but implemented for completeness
+static uint8_t _add       (uint8_t a, uint8_t b) { unsigned t = a + b; return t > 255 ? 255 : t; } // not really used, but implemented for completeness
 static uint8_t _subtract  (uint8_t a, uint8_t b) { return b > a ? (b - a) : 0; }
 static uint8_t _difference(uint8_t a, uint8_t b) { return b > a ? (b - a) : (a - b); }
 static uint8_t _average   (uint8_t a, uint8_t b) { return (a + b) >> 1; }
 #if defined(ESP8266) || defined(CONFIG_IDF_TARGET_ESP32C3)
-static uint8_t _multiply  (uint8_t a, uint8_t b) { return ((a * b) + 255) >> 8; } // faster than division on C3 but slightly less accurate
+static uint8_t _multiply  (uint8_t a, uint8_t b) { return (((uint16_t)a * b) + 255) >> 8; } // faster than division on C3 but slightly less accurate
 #else
 static uint8_t _multiply  (uint8_t a, uint8_t b) { return (a * b) / 255; } // origianl uses a & b in range [0,1]
 #endif
@@ -1350,20 +1379,31 @@ static uint8_t _softlight (uint8_t a, uint8_t b) { return (b * b * (255 - 2 * a)
 #endif
 static uint8_t _dodge     (uint8_t a, uint8_t b) { return _divide(~a,b); }
 static uint8_t _burn      (uint8_t a, uint8_t b) { return ~_divide(a,~b); }
+static uint8_t _chroma    (uint8_t a, uint8_t b) { return a ? a : b; } // not really used, but implemented for completeness
 
 void WS2812FX::blendSegment(const Segment &topSegment) const {
 
   typedef uint8_t(*FuncType)(uint8_t, uint8_t);
   FuncType funcs[] = {
-    _top, _bottom,
-    _add, _subtract, _difference, _average,
-    _multiply, _divide, _lighten, _darken, _screen, _overlay,
-    _hardlight, _softlight, _dodge, _burn
+    _top,        _bottom,    _add,      _subtract,
+    _difference, _average,   _multiply, _divide,
+    _lighten,    _darken,    _screen,   _overlay,
+    _hardlight,  _softlight, _dodge,    _burn,
+    _chroma
   };
 
   const size_t blendMode = topSegment.blendMode < (sizeof(funcs) / sizeof(FuncType)) ? topSegment.blendMode : 0;
   const auto func  = funcs[blendMode]; // blendMode % (sizeof(funcs) / sizeof(FuncType))
-  const auto blend = [&](uint32_t top, uint32_t bottom){ return RGBW32(func(R(top),R(bottom)), func(G(top),G(bottom)), func(B(top),B(bottom)), func(W(top),W(bottom))); };
+  const auto blend = [&](uint32_t t, uint32_t b){ 
+    // handle special modes first
+    switch (blendMode) {
+      case 0 : return t;              // top (faster than lambda)
+      case 1 : return b;              // bottom (faster than lambda)
+      case 2 : return color_add(t,b); // add (faster than lambda)
+      case 16: return t ? t : b;      // chroma (use top layer if not black, else bottom)
+    }
+    return RGBW32(func(R(t),R(b)), func(G(t),G(b)), func(B(t),B(b)), func(W(t),W(b)));
+  };
 
   const int     length     = topSegment.length();     // physical segment length (counts all pixels in 2D segment)
   const int     width      = topSegment.width();
@@ -1468,8 +1508,10 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     };
 
     // if we blend using "push" style we need to "shift" canvas to left/right/up/down
-    unsigned offsetX = (blendingStyle == BLEND_STYLE_PUSH_UP   || blendingStyle == BLEND_STYLE_PUSH_DOWN)  ? 0 : progInv * nCols / 0xFFFFU;
-    unsigned offsetY = (blendingStyle == BLEND_STYLE_PUSH_LEFT || blendingStyle == BLEND_STYLE_PUSH_RIGHT) ? 0 : progInv * nRows / 0xFFFFU;
+    int offsetX = (blendingStyle == BLEND_STYLE_PUSH_UP   || blendingStyle == BLEND_STYLE_PUSH_DOWN)  ? 0 : progInv * nCols / 0xFFFFU;
+    int offsetY = (blendingStyle == BLEND_STYLE_PUSH_LEFT || blendingStyle == BLEND_STYLE_PUSH_RIGHT) ? 0 : progInv * nRows / 0xFFFFU;
+    if (blendingStyle == BLEND_STYLE_PUSH_RIGHT) offsetX = nCols - offsetX;
+    if (blendingStyle == BLEND_STYLE_PUSH_UP)    offsetY = nRows - offsetY;
 
     // we only traverse new segment, not old one
     for (int r = 0; r < nRows; r++) for (int c = 0; c < nCols; c++) {
@@ -1481,14 +1523,12 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       int x = c;
       int y = r;
       // if we blend using "push" style we need to "shift" canvas to left/right/up/down
-      switch (blendingStyle) {
-        case BLEND_STYLE_PUSH_RIGHT: x = (x + offsetX) % nCols;         break;
-        case BLEND_STYLE_PUSH_LEFT:  x = (x - offsetX + nCols) % nCols; break;
-        case BLEND_STYLE_PUSH_DOWN:  y = (y + offsetY) % nRows;         break;
-        case BLEND_STYLE_PUSH_UP:    y = (y - offsetY + nRows) % nRows; break;
-      }
+      if (offsetX != 0) x = (x + offsetX) % nCols;
+      if (offsetY != 0) y = (y + offsetY) % nRows;
       uint32_t c_a = BLACK;
       if (x < vCols && y < vRows) c_a = seg->getPixelColorRaw(x + y*vCols); // will get clipped pixel from old segment or unclipped pixel from new segment
+      uint8_t alpha = topSegment.hasWhite() ? 255 : W(c_a); // if we are using alpha channel (pixel opacity), store it here
+      opacity = (uint16_t(opacity+1) * alpha) >> 8; // combine segment opacity with pixel opacity
       if (segO && blendingStyle == BLEND_STYLE_FADE
         && (topSegment.mode != segO->mode || (segO->name != topSegment.name && segO->name && topSegment.name && strncmp(segO->name, topSegment.name, WLED_MAX_SEGNAME_LEN) != 0))
         && x < oCols && y < oRows) {
@@ -1561,6 +1601,8 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       }
       uint32_t c_a = BLACK;
       if (i < vLen) c_a = seg->getPixelColorRaw(i); // will get clipped pixel from old segment or unclipped pixel from new segment
+      uint8_t alpha = topSegment.hasWhite() ? 255 : W(c_a); // if we are using alpha channel (pixel opacity), store it here
+      opacity = (uint16_t(opacity+1) * alpha) >> 8; // combine segment opacity with pixel opacity
       if (segO && blendingStyle == BLEND_STYLE_FADE && topSegment.mode != segO->mode && i < oLen) {
         // we need to blend old segment using fade as pixels are not clipped
         c_a = color_blend16(c_a, segO->getPixelColorRaw(i), progInv);

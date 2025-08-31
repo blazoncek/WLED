@@ -615,7 +615,7 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
 }
 
 #define WU_WEIGHT(a,b) ((uint8_t) (((a)*(b)+(a)+(b))>>8))
-void Segment::wu_pixel(uint32_t x, uint32_t y, CRGB c) const {      //awesome wu_pixel procedure by reddit u/sutaburosu
+void Segment::wu_pixel(uint32_t x, uint32_t y, CRGBW c) const {      //awesome wu_pixel procedure by reddit u/sutaburosu
   if (!isActive()) return; // not active
   // extract the fractional parts and derive their inverses
   unsigned xx = x & 0xff, yy = y & 0xff, ix = 255 - xx, iy = 255 - yy;
@@ -626,8 +626,8 @@ void Segment::wu_pixel(uint32_t x, uint32_t y, CRGB c) const {      //awesome wu
   for (int i = 0; i < 4; i++) {
     int wu_x = (x >> 8) + (i & 1);        // precalculate x
     int wu_y = (y >> 8) + ((i >> 1) & 1); // precalculate y
-    CRGB led = getPixelColorXY(wu_x, wu_y);
-    CRGB oldLed = led;
+    CRGBW led = getPixelColorXY(wu_x, wu_y);
+    CRGBW oldLed = led;
     led.r = qadd8(led.r, c.r * wu[i] >> 8);
     led.g = qadd8(led.g, c.g * wu[i] >> 8);
     led.b = qadd8(led.b, c.b * wu[i] >> 8);

@@ -76,9 +76,14 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
 
   // append segment
   if (id >= strip.getSegmentsNum()) {
-    if (stop <= 0) return false; // ignore empty/inactive segments
-    strip.appendSegment(0, strip.getLengthTotal());
-    id = strip.getSegmentsNum()-1; // segments are added at the end of list
+    int start  = elem["start"]  | 0;
+    int startY = elem["startY"] | 0;
+    int stopY  = elem["stopY"]  | 1;
+    int len    = (stop > start && start >= 0) ? (stop - start) * (stopY - startY) : -1;
+    // ignore empty/inactive segments or segments that would not fit into memory
+    if (len <= 0 || stop <= 0 || 2*(sizeof(uint32_t)*len + sizeof(Segment) + FAIR_DATA_PER_SEG) > (getFreeHeapSize() - MIN_HEAP_SIZE)) return false;
+    strip.appendSegment(start, stop, startY, stopY);
+    id = strip.getSegmentsNum()-1;  // segments are added at the end of list
     newSeg = true;
   }
 
@@ -249,6 +254,7 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
 
         if (!colValid) continue;
 
+        if (!seg.hasWhite()) rgbw[3] = 255; // if we have RGB only strip, white is considered opacity
         seg.setColor(i, RGBW32(rgbw[0],rgbw[1],rgbw[2],rgbw[3])); // use transition
         if (seg.mode == FX_MODE_STATIC) strip.trigger(); //instant refresh
       }
@@ -306,15 +312,13 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   seg.check2 = getBoolVal(elem["o2"], seg.check2);
   seg.check3 = getBoolVal(elem["o3"], seg.check3);
 
-  uint8_t blend = seg.blendMode;
-  getVal(elem["bm"], blend, 0, 15); // we can't pass reference to bitfield
-  seg.blendMode = constrain(blend, 0, 15);
+  getVal(elem["bm"], seg.blendMode, 0, 16);
 
   JsonArray iarr = elem[F("i")]; //set individual LEDs
   if (!iarr.isNull()) {
     // set brightness immediately and disable transition
     jsonTransitionOnce = true;
-    if (seg.isInTransition()) seg.startTransition(0); // setting transition time to 0 will stop transition in next frame
+    seg.startTransition(0); // setting transition time to 0 will stop transition in next frame
     strip.setTransition(0);
     strip.setBrightness(bri, true);
 
@@ -454,6 +458,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
       realtimeLock(65000);
     } else {
       exitRealtime();
+      strip.setTransition(transitionDelay);
     }
   }
 
