@@ -171,10 +171,10 @@ struct CRGBA {
   inline bool operator!=(const uint32_t rhs) __attribute__((always_inline)) { return (color32 & 0x00FFFFFF) != (rhs & 0x00FFFFFF); } // ignore white or alpha
 
   // Addition assignment with scaling of added color
-  inline CRGBA& operator+=(CRGBA rhs) __attribute__((always_inline)) { return add(rhs); }
-  inline CRGBA& operator+=(uint8_t x) __attribute__((always_inline)) { return add(CRGBA(x,x,x)); }
+  inline CRGBA& operator+=(const CRGBA& rhs) __attribute__((always_inline)) { return add(rhs); }
+  inline CRGBA& operator+=(uint8_t x) __attribute__((always_inline))        { return add(CRGBA(x,x,x)); }
 
-  inline CRGBA& operator-=(CRGBA rhs) __attribute__((always_inline)) {
+  inline CRGBA& operator-=(const CRGBA& rhs) __attribute__((always_inline)) {
     auto qsub8 = [](uint8_t a, uint8_t b) { return a > b ? a - b : 0; };
     r = qsub8(r, rhs.r*(rhs.a+1)>>8);
     g = qsub8(g, rhs.g*(rhs.a+1)>>8);
@@ -221,7 +221,7 @@ struct CRGBA {
 
 #ifdef FASTLED_VERSION
   // Constructor from CRGB
-  inline CRGBA(CRGB rgb) __attribute__((always_inline)) : b(rgb.b), g(rgb.g), r(rgb.r), a(255) {}
+  inline CRGBA(const CRGB &rgb) __attribute__((always_inline)) : b(rgb.b), g(rgb.g), r(rgb.r), a(255) {}
 
   // Assignment from CRGB
   inline CRGBA& operator=(const CRGB& rgb) __attribute__((always_inline)) { b = rgb.b; g = rgb.g; r = rgb.r; a = 255; return *this; }
