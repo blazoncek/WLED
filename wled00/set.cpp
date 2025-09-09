@@ -861,9 +861,9 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
   }
 
   // temporary values, write directly to segments, globals are updated by setValuesFromFirstSelectedSeg()
-  uint32_t col0    = selseg.colors[0];
-  uint32_t col1    = selseg.colors[1];
-  uint32_t col2    = selseg.colors[2];
+  uint32_t col0    = selseg.colors[0].color32;
+  uint32_t col1    = selseg.colors[1].color32;
+  uint32_t col2    = selseg.colors[2].color32;
   byte colIn[4]    = {R(col0), G(col0), B(col0), W(col0)};
   byte colInSec[4] = {R(col1), G(col1), B(col1), W(col1)};
   byte effectIn    = selseg.mode;

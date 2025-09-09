@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2508280
+#define VERSION 2509090
 #else
 #define VERSION BUILD
 #endif
@@ -167,6 +167,7 @@
 #define USE_GET_MILLISECOND_TIMER
 #include "FastLED.h"
 #include "const.h"
+#include "colors.h"
 #include "fcn_declare.h"
 #include "network.h"
 #include "NodeStruct.h"
@@ -997,13 +998,6 @@ WLED_GLOBAL volatile uint8_t jsonBufferLock _INIT(0);
 
 //macro to convert F to const
 #define SET_F(x)  (const char*)F(x)
-
-//color mangling macros
-#define RGBW32(r,g,b,w) (uint32_t((byte(w) << 24) | (byte(r) << 16) | (byte(g) << 8) | (byte(b))))
-#define R(c) (byte((c) >> 16))
-#define G(c) (byte((c) >> 8))
-#define B(c) (byte(c))
-#define W(c) (byte((c) >> 24))
 
 class WLED {
 public:

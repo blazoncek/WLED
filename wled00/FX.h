@@ -325,6 +325,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define BLEND_STYLE_PUSH_MASK       0x10
 #define BLEND_STYLE_COUNT           18
 
+#define BLEND_MODE_COUNT            20    // number of blending modes (see Segment::blendMode)
 
 typedef enum mapping1D2D {
   M12_Pixels = 0,
@@ -339,7 +340,7 @@ class WS2812FX;
 // segment, 72 bytes
 class Segment {
   public:
-    uint32_t colors[NUM_COLORS];
+    CRGBA    colors[NUM_COLORS];  // primary, secondary, tertiary colors (are considered opaque (0xffRRGGBB) if segment has no white channel)
     uint16_t start;   // start index / start X coordinate 2D (left)
     uint16_t stop;    // stop index / stop X coordinate 2D (right); segment is invalid if stop == 0
     uint16_t startY;  // start Y coodrinate 2D (top); there should be no more than 255 rows
@@ -391,7 +392,7 @@ class Segment {
     static uint16_t maxWidth, maxHeight;  // these define matrix width & height (max. segment dimensions)
 
   private:
-    uint32_t *pixels;                 // pixel data
+    CRGBA *pixels;                    // pixel data
     uint16_t _dataLen;                // size of FX data buffer (in bytes, max 64k)
     uint8_t  _default_palette;        // palette number that gets assigned to pal0
     union {
@@ -408,7 +409,7 @@ class Segment {
     static unsigned      _usedSegmentData;    // amount of data used by all segments
     static unsigned      _vLength;            // 1D dimension used for current effect
     static unsigned      _vWidth, _vHeight;   // 2D dimensions used for current effect
-    static uint32_t      _currentColors[NUM_COLORS]; // colors used for current effect (faster access from effect functions)
+    static CRGBA         _currentColors[NUM_COLORS]; // colors used for current effect (faster access from effect functions)
     static CRGBPalette16 _currentPalette;     // palette used for current effect (includes transition, used in color_from_palette())
     static CRGBPalette16 _randomPalette;      // actual random palette
     static CRGBPalette16 _newRandomPalette;   // target random palette
@@ -423,7 +424,7 @@ class Segment {
     struct Transition {
       Segment      *_oldSegment;          // previous segment environment (may be nullptr if effect did not change)
       unsigned long _start;               // must accommodate millis()
-      uint32_t      _colors[NUM_COLORS];  // current colors
+      CRGBA         _colors[NUM_COLORS];  // current colors
       #ifndef WLED_SAVE_RAM
       CRGBPalette16 _palT;                // temporary palette (slowly being morphed from old to new)
       #endif
@@ -456,12 +457,12 @@ class Segment {
     inline static unsigned getUsedSegmentData()            { return Segment::_usedSegmentData; }
     inline static void     addUsedSegmentData(int len)     { Segment::_usedSegmentData += len; }
 
-    inline uint32_t *getPixels() const                              { return pixels; }
-    inline void     setPixelColorRaw(unsigned i, uint32_t c) const  { pixels[i] = c; }
-    inline uint32_t getPixelColorRaw(unsigned i) const              { return pixels[i]; };
+    inline CRGBA *getPixels() const                           { return pixels; }
+    inline void  setPixelColorRaw(unsigned i, CRGBA c) const  { pixels[i] = c; }
+    inline CRGBA getPixelColorRaw(unsigned i) const           { return pixels[i]; };
   #ifndef WLED_DISABLE_2D
-    inline void     setPixelColorXYRaw(unsigned x, unsigned y, uint32_t c) const  { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)] = c; }
-    inline uint32_t getPixelColorXYRaw(unsigned x, unsigned y) const              { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; return pixels[XY(x,y)]; };
+    inline void  setPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const  { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)] = c; }
+    inline CRGBA getPixelColorXYRaw(unsigned x, unsigned y) const           { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; return pixels[XY(x,y)]; };
   #endif
     void resetIfRequired();         // sets all SEGENV variables to 0 and clears data buffer
     CRGBPalette16 &loadPalette(CRGBPalette16 &tgt, uint8_t pal);
@@ -521,7 +522,7 @@ class Segment {
     {
       DEBUGFX_PRINTF_P(PSTR("-- Creating segment: %p [%d,%d:%d,%d]\n"), this, (int)start, (int)stop, (int)startY, (int)stopY);
       // allocate render buffer (always entire segment), prefer IRAM/PSRAM. Note: impact on FPS with PSRAM buffer is low (<2% with QSPI PSRAM) on S2/S3
-      pixels = static_cast<uint32_t*>(allocate_buffer(length() * sizeof(uint32_t), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+      pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
       if (!pixels) {
         DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
         extern byte errorFlag;
@@ -543,7 +544,7 @@ class Segment {
       #endif
       clearName();
       deallocateData();
-      d_free(pixels);
+      p_free(pixels);
       if (_t) stopTransition();
     }
 
@@ -561,6 +562,7 @@ class Segment {
     inline bool     hasRGB()               const { return _isRGB; }
     inline bool     hasWhite()             const { return _hasW; }
     inline bool     isCCT()                const { return _isCCT; }
+    inline bool     isWmanual()            const { return _manualW; }
     inline uint16_t width()                const { return stop > start ? (stop - start) : 0; }// segment width in physical pixels (length if 1D)
     inline uint16_t height()               const { return stopY - startY; }                   // segment height (if 2D) in physical pixels (it *is* always >=1)
     inline uint16_t length()               const { return width() * height(); }               // segment length (count) in physical pixels
@@ -573,7 +575,7 @@ class Segment {
     inline static unsigned vLength()                       { return Segment::_vLength; }
     inline static unsigned vWidth()                        { return Segment::_vWidth; }
     inline static unsigned vHeight()                       { return Segment::_vHeight; }
-    inline static uint32_t getCurrentColor(unsigned i)     { return Segment::_currentColors[i<NUM_COLORS?i:0]; }
+    inline static CRGBA getCurrentColor(unsigned i)        { return Segment::_currentColors[i<NUM_COLORS?i:0];}
     inline static const CRGBPalette16 &getCurrentPalette() { return Segment::_currentPalette; }
 
     inline void setDrawDimensions() const { Segment::_vWidth = virtualWidth(); Segment::_vHeight = virtualHeight(); Segment::_vLength = virtualLength(); }
@@ -607,34 +609,30 @@ class Segment {
 
     // 1D strip
     uint16_t virtualLength() const;
-    [[gnu::hot]] void setPixelColor(int n, uint32_t c) const; // set relative pixel within segment with color
-    inline void setPixelColor(unsigned n, uint32_t c) const                    { setPixelColor(int(n), c); }
-    inline void setPixelColor(int n, byte r, byte g, byte b, byte w = 0) const { setPixelColor(n, RGBW32(r,g,b,w)); }
-    inline void setPixelColor(int n, CRGB c) const                             { setPixelColor(n, RGBW32(c.r,c.g,c.b,!hasWhite()*255)); }
-    void setRawPixelColor(int i, uint32_t col) const                           { if (i >= 0 && i < length()) setPixelColorRaw(i,col); }
+    [[gnu::hot]] void setPixelColor(int n, CRGBA c) const; // set relative pixel within segment with color
+    inline void setPixelColor(unsigned n, CRGBA c) const                        { setPixelColor(int(n), c); }
+    inline void setPixelColor(int n, byte r, byte g, byte b, byte w = 0) const  { setPixelColor(n, CRGBA(r,g,b)); }
+    void setRawPixelColor(unsigned i, CRGBA col) const                          { if (i < length()) setPixelColorRaw(i, col); }
     #ifdef WLED_USE_AA_PIXELS
-    void setPixelColor(float i, uint32_t c, bool aa = true) const;
-    inline void setPixelColor(float i, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0, bool aa = true) const { setPixelColor(i, RGBW32(r,g,b,w), aa); }
-    inline void setPixelColor(float i, CRGB c, bool aa = true) const                                         { setPixelColor(i, RGBW32(c.r,c.g,c.b,!hasWhite()*255), aa); }
+    void setPixelColor(float i, CRGBA c, bool aa = true) const;
+    inline void setPixelColor(float i, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0, bool aa = true) const { setPixelColor(i, CRGBA(r,g,b), aa); }
     #endif
     [[gnu::hot]] bool isPixelClipped(int i) const;
-    [[gnu::hot]] uint32_t getPixelColor(int i) const;
+    [[gnu::hot]] CRGBA getPixelColor(int i) const;
     // 1D support functions (some implement 2D as well)
     void blur(uint8_t, bool smear = false) const;
     void clear() const { fill(BLACK); } // clear segment
-    void fill(uint32_t c) const;
+    void fill(CRGBA c) const;
     void fade_out(uint8_t r) const;
     void fadeToSecondaryBy(uint8_t fadeBy) const;
     void fadeToBlackBy(uint8_t fadeBy) const;
-    inline void blendPixelColor(int n, uint32_t color, uint8_t blend) const        { setPixelColor(n, color_blend(getPixelColor(n), color, blend)); }
-    inline void blendPixelColor(int n, CRGB c, uint8_t blend) const                { blendPixelColor(n, RGBW32(c.r,c.g,c.b,!hasWhite()*255), blend); }
-    inline void addPixelColor(int n, uint32_t color, bool preserveCR = true) const { setPixelColor(n, color_add(getPixelColor(n), color, preserveCR)); }
+    inline void blendPixelColor(int n, CRGBA color, uint8_t blend) const        { setPixelColor(n, getPixelColor(n).nblend(color, blend)); }
+    inline void addPixelColor(int n, CRGBA color, bool preserveCR = true) const { setPixelColor(n, getPixelColor(n).add(color, preserveCR)); }
     inline void addPixelColor(int n, byte r, byte g, byte b, byte w = 0, bool preserveCR = true) const
-                                                                                   { addPixelColor(n, RGBW32(r,g,b,w), preserveCR); }
-    inline void addPixelColor(int n, CRGB c, bool preserveCR = true) const         { addPixelColor(n, RGBW32(c.r,c.g,c.b,!hasWhite()*255), preserveCR); }
-    inline void fadePixelColor(uint16_t n, uint8_t fade) const                     { setPixelColor(n, color_fade(getPixelColor(n), fade, true)); }
-    [[gnu::hot]] uint32_t color_from_palette(uint16_t, bool mapping, bool moving, uint8_t mcol, uint8_t pbri = 255) const;
-    [[gnu::hot]] uint32_t color_wheel(uint8_t pos) const;
+                                                                                { addPixelColor(n, CRGBA(r,g,b), preserveCR); }
+    inline void fadePixelColor(uint16_t n, uint8_t fade) const                  { setPixelColor(n, getPixelColor(n).nscale8_video(fade)); }
+    [[gnu::hot]] CRGBA color_from_palette(uint16_t, bool mapping, bool moving, uint8_t mcol, uint8_t pbri = 255) const;
+    [[gnu::hot]] CRGBA color_wheel(uint8_t pos) const;
     // 2D matrix
     unsigned virtualWidth()  const;       // segment width in virtual pixels (accounts for groupping and spacing)
     unsigned virtualHeight() const;       // segment height in virtual pixels (accounts for groupping and spacing)
@@ -647,63 +645,48 @@ class Segment {
     }
   #ifndef WLED_DISABLE_2D
     inline bool is2D() const                                                            { return (width()>1 && height()>1); }
-    [[gnu::hot]] void setPixelColorXY(int x, int y, uint32_t c) const; // set relative pixel within segment with color
-    inline void setPixelColorXY(unsigned x, unsigned y, uint32_t c) const               { setPixelColorXY(int(x), int(y), c); }
-    inline void setPixelColorXY(int x, int y, byte r, byte g, byte b, byte w = 0) const { setPixelColorXY(x, y, RGBW32(r,g,b,w)); }
-    inline void setPixelColorXY(int x, int y, CRGB c) const                             { setPixelColorXY(x, y, RGBW32(c.r,c.g,c.b,!hasWhite()*255)); }
-    inline void setPixelColorXY(unsigned x, unsigned y, CRGB c) const                   { setPixelColorXY(int(x), int(y), RGBW32(c.r,c.g,c.b,!hasWhite()*255)); }
+    [[gnu::hot]] void setPixelColorXY(int x, int y, CRGBA c) const; // set relative pixel within segment with color
+    inline void setPixelColorXY(unsigned x, unsigned y, CRGBA c) const                  { setPixelColorXY(int(x), int(y), c); }
+    inline void setPixelColorXY(int x, int y, byte r, byte g, byte b, byte w = 0) const { setPixelColorXY(x, y, CRGBA(r,g,b)); }
     #ifdef WLED_USE_AA_PIXELS
-    void setPixelColorXY(float x, float y, uint32_t c, bool aa = true) const;
+    void setPixelColorXY(float x, float y, CRGBA c, bool aa = true) const;
     inline void setPixelColorXY(float x, float y, byte r, byte g, byte b, byte w = 0, bool aa = true) const { setPixelColorXY(x, y, RGBW32(r,g,b,w), aa); }
-    inline void setPixelColorXY(float x, float y, CRGB c, bool aa = true) const                             { setPixelColorXY(x, y, RGBW32(c.r,c.g,c.b,0), aa); }
     #endif
     [[gnu::hot]] bool isPixelXYClipped(int x, int y) const;
-    [[gnu::hot]] uint32_t getPixelColorXY(int x, int y) const;
+    [[gnu::hot]] CRGBA getPixelColorXY(int x, int y) const;
     // 2D support functions
-    inline void blendPixelColorXY(uint16_t x, uint16_t y, uint32_t color, uint8_t blend) const { setPixelColorXY(x, y, color_blend(getPixelColorXY(x,y), color, blend)); }
-    inline void blendPixelColorXY(uint16_t x, uint16_t y, CRGB c, uint8_t blend) const         { blendPixelColorXY(x, y, RGBW32(c.r,c.g,c.b,!hasWhite()*255), blend); }
-    inline void addPixelColorXY(int x, int y, uint32_t color, bool preserveCR = true) const    { setPixelColorXY(x, y, color_add(getPixelColorXY(x,y), color, preserveCR)); }
+    inline void blendPixelColorXY(uint16_t x, uint16_t y, CRGBA color, uint8_t blend) const { setPixelColorXY(x, y, getPixelColorXY(x,y).nblend(color, blend)); }
+    inline void addPixelColorXY(int x, int y, CRGBA color, bool preserveCR = true) const    { setPixelColorXY(x, y, getPixelColorXY(x,y).add(color, preserveCR)); }
     inline void addPixelColorXY(int x, int y, byte r, byte g, byte b, byte w = 0, bool preserveCR = true)
-                                                                                               { addPixelColorXY(x, y, RGBW32(r,g,b,w), preserveCR); }
-    inline void addPixelColorXY(int x, int y, CRGB c, bool preserveCR = true) const            { addPixelColorXY(x, y, RGBW32(c.r,c.g,c.b,!hasWhite()*255), preserveCR); }
-    inline void fadePixelColorXY(uint16_t x, uint16_t y, uint8_t fade) const                   { setPixelColorXY(x, y, color_fade(getPixelColorXY(x,y), fade, true)); }
-    inline void blurCols(fract8 blur_amount, bool smear = false) const                         { blur2D(0, blur_amount, smear); } // blur all columns (50% faster than full 2D blur)
-    inline void blurRows(fract8 blur_amount, bool smear = false) const                         { blur2D(blur_amount, 0, smear); } // blur all rows (50% faster than full 2D blur)
+                                                                                            { addPixelColorXY(x, y, CRGBA(r,g,b), preserveCR); }
+    inline void fadePixelColorXY(uint16_t x, uint16_t y, uint8_t fade) const                { setPixelColorXY(x, y, getPixelColorXY(x,y).nscale8_video(fade)); }
+    inline void blurCols(fract8 blur_amount, bool smear = false) const                      { blur2D(0, blur_amount, smear); } // blur all columns (50% faster than full 2D blur)
+    inline void blurRows(fract8 blur_amount, bool smear = false) const                      { blur2D(blur_amount, 0, smear); } // blur all rows (50% faster than full 2D blur)
     //void box_blur(unsigned r = 1U, bool smear = false); // 2D box blur
     void blur2D(uint8_t blur_x, uint8_t blur_y, bool smear = false) const;
     void moveX(int delta, bool wrap = false) const;
     void moveY(int delta, bool wrap = false) const;
     void move(unsigned dir, unsigned delta, bool wrap = false) const;
-    void drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, uint32_t c, bool soft = false) const;
-    void fillCircle(uint16_t cx, uint16_t cy, uint8_t radius, uint32_t c, bool soft = false) const;
-    void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint32_t c, bool soft = false) const;
-    void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t col2 = 0, int8_t rotate = 0) const;
-    void wu_pixel(uint32_t x, uint32_t y, CRGBW c) const;
-    inline void drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGB c, bool soft = false) const { drawCircle(cx, cy, radius, RGBW32(c.r,c.g,c.b,!hasWhite()*255), soft); }
-    inline void fillCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGB c, bool soft = false) const { fillCircle(cx, cy, radius, RGBW32(c.r,c.g,c.b,!hasWhite()*255), soft); }
-    inline void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGB c, bool soft = false) const { drawLine(x0, y0, x1, y1, RGBW32(c.r,c.g,c.b,!hasWhite()*255), soft); } // automatic inline
-    inline void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGB c, CRGB c2 = CRGB::Black, int8_t rotate = 0) const { drawCharacter(chr, x, y, w, h, RGBW32(c.r,c.g,c.b,!hasWhite()*255), RGBW32(c2.r,c2.g,c2.b,!hasWhite()*255), rotate); } // automatic inline
-    inline void fill_solid(CRGB c) const { fill(RGBW32(c.r,c.g,c.b,0)); }
+    void drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA c, bool soft = false) const;
+    void fillCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA c, bool soft = false) const;
+    void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft = false) const;
+    void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA col2 = 0, int8_t rotate = 0) const;
+    void wu_pixel(uint32_t x, uint32_t y, CRGBA c) const;
   #else
-    inline bool is2D() const                                                      { return false; }
-    inline void setPixelColorXY(int x, int y, uint32_t c) const                   { setPixelColor(x, c); }
-    inline void setPixelColorXY(unsigned x, unsigned y, uint32_t c) const         { setPixelColor(int(x), c); }
-    inline void setPixelColorXY(int x, int y, byte r, byte g, byte b, byte w = 0) const { setPixelColor(x, RGBW32(r,g,b,w)); }
-    inline void setPixelColorXY(int x, int y, CRGB c) const                       { setPixelColor(x, RGBW32(c.r,c.g,c.b,0)); }
-    inline void setPixelColorXY(unsigned x, unsigned y, CRGB c) const             { setPixelColor(int(x), RGBW32(c.r,c.g,c.b,0)); }
+    inline bool is2D() const                                                            { return false; }
+    inline void setPixelColorXY(int x, int y, CRGBA c) const                            { setPixelColor(x, c); }
+    inline void setPixelColorXY(unsigned x, unsigned y, CRGBA c) const                  { setPixelColor(int(x), c); }
+    inline void setPixelColorXY(int x, int y, byte r, byte g, byte b, byte w = 0) const { setPixelColor(x, CRGBA(r,g,b)); }
     #ifdef WLED_USE_AA_PIXELS
-    inline void setPixelColorXY(float x, float y, uint32_t c, bool aa = true) const { setPixelColor(x, c, aa); }
-    inline void setPixelColorXY(float x, float y, byte r, byte g, byte b, byte w = 0, bool aa = true) { setPixelColor(x, RGBW32(r,g,b,w), aa); }
-    inline void setPixelColorXY(float x, float y, CRGB c, bool aa = true) const     { setPixelColor(x, RGBW32(c.r,c.g,c.b,0), aa); }
+    inline void setPixelColorXY(float x, float y, CRGBA c, bool aa = true) const        { setPixelColor(x, c, aa); }
+    inline void setPixelColorXY(float x, float y, byte r, byte g, byte b, byte w = 0, bool aa = true) { setPixelColor(x, CRGBA(r,g,b), aa); }
     #endif
-    inline bool isPixelXYClipped(int x, int y) const                                       { return isPixelClipped(x); }
-    inline uint32_t getPixelColorXY(int x, int y) const                                    { return getPixelColor(x); }
-    inline void blendPixelColorXY(uint16_t x, uint16_t y, uint32_t c, uint8_t blend) const { blendPixelColor(x, c, blend); }
-    inline void blendPixelColorXY(uint16_t x, uint16_t y, CRGB c, uint8_t blend) const     { blendPixelColor(x, RGBW32(c.r,c.g,c.b,0), blend); }
-    inline void addPixelColorXY(int x, int y, uint32_t color, bool saturate = false) const { addPixelColor(x, color, saturate); }
-    inline void addPixelColorXY(int x, int y, byte r, byte g, byte b, byte w = 0, bool saturate = false) const { addPixelColor(x, RGBW32(r,g,b,w), saturate); }
-    inline void addPixelColorXY(int x, int y, CRGB c, bool saturate = false) const         { addPixelColor(x, RGBW32(c.r,c.g,c.b,0), saturate); }
-    inline void fadePixelColorXY(uint16_t x, uint16_t y, uint8_t fade) const               { fadePixelColor(x, fade); }
+    inline bool isPixelXYClipped(int x, int y) const                                    { return isPixelClipped(x); }
+    inline CRGBA getPixelColorXY(int x, int y) const                                    { return getPixelColor(x); }
+    inline void blendPixelColorXY(uint16_t x, uint16_t y, CRGBA c, uint8_t blend) const { blendPixelColor(x, c, blend); }
+    inline void addPixelColorXY(int x, int y, CRGBA color, bool saturate = false) const { addPixelColor(x, color, saturate); }
+    inline void addPixelColorXY(int x, int y, byte r, byte g, byte b, byte w = 0, bool saturate = false) const { addPixelColor(x, CRGBA(r,g,b), saturate); }
+    inline void fadePixelColorXY(uint16_t x, uint16_t y, uint8_t fade) const            { fadePixelColor(x, fade); }
     //inline void box_blur(unsigned i, bool vertical, fract8 blur_amount) {}
     inline void blur2D(uint8_t blur_x, uint8_t blur_y, bool smear = false) {}
     inline void blurCols(fract8 blur_amount, bool smear = false) { blur(blur_amount, smear); } // blur all columns (50% faster than full 2D blur)
@@ -711,15 +694,11 @@ class Segment {
     inline void moveX(int delta, bool wrap = false) {}
     inline void moveY(int delta, bool wrap = false) {}
     inline void move(uint8_t dir, uint8_t delta, bool wrap = false) {}
-    inline void drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, uint32_t c, bool soft = false) {}
-    inline void drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGB c, bool soft = false) {}
-    inline void fillCircle(uint16_t cx, uint16_t cy, uint8_t radius, uint32_t c, bool soft = false) {}
-    inline void fillCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGB c, bool soft = false) {}
-    inline void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint32_t c, bool soft = false) {}
-    inline void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGB c, bool soft = false) {}
-    inline void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, uint32_t color, uint32_t = 0, int8_t = 0) {}
-    inline void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGB c, CRGB c2, int8_t rotate = 0) {}
-    inline void wu_pixel(uint32_t x, uint32_t y, CRGB c) {}
+    inline void drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA c, bool soft = false) {}
+    inline void fillCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA c, bool soft = false) {}
+    inline void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft = false) {}
+    inline void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA = 0, int8_t = 0) {}
+    inline void wu_pixel(uint32_t x, uint32_t y, CRGBA c) {}
   #endif
   friend class WS2812FX;
 };

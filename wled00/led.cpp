@@ -7,14 +7,14 @@
  // applies chosen setment properties to legacy values
 void setValuesFromSegment(uint8_t s) {
   const Segment& seg = strip.getSegment(s);
-  colPri[0] = R(seg.colors[0]);
-  colPri[1] = G(seg.colors[0]);
-  colPri[2] = B(seg.colors[0]);
-  colPri[3] = W(seg.colors[0]);
-  colSec[0] = R(seg.colors[1]);
-  colSec[1] = G(seg.colors[1]);
-  colSec[2] = B(seg.colors[1]);
-  colSec[3] = W(seg.colors[1]);
+  colPri[0] = seg.colors[0].r;
+  colPri[1] = seg.colors[0].g;
+  colPri[2] = seg.colors[0].b;
+  colPri[3] = seg.colors[0].a;
+  colSec[0] = seg.colors[1].r;
+  colSec[1] = seg.colors[1].g;
+  colSec[2] = seg.colors[1].b;
+  colSec[3] = seg.colors[1].a;
   effectCurrent   = seg.mode;
   effectSpeed     = seg.speed;
   effectIntensity = seg.intensity;

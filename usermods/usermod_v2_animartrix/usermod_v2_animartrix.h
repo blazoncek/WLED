@@ -77,10 +77,10 @@ class ANIMartRIXMod:public ANIMartRIX {
 	  setSpeedFactor(speedFactor);
 	}
 	void setPixelColor(int x, int y, rgb pixel) {
-		SEGMENT.setPixelColorXY(x, y, CRGB(pixel.red, pixel.green, pixel.blue));
+		SEGMENT.setPixelColorXY(x, y, pixel);
 	}
 	void setPixelColor(int index, rgb pixel) {
-		SEGMENT.setPixelColor(index, CRGB(pixel.red, pixel.green, pixel.blue));
+		SEGMENT.setPixelColor(index, pixel);
   	}
 
 	// Add any extra custom effects not part of the ANIMartRIX libary here

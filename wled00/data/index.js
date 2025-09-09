@@ -73,15 +73,16 @@ function rgbBri(a) {return 0.2126*parseInt(a.r) + 0.7152*parseInt(a.g) + 0.0722*
 // sets background of color slot selectors
 function setCSL(cs)
 {
-	let w = cs.dataset.w ? parseInt(cs.dataset.w) : 0;
+	let w = parseInt(cs.dataset.w);
+	if (w === undefined || isNaN(w)) w = 0;
 	let hasShadow = getComputedStyle(cs).textShadow !== "none";
-	if (hasRGB && !isRgbBlack(cs.dataset)) {
+	if (hasRGB /*&& !isRgbBlack(cs.dataset)*/) {
 		if (!hasShadow) cs.style.color = rgbBri(cs.dataset) > 127 ? "#000":"#fff"; // if text has no CSS "shadow"
 		cs.style.background = (hasWhite && w > 0) ? `linear-gradient(180deg, ${rgbStr(cs.dataset)} 30%, rgb(${w},${w},${w}))` : rgbStr(cs.dataset);
 	} else {
 		if (hasRGB && !hasWhite) w = 0;
 		cs.style.background = `rgb(${w},${w},${w})`;
-		if (!hasShadow) cs.style.color = w > 127 ? "#000":"#fff";
+		if (!hasShadow) cs.style.color = (hasWhite ? w : rgbBri(cs.dataset)) > 127 ? "#000":"#fff";
 	}
 }
 
@@ -826,7 +827,10 @@ function populateSegments(s)
 							`<option value="13" ${inst.bm==13?' selected':''}>Soft Light</option>`+
 							`<option value="14" ${inst.bm==14?' selected':''}>Dodge</option>`+
 							`<option value="15" ${inst.bm==15?' selected':''}>Burn</option>`+
-							`<option value="16" ${inst.bm==16?' selected':''}>Chroma</option>`+
+							`<option value="16" ${inst.bm==16?' selected':''}>Stencil</option>`+
+							`<option value="17" ${inst.bm==17?' selected':''}>Hue</option>`+
+							`<option value="18" ${inst.bm==18?' selected':''}>Saturation</option>`+
+							`<option value="19" ${inst.bm==19?' selected':''}>Value</option>`+
 						`</select></div>`+
 					`</div>`;
 		let sndSim = `<div data-snd="si" class="lbl-s hide">Sound sim<br>`+
@@ -1475,6 +1479,7 @@ function readState(s,command=false)
 	else gId('bsp').classList.remove('hide')
 
 	populateSegments(s);
+	segLmax = 0; // reset max segment length
 	hasRGB = hasWhite = hasCCT = has2D = false;
 	let i = {};
 	// determine light capabilities from selected segments
@@ -1482,8 +1487,8 @@ function readState(s,command=false)
 		let w  = (seg.stop - seg.start);
 		let h  = seg.stopY ? (seg.stopY - seg.startY) : 1;
 		let lc = seg.lc;
-		if (w*h > segLmax) segLmax = w*h;
 		if (seg.sel) {
+			if (w*h > segLmax) segLmax = w*h;
 			if (isEmpty(i) || (i.id == s.mainseg && !i.sel)) i = seg; // get first selected segment (and replace mainseg if it is not selected)
 			hasRGB   |= !!(lc & 0x01);
 			hasWhite |= !!(lc & 0x02);
@@ -1502,15 +1507,14 @@ function readState(s,command=false)
 		hasCCT   |= !!(i.lc & 0x04);
 		has2D    |= (i.stop - i.start) > 1 && (i.stopY ? (i.stopY - i.startY) : 1) > 1;
 	}
-
-	var cd = d.querySelectorAll("#csl button");
-	for (let e = cd.length-1; e >= 0; e--) {
-		cd[e].dataset.r = i.col[e][0];
-		cd[e].dataset.g = i.col[e][1];
-		cd[e].dataset.b = i.col[e][2];
-		if (hasWhite || (!hasRGB && !hasWhite)) { cd[e].dataset.w = i.col[e][3]; }
-		setCSL(cd[e]);
-	}
+	// update color selectors with values from first selected segment (or mainseg)
+	d.querySelectorAll("#csl button").forEach((e,j) => {
+		e.dataset.r = i.col[j][0];
+		e.dataset.g = i.col[j][1];
+		e.dataset.b = i.col[j][2];
+		e.dataset.w = (i.col[j][3] != undefined) ? i.col[j][3] : ((i.lc&3)?0:255); // On/Off bus should have W=255
+		setCSL(e);
+	});
 	selectSlot(csel);
 	if (i.cct != null && i.cct>=0) gId("sliderA").value = i.cct;
 
@@ -1594,9 +1598,9 @@ function setEffectParameters(idx)
 	var controlDefined = fxdata[idx].length;
 	var effectPar = fxdata[idx];
 	var effectPars = (effectPar == '')?[]:effectPar.split(";");
-	var slOnOff = (effectPars.length==0 || effectPars[0]=='')?[]:effectPars[0].split(",");
-	var coOnOff = (effectPars.length<2  || effectPars[1]=='')?[]:effectPars[1].split(",");
-	var paOnOff = (effectPars.length<3  || effectPars[2]=='')?[]:effectPars[2].split(",");
+	var slOnOff = (effectPars.length==0 || effectPars[0]=='')?[]:effectPars[0].split(","); // slider on/off control
+	var coOnOff = (effectPars.length<2  || effectPars[1]=='')?[]:effectPars[1].split(","); // color selector on/off control
+	var paOnOff = (effectPars.length<3  || effectPars[2]=='')?[]:effectPars[2].split(","); // palette on/off control
 
 	// set html slider items on/off
 	d.querySelectorAll("#sliders .sliderwrap").forEach((slider, i)=>{
@@ -1639,12 +1643,12 @@ function setEffectParameters(idx)
 	var cslLabel = '';
 	var sep = '';
 	var cslCnt = 0, oCsel = csel;
-	d.querySelectorAll("#csl button").forEach((e,i)=>{
-		var btn = gId("csl" + i);
+	d.querySelectorAll("#csl button").forEach((btn,i)=>{
 		// if no controlDefined or coOnOff has a value
+		btn.dataset.hide = 0;
+		btn.classList.remove('hide');
+		btn.innerHTML = `${i+1}`; // name (hidden) buttons 1..3 for * palettes
 		if (coOnOff.length>i && coOnOff[i] != "") {
-			btn.classList.remove('hide');
-			btn.dataset.hide = 0;
 			if (coOnOff[i] != "!") {
 				var abbreviation = coOnOff[i].substr(0,2);
 				btn.innerHTML = abbreviation;
@@ -1653,26 +1657,21 @@ function setEffectParameters(idx)
 					sep = ', ';
 				}
 			}
-			else if (i==0) btn.innerHTML = "Fx";
-			else if (i==1) btn.innerHTML = "Bg";
-			else btn.innerHTML = "Cs";
+			else btn.innerHTML = (i==0)?"Fx":((i==1)?"Bg":"Cs"); // default names
 			if (!cslCnt || oCsel==i) selectSlot(i); // select 1st displayed slot or old one
 			cslCnt++;
 		} else if (!controlDefined) { // if no controls then all buttons should be shown for color 1..3
-			btn.classList.remove('hide');
-			btn.dataset.hide = 0;
-			btn.innerHTML = `${i+1}`;
 			if (!cslCnt || oCsel==i) selectSlot(i); // select 1st displayed slot or old one
 			cslCnt++;
 		} else {
 			btn.classList.add('hide');
 			btn.dataset.hide = 1;
-			btn.innerHTML = `${i+1}`; // name hidden buttons 1..3 for * palettes
 		}
 	});
-	gId("cslLabel").innerHTML = cslLabel;
-	if (cslLabel!=="") gId("cslLabel").classList.remove("hide");
-	else               gId("cslLabel").classList.add("hide");
+	let lbl = gId("cslLabel");
+	lbl.innerHTML = cslLabel;
+	if (cslLabel!=="") lbl.classList.remove("hide");
+	else               lbl.classList.add("hide");
 
 	// set palette on/off
 	var palw = gId("palw"); // wrapper
@@ -1703,14 +1702,6 @@ function setEffectParameters(idx)
 		}
 	}
 	pall.innerHTML = icon + text;
-	// not all color selectors shown, hide palettes created from color selectors
-	// NOTE: this will disallow user to select "* Color ..." palettes which may be undesirable in some cases or for some users
-	//for (let e of (d.querySelectorAll('#pallist .lstI')||[])) {
-	//	let fltr = "* C";
-	//	if (cslCnt==1 && csel==0) fltr = "* Colors";
-	//	else if (cslCnt==2) fltr = "* Colors Only";
-	//	if (cslCnt < 3 && e.querySelector('.lstIname').innerText.indexOf(fltr)>=0) e.classList.add('hide'); else e.classList.remove('hide');
-	//}
 }
 
 var jsonTimeout;
@@ -2348,21 +2339,21 @@ function setMiY(s)
 
 function setM12(s)
 {
-	var value = gId(`seg${s}m12`).selectedIndex;
+	var value = gId(`seg${s}m12`).value;
 	var obj = {"seg": {"id": s, "m12": value}};
 	requestJson(obj);
 }
 
 function setSi(s)
 {
-	var value = gId(`seg${s}si`).selectedIndex;
+	var value = gId(`seg${s}si`).value;
 	var obj = {"seg": {"id": s, "si": value}};
 	requestJson(obj);
 }
 
 function setBm(s)
 {
-	var value = gId(`seg${s}bm`).selectedIndex;
+	var value = gId(`seg${s}bm`).value;
 	var obj = {"seg": {"id": s, "bm": value}};
 	requestJson(obj);
 }
@@ -2599,8 +2590,9 @@ function delP(i) {
 
 function selectSlot(b)
 {
-	csel = b;
 	var cd = gId('csl').children;
+	if (b >= cd.length || cd[b].dataset.hide == '1') return;
+	csel = b;
 	for (let i of cd) i.classList.remove('sl');
 	cd[b].classList.add('sl');
 	setPicker(rgbStr(cd[b].dataset));

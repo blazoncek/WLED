@@ -16,7 +16,7 @@
  */
 namespace {
   typedef struct {
-    uint32_t colors[NUM_COLORS];
+    CRGBA    colors[NUM_COLORS];
     uint16_t start;
     uint16_t stop;
     uint16_t offset;
@@ -226,10 +226,10 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
           JsonObject oCol = colarr[i];
           if (!oCol.isNull()) {
             // we have a JSON object for color {"w":123,"r":123,...}; allows individual channel control
-            rgbw[0] = oCol["r"] | R(seg.colors[i]);
-            rgbw[1] = oCol["g"] | G(seg.colors[i]);
-            rgbw[2] = oCol["b"] | B(seg.colors[i]);
-            rgbw[3] = oCol["w"] | W(seg.colors[i]);
+            rgbw[0] = oCol["r"] | seg.colors[i].r;
+            rgbw[1] = oCol["g"] | seg.colors[i].g;
+            rgbw[2] = oCol["b"] | seg.colors[i].b;
+            rgbw[3] = oCol["w"] | seg.colors[i].a;
             colValid = true;
           } else {
             byte brgbw[] = {0,0,0,0};
@@ -254,7 +254,7 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
 
         if (!colValid) continue;
 
-        if (!seg.hasWhite()) rgbw[3] = 255; // if we have RGB only strip, white is considered opacity
+        // rgbw[3] is ignored on RGB-only segments (and is forced to 255 in setColor() as opacity)
         seg.setColor(i, RGBW32(rgbw[0],rgbw[1],rgbw[2],rgbw[3])); // use transition
         if (seg.mode == FX_MODE_STATIC) strip.trigger(); //instant refresh
       }
@@ -312,7 +312,7 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   seg.check2 = getBoolVal(elem["o2"], seg.check2);
   seg.check3 = getBoolVal(elem["o3"], seg.check3);
 
-  getVal(elem["bm"], seg.blendMode, 0, 16);
+  getVal(elem["bm"], seg.blendMode, 0, BLEND_MODE_COUNT-1);
 
   JsonArray iarr = elem[F("i")]; //set individual LEDs
   if (!iarr.isNull()) {
@@ -611,16 +611,10 @@ static void serializeSegment(JsonObject& root, const Segment& seg, byte id, bool
   // to conserve RAM we will serialize the col array manually
   // this will reduce RAM footprint from ~300 bytes to 84 bytes per segment
   char colstr[70]; colstr[0] = '['; colstr[1] = '\0';  //max len 68 (5 chan, all 255)
-  const char *format = strip.hasWhiteChannel() ? PSTR("[%u,%u,%u,%u]") : PSTR("[%u,%u,%u]");
-  for (size_t i = 0; i < 3; i++)
-  {
-    byte segcol[4]; byte* c = segcol;
-    segcol[0] = R(seg.colors[i]);
-    segcol[1] = G(seg.colors[i]);
-    segcol[2] = B(seg.colors[i]);
-    segcol[3] = W(seg.colors[i]);
+  const char *format = seg.hasWhite() ? PSTR("[%u,%u,%u,%u]") : PSTR("[%u,%u,%u]");
+  for (size_t i = 0; i < 3; i++) {
     char tmpcol[22];
-    sprintf_P(tmpcol, format, (unsigned)c[0], (unsigned)c[1], (unsigned)c[2], (unsigned)c[3]);
+    sprintf_P(tmpcol, format, (unsigned)seg.colors[i].r, (unsigned)seg.colors[i].g, (unsigned)seg.colors[i].b, (unsigned)seg.colors[i].a);
     strcat(colstr, i<2 ? strcat(tmpcol, ",") : tmpcol);
   }
   strcat(colstr, "]");
@@ -908,7 +902,7 @@ void setPaletteColors(JsonArray json, CRGBPalette16 palette)
 {
     for (int i = 0; i < 16; i++) {
       JsonArray colors =  json.createNestedArray();
-      CRGB color = palette[i];
+      CRGBA color(palette[i]);
       colors.add(i<<4);
       colors.add(color.red);
       colors.add(color.green);

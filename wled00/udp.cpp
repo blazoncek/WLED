@@ -36,7 +36,7 @@ void notify(byte callMode, bool followUp)
   udpOut[0] = 0; //0: wled notifier protocol 1: WARLS protocol
   udpOut[1] = callMode;
   udpOut[2] = bri;
-  uint32_t col = mainseg.colors[0];
+  uint32_t col = mainseg.colors[0].color32;
   udpOut[3] = R(col);
   udpOut[4] = G(col);
   udpOut[5] = B(col);
@@ -52,7 +52,7 @@ void notify(byte callMode, bool followUp)
   //9: supports sync groups, 37 byte packet 10: supports CCT, 39 byte packet 11: per segment options, variable packet length (40+WS2812FX::getMaxSegments()*3)
   //12: enhanced effect sliders, 2D & mapping options
   udpOut[11] = 12;
-  col = mainseg.colors[1];
+  col = mainseg.colors[1].color32;
   udpOut[12] = R(col);
   udpOut[13] = G(col);
   udpOut[14] = B(col);
@@ -61,7 +61,7 @@ void notify(byte callMode, bool followUp)
   udpOut[17] = (transitionDelay >> 0) & 0xFF;
   udpOut[18] = (transitionDelay >> 8) & 0xFF;
   udpOut[19] = mainseg.palette;
-  col = mainseg.colors[2];
+  col = mainseg.colors[2].color32;
   udpOut[20] = R(col);
   udpOut[21] = G(col);
   udpOut[22] = B(col);
@@ -116,18 +116,18 @@ void notify(byte callMode, bool followUp)
     udpOut[12+ofs] = selseg.speed;
     udpOut[13+ofs] = selseg.intensity;
     udpOut[14+ofs] = selseg.palette;
-    udpOut[15+ofs] = R(selseg.colors[0]);
-    udpOut[16+ofs] = G(selseg.colors[0]);
-    udpOut[17+ofs] = B(selseg.colors[0]);
-    udpOut[18+ofs] = W(selseg.colors[0]);
-    udpOut[19+ofs] = R(selseg.colors[1]);
-    udpOut[20+ofs] = G(selseg.colors[1]);
-    udpOut[21+ofs] = B(selseg.colors[1]);
-    udpOut[22+ofs] = W(selseg.colors[1]);
-    udpOut[23+ofs] = R(selseg.colors[2]);
-    udpOut[24+ofs] = G(selseg.colors[2]);
-    udpOut[25+ofs] = B(selseg.colors[2]);
-    udpOut[26+ofs] = W(selseg.colors[2]);
+    udpOut[15+ofs] = selseg.colors[0].r;
+    udpOut[16+ofs] = selseg.colors[0].g;
+    udpOut[17+ofs] = selseg.colors[0].b;
+    udpOut[18+ofs] = selseg.colors[0].a;
+    udpOut[19+ofs] = selseg.colors[1].r;
+    udpOut[20+ofs] = selseg.colors[1].g;
+    udpOut[21+ofs] = selseg.colors[1].b;
+    udpOut[22+ofs] = selseg.colors[1].a;
+    udpOut[23+ofs] = selseg.colors[2].r;
+    udpOut[24+ofs] = selseg.colors[2].g;
+    udpOut[25+ofs] = selseg.colors[2].b;
+    udpOut[26+ofs] = selseg.colors[2].a;
     udpOut[27+ofs] = selseg.cct;
     udpOut[28+ofs] = (selseg.options>>8) & 0xFF; //mirror_y, transpose, 2D mapping & sound
     udpOut[29+ofs] = selseg.custom1;

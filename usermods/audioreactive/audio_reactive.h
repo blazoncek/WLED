@@ -655,8 +655,8 @@ static uint16_t mode_ripplepeak(void) {                // * Ripple peak. By Andr
         break;
 
       default:                                            // Middle of the ripples.
-        SEGMENT.setPixelColor((ripples[i].pos + ripples[i].state + SEGLEN) % SEGLEN, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(ripples[i].color, false, false, 0), uint8_t(2*255/ripples[i].state)));
-        SEGMENT.setPixelColor((ripples[i].pos - ripples[i].state + SEGLEN) % SEGLEN, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(ripples[i].color, false, false, 0), uint8_t(2*255/ripples[i].state)));
+        SEGMENT.setPixelColor((ripples[i].pos + ripples[i].state + SEGLEN) % SEGLEN, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(ripples[i].color, false, false, 0), uint8_t(2*255/ripples[i].state)));
+        SEGMENT.setPixelColor((ripples[i].pos - ripples[i].state + SEGLEN) % SEGLEN, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(ripples[i].color, false, false, 0), uint8_t(2*255/ripples[i].state)));
         ripples[i].state++;                               // Next step.
         break;
     } // switch step
@@ -697,8 +697,8 @@ static uint16_t mode_gravcenter(void) {                // Gravcenter. By Andrew 
 
   for (int i=0; i<tempsamp; i++) {
     uint8_t index = inoise8(i*segmentSampleAvg+strip.now, 5000+i*segmentSampleAvg);
-    SEGMENT.setPixelColor(i+SEGLEN/2, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
-    SEGMENT.setPixelColor(SEGLEN/2-i-1, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
+    SEGMENT.setPixelColor(i+SEGLEN/2, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
+    SEGMENT.setPixelColor(SEGLEN/2-i-1, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
   }
 
   if (tempsamp >= gravcen->topLED)
@@ -786,7 +786,7 @@ static uint16_t mode_gravimeter(void) {                // Gravmeter. By Andrew T
 
   for (int i=0; i<tempsamp; i++) {
     uint8_t index = inoise8(i*segmentSampleAvg+strip.now, 5000+i*segmentSampleAvg);
-    SEGMENT.setPixelColor(i, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
+    SEGMENT.setPixelColor(i, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
   }
 
   if (tempsamp >= gravcen->topLED)
@@ -815,7 +815,7 @@ static uint16_t mode_juggles(void) {                   // Juggles. By Andrew Tul
 
   for (size_t i=0; i<SEGMENT.intensity/32+1U; i++) {
     // if SEGLEN equals 1, we will always set color to the first and only pixel, but the effect is still good looking
-    SEGMENT.setPixelColor(beatsin16(SEGMENT.speed/4+i*2,0,SEGLEN-1), color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(strip.now/4+i*2, false, false, 0), my_sampleAgc));
+    SEGMENT.setPixelColor(beatsin16(SEGMENT.speed/4+i*2,0,SEGLEN-1), SEGCOLOR(1).nblend(SEGMENT.color_from_palette(strip.now/4+i*2, false, false, 0), my_sampleAgc));
   }
 
   return FRAMETIME;
@@ -840,7 +840,7 @@ static uint16_t mode_matripix(void) {                  // Matripix. By Andrew Tu
     for (unsigned i = 0; i < k; i++) {
       SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i+1)); // shift left
     }
-    SEGMENT.setPixelColor(k, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(strip.now, false, false, 0), pixBri));
+    SEGMENT.setPixelColor(k, SEGCOLOR(1).blend(SEGMENT.color_from_palette(strip.now, false, false, 0), (uint8_t)pixBri));
   }
 
   return FRAMETIME;
@@ -950,7 +950,7 @@ static uint16_t mode_pixelwave(void) {                 // Pixelwave. By Andrew T
     uint8_t pixBri = volumeRaw * SEGMENT.intensity / 64;
 
     const unsigned halfSeg = SEGLEN/2;
-    SEGMENT.setPixelColor(halfSeg, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(strip.now, false, false, 0), pixBri));
+    SEGMENT.setPixelColor(halfSeg, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(strip.now, false, false, 0), pixBri));
     for (unsigned i = SEGLEN - 1; i > halfSeg; i--) SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i-1)); //move to the left
     for (unsigned i = 0; i < halfSeg; i++)          SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i+1)); // move to the right
   }
@@ -988,7 +988,7 @@ static uint16_t mode_plasmoid(void) {                  // Plasmoid. By Andrew Tu
     uint8_t colorIndex=thisbright;
     if (volumeSmth * SEGMENT.intensity / 64 < thisbright) {thisbright = 0;}
 
-    SEGMENT.addPixelColor(i, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(colorIndex, false, false, 0), thisbright));
+    SEGMENT.addPixelColor(i, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(colorIndex, false, false, 0), thisbright));
   }
 
   return FRAMETIME;
@@ -1077,7 +1077,7 @@ static uint16_t mode_pixels(void) {                    // Pixels. By Andrew Tuli
 
   for (int i=0; i <SEGMENT.intensity/8; i++) {
     unsigned segLoc = hw_random16(SEGLEN);                    // 16 bit for larger strands of LED's.
-    SEGMENT.setPixelColor(segLoc, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(myVals[i%32]+i*4, false, false, 0), uint8_t(volumeSmth)));
+    SEGMENT.setPixelColor(segLoc, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(myVals[i%32]+i*4, false, false, 0), uint8_t(volumeSmth)));
   }
 
   return FRAMETIME;
@@ -1111,7 +1111,7 @@ static uint16_t mode_blurz(void) {                    // Blurz. By Andrew Tuline
   SEGENV.step += FRAMETIME;
   if (SEGENV.step > cycleTime) {
     unsigned segLoc = hw_random16(SEGLEN);
-    SEGMENT.setPixelColor(segLoc, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(2*fftResult[SEGENV.aux0%16]*240/max(1, (int)SEGLEN-1), false, false, 0), 2*fftResult[SEGENV.aux0%16]));
+    SEGMENT.setPixelColor(segLoc, SEGCOLOR(1).blend(SEGMENT.color_from_palette(2*fftResult[SEGENV.aux0%16]*240/max(1, (int)SEGLEN-1), false, false, 0), (uint8_t)(2*fftResult[SEGENV.aux0%16])));
     ++(SEGENV.aux0) %= 16; // make sure it doesn't cross 16
 
     SEGENV.step = 1;
@@ -1137,7 +1137,7 @@ static uint16_t mode_DJLight(void) {                   // Written by ??? Adapted
   if (SEGENV.aux0 != secondHand) {                        // Triggered millis timing.
     SEGENV.aux0 = secondHand;
 
-    CRGB color = CRGB(fftResult[15]/2, fftResult[5]/2, fftResult[0]/2).fadeToBlackBy(map(fftResult[4], 0, 255, 255, 4)); // 16-> 15 as 16 is out of bounds
+    CRGBA color = CRGBA(fftResult[15]/2, fftResult[5]/2, fftResult[0]/2).fadeToBlackBy(map(fftResult[4], 0, 255, 255, 4)); // 16-> 15 as 16 is out of bounds
     SEGMENT.setPixelColor(mid, color);
 
     // if SEGLEN equals 1 these loops won't execute
@@ -1173,7 +1173,7 @@ static uint16_t mode_freqmap(void) {                   // Map FFT_MajorPeak to S
 
   uint8_t bright = (uint8_t)my_magnitude;
 
-  SEGMENT.setPixelColor(locn, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(SEGMENT.intensity+pixCol, false, false, 0), bright));
+  SEGMENT.setPixelColor(locn, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(SEGMENT.intensity+pixCol, false, false, 0), bright));
 
   return FRAMETIME;
 } // mode_freqmap()
@@ -1196,7 +1196,7 @@ static uint16_t mode_freqmatrix(void) {                // Freqmatrix. By Andreas
 
     float intensity = map(pixVal, 0, 255, 0, 100) / 100.0f;  // make a brightness from the last avg
 
-    uint32_t pixel = BLACK;
+    CRGBA pixel = BLACK;
 
     // MajorPeak holds the freq. value which is most abundant in the last sample.
     // With our sampling rate of 10240Hz we have a usable freq range from roughly 80Hz to 10240/2 Hz
@@ -1208,7 +1208,7 @@ static uint16_t mode_freqmatrix(void) {                // Freqmatrix. By Andreas
       uint8_t i =  lowerLimit!=upperLimit ? map(FFT_MajorPeak, lowerLimit, upperLimit, 0, 255) : FFT_MajorPeak;  // may under/overflow - so we enforce uint8_t
       unsigned b = 255 * intensity;
       if (b > 255) b = 255;
-      pixel = CRGBW(CHSV(i, 240, (uint8_t)b)); // implicit conversion to RGB supplied by FastLED
+      pixel = CRGBA(CHSV32(i, 240, (uint8_t)b)); // implicit conversion to RGB supplied by FastLED
     }
 
     // shift the pixels one pixel up
@@ -1245,7 +1245,7 @@ static uint16_t mode_freqpixels(void) {                // Freqpixel. By Andrew T
   if (FFT_MajorPeak < 61.0f) pixCol = 0;                                               // handle underflow
   for (int i=0; i < SEGMENT.intensity/32+1; i++) {
     unsigned locn = hw_random16(0,SEGLEN);
-    SEGMENT.setPixelColor(locn, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(SEGMENT.intensity+pixCol, false, false, 0), (uint8_t)my_magnitude));
+    SEGMENT.setPixelColor(locn, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(SEGMENT.intensity+pixCol, false, false, 0), (uint8_t)my_magnitude));
   }
 
   return FRAMETIME;
@@ -1279,7 +1279,7 @@ static uint16_t mode_freqwave(void) {                  // Freqwave. By Andreas P
     float pixVal = min(255.0f, volumeSmth * (float)SEGMENT.intensity / 256.0f * sensitivity);
     float intensity = mapf(pixVal, 0.0f, 255.0f, 0.0f, 100.0f) / 100.0f;  // make a brightness from the last avg
 
-    uint32_t pixel = BLACK;
+    CRGBA pixel = BLACK;
 
     // MajorPeak holds the freq. value which is most abundant in the last sample.
     // With our sampling rate of 10240Hz we have a usable freq range from roughly 80Hz to 10240/2 Hz
@@ -1290,7 +1290,7 @@ static uint16_t mode_freqwave(void) {                  // Freqwave. By Andreas P
       int lowerLimit = 80 + 3 * SEGMENT.custom1;
       uint8_t i =  lowerLimit!=upperLimit ? map(FFT_MajorPeak, lowerLimit, upperLimit, 0, 255) : FFT_MajorPeak; // may under/overflow - so we enforce uint8_t
       unsigned b = min(255.0f, 255.0f * intensity);
-      pixel = CRGBW(CHSV(i, 240, (uint8_t)b)); // implicit conversion to RGB supplied by FastLED
+      pixel = CRGBA(CHSV32(i, 240, (uint8_t)b)); // implicit conversion to RGB supplied by FastLED
     }
 
     // shift the pixels one pixel outwards
@@ -1364,7 +1364,7 @@ static uint16_t mode_noisemove(void) {                 // Noisemove.    By: Andr
     unsigned locn = inoise16(strip.now*SEGMENT.speed+i*50000, strip.now*SEGMENT.speed);   // Get a new pixel location from moving noise.
     // if SEGLEN equals 1 locn will be always 0, hence we set the first pixel only
     locn = map(locn, 7500, 58000, 0, SEGLEN-1);           // Map that to the length of the strand, and ensure we don't go over.
-    SEGMENT.setPixelColor(locn, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(i*64, false, false, 0), uint8_t(fftResult[i % 16]*4)));
+    SEGMENT.setPixelColor(locn, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(i*64, false, false, 0), uint8_t(fftResult[i % 16]*4)));
   }
 
   return FRAMETIME;
@@ -1398,7 +1398,7 @@ static uint16_t mode_rocktaves(void) {                 // Rocktaves. Same note f
 
   unsigned i = map(beatsin8_t(8+octCount*4, 0, 255, 0, octCount*8), 0, 255, 0, SEGLEN-1);
   i = constrain(i, 0U, SEGLEN-1U);
-  SEGMENT.addPixelColor(i, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette((uint8_t)frTemp, false, false, 0), volTemp));
+  SEGMENT.addPixelColor(i, SEGCOLOR(1).nblend(SEGMENT.color_from_palette((uint8_t)frTemp, false, false, 0), volTemp));
 
   return FRAMETIME;
 } // mode_rocktaves()
@@ -1432,9 +1432,9 @@ static uint16_t mode_waterfall(void) {                   // Waterfall. By: Andre
 
     unsigned k = SEGLEN-1;
     if (samplePeak) {
-      SEGMENT.setPixelColor(k, CRGBW(CHSV(92,92,92)));
+      SEGMENT.setPixelColor(k, CRGBA(CHSV32((uint8_t)92,92,92)));
     } else {
-      SEGMENT.setPixelColor(k, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(pixCol+SEGMENT.intensity, false, false, 0), (uint8_t)my_magnitude));
+      SEGMENT.setPixelColor(k, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(pixCol+SEGMENT.intensity, false, false, 0), (uint8_t)my_magnitude));
     }
     // loop will not execute if SEGLEN equals 1
     for (unsigned i = 0; i < k; i++) {
@@ -1552,7 +1552,7 @@ static uint16_t mode_2DGEQ(void) { // By Will Tatam. Code reduction by Ewoud Wij
     int barHeight  = map(fftResult[band], 0, 255, 0, rows); // do not subtract -1 from rows here
     if (barHeight > previousBarHeight[x]) previousBarHeight[x] = barHeight; //drive the peak up
 
-    uint32_t ledColor = BLACK;
+    CRGBA ledColor = BLACK;
     for (int y=0; y < barHeight; y++) {
       if (SEGMENT.check1) //color_vertical / color bars toggle
         colorIndex = map(y, 0, rows-1, 0, 255);
@@ -1602,7 +1602,7 @@ static uint16_t mode_2DFunkyPlank(void) {              // Written by ??? Adapted
       int v = map(fftResult[band % 16], 0, 255, 10, 255);
       for (int w = 0; w < barWidth; w++) {
          int xpos = (barWidth * b) + w;
-         SEGMENT.setPixelColorXY(xpos, 0, CRGBW(CHSV(hue, 255, v)));
+         SEGMENT.setPixelColorXY(xpos, 0, CRGBA(CHSV32((uint8_t)hue, 255, v)));
       }
     }
 
@@ -1675,10 +1675,10 @@ static uint16_t mode_2DAkemi(void) {
 
   //draw and color Akemi
   for (int y=0; y < rows; y++) for (int x=0; x < cols; x++) {
-    CRGB color;
-    CRGB soundColor = CRGB::Orange;
-    CRGB faceColor  = CRGB(SEGMENT.color_wheel(counter));
-    CRGB armsAndLegsColor = CRGB(SEGCOLOR(1) > 0 ? SEGCOLOR(1) : 0xFFE0A0); //default warmish white 0xABA8FF; //0xFF52e5;//
+    CRGBA color;
+    CRGBA soundColor = CRGB::Orange;
+    CRGBA faceColor  = SEGMENT.color_wheel(counter);
+    CRGBA armsAndLegsColor = SEGCOLOR(1) > 0 ? SEGCOLOR(1) : 0xFFE0A0; //default warmish white 0xABA8FF; //0xFF52e5;//
     uint8_t ak = pgm_read_byte_near(akemi + ((y * 32)/rows) * 32 + (x * 32)/cols); // akemi[(y * 32)/rows][(x * 32)/cols]
     switch (ak) {
       case 3: armsAndLegsColor.r *= lightFactor;  armsAndLegsColor.g *= lightFactor;  armsAndLegsColor.b *= lightFactor;  color = armsAndLegsColor; break; //light arms and legs 0x9B9B9B
@@ -1705,7 +1705,7 @@ static uint16_t mode_2DAkemi(void) {
     unsigned band = map(x, 0, max(xMax,4), 0, 15);  // map 0..cols/8 to 16 GEQ bands
     band = constrain(band, 0, 15);
     int barHeight = map(fftResult[band], 0, 255, 0, 17*rows/32);
-    uint32_t color = SEGMENT.color_from_palette((band * 35), false, false, 0);
+    CRGBA color = SEGMENT.color_from_palette((band * 35), false, false, 0);
 
     for (int y=0; y < barHeight; y++) {
       SEGMENT.setPixelColorXY(x, rows/2-y, color);
@@ -1850,7 +1850,7 @@ class AudioReactive : public Usermod {
     // private methods
     void removeAudioPalettes(void);
     void createAudioPalettes(void);
-    CRGB getCRGBForBand(int x, int pal);
+    CRGBA getCRGBForBand(int x, int pal);
     void fillAudioPalettes(void);
 
     ////////////////////
@@ -3193,28 +3193,26 @@ void AudioReactive::createAudioPalettes(void) {
 }
 
 // credit @netmindz ar palette, adapted for usermod @blazoncek
-CRGB AudioReactive::getCRGBForBand(int x, int pal) {
-  CRGB value;
-  CHSV hsv;
+CRGBA AudioReactive::getCRGBForBand(int x, int pal) {
+  CRGBA value;
+  CHSV32 hsv;
   int b;
   switch (pal) {
     case 2:
       b = map(x, 0, 255, 0, NUM_GEQ_CHANNELS/2); // convert palette position to lower half of freq band
-      hsv = CHSV(fftResult[b], 255, x);
-      hsv2rgb_rainbow(hsv, value);  // convert to R,G,B
+      value = CHSV32(fftResult[b], 255, x);
       break;
     case 1:
       b = map(x, 1, 255, 0, 10); // convert palette position to lower half of freq band
-      hsv = CHSV(fftResult[b], 255, map(fftResult[b], 0, 255, 30, 255));  // pick hue
-      hsv2rgb_rainbow(hsv, value);  // convert to R,G,B
+      value = CHSV32(fftResult[b], 255, map(fftResult[b], 0, 255, 30, 255));  // pick hue
       break;
     default:
       if (x == 1) {
-        value = CRGB(fftResult[10]/2, fftResult[4]/2, fftResult[0]/2);
+        value = CRGBA(fftResult[10]/2, fftResult[4]/2, fftResult[0]/2);
       } else if(x == 255) {
-        value = CRGB(fftResult[10]/2, fftResult[0]/2, fftResult[4]/2);
+        value = CRGBA(fftResult[10]/2, fftResult[0]/2, fftResult[4]/2);
       } else {
-        value = CRGB(fftResult[0]/2, fftResult[4]/2, fftResult[10]/2);
+        value = CRGBA(fftResult[0]/2, fftResult[4]/2, fftResult[10]/2);
       }
       break;
   }
@@ -3234,7 +3232,7 @@ void AudioReactive::fillAudioPalettes() {
     tcp[2] = 0;
     tcp[3] = 0;
     
-    CRGB rgb = getCRGBForBand(1, pal);
+    CRGBA rgb = getCRGBForBand(1, pal);
     tcp[4] = 1;  // anchor of first color
     tcp[5] = rgb.r;
     tcp[6] = rgb.g;

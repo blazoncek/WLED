@@ -6,11 +6,54 @@
 
 constexpr uint32_t TWO_CHANNEL_MASK = 0x00FF00FF;     // mask for R and B channels or W and G if negated (poorman's SIMD; https://github.com/wled/WLED/pull/4568#discussion_r1986587221)
 
+ __attribute__((optimize("-O2"))) CRGBA& CRGBA::nscale8(uint8_t scale) {
+  uint8_t aO = a; // save alpha
+  fast_color_scale(color32, scale);
+  a = aO;        // restore alpha
+  //uint32_t s = scale + 1; // 1-256
+  //r = (r * s) >> 8;
+  //g = (g * s) >> 8;
+  //b = (b * s) >> 8;
+  return *this;
+}
+
+__attribute__((optimize("-O2"))) CRGBA& CRGBA::add(CRGBA c, bool preserveCR)
+{
+  uint32_t c2 = c.color32 & 0x00FFFFFF; // ignore alpha of color2
+  fast_color_scale(c2, c.a);            // scale color2 by its alpha
+  uint32_t c1 = color32 & 0x00FFFFFF;   // ignore alpha of color1
+  uint32_t rb = ( c1     & TWO_CHANNEL_MASK) + ( c2     & TWO_CHANNEL_MASK); // mask and add two colors at once
+  uint32_t wg = ((c1>>8) & TWO_CHANNEL_MASK) + ((c2>>8) & TWO_CHANNEL_MASK);
+  wg |= a << 16;
+  if (preserveCR) {
+    auto max = [](uint32_t a, uint32_t b){ return a > b ? a : b; };
+    uint32_t maxC = max(rb >> 16, rb & 0xFFFF);     // check for overflow
+    maxC = max(maxC, wg & 0xFFFF);
+    if (maxC > 255U) {                              // maxC cannot be greater than 0x1FE (0xFF+0xFF)
+      maxC = (255U << 8) / maxC;                    // 0x80 - 0xFF (0x1FE - 0x100)
+      rb = ((rb * maxC) >> 8) &  TWO_CHANNEL_MASK;  // mask out unused lower bits
+      wg =  (wg * maxC)       & ~TWO_CHANNEL_MASK;  // mask out unused lower bits
+      wg = (wg & 0x00FFFFFF) | (a << 24);           // restore alpha (it was modified by scaling by maxC above)
+    } else wg <<= 8;
+  } else {
+    // saturate overflows
+    if (rb & 0xFF000000) rb |= 0x00FF0000;
+    if (wg & 0x0000FF00) wg |= 0x000000FF;
+    if (rb & 0x0000FF00) rb |= 0x000000FF;
+    // alpha remains unchanged (alpha of c2 is applied via scaling above and removed from c)
+    rb &= TWO_CHANNEL_MASK;
+    wg &= TWO_CHANNEL_MASK;
+    wg <<= 8;
+  }
+  color32 = rb | wg;
+  return *this;
+}
+
 /*
  * color blend function, based on FastLED blend function
  * the calculation for each color is: result = (A*(amountOfA) + A + B*(amountOfB) + B) / 256 with amountOfA = 255 - amountOfB
  */
-uint32_t IRAM_ATTR color_blend(uint32_t color1, uint32_t color2, uint8_t blend)
+__attribute__((optimize("-O2"))) uint32_t color_blend(uint32_t color1, uint32_t color2, uint8_t blend)
 {
   // min / max blend checking is omitted: calls with 0 or 255 are rare, checking lowers overall performance
   uint32_t rb1 =  color1       & TWO_CHANNEL_MASK;  // extract R & B channels from color1
@@ -27,7 +70,7 @@ uint32_t IRAM_ATTR color_blend(uint32_t color1, uint32_t color2, uint8_t blend)
  * original idea: https://github.com/wled/WLED/pull/2465 by https://github.com/Proto-molecule
  * speed optimisations by @dedehai
  */
-uint32_t color_add(uint32_t c1, uint32_t c2, bool preserveCR)
+__attribute__((optimize("-O2"))) uint32_t color_add(uint32_t c1, uint32_t c2, bool preserveCR)
 {
   if (preserveCR) { fast_color_add(c1, c2); return c1; }
   if (c1 == BLACK) return c2;
@@ -45,12 +88,11 @@ uint32_t color_add(uint32_t c1, uint32_t c2, bool preserveCR)
 }
 
 // fast color scale function (scales c1 as c1 * scale / 256)
-__attribute__((optimize("-O2"))) void IRAM_ATTR fast_color_scale(uint32_t &c1, uint8_t scale)
+__attribute__((optimize("-O2"))) void fast_color_scale(uint32_t &c1, uint8_t scale)
 {
-  //if (scale == 255) return;
-  if (scale == 0) { c1 = BLACK; return; }
-  uint32_t rb = ((( c1     & TWO_CHANNEL_MASK) * scale) >> 8) &  TWO_CHANNEL_MASK;
-  uint32_t wg =  (((c1>>8) & TWO_CHANNEL_MASK) * scale)       & ~TWO_CHANNEL_MASK;
+  uint32_t s = scale + 1;
+  uint32_t rb = ((( c1     & TWO_CHANNEL_MASK) * s) >> 8) &  TWO_CHANNEL_MASK;
+  uint32_t wg =  (((c1>>8) & TWO_CHANNEL_MASK) * s)       & ~TWO_CHANNEL_MASK;
   c1 = rb | wg;
 }
 
@@ -78,7 +120,7 @@ __attribute__((optimize("-O2"))) void fast_color_add(uint32_t &c1, uint32_t c2, 
  * fades color toward black
  * if using "video" method the resulting color will never become black unless it is already black
  */
-uint32_t IRAM_ATTR color_fade(uint32_t c1, uint8_t amount, bool video)
+__attribute__((optimize("-O2"))) uint32_t color_fade(uint32_t c1, uint8_t amount, bool video)
 {
   if (amount == 255) return c1; // no fading
   uint32_t addRemains = 0;
@@ -93,7 +135,11 @@ uint32_t IRAM_ATTR color_fade(uint32_t c1, uint8_t amount, bool video)
 }
 
 // 1:1 replacement of fastled function optimized for ESP, slightly faster, more accurate and uses less flash (~ -200bytes)
-uint32_t ColorFromPaletteWLED(const CRGBPalette16& pal, unsigned index, uint8_t brightness, TBlendType blendType)
+// Palette (CRGBPalette16) is constructed from 16 CRGB elements and can produce 255 individual color entries which may be blended.
+// Blending also occurs between the 16th and 1st elements when blendType is LINEARBLEND, producing wrap-around palette.
+// If you do not want wrap-around, use LINEARBLEND_NOWRAP which effectively reduces color entris count to 240.
+// If you do not want any blending at all, use NOBLEND which effectively reduces color entries count to 16.
+__attribute__((optimize("-O2"))) CRGBA ColorFromPaletteWLED(const CRGBPalette16& pal, uint8_t index, uint8_t brightness, TBlendType blendType)
 {
   if (blendType == LINEARBLEND_NOWRAP) {
     index = (index*240) >> 8; // Blend range is affected by lo4 blend of values, remap to avoid wrapping
@@ -101,7 +147,6 @@ uint32_t ColorFromPaletteWLED(const CRGBPalette16& pal, unsigned index, uint8_t 
   unsigned hi4 = (index & 0xF0) >> 4;
   unsigned lo4 = (index & 0x0F);
   const CRGB* entry = (CRGB*)&(pal[0]) + hi4;
-  //const CRGB* entry = (CRGB*)((uint8_t*)(&(pal[0])) + (hi4 * sizeof(CRGB)));
   unsigned red1   = entry->r;
   unsigned green1 = entry->g;
   unsigned blue1  = entry->b;
@@ -122,7 +167,7 @@ uint32_t ColorFromPaletteWLED(const CRGBPalette16& pal, unsigned index, uint8_t 
     green1 = (green1 * scale) >> 8;
     blue1  = (blue1  * scale) >> 8;
   }
-  return RGBW32(red1, green1, blue1, 255); // white channel considered alpha (full opacity)
+  return CRGBA(red1, green1, blue1);
 }
 
 void setRandomColor(byte* rgb)
@@ -313,25 +358,22 @@ void hsv2rgb(const CHSV32& hsv, uint32_t& rgb) // convert HSV (16bit hue) to RGB
   }
 }
 
-void rgb2hsv(const uint32_t rgb, CHSV32& hsv) // convert RGB to HSV (16bit hue), much more accurate and faster than fastled version
+void rgb2hsv(const CRGBA& rgb, CHSV32& hsv) // convert RGB to HSV (16bit hue), much more accurate and faster than fastled version
 {
     hsv.raw = 0;
-    int32_t r = (rgb>>16)&0xFF;
-    int32_t g = (rgb>>8)&0xFF;
-    int32_t b = rgb&0xFF;
     int32_t minval, maxval, delta;
-    minval = min(r, g);
-    minval = min(minval, b);
-    maxval = max(r, g);
-    maxval = max(maxval, b);
+    minval = min(rgb.r, rgb.g);
+    minval = min((uint8_t)minval, rgb.b);
+    maxval = max(rgb.r, rgb.g);
+    maxval = max((uint8_t)maxval, rgb.b);
     if (maxval == 0)  return; // black
     hsv.v = maxval;
     delta = maxval - minval;
     hsv.s = (255 * delta) / maxval;
     if (hsv.s == 0)  return; // gray value
-    if (maxval == r) hsv.h = (10923 * (g - b)) / delta;
-    else if (maxval == g)  hsv.h = 21845 + (10923 * (b - r)) / delta;
-    else hsv.h = 43690 + (10923 * (r - g)) / delta;
+    if (maxval == rgb.r) hsv.h = (10923 * (rgb.g - rgb.b)) / delta;
+    else if (maxval == rgb.g)  hsv.h = 21845 + (10923 * (rgb.b - rgb.r)) / delta;
+    else hsv.h = 43690 + (10923 * (rgb.r - rgb.g)) / delta;
 }
 
 void colorHStoRGB(uint16_t hue, byte sat, byte* rgb) { //hue, sat to rgb
