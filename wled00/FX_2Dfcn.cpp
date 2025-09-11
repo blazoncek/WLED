@@ -8,7 +8,6 @@
   Parts of the code adapted from WLED Sound Reactive
 */
 #include "wled.h"
-#include "palettes.h"
 
 // setUpMatrix() - constructs ledmap array from matrix of panels with WxH pixels
 // this converts physical (possibly irregular) LED arrangement into well defined
@@ -246,8 +245,6 @@ void Segment::blur2D(uint8_t blur_x, uint8_t blur_y, bool smear) const {
   const unsigned cols = vWidth();
   const unsigned rows = vHeight();
   const auto XY = [&](unsigned x, unsigned y){ return x + y*cols; };
-  CRGBA lastnew;
-  CRGBA last;
   if (blur_x) {
     const uint8_t keepx = smear ? 255 : 255 - blur_x;
     const uint8_t seepx = blur_x >> (1 + smear);

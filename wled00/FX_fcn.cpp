@@ -10,7 +10,6 @@
   Modified heavily for WLED
 */
 #include "wled.h"
-#include "palettes.h"
 
 /*
   Custom per-LED mapping has moved!
@@ -207,8 +206,12 @@ void Segment::resetIfRequired() {
 }
 
 CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) {
-  if (pal < 245 && pal > GRADIENT_PALETTE_COUNT+13) pal = 0;
-  if (pal > 245 && (customPalettes.size() == 0 || 255U-pal > customPalettes.size()-1)) pal = 0;
+  // there is one randomy generated palette (1) followed by 4 palettes created from segment colors (2-5)
+  // those are followed by 7 fastled palettes (6-12) and 59 gradient palettes (13-71)
+  // then come the custom palettes (255,254,...) growing downwards from 255 (255 being 1st custom palette)
+  // palette 0 is a varying palette depending on effect and may be replaced by segment's color if so
+  // instructed in color_from_palette()
+  if (pal > FIXED_PALETTE_COUNT && pal < 255-customPalettes.size()+1) pal = 0; // out of bounds palette
   //default palette. Differs depending on effect
   if (pal == 0) pal = _default_palette; // _default_palette is set in setMode()
   switch (pal) {
@@ -244,13 +247,13 @@ CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) {
       }
       break;}
     default: //progmem palettes
-      if (pal>245) {
+      if (pal > 255 - customPalettes.size()) {
         targetPalette = customPalettes[255-pal]; // we checked bounds above
-      } else if (pal < 13) { // palette 6 - 12, fastled palettes
-        targetPalette = *fastledPalettes[pal-6];
+      } else if (pal < DYNAMIC_PALETTE_COUNT+FASTLED_PALETTE_COUNT+1) { // palette 6 - 12, fastled palettes
+        targetPalette = *fastledPalettes[pal-DYNAMIC_PALETTE_COUNT-1];
       } else {
         byte tcp[72];
-        memcpy_P(tcp, (byte*)pgm_read_dword(&(gGradientPalettes[pal-13])), 72);
+        memcpy_P(tcp, (byte*)pgm_read_dword(&(gGradientPalettes[pal-(DYNAMIC_PALETTE_COUNT+FASTLED_PALETTE_COUNT)-1])), 72);
         targetPalette.loadDynamicGradientPalette(tcp);
       }
       break;
@@ -479,14 +482,19 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
 
 // c is considered opaque if segment has no white channel (0xFF000000 is added)
 Segment &Segment::setColor(uint8_t slot, uint32_t c) {
-  if (slot >= NUM_COLORS || c == uint32_t(colors[slot])) return *this;  // we need to check full 32bit value here
+  c |= hasWhite() ? 0 : 0xFF000000; // force opaque color if RGB only
+  return setColor(slot, CRGBA(R(c), G(c), B(c), W(c)));
+}
+
+Segment &Segment::setColor(uint8_t slot, CRGBA c) {
+  if (slot >= NUM_COLORS || c == colors[slot]) return *this;
   if (!hasRGB() && !hasWhite()) {
     if (slot == 0 && c == BLACK) return *this; // on/off segment cannot have primary color black
     if (slot == 1 && c != BLACK) return *this; // on/off segment cannot have secondary color non black
   }
   //DEBUGFX_PRINTF_P(PSTR("- Starting color transition: %d [0x%X]\n"), slot, c);
   startTransition(strip.getTransition(), blendingStyle != BLEND_STYLE_FADE); // start transition prior to change
-  colors[slot] = (uint32_t)(c | (hasWhite() ? 0 : 0xFF000000)); // force opaque color if RGB only
+  colors[slot] = c;
   stateChanged = true; // send UDP/WS broadcast
   return *this;
 }

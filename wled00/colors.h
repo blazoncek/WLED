@@ -48,7 +48,7 @@ inline uint8_t scale8(uint8_t i, uint8_t scale) { return (uint16_t(i) * (1 + sca
 CRGBPalette16 generateHarmonicRandomPalette(const CRGBPalette16 &basepalette);
 CRGBPalette16 generateRandomPalette();
 void loadCustomPalettes();
-#define getPaletteCount() (13 + GRADIENT_PALETTE_COUNT + customPalettes.size())
+#define getPaletteCount() (FIXED_PALETTE_COUNT + customPalettes.size())
 
 // color conversion functions
 inline uint32_t colorFromRgbw(byte* rgbw) { return uint32_t((byte(rgbw[3]) << 24) | (byte(rgbw[0]) << 16) | (byte(rgbw[1]) << 8) | (byte(rgbw[2]))); }
@@ -275,5 +275,9 @@ struct CHSV32 { // 32bit HSV color with 16bit hue for more accurate conversions
 #ifdef FASTLED_VERSION
 inline CHSV rgb2hsv(const CRGB c) { CHSV32 hsv; rgb2hsv(CRGBA(c).color32, hsv); return CHSV(hsv); } // CRGB to hsv
 #endif
+
+// palettes
+extern const TProgmemRGBPalette16* const fastledPalettes[];
+extern const uint8_t* const gGradientPalettes[];
 
 #endif
