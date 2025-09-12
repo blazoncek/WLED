@@ -902,7 +902,6 @@ ESP-NOW  inited in AP mode (channel: 6/1).
   }
 
   const bool isSTAmode = WiFi.getMode() & WIFI_MODE_STA;
-  const bool isAPmode  = WiFi.getMode() & WIFI_MODE_AP;
 
   if (!apActive) {
     // WiFi is not configured and soft AP is not yet open
@@ -955,6 +954,7 @@ ESP-NOW  inited in AP mode (channel: 6/1).
   }
 
 #ifndef WLED_DISABLE_ESPNOW
+  const bool isAPmode  = WiFi.getMode() & WIFI_MODE_AP;
   const bool isESPNowMasterDefined = masterRemotes.size() > 0;
 
   // if we are syncing via ESP-NOW and master has not been heard in a while we shoud retry WiFi

@@ -3195,7 +3195,6 @@ void AudioReactive::createAudioPalettes(void) {
 // credit @netmindz ar palette, adapted for usermod @blazoncek
 CRGBA AudioReactive::getCRGBForBand(int x, int pal) {
   CRGBA value;
-  CHSV32 hsv;
   int b;
   switch (pal) {
     case 2:

@@ -2070,9 +2070,9 @@ bool WS2812FX::deserializeMap(unsigned n) {
   suspend();
   waitForIt();
 
-  JsonObject root = pDoc->as<JsonObject>();
   #ifndef WLED_DISABLE_2D
   // if we are loading default ledmap (at boot) set matrix width and height from the ledmap (compatible with WLED MM ledmaps)
+  JsonObject root = pDoc->as<JsonObject>();
   if (n == 0 && (!root[F("width")].isNull() || !root[F("height")].isNull())) {
     Segment::maxWidth  = min(max(root[F("width")].as<int>(), 1), 255);
     Segment::maxHeight = min(max(root[F("height")].as<int>(), 1), 255);
