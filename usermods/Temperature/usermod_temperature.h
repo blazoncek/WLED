@@ -48,6 +48,7 @@ class UsermodTemperature : public Usermod {
     byte sensorFound;
 
     bool enabled = true;
+    uint8_t resolution = 0; // 9bits=0, 10bits=1, 11bits=2, 12bits=3
 
     bool HApublished = false;
     int16_t idx = -1;   // Domoticz virtual sensor idx
@@ -59,6 +60,7 @@ class UsermodTemperature : public Usermod {
     static const char _parasite[];
     static const char _parasitePin[];
     static const char _domoticzIDX[];
+    static const char _resolution[];
     static const char _sensor[];
     static const char _temperature[];
     static const char _Temperature[];
@@ -135,9 +137,14 @@ float UsermodTemperature::readDallas() {
       case 0x28:  // DS1822
       case 0x3B:  // DS1825
       case 0x42:  // DS28EA00
-        result = (data[1]<<4) | (data[0]>>4);   // we only need whole part, we will add fraction when returning
-        if (data[1] & 0x80) result |= 0xF000;   // fix negative value
-        retVal = float(result) + ((data[0] & 0x08) ? 0.5f : 0.0f);
+        // 12-bit LSB = 0.0625°C (4-bit fraction)
+        result = (data[1] << 8) | data[0];
+        // Clear LSBs to match desired precision (9/10/11-bit)
+        result &= 0xFFFF << (3 - (resolution & 3));
+        retVal = float(result) * 0.0625f;
+        //result = (data[1]<<4) | (data[0]>>4);   // we only need whole part, we will add fraction when returning
+        //if (data[1] & 0x80) result |= 0xF000;   // fix negative value
+        //retVal = float(result) + ((data[0] & 0x08) ? 0.5f : 0.0f);
         break;
     }
   }
@@ -384,6 +391,7 @@ void UsermodTemperature::addToConfig(JsonObject &root) {
   top[FPSTR(_parasite)] = parasite;
   top[FPSTR(_parasitePin)] = parasitePin;
   top[FPSTR(_domoticzIDX)] = idx;
+  top[FPSTR(_resolution)] = resolution;
   DEBUGUM_PRINTLN(F("Temperature config saved."));
 }
 
@@ -411,6 +419,7 @@ bool UsermodTemperature::readFromConfig(JsonObject &root) {
   parasite          = top[FPSTR(_parasite)] | parasite;
   parasitePin       = top[FPSTR(_parasitePin)] | parasitePin;
   idx               = top[FPSTR(_domoticzIDX)] | idx;
+  resolution        = top[FPSTR(_resolution)] | resolution;
 
   if (!initDone) {
     // first run: reading from cfg.json
@@ -431,7 +440,7 @@ bool UsermodTemperature::readFromConfig(JsonObject &root) {
     }
   }
   // use "return !top["newestParameter"].isNull();" when updating Usermod with new features
-  return !top[FPSTR(_domoticzIDX)].isNull();
+  return !top[FPSTR(_resolution)].isNull();
 }
 
 void UsermodTemperature::appendConfigData() {
@@ -439,6 +448,14 @@ void UsermodTemperature::appendConfigData() {
   oappend(F("',1,'<i>(if no Vcc connected)</i>');"));  // 0 is field type, 1 is actual field
   oappend(F("addInfo('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":")); oappend(String(FPSTR(_parasitePin)).c_str());
   oappend(F("',1,'<i>(for external MOSFET)</i>');"));  // 0 is field type, 1 is actual field
+  oappend(F("dd=addDD('")); oappend(String(FPSTR(_name)).c_str()); 
+  oappend(F("','")); oappend(String(FPSTR(_resolution)).c_str()); oappend(F("');"));
+  oappend(F("addO(dd,'0.5 °C (9-bit)',0);"));
+  oappend(F("addO(dd,'0.25°C (10-bit)',1);"));
+  oappend(F("addO(dd,'0.125°C (11-bit)',2);"));
+  oappend(F("addO(dd,'0.0625°C (12-bit)',3);"));
+  oappend(F("addInfo('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":")); oappend(String(FPSTR(_resolution)).c_str());
+  oappend(F("',1,'<i>(ignored on DS18S20)</i>');"));  // 0 is field type, 1 is actual field
 }
 
 float UsermodTemperature::getTemperature() {
@@ -458,6 +475,7 @@ const char UsermodTemperature::_readInterval[] PROGMEM = "read-interval-s";
 const char UsermodTemperature::_parasite[]     PROGMEM = "parasite-pwr";
 const char UsermodTemperature::_parasitePin[]  PROGMEM = "parasite-pwr-pin";
 const char UsermodTemperature::_domoticzIDX[]  PROGMEM = "domoticz-idx";
+const char UsermodTemperature::_resolution[]   PROGMEM = "resolution";
 const char UsermodTemperature::_sensor[]       PROGMEM = "sensor";
 const char UsermodTemperature::_temperature[]  PROGMEM = "temperature";
 const char UsermodTemperature::_Temperature[]  PROGMEM = "/temperature";
