@@ -158,8 +158,9 @@ struct CRGBA {
   // Assignment from 32-bit color
   inline CRGBA& operator=(uint32_t color) __attribute__((always_inline)) { color32 = color; return *this; }
 
-  // scale color (i.e. r*(scale+1)/256)
-  inline CRGBA& operator/=(uint8_t scale) __attribute__((always_inline)) { return nscale8(scale); }
+  // Scaling assignment
+  inline CRGBA& operator*=(uint8_t scale) __attribute__((always_inline)) { return nscale8(scale); }
+  inline CRGBA& operator/=(uint8_t scale) __attribute__((always_inline)) { return nscale8(255 - scale); }
 
   // video scaling: make sure colors do not dim to zero if they started non-zero
   inline CRGBA& operator%=(uint8_t scale) __attribute__((always_inline)) { return nscale8_video(scale); }
@@ -189,9 +190,6 @@ struct CRGBA {
     b = qsub8(b, x);
     return *this;
   }
-
-  // Scaling assignment
-  inline CRGBA& operator*=(uint8_t scale) __attribute__((always_inline)) { return nscale8(scale); }
 
   // Saturate channels
   inline CRGBA& operator|=(const CRGBA& rhs) __attribute__((always_inline)) {

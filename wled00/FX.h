@@ -124,6 +124,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define DARKSLATEGRAY (uint32_t)0x2F4F4F
 #define DARKSLATEGREY DARKSLATEGRAY
 #define TRANSPARENT(a) CRGBA(a).setOpacity(0)
+#define OPACITY(a,b)   CRGBA(a).setOpacity(b)
 
 // segment options
 #define NO_OPTIONS   (uint16_t)0x0000

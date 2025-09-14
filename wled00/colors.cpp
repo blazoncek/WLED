@@ -24,12 +24,12 @@ __attribute__((optimize("-O2"))) CRGBA& CRGBA::add(CRGBA c, bool preserveCR)
   uint32_t c1 = color32 & 0x00FFFFFF;   // ignore alpha of color1
   uint32_t rb = ( c1     & TWO_CHANNEL_MASK) + ( c2     & TWO_CHANNEL_MASK); // mask and add two colors at once
   uint32_t wg = ((c1>>8) & TWO_CHANNEL_MASK) + ((c2>>8) & TWO_CHANNEL_MASK);
-  wg |= a << 16;
+  wg |= a << 16;                        // use original alpha
   if (preserveCR) {
-    auto max = [](uint32_t a, uint32_t b){ return a > b ? a : b; };
-    uint32_t maxC = max(rb >> 16, rb & 0xFFFF);     // check for overflow
-    maxC = max(maxC, wg & 0xFFFF);
-    if (maxC > 255U) {                              // maxC cannot be greater than 0x1FE (0xFF+0xFF)
+    if (((rb | wg) & 0x01000100) != 0) {            // detect overflow by checking 9th bit
+      auto max = [](uint32_t a, uint32_t b){ return a > b ? a : b; };
+      uint32_t maxC = max(rb >> 16, rb & 0xFFFF);   // maxC cannot be greater than 0x1FE (0xFF+0xFF)
+      maxC = max(maxC, wg & 0xFFFF);
       maxC = (255U << 8) / maxC;                    // 0x80 - 0xFF (0x1FE - 0x100)
       rb = ((rb * maxC) >> 8) &  TWO_CHANNEL_MASK;  // mask out unused lower bits
       wg =  (wg * maxC)       & ~TWO_CHANNEL_MASK;  // mask out unused lower bits
@@ -37,12 +37,10 @@ __attribute__((optimize("-O2"))) CRGBA& CRGBA::add(CRGBA c, bool preserveCR)
     } else wg <<= 8;
   } else {
     // saturate overflows
-    if (rb & 0xFF000000) rb |= 0x00FF0000;
-    if (wg & 0x0000FF00) wg |= 0x000000FF;
-    if (rb & 0x0000FF00) rb |= 0x000000FF;
+    // branchless per-channel saturation to 255 (extract 9th bit, subtract 1 if it is set(==255), mask with 0xFF)
+    rb |= ((rb & 0x01000100) - ((rb & 0x01000100) >> 8)) & TWO_CHANNEL_MASK;
     // alpha remains unchanged (alpha of c2 is applied via scaling above and removed from c)
-    rb &= TWO_CHANNEL_MASK;
-    wg &= TWO_CHANNEL_MASK;
+    wg |= ((wg & 0x00000100) - ((wg & 0x00000100) >> 8)) & TWO_CHANNEL_MASK;
     wg <<= 8;
   }
   color32 = rb | wg;
@@ -78,12 +76,9 @@ __attribute__((optimize("-O2"))) uint32_t color_add(uint32_t c1, uint32_t c2, bo
   uint32_t rb = ( c1     & TWO_CHANNEL_MASK) + ( c2     & TWO_CHANNEL_MASK); // mask and add two colors at once
   uint32_t wg = ((c1>>8) & TWO_CHANNEL_MASK) + ((c2>>8) & TWO_CHANNEL_MASK);
   // saturate overflows
-  if (rb & 0xFF000000) rb |= 0x00FF0000;
-  if (wg & 0x0000FF00) wg |= 0x000000FF;
-  if (rb & 0x0000FF00) rb |= 0x000000FF;
-  if (wg & 0xFF000000) wg |= 0x00FF0000;
-  rb &= TWO_CHANNEL_MASK;
-  wg &= TWO_CHANNEL_MASK;
+  // branchless per-channel saturation to 255 (extract 9th bit, subtract 1 if it is set (256-(256>>8)==255 || 0-0=0), mask with 0xFF)
+  rb |= ((rb & 0x01000100) - ((rb & 0x01000100) >> 8)) & TWO_CHANNEL_MASK;
+  wg |= ((wg & 0x01000100) - ((wg & 0x01000100) >> 8)) & TWO_CHANNEL_MASK;
   return rb | (wg<<8);
 }
 
@@ -102,13 +97,13 @@ __attribute__((optimize("-O2"))) void fast_color_add(uint32_t &c1, uint32_t c2, 
   if (c2 == BLACK) return;                              // adding black does nothing
   if (scale < 255) fast_color_scale(c2, scale);         // scale added color
   if (c1 == BLACK) { c1 = c2; return; }                 // source is black, just assign c2
-  auto max = [](uint32_t a, uint32_t b){ return a > b ? a : b; };
   uint32_t rb = ( c1     & TWO_CHANNEL_MASK) + ( c2     & TWO_CHANNEL_MASK); // mask and add two colors at once
   uint32_t wg = ((c1>>8) & TWO_CHANNEL_MASK) + ((c2>>8) & TWO_CHANNEL_MASK); // mask and add two colors at once
-  uint32_t maxC = max(rb >> 16, rb & 0xFFFF);           // check for overflow
-  maxC = max(maxC, wg & 0xFFFF);
-  maxC = max(maxC, wg >> 16);
-  if (maxC > 255U) {                                    // maxC cannot be greater than 0x1FE (0xFF+0xFF)
+  if (((rb | wg) & 0x01000100) != 0) {                  // detect overflow by checking 9th bit
+    auto max = [](uint32_t a, uint32_t b){ return a > b ? a : b; };
+    uint32_t maxC = max(rb >> 16, rb & 0xFFFF);         // maxC cannot be greater than 0x1FE (0xFF+0xFF)
+    maxC = max(maxC, wg & 0xFFFF);
+    maxC = max(maxC, wg >> 16);
     maxC = (255U<<8) / maxC;                            // 0x80 - 0xFF (0x1FE - 0x100)
     rb = ((rb * maxC) >> 8) &  TWO_CHANNEL_MASK;        // mask out unused lower bits
     wg =  (wg * maxC)       & ~TWO_CHANNEL_MASK;        // mask out unused lower bits
