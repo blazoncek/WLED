@@ -64,7 +64,7 @@
 				if (!ok) return; // prevent iteration after conflict
 				let nm = LC.name.substring(0,2);
 				let n = LC.name.substring(2);
-				let t = parseInt(d.Sf["LT"+n].value, 10); // LED type SELECT
+				let t = parseInt(gN("LT"+n).value, 10); // LED type SELECT
 				// ignore IP address
 				if (nm=="L0" || nm=="L1" || nm=="L2" || nm=="L3") {
 					if (isNet(t)) return;
@@ -92,7 +92,7 @@
 							if (n2=="L0" || n2=="L1" || n2=="L2" || n2=="L3" || n2=="L4") {
 								if (n2.substring(0,1)==="L") {
 									var m  = nList[j].name.substring(2);
-									var t2 = parseInt(d.Sf["LT"+m].value, 10);
+									var t2 = parseInt(gN("LT"+m).value, 10);
 									if (t2>=80) continue;
 								}
 								if (nList[j].value!="" && nList[i].value==nList[j].value) {
@@ -146,8 +146,8 @@
 			d.Sf.querySelectorAll("#mLC input[name^=MA]").forEach((i,x)=>{
 				var n = chrID(x);
 				gId("PSU"+n).style.display = ppl ? "inline" : "none";
-				const t = parseInt(d.Sf["LT"+n].value); // LED type SELECT
-				const c = parseInt(d.Sf["LC"+n].value); //get LED count
+				const t = parseInt(gN("LT"+n).value); // LED type SELECT
+				const c = parseInt(gN("LC"+n).value); //get LED count
 				i.min = ppl && isDig(t) ? 250 : 0;
 				if (!abl || !isDig(t)) i.value = 0;
 				else if (ppl) sumMA += parseInt(i.value,10);
@@ -159,10 +159,10 @@
 		function enLA(s,n)
 		{
 			const abl = d.Sf.ABL.checked;
-			const t = parseInt(d.Sf["LT"+n].value); // LED type SELECT
+			const t = parseInt(gN("LT"+n).value);          // LED type SELECT
 			gId('LAdis'+n).style.display = s.selectedIndex==5 ? "inline" : "none"; // show/hide custom mA field
-			if (s.value!=="0") d.Sf["LA"+n].value = s.value; // set value from select object
-			d.Sf["LA"+n].min = (!isDig(t) || !abl) ? 0 : 1; // set minimum value for validation
+			if (s.value!=="0") gN("LA"+n).value = s.value; // set value from select object
+			gN("LA"+n).min = (!isDig(t) || !abl) ? 0 : 1;  // set minimum value for validation
 		}
 		function setABL()
 		{
@@ -177,7 +177,7 @@
 				sel.value = 0; // set custom
 				var n = chrID(x);
 				if (en)
-					switch (parseInt(d.Sf["LA"+n].value)) {
+					switch (parseInt(gN("LA"+n).value)) {
 						case 0: break; // disable ABL
 						case 15: sel.value = 15; break;
 						case 30: sel.value = 30; break;
@@ -194,14 +194,14 @@
 		//returns mem usage
 		function getMem(t, n) {
 			if (isAna(t)) return 5;	// analog
-			let len = parseInt(d.Sf["LC"+n].value);
-			len += parseInt(d.Sf["SL"+n].value); // skipped LEDs are allocated too
+			let len = parseInt(gN("LC"+n).value);
+			len += parseInt(gN("SL"+n).value); // skipped LEDs are allocated too
 			let dbl = 0;
 			let ch = 3*hasRGB(t) + hasW(t) + hasCCT(t);
 			let mul = 1;
 			if (isDig(t)) {
 				if (is16b(t)) len *= 2; // 16 bit LEDs
-				if (is8266() && d.Sf["L0"+n].value == 3) { //8266 DMA uses 5x the mem
+				if (is8266() && gN("L0"+n).value == 3) { //8266 DMA uses 5x the mem
 					mul = 5;
 				}
 				let parallelI2S = d.Sf.PR.checked && (is32() || isS2() || isS3) && !isD2P(t);
@@ -213,6 +213,7 @@
 					dbl = len * ch * 3; // DMA buffer for parallel I2S (TODO: ony the bus with largst LED count should be used)
 				}
 			}
+			dbl += len * (gN("MS").checked ? 4 : 0); // add segment buffer per output if enabled
 			return len * ch * mul + dbl;
 		}
 
@@ -250,7 +251,7 @@
 				// secondary pins show/hide (type string length is equivalent to number of pins used; except for network and on/off)
 				let pins = Math.max(gT(t).t.length,1) + 3*isNet(t); // fixes network pins to 4
 				for (let p=1; p<5; p++) {
-					var LK = d.Sf["L"+p+n];
+					var LK = gN("L"+p+n);
 					if (!LK) continue;
 					LK.style.display = (p < pins) ? "inline" : "none";
 					LK.required = (p < pins);
@@ -272,16 +273,16 @@
 				gId("abl"+n).style.display = (!abl || !isDig(t)) ? "none" : "inline"; // show/hide individual ABL settings
 				if (change) { // did we change LED type?
 					gId("rf"+n).checked = (gId("rf"+n).checked || t == 31); // LEDs require data in off state (mandatory for TM1814)
-					if (isAna(t)) d.Sf["LC"+n].value = 1;                   // for sanity change analog count just to 1 LED
-					d.Sf["LA"+n].min = (!isDig(t) || !abl) ? 0 : 1;         // set minimum value for LED mA
-					d.Sf["MA"+n].min = (!isDig(t)) ? 0 : 250;               // set minimum value for PSU mA
+					if (isAna(t)) gN("LC"+n).value = 1;                   // for sanity change analog count just to 1 LED
+					gN("LA"+n).min = (!isDig(t) || !abl) ? 0 : 1;         // set minimum value for LED mA
+					gN("MA"+n).min = (!isDig(t)) ? 0 : 250;               // set minimum value for PSU mA
 				}
 				gId("rf"+n).onclick = mustR(t) ? (()=>{return false}) : (()=>{});           // prevent change change of "Refresh" checkmark when mandatory
 				gRGBW |= hasW(t);                                                           // RGBW checkbox
 				gId("co"+n).style.display = (isVir(t) || isAna(t)) ? "none":"inline";       // hide color order for PWM
 				gId("dig"+n+"w").style.display = (isDig(t) && hasW(t)) ? "inline":"none";   // show swap channels dropdown
 				gId("dig"+n+"w").querySelector("[data-opt=CCT]").disabled = !hasCCT(t);     // disable WW/CW swapping	
-				if (!(isDig(t) && hasW(t))) d.Sf["WO"+n].value = 0;                         // reset swapping
+				if (!(isDig(t) && hasW(t))) gN("WO"+n).value = 0;                           // reset swapping
 				gId("dig"+n+"c").style.display = (isAna(t)) ? "none":"inline";              // hide count for analog
 				gId("dig"+n+"r").style.display = (isVir(t)) ? "none":"inline";              // hide reversed for virtual
 				gId("dig"+n+"s").style.display = (isVir(t) || isAna(t)) ? "none":"inline";  // hide skip 1st for virtual & analog
@@ -291,7 +292,7 @@
 				gId("rev"+n).innerHTML = isAna(t) ? "Inverted output":"Reversed";           // change reverse text for analog else (rotated 180°)
 				//gId("psd"+n).innerHTML = isAna(t) ? "Index:":"Start:";                      // change analog start description
 				gId("net"+n+"h").style.display = isNet(t) && !is8266() ? "block" : "none";  // show host field for network types except on ESP8266
-				if (!isNet(t) || is8266()) d.Sf["HS"+n].value = "";                         // cleart host field if not network type or ESP8266
+				if (!isNet(t) || is8266()) gN("HS"+n).value = "";                           // cleart host field if not network type or ESP8266
 			});
 			// display global white channel overrides
 			gId("wc").style.display = (gRGBW) ? 'inline':'none';
@@ -305,7 +306,7 @@
 			nList.forEach((LC,i)=>{
 				let nm = LC.name.substring(0,2);  // field name
 				let n  = parseInt(LC.name.substring(2)); // bus number
-				let t  = parseInt(d.Sf["LT"+n].value); // LED type SELECT
+				let t  = parseInt(gN("LT"+n).value); // LED type SELECT
 				if (isDig(t)) {
 					if (sameType == 0) sameType = t; // first bus type
 					else if (sameType != t) sameType = -1; // different bus type
@@ -323,7 +324,7 @@
 						if (isDig(t)) {
 							if (c > maxLC) maxLC = c; //max per output
 							sDI += c; // summarize digital LED count
-							let maPL = parseInt(d.Sf["LA"+n].value);
+							let maPL = parseInt(gN("LA"+n).value);
 							if (maPL == 255) maPL = 12; // wacky WS2815 mode (255 == 12mA per LED)
 							busMA += maPL*c; // summarize maximum bus current (calculated)
 						}
@@ -353,7 +354,7 @@
 							if (n2=="L0" || n2=="L1" || n2=="L2" || n2=="L3" || n2=="L4") {
 								if (n2.substring(0,1)==="L") {
 									let m  = nList[j].name.substring(2);
-									let t2 = parseInt(d.Sf["LT"+m].value, 10);
+									let t2 = parseInt(gN("LT"+m).value, 10);
 									if (isVir(t2)) continue;
 								}
 								if (nList[j].value!="" && nList[j].value!="-1") p.push(parseInt(nList[j].value,10));  // add current pin
@@ -366,11 +367,11 @@
 			});
 			if (is32() || isS2() || isS3()) {
 				if (maxLC > 600 || dC < 2 || sameType <= 0) {
-					d.Sf["PR"].checked = false;
+					gN("PR").checked = false;
 					gId("prl").classList.add("hide");
 				} else
 					gId("prl").classList.remove("hide");
-			} else d.Sf["PR"].checked = false;
+			} else gN("PR").checked = false;
 			// distribute ABL current if not using PPL
 			enPPL(sDI);
 
@@ -379,6 +380,7 @@
 			gId("pc").textContent = (sLC == sPC) ? "":"(" + sPC + " physical)";
 
 			// memory usage and warnings
+			memu += sLC * (4 + (gN("MS").checked ? 0 : 4)); // pixel buffer (4 bytes per pixel) + at least 1 segment buffer
 			gId('m0').innerHTML = memu;
 			bquot = memu / maxM * 100;
 			gId('dbar').style.background = `linear-gradient(90deg, ${bquot > 60 ? (bquot > 90 ? "red":"orange"):"#ccc"} 0 ${bquot}%, #444 ${bquot}% 100%)`;
@@ -404,8 +406,8 @@
 		function lastEnd(i) {
 			if (i-- < 1) return 0;
 			var s = chrID(i);
-			v = parseInt(d.getElementsByName("LS"+s)[0].value) + parseInt(d.getElementsByName("LC"+s)[0].value);
-			var t = parseInt(d.getElementsByName("LT"+s)[0].value);
+			v = parseInt(gN("LS"+s).value) + parseInt(gN("LC"+s).value);
+			var t = parseInt(gN("LT"+s).value);
 			if (isPWM(t)) v = 1; //PWM busses
 			return isNaN(v) ? 0 : v;
 		}
@@ -487,11 +489,11 @@ mA/LED: <select name="LAsel${s}" onchange="enLA(this,'${s}');UI();">
 						}
 					}
 				});
-				enLA(d.Sf["LAsel"+s],s); // update LED mA
+				enLA(gN("LAsel"+s),s); // update LED mA
 				// disable inappropriate LED types
-				let sel = d.getElementsByName("LT"+s)[0];
+				let sel = gN("LT"+s);
 				// 32 & S2 supports mono I2S as well as parallel so we need to take that into account; S3 only supports parallel
-				let maxDB = maxD - (is32() || isS2() || isS3() ? (!d.Sf["PR"].checked)*8 - (!isS3()) : 0); // adjust max digital buses if parallel I2S is not used
+				let maxDB = maxD - (is32() || isS2() || isS3() ? (!gN("PR").checked)*8 - (!isS3()) : 0); // adjust max digital buses if parallel I2S is not used
 				if (digitalB >= maxDB) disable(sel,'option[data-type="D"]'); // NOTE: see isDig()
 				if (twopinB  >= 2)     disable(sel,'option[data-type="2P"]'); // NOTE: see isD2P() (we will only allow 2 2pin buses)
 				disable(sel,`option[data-type^="${'A'.repeat(maxA-analogB+1)}"]`); // NOTE: see isPWM()
@@ -646,23 +648,23 @@ Swap: <select id="xw${s}" name="XW${s}">
 						let l = c.hw.led;
 						l.ins.forEach((v,i,a)=>{
 							addLEDs(1);
-							for (var j=0; j<v.pin.length; j++) d.getElementsByName(`L${j}${i}`)[0].value = v.pin[j];
-							d.getElementsByName("LT"+i)[0].value   = v.type;
-							d.getElementsByName("LS"+i)[0].value   = v.start;
-							d.getElementsByName("LC"+i)[0].value   = v.len;
-							d.getElementsByName("CO"+i)[0].value   = v.order & 0x0F;
-							d.getElementsByName("SL"+i)[0].value   = v.skip;
-							d.getElementsByName("RF"+i)[0].checked = v.ref;
-							d.getElementsByName("CV"+i)[0].checked = v.rev;
-							d.getElementsByName("AW"+i)[0].value   = v.rgbwm;
-							d.getElementsByName("WO"+i)[0].value   = (v.order>>4) & 0x0F;
-							d.getElementsByName("SP"+i)[0].value   = v.freq;
-							d.getElementsByName("LA"+i)[0].value   = v.ledma;
-							d.getElementsByName("MA"+i)[0].value   = v.maxpwr;
+							for (var j=0; j<v.pin.length; j++) gN(`L${j}${i}`).value = v.pin[j];
+							gN("LT"+i).value   = v.type;
+							gN("LS"+i).value   = v.start;
+							gN("LC"+i).value   = v.len;
+							gN("CO"+i).value   = v.order & 0x0F;
+							gN("SL"+i).value   = v.skip;
+							gN("RF"+i).checked = v.ref;
+							gN("CV"+i).checked = v.rev;
+							gN("AW"+i).value   = v.rgbwm;
+							gN("WO"+i).value   = (v.order>>4) & 0x0F;
+							gN("SP"+i).value   = v.freq;
+							gN("LA"+i).value   = v.ledma;
+							gN("MA"+i).value   = v.maxpwr;
 						});
-						d.getElementsByName("PR")[0].checked  = l.prl | 0;
-						d.getElementsByName("MA")[0].value    = l.maxpwr;
-						d.getElementsByName("ABL")[0].checked = l.maxpwr > 0;
+						gN("PR").checked  = l.prl | 0;
+						gN("MA").value    = l.maxpwr;
+						gN("ABL").checked = l.maxpwr > 0;
 					}
 					if(c.hw.com) {
 						resetCOM();
@@ -676,22 +678,22 @@ Swap: <select id="xw${s}" name="XW${s}">
 						b.ins.forEach((v,i,a)=>{
 							addBtn(i,v.pin[0],v.type);
 						});
-						d.getElementsByName("TT")[0].value = b.tt;
+						gN("TT").value = b.tt;
 					}
 					let ir = c.hw.ir;
 					if (ir) {
-						d.getElementsByName("IR")[0].value = ir.pin;
-						d.getElementsByName("IT")[0].value = ir.type;
+						gN("IR").value = ir.pin;
+						gN("IT").value = ir.type;
 					}
 					let rl = c.hw.relay;
 					if (rl) {
-						d.getElementsByName("RL")[0].value   = rl.pin;
-						d.getElementsByName("RM")[0].checked = rl.rev;
-						d.getElementsByName("RO")[0].checked = rl.odrain;
+						gN("RL").value   = rl.pin;
+						gN("RM").checked = rl.rev;
+						gN("RO").checked = rl.odrain;
 					}
 					let li = c.light;
 					if (li) {
-						d.getElementsByName("MS")[0].checked  = li.aseg;
+						gN("MS").checked  = li.aseg;
 					}
 					UI();
 				}
@@ -760,7 +762,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 		function addDropdown(field) {
 			let sel = cE('select');
 			sel.classList.add("pin");
-			let inp = d.getElementsByName(field)[0];
+			let inp = gN(field);
 			if (inp && inp.tagName === "INPUT" && (inp.type === "text" || inp.type === "number")) {  // may also use nodeName
 				let v = inp.value;
 				let n = inp.name;
@@ -840,7 +842,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 		</div>
 		<hr class="sml">
 		<div id="prl" class="hide">Use parallel I2S: <input type="checkbox" name="PR"><br></div>
-		Make a segment for each output: <input type="checkbox" name="MS"><br>
+		Make a segment for each output: <input type="checkbox" name="MS" onchange="UI()"><br>
 		Custom bus start indices: <input type="checkbox" onchange="tglSi(this.checked)" id="si"><br>
 		<hr class="sml">
 		<div id="color_order_mapping">
