@@ -10,7 +10,7 @@ constexpr size_t GRADIENT_PALETTE_COUNT = 59; // = sizeof(gGradientPalettes) / s
 constexpr size_t DYNAMIC_PALETTE_COUNT = 5;   // 1-5 are dynamic palettes (1=random,2=primary,3=primary+secondary,4=primary+secondary+tertiary,5=primary+secondary(+tertiary if not black)
 constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_COUNT + GRADIENT_PALETTE_COUNT; // total number of fixed palettes
 #ifndef WLED_MAX_CUSTOM_PALETTES
-  #define WLED_MAX_CUSTOM_PALETTES 10
+  #define WLED_MAX_CUSTOM_PALETTES (255-FIXED_PALETTE_COUNT) // number of custom palettes
 #endif
 
 // You can define custom product info from build flags.

@@ -617,7 +617,7 @@
     const palettesDiv = gId("palettes");
     const staticPalettesDiv = gId("staticPalettes");
     const paletteDivs = Array.from(palettesDiv.children).filter((child) => {
-      return child.id.match(/^palette\d$/); // match only elements with id starting with "palette" followed by a single digit
+      return child.id.match(/^palette\d+$/); // match only elements with id starting with "palette" followed by a digit
     });
 
     for (const div of paletteDivs) {
