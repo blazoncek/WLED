@@ -807,7 +807,7 @@ int BusManager::add(const BusConfig &bc) {
   } else {
     busses.push_back(make_unique<BusPwm>(bc));
   }
-  return busses.size();
+  return busses.back()->isOk() ? busses.size() : -1;
 }
 
 // credit @willmmiles

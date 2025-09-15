@@ -385,7 +385,7 @@ struct BusConfig {
   uint16_t milliAmpsMax;
   String text;
 
-  BusConfig(uint8_t busType, uint8_t* ppins, uint16_t pstart, uint16_t len = 1, uint8_t pcolorOrder = COL_ORDER_GRB, bool rev = false, uint8_t skip = 0, byte aw=RGBW_MODE_MANUAL_ONLY, uint16_t clock_kHz=0U, uint8_t maPerLed=LED_MILLIAMPS_DEFAULT, uint16_t maMax=ABL_MILLIAMPS_DEFAULT, String sometext = "")
+  BusConfig(uint8_t busType, uint8_t* ppins, uint16_t pstart = 0, uint16_t len = DEFAULT_LED_COUNT, uint8_t pcolorOrder = COL_ORDER_GRB, bool rev = false, uint8_t skip = 0, byte aw=RGBW_MODE_MANUAL_ONLY, uint16_t clock_kHz=0U, uint8_t maPerLed=LED_MILLIAMPS_DEFAULT, uint16_t maMax=ABL_MILLIAMPS_DEFAULT, String sometext = "")
   : count(std::max(len,(uint16_t)1))
   , start(pstart)
   , colorOrder(pcolorOrder)
@@ -399,6 +399,7 @@ struct BusConfig {
   {
     refreshReq = (bool) GET_BIT(busType,7);
     type = busType & 0x7F;  // bit 7 may be/is hacked to include refresh info (1=refresh in off state, 0=no refresh)
+    if (Bus::isDigital(type)) count = std::min(count, (uint16_t)MAX_LEDS_PER_BUS);
     size_t nPins = Bus::getNumberOfPins(type);
     for (size_t i = 0; i < nPins; i++) pins[i] = ppins[i];
     DEBUGBUS_PRINTF_P(PSTR("Bus: Config (%d-%d, type:%d, CO:%d, rev:%d, skip:%d, AW:%d kHz:%d, mA:%d/%d)\n"),
@@ -411,18 +412,6 @@ struct BusConfig {
       (int)frequency,
       (int)milliAmpsPerLed, (int)milliAmpsMax
     );
-  }
-
-  //validates start and length and extends total if needed
-  bool adjustBounds(uint16_t& total) {
-    if (!count) count = 1;
-    if (count > MAX_LEDS_PER_BUS) count = MAX_LEDS_PER_BUS;
-    if (start >= MAX_LEDS) return false;
-    //limit length of strip if it would exceed total permissible LEDs
-    if (start + count > MAX_LEDS) count = MAX_LEDS - start;
-    //extend total count accordingly
-    if (start + count > total) total = start + count;
-    return true;
   }
 
   size_t memUsage(unsigned nr = 0) const;

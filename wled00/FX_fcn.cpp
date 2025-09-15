@@ -1219,8 +1219,10 @@ void WS2812FX::finalizeInit() {
     }
     #endif
     if (mem + maxI2S <= MAX_LED_MEMORY) {
-      BusManager::add(bus);
-      DEBUG_PRINTF_P(PSTR("Bus memory: %uB\n"), memB);
+      if (BusManager::add(bus) < 0) {
+        DEBUG_PRINTF_P(PSTR("Bus %d (%d) #%u created but not valid!\n"), (int)bus.type, (int)bus.count, digitalCount);
+        break;
+      }
     } else {
       DEBUG_PRINTF_P(PSTR("Out of LED memory! Bus %d (%d) #%u not created."), (int)bus.type, (int)bus.count, digitalCount);
       break;
@@ -1230,6 +1232,7 @@ void WS2812FX::finalizeInit() {
   busConfigs.clear();
   busConfigs.shrink_to_fit();
 
+  // validation and initialisation of buses
   _length = 0;
   for (size_t i=0; i<BusManager::getNumBusses(); i++) {
     Bus *bus = BusManager::getBus(i);
@@ -1244,6 +1247,24 @@ void WS2812FX::finalizeInit() {
     bus->begin();
     bus->setBrightness(scaledBri(bri));
   }
+
+  // if no valid bus was added, add a dummy one
+  if (_length == 0) {
+    BusManager::removeAll(); // release all memory allocated by buses created so far
+    uint8_t pins[] = { DEFAULT_LED_PIN };
+    if (BusManager::add(BusConfig(DEFAULT_LED_TYPE,pins,0,DEFAULT_LED_COUNT)) < 0) { // add dummy bus to avoid crashes
+      // something went horribly wrong
+      DEBUG_PRINTLN(F("Fatal error: unable to add fallback bus!"));
+      _length = 1;
+    } else {
+      _length = DEFAULT_LED_COUNT;
+      _hasWhiteChannel = _isOffRefreshRequired = false;
+      BusManager::getBus(0)->begin();
+      BusManager::getBus(0)->setBrightness(scaledBri(bri));
+      DEBUG_PRINTLN(F("Added fallback bus."));
+    }
+  }
+
   BusManager::initializeABL(milliAmpsMax);  // if milliAmpsMax is 0, per output ABL will be enabled if supported by bus
   DEBUG_PRINTF_P(PSTR("Heap after buses: %d\n"), getFreeHeapSize());
 
