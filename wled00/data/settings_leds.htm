@@ -204,13 +204,13 @@
 				if (is8266() && gN("L0"+n).value == 3) { //8266 DMA uses 5x the mem
 					mul = 5;
 				}
-				let parallelI2S = d.Sf.PR.checked && (is32() || isS2() || isS3) && !isD2P(t);
+				let parallelI2S = d.Sf.PR.checked && (is32() || isS2() || isS3()) && !isD2P(t);
 				if (isC3() || (isS3() && !parallelI2S)) {
 					mul = 2; // ESP32 RMT uses double buffer
-				} else if ((is32() || isS2() || isS3) && n > (parallelI2S ? 7 : 0)) {
+				} else if ((is32() || isS2() || isS3()) && n > (parallelI2S ? 7 : 0)) {
 					mul = 2; // ESP32 RMT uses double buffer
 				} else if ((parallelI2S && n < 8) || (n == 0 && is32())) { // I2S uses extra DMA buffer
-					dbl = len * ch * 3; // DMA buffer for parallel I2S (TODO: ony the bus with largst LED count should be used)
+					dbl = len * ch * 3; // DMA buffer for parallel I2S (TODO: only the bus with largst LED count should be used)
 				}
 			}
 			dbl += len * (gN("MS").checked ? 4 : 0); // add segment buffer per output if enabled
