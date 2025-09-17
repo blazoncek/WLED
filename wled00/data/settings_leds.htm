@@ -24,6 +24,7 @@
 		function mustR(t)  { return !!(gT(t).c & 0x20); }           // Off refresh is mandatory
 		function numPins(t){ return Math.max(gT(t).t.length, 1); }  // type length determines number of GPIO pins
 		function chrID(x)  { return String.fromCharCode((x<10?48:55)+x); }
+		function toNum(c)  { let n=c.charCodeAt(0); return (n>=48 && n<=57)?n-48:(n>=65 && n<=90)?n-55:0; } // convert char (0-9A-Z) to number (0-35)
 		function S() {
 			getLoc();
 			loadJS(getURL('/settings/s.js?p=2'), false, ()=>{
@@ -62,49 +63,45 @@
 			var nList = d.Sf.querySelectorAll("#mLC input[name^=L]");
 			nList.forEach((LC,i)=>{
 				if (!ok) return; // prevent iteration after conflict
-				let nm = LC.name.substring(0,2);
-				let n = LC.name.substring(2);
+				let nm = LC.name.substring(0,2);  // field name : /L./
+				if (nm.search(/^L[0-4]/) < 0) return; // not pin fields
+				let n = LC.name.substring(2,3);   // bus number (0-Z)
 				let t = parseInt(gN("LT"+n).value, 10); // LED type SELECT
 				// ignore IP address
-				if (nm=="L0" || nm=="L1" || nm=="L2" || nm=="L3") {
-					if (isNet(t)) return;
-				}
+				if (isNet(t)) return;
 				//check for pin conflicts
-				if (nm=="L0" || nm=="L1" || nm=="L2" || nm=="L3" || nm=="L4")
-					if (LC.value!="" && LC.value!="-1") {
-						let p = d.rsvd.concat(d.um_p); // used pin array
-						d.Sf.querySelectorAll("select.pin").forEach((e)=>{if(e.value>-1)p.push(parseInt(e.value));}) // buttons, IR & relay
-						if (p.some((e)=>e==parseInt(LC.value))) {
-							alert(`Sorry, pins ${JSON.stringify(p)} can't be used.`);
-							LC.value="";
-							LC.focus();
-							ok = false;
-							return;
-						} else if (d.ro_gpio.some((e)=>e==parseInt(LC.value))) {
-							alert(`Sorry, pins ${JSON.stringify(d.ro_gpio)} are input only.`);
-							LC.value="";
-							LC.focus();
-							ok = false;
-							return;
-						}
-						for (j=i+1; j<nList.length; j++) {
-							let n2 = nList[j].name.substring(0,2);
-							if (n2=="L0" || n2=="L1" || n2=="L2" || n2=="L3" || n2=="L4") {
-								if (n2.substring(0,1)==="L") {
-									var m  = nList[j].name.substring(2);
-									var t2 = parseInt(gN("LT"+m).value, 10);
-									if (t2>=80) continue;
-								}
-								if (nList[j].value!="" && nList[i].value==nList[j].value) {
-									alert(`Pin conflict between ${LC.name}/${nList[j].name}!`);
-									nList[j].value="";
-									nList[j].focus();
-									ok = false;
-									return;
-								}
+				if (LC.value!="" && LC.value!="-1") {
+					let p = d.rsvd.concat(d.um_p); // used pin array
+					d.Sf.querySelectorAll("select.pin").forEach((e)=>{if(e.value>-1)p.push(parseInt(e.value));}) // buttons, IR & relay
+					if (p.some((e)=>e==parseInt(LC.value))) {
+						alert(`Sorry, pins ${JSON.stringify(p)} can't be used.`);
+						LC.value="";
+						LC.focus();
+						ok = false;
+						return;
+					} else if (d.ro_gpio.some((e)=>e==parseInt(LC.value))) {
+						alert(`Sorry, pins ${JSON.stringify(d.ro_gpio)} are input only.`);
+						LC.value="";
+						LC.focus();
+						ok = false;
+						return;
+					}
+					for (j=i+1; j<nList.length; j++) {
+						let n2 = nList[j].name.substring(0,2); // field name /L./
+						if (n2.search(/^L[0-4]/) == 0) { // pin fields
+							let m  = nList[j].name.substring(2,3); // bus number (0-Z)
+							let t2 = parseInt(gN("LT"+m).value, 10);
+							if (isVir(t2)) continue;
+							if (nList[j].value!="" && nList[i].value==nList[j].value) {
+								alert(`Pin conflict between ${LC.name}/${nList[j].name}!`);
+								nList[j].value="";
+								nList[j].focus();
+								ok = false;
+								return;
 							}
 						}
 					}
+				}
 			});
 			return ok;
 		}
@@ -207,9 +204,9 @@
 				let parallelI2S = d.Sf.PR.checked && (is32() || isS2() || isS3()) && !isD2P(t);
 				if (isC3() || (isS3() && !parallelI2S)) {
 					mul = 2; // ESP32 RMT uses double buffer
-				} else if ((is32() || isS2() || isS3()) && n > (parallelI2S ? 7 : 0)) {
+				} else if ((is32() || isS2() || isS3()) && toNum(n) > (parallelI2S ? 7 : 0)) {
 					mul = 2; // ESP32 RMT uses double buffer
-				} else if ((parallelI2S && n < 8) || (n == 0 && is32())) { // I2S uses extra DMA buffer
+				} else if ((parallelI2S && toNum(n) < 8) || (toNum(n) == 0 && is32())) { // I2S uses extra DMA buffer
 					dbl = len * ch * 3; // DMA buffer for parallel I2S (TODO: only the bus with largst LED count should be used)
 				}
 			}
@@ -264,10 +261,9 @@
 			let LTs = d.Sf.querySelectorAll("#mLC select[name^=LT]");
 			LTs.forEach((s,i)=>{
 				if (i < LTs.length-1) s.disabled = true; // prevent changing type (as we can't update options)
-				// is the field a LED type?
-				var n = s.name.substring(2);
+				var n = s.name.substring(2,3); // bus number (0-Z)
 				var t = parseInt(s.value);
-				memu += getMem(t, parseInt(n)); // calc memory
+				memu += getMem(t, n); // calc memory
 				dC += (isDig(t) && !isD2P(t));
 				setPinConfig(n,t);
 				gId("abl"+n).style.display = (!abl || !isDig(t)) ? "none" : "inline"; // show/hide individual ABL settings
@@ -292,7 +288,7 @@
 				gId("rev"+n).innerHTML = isAna(t) ? "Inverted output":"Reversed";           // change reverse text for analog else (rotated 180°)
 				//gId("psd"+n).innerHTML = isAna(t) ? "Index:":"Start:";                      // change analog start description
 				gId("net"+n+"h").style.display = isNet(t) && !is8266() ? "block" : "none";  // show host field for network types except on ESP8266
-				if (!isNet(t) || is8266()) gN("HS"+n).value = "";                           // cleart host field if not network type or ESP8266
+				if (!isNet(t) || is8266()) gN("HS"+n).value = "";                           // cleart host field if not network type or ESP8266
 			});
 			// display global white channel overrides
 			gId("wc").style.display = (gRGBW) ? 'inline':'none';
@@ -304,8 +300,8 @@
 			let sameType = 0;
 			var nList = d.Sf.querySelectorAll("#mLC input[name^=L]");
 			nList.forEach((LC,i)=>{
-				let nm = LC.name.substring(0,2);  // field name
-				let n  = parseInt(LC.name.substring(2)); // bus number
+				let nm = LC.name.substring(0,2);     // field name : /L./
+				let n  = LC.name.substring(2,3);     // bus number (0-Z)
 				let t  = parseInt(gN("LT"+n).value); // LED type SELECT
 				if (isDig(t)) {
 					if (sameType == 0) sameType = t; // first bus type
@@ -315,7 +311,7 @@
 				if (nm=="LC") {
 					LC.max = isAna(t) ? 1 : (isDig(t) ? maxPB : 16384); // set max value
 					let c = parseInt(LC.value,10); //get LED count
-					if (!customStarts || !startsDirty[n]) gId("ls"+n).value = sLC; //update start value
+					if (!customStarts || !startsDirty[toNum(n)]) gId("ls"+n).value = sLC; //update start value
 					gId("ls"+n).disabled = !customStarts; //enable/disable field editing
 					if (c) {
 						let s = parseInt(gId("ls"+n).value); //start value
@@ -332,7 +328,7 @@
 					return;
 				}
 				// ignore IP address (stored in pins for virtual busses)
-				if (nm=="L0" || nm=="L1" || nm=="L2" || nm=="L3") {
+				if (nm.search(/^L[0-3]/) == 0) { // pin fields
 					if (isVir(t)) {
 						LC.max = 255;
 						LC.min = 0;
@@ -344,26 +340,24 @@
 					}
 				}
 				// check for pin conflicts & color fields
-				if (nm=="L0" || nm=="L1" || nm=="L2" || nm=="L3" || nm=="L4")
+				if (nm.search(/^L[0-4]/) == 0) // pin fields
 					if (LC.value!="" && LC.value!="-1") {
 						let p = d.rsvd.concat(d.um_p); // used pin array
 						d.Sf.querySelectorAll("select.pin").forEach((e)=>{if(e.value>-1)p.push(parseInt(e.value));}) // buttons, IR & relay
 						for (j=0; j<nList.length; j++) {
 							if (i==j) continue;
-							let n2 = nList[j].name.substring(0,2);
-							if (n2=="L0" || n2=="L1" || n2=="L2" || n2=="L3" || n2=="L4") {
-								if (n2.substring(0,1)==="L") {
-									let m  = nList[j].name.substring(2);
-									let t2 = parseInt(gN("LT"+m).value, 10);
-									if (isVir(t2)) continue;
-								}
+							let n2 = nList[j].name.substring(0,2); // field name : /L./
+							if (n2.search(/^L[0-4]/) == 0) { // pin fields
+								let m  = nList[j].name.substring(2,3); // bus number (0-Z)
+								let t2 = parseInt(gN("LT"+m).value, 10);
+								if (isVir(t2)) continue;
 								if (nList[j].value!="" && nList[j].value!="-1") p.push(parseInt(nList[j].value,10));  // add current pin
 							}
 						}
 						// now check for conflicts
 						if (p.some((e)=>e==parseInt(LC.value))) LC.style.color = "red";
 						else LC.style.color = d.ro_gpio.some((e)=>e==parseInt(LC.value)) ? "orange" : "#fff";
-					}
+					} else LC.style.color = "#fff";
 			});
 			if (is32() || isS2() || isS3()) {
 				if (maxLC > 600 || dC < 2 || sameType <= 0) {
