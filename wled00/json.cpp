@@ -726,21 +726,13 @@ void serializeInfo(JsonObject root)
   }
   #endif
 
-  unsigned totalLC = 0;
   JsonArray lcarr = leds.createNestedArray(F("seglc")); // deprecated, use state.seg[].lc
   size_t nSegs = strip.getSegmentsNum();
   for (size_t s = 0; s < nSegs; s++) {
     if (!strip.getSegment(s).isActive()) continue;
     unsigned lc = strip.getSegment(s).getLightCapabilities();
-    totalLC |= lc;
     lcarr.add(lc); // deprecated, use state.seg[].lc
   }
-
-  leds["lc"] = totalLC;
-
-  leds[F("rgbw")] = strip.hasRGBWBus(); // deprecated, use info.leds.lc
-  leds[F("wv")]   = totalLC & 0x02;     // deprecated, true if white slider should be displayed for any segment
-  leds["cct"]     = totalLC & 0x04;     // deprecated, use info.leds.lc
 
   #ifdef WLED_DEBUG
   JsonArray i2c = root.createNestedArray(F("i2c"));
