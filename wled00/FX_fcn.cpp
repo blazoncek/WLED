@@ -1166,7 +1166,7 @@ void WS2812FX::finalizeInit() {
   // the other option is saving UI settings which will cause enumeration
   enumerateLedmaps();
 
-  _hasWhiteChannel = _isOffRefreshRequired = false;
+  _hasRGB = _hasWhiteChannel = _hasCCT = _isOffRefreshRequired = false;
   BusManager::removeAll();
 
   unsigned digitalCount = 0;
@@ -1239,6 +1239,8 @@ void WS2812FX::finalizeInit() {
     if (!bus || !bus->isOk() || bus->getStart() + bus->getLength() > MAX_LEDS) break;
     //RGBW mode is enabled if at least one of the strips is RGBW
     _hasWhiteChannel |= bus->hasWhite();
+    _hasCCT          |= bus->hasCCT();
+    _hasRGB          |= bus->hasRGB();
     //refresh is required to remain off if at least one of the strips requires the refresh.
     _isOffRefreshRequired |= bus->isOffRefreshRequired() && !bus->isPWM(); // use refresh bit for phase shift with analog
     unsigned busEnd = bus->getStart() + bus->getLength();
@@ -1258,7 +1260,8 @@ void WS2812FX::finalizeInit() {
       _length = 1;
     } else {
       _length = DEFAULT_LED_COUNT;
-      _hasWhiteChannel = _isOffRefreshRequired = false;
+      _hasWhiteChannel = _hasCCT = _isOffRefreshRequired = false;
+      _hasRGB = true;
       BusManager::getBus(0)->begin();
       BusManager::getBus(0)->setBrightness(scaledBri(bri));
       DEBUG_PRINTLN(F("Added fallback bus."));
@@ -1875,28 +1878,6 @@ uint16_t WS2812FX::getLengthTotal() const {
 
 uint16_t WS2812FX::getLengthPhysical() const {
   return BusManager::getTotalLength(true);
-}
-
-//used for JSON API info.leds.rgbw. Little practical use, deprecate with info.leds.rgbw.
-//returns if there is an RGBW bus (supports RGB and White, not only white)
-//not influenced by auto-white mode, also true if white slider does not affect output white channel
-bool WS2812FX::hasRGBWBus() const {
-  for (size_t b = 0; b < BusManager::getNumBusses(); b++) {
-    const Bus *bus = BusManager::getBus(b);
-    if (!bus || !bus->isOk()) break;
-    if (bus->hasRGB() && bus->hasWhite()) return true;
-  }
-  return false;
-}
-
-bool WS2812FX::hasCCTBus() const {
-  if (cctFromRgb && !correctWB) return false;
-  for (size_t b = 0; b < BusManager::getNumBusses(); b++) {
-    const Bus *bus = BusManager::getBus(b);
-    if (!bus || !bus->isOk()) break;
-    if (bus->hasCCT()) return true;
-  }
-  return false;
 }
 
 void WS2812FX::purgeSegments() {

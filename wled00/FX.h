@@ -743,10 +743,13 @@ class WS2812FX {
       _frametime(FRAMETIME_FIXED),
       _targetFps(WLED_FPS),
       _cumulativeFps(WLED_FPS),
-      _isServicing(false),
-      _isOffRefreshRequired(false),
-      _hasWhiteChannel(false),
-      _triggered(false),
+      _options(0),
+      //_isServicing(false),
+      //_isOffRefreshRequired(false),
+      //_hasWhiteChannel(false),
+      //_triggered(false),
+      //_hasRGB(false),
+      //_hasCCT(false),
       _segment_index(0),
       _mainSegment(0),
       _modeCount(MODE_COUNT),
@@ -814,12 +817,13 @@ class WS2812FX {
     void addSegmentGeometryUpdate(uint8_t id, uint16_t sStart, uint16_t sStop, uint8_t grp = 1, uint8_t spc = 0, uint16_t ofs = UINT16_MAX, uint16_t sStartY = 0, uint16_t sStopY = 1, uint8_t m12 = 0);
 
     bool checkSegmentAlignment() const;
-    bool hasRGBWBus() const;
-    bool hasCCTBus() const;
     bool deserializeMap(unsigned n = 0);
 
     inline bool isUpdating() const           { return !BusManager::canAllShow(); } // return true if the strip is being sent pixel updates
     inline bool isServicing() const          { return _isServicing; }           // returns true if strip.service() is executing
+    inline bool hasRGBBus() const            { return _hasRGB; }                // returns true if strip supports RGB
+    inline bool hasRGBWBus() const           { return _hasRGB && _hasWhiteChannel; }  // returns true if strip supports RGBW (not influenced by auto-white mode)
+    inline bool hasCCTBus() const            { return cctFromRgb && !correctWB ? false : _hasCCT; } // returns true if strip requires manual CCT control (excludes automatic CCT from RGB)
     inline bool hasWhiteChannel() const      { return _hasWhiteChannel; }       // returns true if strip contains separate white chanel
     inline bool isOffRefreshRequired() const { return _isOffRefreshRequired; }  // returns true if strip requires regular updates (i.e. TM1814 chipset)
     inline bool isSuspended() const          { return _suspend; }               // returns true if strip.service() execution is suspended
@@ -928,11 +932,16 @@ class WS2812FX {
     uint8_t  _cumulativeFps;
 
     // will require only 1 byte
-    struct {
-      bool _isServicing          : 1;
-      bool _isOffRefreshRequired : 1; //periodic refresh is required for the strip to remain off.
-      bool _hasWhiteChannel      : 1;
-      bool _triggered            : 1;
+    union {
+      mutable uint8_t _options;  // determines strip options: RGB, W, CCT, refresh, etc.
+      struct {
+        bool _isServicing          : 1; // true if strip.service() is executing
+        bool _isOffRefreshRequired : 1; // periodic refresh is required for the strip to remain off.
+        bool _hasWhiteChannel      : 1;
+        bool _triggered            : 1; // true if strip received a trigger() request, forcing refresh even when off
+        bool _hasRGB               : 1; // strip has RGB channels
+        bool _hasCCT               : 1; // strip has CCT (cold white + warm white) channels
+      };
     };
 
     uint8_t _segment_index;
