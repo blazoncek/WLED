@@ -82,11 +82,9 @@ function getLoc() {
 		}
 	} else {
 		// detect reverse proxy
-		let path = l.pathname;
-		let paths = path.slice(1,path.endsWith('/')?-1:undefined).split("/");
-		if (paths.length > 1) paths.pop(); // remove file or subpage (or "settings")
-		let settingsIndex = paths.lastIndexOf("settings");
-		if (settingsIndex >= 0) for (let i = paths.length; i > settingsIndex; i--) paths.pop(); // remove all after and including "settings"
+		let paths = l.pathname.split("/").slice(1); // first is always empty
+		let settingsIndex = paths.lastIndexOf("settings"); // -1 or index of "settings"
+		paths = paths.slice(0,settingsIndex); // if we don't have "settings", remove last entry (empty / or file)
 		if (paths.length > 1) {
 			locproto = l.protocol;
 			loc = true;
