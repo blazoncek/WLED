@@ -707,7 +707,7 @@ void Segment::setPixelColor(int i, CRGBA col) const
     const auto XY = [&](unsigned x, unsigned y){ return x + y*vW;};
     switch (map1D2D) {
       case M12_Pixels:
-        // use all available pixels as a long strip
+        // use all available pixels as a long strip (respect transpose)
         setPixelColorRaw(XY(i % vW, i / vW), col);
         break;
       case M12_pBar:
@@ -726,15 +726,16 @@ void Segment::setPixelColor(int i, CRGBA col) const
             int x = roundf(sin_t(rad) * r);
             int y = roundf(cos_t(rad) * r);
             // exploit symmetry
-            setPixelColorXY(x, y, col);
-            setPixelColorXY(y, x, col);
+            // as segment may not be square limit pixel drawing (faster than letting setPixelColorXY() decide)
+            if (x < vW && y < vH) setPixelColorRaw(XY(x, y), col);
+            if (y < vW && x < vH) setPixelColorRaw(XY(y, x), col);
           }
           // Bresenham’s Algorithm (may not fill every pixel)
           //int d = 3 - (2*i);
           //int y = i, x = 0;
           //while (y >= x) {
-          //  setPixelColorXY(x, y, col);
-          //  setPixelColorXY(y, x, col);
+          //  if (x < vW && y < vH) setPixelColorRaw(XY(x, y), col);
+          //  if (y < vW && x < vH) setPixelColorRaw(XY(y, x), col);
           //  x++;
           //  if (d > 0) {
           //    y--;
@@ -745,10 +746,16 @@ void Segment::setPixelColor(int i, CRGBA col) const
           //}
         }
         break;
-      case M12_pCorner:
-        for (int x = 0; x <= i; x++) setPixelColorRaw(XY(x, i), col);
-        for (int y = 0; y <  i; y++) setPixelColorRaw(XY(i, y), col);
+      case M12_pCorner: {
+        // corner expansion can work on non-square segments, but virtualLength() returns
+        // maximum dimension (either virtualWidth() or virtualHeight()) so we needt to limit
+        // drawing in that particular dimension
+        int w = min(i, vW - 1);
+        int h = min(i, vH - 1);
+        if (i < vH) for (int x = 0; x <= w; x++) setPixelColorRaw(XY(x, i), col);
+        if (i < vW) for (int y = 0; y <= h; y++) setPixelColorRaw(XY(i, y), col);
         break;
+      }
       case M12_sPinwheel: {
         // Uses Bresenham's algorithm to place coordinates of two lines in arrays then draws between them
         int startX, startY, cosVal[2], sinVal[2]; // in fixed point scale
@@ -1759,9 +1766,13 @@ void WS2812FX::setTransitionMode(bool t) {
   resume();
 }
 
-// wait until frame is over (service() has finished or time for 1 frame has passed; yield() crashes on 8266)
+// wait until frame is over (service() has finished or time for 2 frames have passed; yield() crashes on 8266)
+// the latter may, in rare circumstances, lead to incorrectly assuming strip is done servicing but will not block
+// other processing "indefinitely"
+// rare circumstances are: setting FPS to high number (i.e. 120) and have very slow effect that will need more
+// time than 2 * _frametime (1000/FPS) to draw content
 void WS2812FX::waitForIt() {
-  unsigned long maxWait = millis() + getFrameTime();
+  unsigned long maxWait = millis() + 2 * getFrameTime(); // see wled#4779
   while (isServicing() && maxWait > millis()) delay(1);
   #ifdef WLED_DEBUG_FX
   if (millis() >= maxWait) DEBUGFX_PRINTLN(F("Waited for strip to finish servicing."));
@@ -1770,7 +1781,7 @@ void WS2812FX::waitForIt() {
 
 void WS2812FX::setTargetFps(unsigned fps) {
   if (fps > 0 && fps <= 120) _targetFps = fps;
-  _frametime = 1000 / _targetFps;
+  _frametime = 1000 / _targetFps + (1000 % _targetFps > 0 ? 1 : 0); // "round" up for safety (as precision is lost due to integer math)
 }
 
 void WS2812FX::setCCT(uint16_t k) {
@@ -1899,7 +1910,11 @@ Segment& WS2812FX::getSegment(unsigned id) {
   return _segments[id >= _segments.size() ? getMainSegmentId() : id]; // vectors
 }
 
+// WARNING: resetSegments(), makeAutoSegments() and fixInvalidSegments() must not be called while
+// strip is being serviced (strip.service()), you must call suspend prior if changing segments outside
+// loop() context
 void WS2812FX::resetSegments() {
+  if (isServicing()) return;
   _segments.clear();          // destructs all Segment as part of clearing
   _segments.emplace_back(0, isMatrix ? Segment::maxWidth : _length, 0, isMatrix ? Segment::maxHeight : 1);
   _segments.shrink_to_fit();  // just in case ...
@@ -1907,6 +1922,7 @@ void WS2812FX::resetSegments() {
 }
 
 void WS2812FX::makeAutoSegments(bool forceReset) {
+  if (isServicing()) return;
   if (autoSegments) { //make one segment per bus
     unsigned segStarts[MAX_NUM_SEGMENTS] = {0};
     unsigned segStops [MAX_NUM_SEGMENTS] = {0};
@@ -1978,6 +1994,7 @@ void WS2812FX::makeAutoSegments(bool forceReset) {
 }
 
 void WS2812FX::fixInvalidSegments() {
+  if (isServicing()) return;
   //make sure no segment is longer than total (sanity check)
   for (size_t i = getSegmentsNum()-1; i > 0; i--) {
     if (isMatrix) {
@@ -2040,6 +2057,7 @@ void WS2812FX::printSize() {
 
 // load custom mapping table from JSON file (called from finalizeInit() or deserializeState())
 // if this is a matrix set-up and default ledmap.json file does not exist, create mapping table using setUpMatrix() from panel information
+// WARNING: effect drawing has to be suspended (strip.suspend()) or must be called from loop() context
 bool WS2812FX::deserializeMap(unsigned n) {
   char fileName[32];
   strcpy_P(fileName, PSTR("/ledmap"));
@@ -2069,9 +2087,6 @@ bool WS2812FX::deserializeMap(unsigned n) {
   } else
     DEBUG_PRINTF_P(PSTR("Reading LED map from %s\n"), fileName);
 
-  suspend();
-  waitForIt();
-
   #ifndef WLED_DISABLE_2D
   // if we are loading default ledmap (at boot) set matrix width and height from the ledmap (compatible with WLED MM ledmaps)
   JsonObject root = pDoc->as<JsonObject>();
@@ -2099,7 +2114,6 @@ bool WS2812FX::deserializeMap(unsigned n) {
       p_free(customMappingTable);
       customMappingTable = nullptr;
       f.close();
-      resume();
       releaseJSONBufferLock();
       return false;
     }
@@ -2163,8 +2177,6 @@ bool WS2812FX::deserializeMap(unsigned n) {
   } else {
     DEBUG_PRINTLN(F("ERROR LED map allocation error."));
   }
-
-  resume();
 
   releaseJSONBufferLock();
   return (customMappingSize > 0);
