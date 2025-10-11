@@ -427,11 +427,11 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
   if (ofs < UINT16_MAX) offset = ofs;
   map1D2D  = constrain(m12, 0, 7);
 
+  DEBUGFX_PRINTF_P(PSTR("Geometry: (%d,%d -> %d,%d) [%d,%d] ofs:%d m:%d\n"), (int)i1, (int)i2, (int)i1Y, (int)i2Y, (int)grp, (int)spc, (int)ofs, (int)m12);
   if (boundsUnchanged) return;
 
   unsigned oldLength = length();
 
-  DEBUGFX_PRINTF_P(PSTR("Segment geometry: %d,%d -> %d,%d [%d,%d]\n"), (int)i1, (int)i2, (int)i1Y, (int)i2Y, (int)grp, (int)spc);
   markForReset();
   if (_t) stopTransition(); // we can't use transition if segment dimensions changed
   stateChanged = true;      // send UDP/WS broadcast
@@ -650,7 +650,8 @@ uint16_t Segment::virtualLength() const {
         vLen = max(vW,vH); // get the longest dimension
         break;
       case M12_pArc:
-        vLen = sqrt16(vH*vH + vW*vW); // use diagonal
+        // we need to multiply hypotenuse by 4 within sqrt and divide by 2 afterwards to improve resolution
+        vLen = (sqrt16((vH*vH + vW*vW) << 2) + 1) >> 1; // use hypotenuse (rounded up)
         break;
       case M12_sPinwheel:
         vLen = getPinwheelLength(vW, vH);
@@ -704,7 +705,7 @@ void Segment::setPixelColor(int i, CRGBA col) const
   if (is2D()) {
     const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
     const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
-    const auto XY = [&](unsigned x, unsigned y){ return x + y*vW;};
+    const auto XY = [&](unsigned x, unsigned y) { return x + y*vW; };
     switch (map1D2D) {
       case M12_Pixels:
         // use all available pixels as a long strip (respect transpose)
@@ -715,37 +716,27 @@ void Segment::setPixelColor(int i, CRGBA col) const
         if (vStrip > 0)                   setPixelColorRaw(XY(vStrip - 1, vH - i - 1), col);
         else for (int x = 0; x < vW; x++) setPixelColorRaw(XY(x, vH - i - 1), col);
         break;
-      case M12_pArc:
-        // expand in circular fashion from center
-        if (i == 0)
-          setPixelColorRaw(XY(0, 0), col);
-        else {
-          float r = i;
-          float step = HALF_PI / (2.8284f * r + 4); // we only need (PI/4)/(r/sqrt(2)+1) steps
-          for (float rad = 0.0f; rad <= (HALF_PI/2)+step/2; rad += step) {
-            int x = roundf(sin_t(rad) * r);
-            int y = roundf(cos_t(rad) * r);
-            // exploit symmetry
+      case M12_pArc: {
+        // expand 1D effect in a circular manner
+        // adapted code by @brandon502 wled#4994
+        if (i == 0)    { setPixelColorRaw(XY(0, 0), col);       break; }  // with only 1 pixel to draw, return early
+        if (i == vL-1) { setPixelColorRaw(XY(vW-1, vH-1), col); break; }  // extreme (last) pixel is always in corner
+        if (i == 2)      setPixelColorRaw(XY(1, 1), col);                 // cover anomally (missing pixel with square detection)
+        // Tony Barrera's circle algorithm
+        // https://softwareengineering.stackexchange.com/questions/287478/drawing-concentric-circles-without-gaps/357445#357445
+        int x = 0, y = i;  // i is the radius
+        int d = -(i >> 1); // initial decision parameter
+        while (x <= y) {
+          if (i != x || i != y) { // prevent early square
             // as segment may not be square limit pixel drawing (faster than letting setPixelColorXY() decide)
             if (x < vW && y < vH) setPixelColorRaw(XY(x, y), col);
             if (y < vW && x < vH) setPixelColorRaw(XY(y, x), col);
           }
-          // Bresenham’s Algorithm (may not fill every pixel)
-          //int d = 3 - (2*i);
-          //int y = i, x = 0;
-          //while (y >= x) {
-          //  if (x < vW && y < vH) setPixelColorRaw(XY(x, y), col);
-          //  if (y < vW && x < vH) setPixelColorRaw(XY(y, x), col);
-          //  x++;
-          //  if (d > 0) {
-          //    y--;
-          //    d += 4 * (x - y) + 10;
-          //  } else {
-          //    d += 4 * x + 6;
-          //  }
-          //}
+          if (d <= 0) d += ++x;
+          else        d -= --y;
         }
         break;
+      }
       case M12_pCorner: {
         // corner expansion can work on non-square segments, but virtualLength() returns
         // maximum dimension (either virtualWidth() or virtualHeight()) so we needt to limit
@@ -842,7 +833,7 @@ void Segment::setPixelColor(int i, CRGBA col) const
                   (!onLine1 && (!onLine2 || drawLast))  || // Middle pixels and line2 if drawLast
                   (!onLine2 && (!onLine1 || drawFirst))    // Middle pixels and line1 if drawFirst
                 ) {
-                setPixelColorXY(x, y, col);
+                if (x < vW && y < vH) setPixelColorRaw(XY(x, y), col);
               }
             }
           }
@@ -856,10 +847,13 @@ void Segment::setPixelColor(int i, CRGBA col) const
   } else if (Segment::maxHeight != 1 && (width() == 1 || height() == 1)) {
     if (start < Segment::maxWidth*Segment::maxHeight) {
       // we have a vertical or horizontal 1D segment (WARNING: virtual...() may be transposed)
+      const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
+      const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
+      const auto XY = [&](unsigned x, unsigned y) { return x + y*vW; };
       int x = 0, y = 0;
-      if (vHeight() > 1) y = i;
-      if (vWidth()  > 1) x = i;
-      setPixelColorXY(x, y, col);
+      if (vH > 1) y = i;
+      if (vW > 1) x = i;
+      if (x < vW && y < vH) setPixelColorRaw(XY(x, y), col);
       return;
     }
   }
@@ -916,6 +910,7 @@ CRGBA Segment::getPixelColor(int i) const
   if (is2D()) {
     const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
     const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
+    const auto XY = [&](unsigned x, unsigned y){ return x + y*vW;};
     int x = 0, y = 0;
     switch (map1D2D) {
       case M12_Pixels:
@@ -927,9 +922,20 @@ CRGBA Segment::getPixelColor(int i) const
         else            { y = vH - i - 1; };
         break;
       case M12_pArc:
-        if (i > vW && i > vH) {
-          x = y = sqrt16(i*i/2);
-          break; // use diagonal
+        if (i >= vW && i >= vH) {
+          // using diagonal/hypotenuse pixel has a drawback as not every arc paints diagonal pixels
+          // so we need to reverse-plot the circle to find a pixel that was painted
+          // using Barerra's circle algorithm (see above, i is outside of segment dimensions)
+          int cx = 0, cy = i;     // i is the radius (i.e. > vW or vH)
+          int d = -(i >> 1);      // initial decision parameter
+          int validCount = 0;     // count of valid pixels found
+          while (cx <= cy && validCount < 2) { // when we find 2 valid pixels we are done otherwise continue until circle is complete
+            if      (cy < vH && cx < vW) { x = cx; y = cy; validCount++; }
+            else if (cy < vW && cx < vH) { x = cy; y = cx; validCount++; }
+            if (d <= 0) d += ++cx;
+            else        d -= --cy;
+          }
+          break;
         }
         // otherwise fallthrough
       case M12_pCorner:
@@ -953,7 +959,8 @@ CRGBA Segment::getPixelColor(int i) const
         break;
       }
     }
-    return getPixelColorXY(x, y);
+    if (x >= vW || y >= vH) return CRGBA(0, 0, 0, hasWhite() ? 0 : 255); // out of bounds
+    i = XY(x, y);
   }
 #endif
   return getPixelColorRaw(i);
@@ -1080,45 +1087,6 @@ void Segment::blur(uint8_t blur_amount, bool smear) const {
 }
 
 /*
- * Put a value 0 to 255 in to get a color value from color wheel if using "default" palette.
- */
-CRGBA Segment::color_wheel(uint8_t pos) const {
-  if (palette || !_isRGB) return color_from_palette(pos, false, false, 0); // never wrap palette
-  pos = 255 - pos;
-  if (useRainbowWheel) {
-    return CRGBA(CHSV32(pos, 255, 255));
-  } else {
-    unsigned r = 0, g = 0, b = 0;
-    // by @TripleWhy https://github.com/Aircoookie/WLED/pull/3681 (https://github.com/TripleWhy)
-    // HSV 2 RGB conversion, assuming H=pos*360°/256, S=1 and V=1. (see also hsv2rgb() for more universal approach)
-    const unsigned h = (pos * 3) >> 7;    // avoid division: s = (pos * 3) / 128;
-    const unsigned f = (pos * 6) & 0xFF;  // avoid modulus: f = (pos * 6) % 256
-    switch (h) {
-      case  0: r = 255;     g = f;       break;
-      case  1: r = 255 - f; g = 255;     break;
-      case  2: g = 255;     b = f;       break;
-      case  3: g = 255 - f; b = 255;     break;
-      case  4: r = f;       b = 255;     break;
-      default: r = 255;     b = 255 - f; break;
-    }
-    // old behaviour, kept for posterity (Inspired by the Adafruit examples)
-    //if (pos <= 85) {
-    //  b = pos * 3;
-    //  r = 255 - b;
-    //} else if (pos <= 170) {
-    //  pos -= 85;
-    //  g = pos * 3;
-    //  b = 255 - g;
-    //} else {
-    //  pos -= 170;
-    //  r = pos * 3;
-    //  g = 255 - r;
-    //}
-    return CRGBA(r, g, b);
-  }
-}
-
-/*
  * Gets a single color from the currently selected palette.
  * @param i Palette Index (if mapping is true, the full palette will be _virtualSegmentLength long, if false, 255). Will wrap around automatically.
  * @param mapping if true, LED position in segment is considered for color
@@ -1137,15 +1105,36 @@ CRGBA Segment::color_from_palette(uint16_t i, bool mapping, bool moving, uint8_t
 
   unsigned paletteIndex = i;
   if (mapping) paletteIndex = min((i*255)/vLength(), 255U);
-  // paletteBlend: 0 - wrap when moving, 1 - always wrap, 2 - never wrap, 3 - none (undefined/no interpolation of palette entries)
-  // ColorFromPalette interpolations are: NOBLEND, LINEARBLEND, LINEARBLEND_NOWRAP (shortens palette to 240 entries)
-  TBlendType blend = NOBLEND;
-  switch (paletteBlend) {
-    case 0: blend = moving ? LINEARBLEND : LINEARBLEND_NOWRAP; break;
-    case 1: blend = LINEARBLEND; break;
-    case 2: blend = LINEARBLEND_NOWRAP; break;
+
+  CRGBA palcol;
+  if (palette == 0 && mcol >= NUM_COLORS && !mapping) {
+    // behave like color_wheel() if default palette is selected and no mapping is requested and no standard color is requested
+    paletteIndex = 255 - (paletteIndex & 0xFF);
+    unsigned r = 0, g = 0, b = 0;
+    // by @TripleWhy https://github.com/Aircoookie/WLED/pull/3681 (https://github.com/TripleWhy)
+    // HSV 2 RGB conversion, assuming H=pos*360°/256, S=1 and V=1. (see also hsv2rgb() for more universal approach)
+    const unsigned h = (paletteIndex * 3) >> 7;    // avoid division: s = (pos * 3) / 128;
+    const unsigned f = (paletteIndex * 6) & 0xFF;  // avoid modulus: f = (pos * 6) % 256
+    switch (h) {
+      case  0: r = 255;     g = f;       break;
+      case  1: r = 255 - f; g = 255;     break;
+      case  2: g = 255;     b = f;       break;
+      case  3: g = 255 - f; b = 255;     break;
+      case  4: r = f;       b = 255;     break;
+      default: r = 255;     b = 255 - f; break;
+    }
+    palcol = CRGBA(r, g, b);
+  } else {
+    // paletteBlend: 0 - wrap when moving, 1 - always wrap, 2 - never wrap, 3 - none (undefined/no interpolation of palette entries)
+    // ColorFromPalette interpolations are: NOBLEND, LINEARBLEND, LINEARBLEND_NOWRAP (shortens palette to 240 entries)
+    TBlendType blend = NOBLEND;
+    switch (paletteBlend) {
+      case 0: blend = moving ? LINEARBLEND : LINEARBLEND_NOWRAP; break;
+      case 1: blend = LINEARBLEND; break;
+      case 2: blend = LINEARBLEND_NOWRAP; break;
+    }
+    palcol = ColorFromPaletteWLED(_currentPalette, paletteIndex, pbri, blend);
   }
-  CRGBA palcol = ColorFromPaletteWLED(_currentPalette, paletteIndex, pbri, blend);
   if (hasW) palcol.alpha = color.alpha; // preserve white channel
   return palcol;
 }

@@ -154,17 +154,17 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_THEATER_CHASE           13
 //#define FX_MODE_THEATER_CHASE_RAINBOW   14  // candidate for removal (use Theater)
 #define FX_MODE_RUNNING_LIGHTS          15
-#define FX_MODE_SAW                     16
+//#define FX_MODE_SAW                     16  // candidate for removal (use Running Lights with check 2)
 #define FX_MODE_TWINKLE                 17
 #define FX_MODE_DISSOLVE                18
 //#define FX_MODE_DISSOLVE_RANDOM         19  // candidate for removal (use Dissolve with with check 3)
 #define FX_MODE_SPARKLE                 20
 #define FX_MODE_FLASH_SPARKLE           21
 #define FX_MODE_HYPER_SPARKLE           22
-#define FX_MODE_STROBE                  23
-#define FX_MODE_STROBE_RAINBOW          24
+//#define FX_MODE_STROBE                  23  // candidate for removal (use Blink with with check 2)
+//#define FX_MODE_STROBE_RAINBOW          24  // candidate for removal (use Blink with with check 1 & check 2)
 #define FX_MODE_MULTI_STROBE            25
-#define FX_MODE_BLINK_RAINBOW           26
+//#define FX_MODE_BLINK_RAINBOW           26  // candidate for removal (use Blink with with check 1)
 #define FX_MODE_ANDROID                 27
 #define FX_MODE_CHASE_COLOR             28
 #define FX_MODE_CHASE_RANDOM            29
@@ -635,7 +635,7 @@ class Segment {
                                                                                 { addPixelColor(n, CRGBA(r,g,b), preserveCR); }
     inline void fadePixelColor(uint16_t n, uint8_t fade) const                  { setPixelColor(n, getPixelColor(n).nscale8_video(fade)); }
     [[gnu::hot]] CRGBA color_from_palette(uint16_t, bool mapping, bool moving, uint8_t mcol, uint8_t pbri = 255) const;
-    [[gnu::hot]] CRGBA color_wheel(uint8_t pos) const;
+    inline CRGBA color_wheel(uint8_t pos) const                                 { return color_from_palette(pos, false, false, 255); };
     // 2D matrix
     unsigned virtualWidth()  const;       // segment width in virtual pixels (accounts for groupping and spacing)
     unsigned virtualHeight() const;       // segment height in virtual pixels (accounts for groupping and spacing)

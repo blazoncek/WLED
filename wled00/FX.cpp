@@ -114,7 +114,11 @@ static const char _data_FX_MODE_STATIC[] PROGMEM = "Solid";
  * Alternate between color1 and color2
  * if(strobe == true) then create a strobe effect
  */
-uint16_t blink(CRGBA color1, CRGBA color2, bool strobe, bool do_palette) {
+uint16_t mode_blink() {
+  bool rainbow = SEGMENT.check1;
+  bool strobe = SEGMENT.check2;
+  bool swapTimeSpace = SEGMENT.check3;
+
   uint32_t cycleTime = (255 - SEGMENT.speed)*20;
   uint32_t onTime = FRAMETIME;
   if (!strobe) onTime += ((cycleTime * SEGMENT.intensity) >> 8);
@@ -130,52 +134,17 @@ uint16_t blink(CRGBA color1, CRGBA color2, bool strobe, bool do_palette) {
 
   SEGENV.step = it; //save previous iteration
 
-  CRGBA color = on ? color1 : color2;
-  if (color == color1 && do_palette)
-  {
+  if (on) {
     for (unsigned i = 0; i < SEGLEN; i++) {
-      SEGMENT.setPixelColor(i, SEGMENT.color_from_palette(i, true, PALETTE_FIXED, 0));
+      uint8_t index = (swapTimeSpace ? ((it * 256 * FRAMETIME) / cycleTime) : (i * 256) / SEGLEN);
+      CRGBA color = SEGMENT.color_from_palette(index, false, PALETTE_MOVING, rainbow*255);
+      SEGMENT.setPixelColor(i, color);
     }
-  } else SEGMENT.fill(color);
+  } else SEGMENT.fill(SEGCOLOR(1));
 
   return FRAMETIME;
 }
-
-
-/*
- * Normal blinking. Intensity sets duty cycle.
- */
-uint16_t mode_blink(void) {
-  return blink(SEGCOLOR(0), SEGCOLOR(1), false, true);
-}
-static const char _data_FX_MODE_BLINK[] PROGMEM = "Blink@!,Duty cycle;!,!;!;01";
-
-
-/*
- * Classic Blink effect. Cycling through the rainbow.
- */
-uint16_t mode_blink_rainbow(void) {
-  return blink(SEGMENT.color_wheel(SEGENV.call & 0xFF), SEGCOLOR(1), false, false);
-}
-static const char _data_FX_MODE_BLINK_RAINBOW[] PROGMEM = "Blink Rainbow@Frequency,Blink duration;!,!;!;01";
-
-
-/*
- * Classic Strobe effect.
- */
-uint16_t mode_strobe(void) {
-  return blink(SEGCOLOR(0), SEGCOLOR(1), true, true);
-}
-static const char _data_FX_MODE_STROBE[] PROGMEM = "Strobe@!;!,!;!;01";
-
-
-/*
- * Classic Strobe effect. Cycling through the rainbow.
- */
-uint16_t mode_strobe_rainbow(void) {
-  return blink(SEGMENT.color_wheel(SEGENV.call & 0xFF), SEGCOLOR(1), true, false);
-}
-static const char _data_FX_MODE_STROBE_RAINBOW[] PROGMEM = "Strobe Rainbow@!;,!;!;01";
+static const char _data_FX_MODE_BLINK[] PROGMEM = "Blink@!,Duty,,,,Rainbow,Strobe,Time/space;!,!;!;01";
 
 
 /*
@@ -488,14 +457,15 @@ static const char _data_FX_MODE_THEATER_CHASE[] PROGMEM = "Theater@!,Gap size,,,
 
 
 /*
- * Running lights effect with smooth sine transition base.
+ * Running lights effect with smooth sine/sawtooth transition base.
  * Idea: Make the gap width controllable with a third slider in the future
  */
-static uint16_t running_base(bool saw) {
+uint16_t mode_running_lights(void) {
   const bool dual = SEGMENT.check3;
   unsigned x_scale = SEGMENT.intensity >> 2;
   uint32_t counter = (strip.now * SEGMENT.speed) >> 9;
   const bool moving = SEGMENT.check1;
+  const bool saw = SEGMENT.check2;
 
   for (unsigned i = 0; i < SEGLEN; i++) {
     unsigned a = i*x_scale - counter;
@@ -523,23 +493,7 @@ static uint16_t running_base(bool saw) {
 
   return FRAMETIME;
 }
-
-/*
- * Running lights effect with smooth sine transition.
- */
-uint16_t mode_running_lights(void) {
-  return running_base(false);
-}
-static const char _data_FX_MODE_RUNNING_LIGHTS[] PROGMEM = "Running@!,Wave width,,,,Animate palette,,Dual;!,!,!;!;;o1=0";
-
-
-/*
- * Running lights effect with sawtooth transition.
- */
-uint16_t mode_saw(void) {
-  return running_base(true);
-}
-static const char _data_FX_MODE_SAW[] PROGMEM = "Saw@!,Width,,,,Animate palette;!,!;!;;o1=0,o3=0";
+static const char _data_FX_MODE_RUNNING_LIGHTS[] PROGMEM = "Running@!,Width,,,,Animate palette,Saw,Dual;!,!,!;!;;o1=0,o3=0";
 
 
 /*
@@ -1979,7 +1933,7 @@ uint16_t mode_palette() {
       // Finally, shift the palette a bit.
       const int paletteOffset = (!inputAnimateShift) ? (inputShift-128) : (((strip.now * ((inputShift >> 3) +1)) & 0xFFFF) >> 8);
       colorIndex += paletteOffset;
-      const CRGBA color = SEGMENT.color_wheel((uint8_t)colorIndex);
+      const CRGBA color = SEGMENT.color_wheel(colorIndex);
       if (isMatrix) {
         SEGMENT.setPixelColorXY(x, y, color);
       } else {
@@ -2424,26 +2378,7 @@ uint16_t mode_ripple(void) {
   SEGMENT.fill(SEGMENT.check1 ? SEGMENT.color_wheel(SEGENV.aux0).nblend(BLACK,uint8_t(192)) : SEGCOLOR(1));
   return ripple_base();
 }
-static const char _data_FX_MODE_RIPPLE[] PROGMEM = "Ripple@!,# of Waves,,,,Palette BG;,!;!;12;o1=0";
-
-
-//uint16_t mode_ripple_rainbow(void) {
-//  if (SEGLEN <= 1) return mode_static();
-//  if (SEGENV.call ==0) {
-//    SEGENV.aux0 = hw_random8();
-//    SEGENV.aux1 = hw_random8();
-//  }
-//  if (SEGENV.aux0 == SEGENV.aux1) {
-//    SEGENV.aux1 = hw_random8();
-//  } else if (SEGENV.aux1 > SEGENV.aux0) {
-//    SEGENV.aux0++;
-//  } else {
-//    SEGENV.aux0--;
-//  }
-//  SEGMENT.fill(color_blend(SEGMENT.color_wheel(SEGENV.aux0),BLACK,uint8_t(235)));
-//  return ripple_base();
-//}
-//static const char _data_FX_MODE_RIPPLE_RAINBOW[] PROGMEM = "Ripple Rainbow@!,Waves;;!;12";
+static const char _data_FX_MODE_RIPPLE[] PROGMEM = "Ripple@!,Waves,,,,Palette BG;,!;!;12;o1=0";
 
 
 //  TwinkleFOX by Mark Kriegsman: https://gist.github.com/kriegsman/756ea6dcae8e30845b5a
@@ -3002,7 +2937,6 @@ static uint16_t rolling_balls() {
 
     CRGBA color = SEGCOLOR(0);
     if (SEGMENT.palette) {
-      //color = SEGMENT.color_wheel(i*(256/MAX(numBalls, 8)));
       color = SEGMENT.color_from_palette(i*255/numBalls, false, PALETTE_FIXED, 0);
     } else if (hasCol2) {
       color = SEGCOLOR(i % NUM_COLORS);
@@ -6503,16 +6437,12 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_FADE, &mode_fade, _data_FX_MODE_FADE);
   addEffect(FX_MODE_THEATER_CHASE, &mode_theater_chase, _data_FX_MODE_THEATER_CHASE);
   addEffect(FX_MODE_RUNNING_LIGHTS, &mode_running_lights, _data_FX_MODE_RUNNING_LIGHTS);
-  addEffect(FX_MODE_SAW, &mode_saw, _data_FX_MODE_SAW);
   addEffect(FX_MODE_TWINKLE, &mode_twinkle, _data_FX_MODE_TWINKLE);
   addEffect(FX_MODE_DISSOLVE, &mode_dissolve, _data_FX_MODE_DISSOLVE);
   addEffect(FX_MODE_SPARKLE, &mode_sparkle, _data_FX_MODE_SPARKLE);
   addEffect(FX_MODE_FLASH_SPARKLE, &mode_flash_sparkle, _data_FX_MODE_FLASH_SPARKLE);
   addEffect(FX_MODE_HYPER_SPARKLE, &mode_hyper_sparkle, _data_FX_MODE_HYPER_SPARKLE);
-  addEffect(FX_MODE_STROBE, &mode_strobe, _data_FX_MODE_STROBE);
-  addEffect(FX_MODE_STROBE_RAINBOW, &mode_strobe_rainbow, _data_FX_MODE_STROBE_RAINBOW);
   addEffect(FX_MODE_MULTI_STROBE, &mode_multi_strobe, _data_FX_MODE_MULTI_STROBE);
-  addEffect(FX_MODE_BLINK_RAINBOW, &mode_blink_rainbow, _data_FX_MODE_BLINK_RAINBOW);
   addEffect(FX_MODE_ANDROID, &mode_android, _data_FX_MODE_ANDROID);
   addEffect(FX_MODE_CHASE_COLOR, &mode_chase_color, _data_FX_MODE_CHASE_COLOR);
   addEffect(FX_MODE_CHASE_RANDOM, &mode_chase_random, _data_FX_MODE_CHASE_RANDOM);
