@@ -2337,21 +2337,21 @@ function setMiY(s)
 
 function setM12(s)
 {
-	var value = gId(`seg${s}m12`).value;
+	var value = parseInt(gId(`seg${s}m12`).value);
 	var obj = {"seg": {"id": s, "m12": value}};
 	requestJson(obj);
 }
 
 function setSi(s)
 {
-	var value = gId(`seg${s}si`).value;
+	var value = parseInt(gId(`seg${s}si`).value);
 	var obj = {"seg": {"id": s, "si": value}};
 	requestJson(obj);
 }
 
 function setBm(s)
 {
-	var value = gId(`seg${s}bm`).value;
+	var value = parseInt(gId(`seg${s}bm`).value);
 	var obj = {"seg": {"id": s, "bm": value}};
 	requestJson(obj);
 }
