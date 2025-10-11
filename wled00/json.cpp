@@ -214,10 +214,10 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
         // JSON "col" array can contain the following values for each of segment's colors (primary, background, custom):
         // "col":[int|string|object|array, int|string|object|array, int|string|object|array]
         //   int = Kelvin temperature or 0 for black
-        //   string = hex representation of [WW]RRGGBB
+        //   string = hex representation of [WW]RRGGBB or "r" for random color
         //   object = individual channel control {"r":0,"g":127,"b":255,"w":255}, each being optional (valid to send {})
         //   array = direct channel values [r,g,b,w] (w element being optional)
-        int rgbw[] = {0,0,0,0};
+        int rgbw[] = {0,0,0,seg.colors[i].a};
         bool colValid = false;
         JsonArray colX = colarr[i];
         if (colX.isNull()) {
@@ -227,19 +227,22 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
             rgbw[0] = oCol["r"] | seg.colors[i].r;
             rgbw[1] = oCol["g"] | seg.colors[i].g;
             rgbw[2] = oCol["b"] | seg.colors[i].b;
-            rgbw[3] = oCol["w"] | seg.colors[i].a;
+            if (seg.hasWhite()) rgbw[3] = oCol["w"] | seg.colors[i].a;
             colValid = true;
           } else {
-            byte brgbw[] = {0,0,0,0};
+            byte brgbw[] = {0,0,0,seg.colors[i].a};
             const char* hexCol = colarr[i];
             if (hexCol == nullptr) { //Kelvin color temperature (or invalid), e.g 2400
               int kelvin = colarr[i] | -1;
               if (kelvin <  0) continue;
-              if (kelvin == 0) seg.setColor(i, 0);
               if (kelvin >  0) colorKtoRGB(kelvin, brgbw);
               colValid = true;
             } else { //HEX string, e.g. "FFAA00"
               colValid = colorFromHexString(brgbw, hexCol);
+              if (!colValid && tolower(hexCol[0]) == 'r') {
+                setRandomColor(brgbw); // "random" color
+                colValid = true;
+              }
             }
             for (size_t c = 0; c < 4; c++) rgbw[c] = brgbw[c];
           }
