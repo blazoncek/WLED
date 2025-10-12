@@ -1573,7 +1573,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       if (topSegment.reverse_y) y = nRows - y - 1;
       if (topSegment.transpose) std::swap(x,y); // swap X & Y if segment transposed
       // c_a is lacking white channel, we will try to add it back for Solid/Static effect where it is most likely missing
-      uint32_t ct = hasWhite ? c_a.color32 : (uint32_t)c_a; // (uint32_t)c_a strips alpha channel
+      uint32_t ct = hasWhite ? c_a.color32 : c_a.color32 & 0xFFFFFF;
       uint8_t  o  = hasWhite ? opacity : ((unsigned)opacity * (c_a.a + 1)) >> 8; // combine segment opacity with pixel opacity (c_a.a is alpha channel)
       // expand pixel
       const unsigned groupLen = topSegment.groupLength();
@@ -1645,7 +1645,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       // expand pixel
       i *= topSegment.groupLength();
       // c_a is lacking white channel, we will try to add it back for Solid/Static effect where it is most likely missing
-      uint32_t c = hasWhite ? c_a.color32 : (uint32_t)c_a; // (uint32_t)c_a strips alpha channel
+      uint32_t c = hasWhite ? c_a.color32 : c_a.color32 & 0xFFFFFF;
       uint8_t  o = hasWhite ? opacity : ((unsigned)opacity * (c_a.a + 1)) >> 8; // combine segment opacity with pixel opacity (c_a.a is alpha channel)
       // set all the pixels in the group
       const int maxI = std::min(i + topSegment.grouping, length); // make sure to not go beyond physical length
