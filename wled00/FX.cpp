@@ -152,7 +152,7 @@ static const char _data_FX_MODE_BLINK[] PROGMEM = "Blink@!,Duty,,,,Rainbow,Strob
  * LEDs are turned on (color1) in sequence, then turned off (color2) in sequence.
  * if (bool rev == true) then LEDs are turned off in reverse order
  */
-uint16_t color_wipe(bool rev, bool useRandomColors) {
+uint16_t mode_color_wipe() {
   if (SEGLEN <= 1) return mode_static();
   uint32_t cycleTime = 750 + (255 - SEGMENT.speed)*150;
   uint32_t perc = strip.now % cycleTime;
@@ -164,6 +164,9 @@ uint16_t color_wipe(bool rev, bool useRandomColors) {
   } else {
     if (SEGENV.step == 2) SEGENV.step = 3; //trigger color change
   }
+
+  bool rev = SEGMENT.check1; // wipe/sweep
+  bool useRandomColors = SEGMENT.check3; // random colors
 
   if (useRandomColors) {
     if (SEGENV.call == 0) {
@@ -203,43 +206,7 @@ uint16_t color_wipe(bool rev, bool useRandomColors) {
   }
   return FRAMETIME;
 }
-
-
-/*
- * Lights all LEDs one after another.
- */
-uint16_t mode_color_wipe(void) {
-  return color_wipe(false, false);
-}
-static const char _data_FX_MODE_COLOR_WIPE[] PROGMEM = "Wipe@!,!;!,!;!";
-
-
-/*
- * Lights all LEDs one after another. Turns off opposite
- */
-uint16_t mode_color_sweep(void) {
-  return color_wipe(true, false);
-}
-static const char _data_FX_MODE_COLOR_SWEEP[] PROGMEM = "Sweep@!,!;!,!;!";
-
-
-/*
- * Turns all LEDs after each other to a random color.
- * Then starts over with another color.
- */
-uint16_t mode_color_wipe_random(void) {
-  return color_wipe(false, true);
-}
-static const char _data_FX_MODE_COLOR_WIPE_RANDOM[] PROGMEM = "Wipe Random@!;;!";
-
-
-/*
- * Random color introduced alternating from start and end of strip.
- */
-uint16_t mode_color_sweep_random(void) {
-  return color_wipe(true, true);
-}
-static const char _data_FX_MODE_COLOR_SWEEP_RANDOM[] PROGMEM = "Sweep Random@!;;!";
+static const char _data_FX_MODE_COLOR_WIPE[] PROGMEM = "Wipe/Sweep@!,!,,,,Sweep,,Random;!,!;!";
 
 
 /*
@@ -730,18 +697,32 @@ static const char _data_FX_MODE_ANDROID[] PROGMEM = "Android@!,Width;!,!;!;;m12=
  * color1 = background color
  * color2 and color3 = colors of two adjacent leds
  */
-static uint16_t chase(CRGBA color1, CRGBA color2, CRGBA color3, bool do_palette) {
+uint16_t mode_chase() {
   uint16_t counter = strip.now * ((SEGMENT.speed >> 2) + 1);
   uint16_t a = (counter * SEGLEN) >> 16;
 
-  bool chase_random = (SEGMENT.mode == FX_MODE_CHASE_RANDOM);
+  bool chase_random = SEGMENT.check3;   // if true, use random color for chase
+  bool rainbow = SEGMENT.check1;        // if true, use palette for background
+  CRGBA color1 = SEGCOLOR(1);           // background color
+  CRGBA color2 = (SEGCOLOR(2) != BLACK) ? SEGCOLOR(2) : SEGCOLOR(0);  // second color
+  CRGBA color3 = SEGCOLOR(0);           // first color
+
   if (chase_random) {
-    if (a < SEGENV.step) //we hit the start again, choose new color for Chase random
-    {
-      SEGENV.aux1 = SEGENV.aux0; //store previous random color
+    if (a < SEGENV.step) {              // we hit the start again, choose new color for Chase random
+      SEGENV.aux1 = SEGENV.aux0;        // store previous random color
       SEGENV.aux0 = get_random_wheel_index(SEGENV.aux0);
     }
     color1 = SEGMENT.color_wheel(SEGENV.aux0);
+  } else if (rainbow) {
+    unsigned color_sep = 256 / SEGLEN;
+    if (color_sep == 0) color_sep = 1;  // correction for segments longer than 256 LEDs
+    unsigned color_index = SEGENV.call & 0xFF;
+    color1 = SEGMENT.color_wheel(((SEGENV.step * color_sep) + color_index) & 0xFF);
+  } else if (SEGMENT.check2) {          // if rainbow runner
+    uint16_t n = SEGENV.step;
+    uint16_t m = (SEGENV.step + 1) % SEGLEN;
+    color2 = SEGMENT.color_wheel(((n * 256 / SEGLEN) + (SEGENV.call & 0xFF)) & 0xFF);
+    color3 = SEGMENT.color_wheel(((m * 256 / SEGLEN) + (SEGENV.call & 0xFF)) & 0xFF);  
   }
   SEGENV.step = a;
 
@@ -754,24 +735,21 @@ static uint16_t chase(CRGBA color1, CRGBA color2, CRGBA color3, bool do_palette)
   if (c > SEGLEN) c -= SEGLEN;
 
   //background
-  if (do_palette)
-  {
+  if (!rainbow && SEGMENT.palette > 0) {
     for (unsigned i = 0; i < SEGLEN; i++) {
       SEGMENT.setPixelColor(i, SEGMENT.color_from_palette(i, true, PALETTE_FIXED, 1));
     }
   } else SEGMENT.fill(color1);
 
   //if random, fill old background between a and end
-  if (chase_random)
-  {
+  if (chase_random) {
     color1 = SEGMENT.color_wheel(SEGENV.aux1);
     for (unsigned i = a; i < SEGLEN; i++)
       SEGMENT.setPixelColor(i, color1);
   }
 
   //fill between points a and b with color2
-  if (a < b)
-  {
+  if (a < b) {
     for (unsigned i = a; i < b; i++)
       SEGMENT.setPixelColor(i, color2);
   } else {
@@ -782,8 +760,7 @@ static uint16_t chase(CRGBA color1, CRGBA color2, CRGBA color3, bool do_palette)
   }
 
   //fill between points b and c with color2
-  if (b < c)
-  {
+  if (b < c) {
     for (unsigned i = b; i < c; i++)
       SEGMENT.setPixelColor(i, color3);
   } else {
@@ -795,52 +772,9 @@ static uint16_t chase(CRGBA color1, CRGBA color2, CRGBA color3, bool do_palette)
 
   return FRAMETIME;
 }
+static const char _data_FX_MODE_CHASE[] PROGMEM = "Chase@!,Width,,,,Rainbow Bg,Runner,Random;!,!,!;!";
 
 
-/*
- * Bicolor chase, more primary color.
- */
-uint16_t mode_chase_color(void) {
-  return chase(SEGCOLOR(1), (SEGCOLOR(2) != BLACK) ? SEGCOLOR(2) : SEGCOLOR(0), SEGCOLOR(0), true);
-}
-static const char _data_FX_MODE_CHASE_COLOR[] PROGMEM = "Chase@!,Width;!,!,!;!";
-
-
-/*
- * Primary running followed by random color.
- */
-uint16_t mode_chase_random(void) {
-  return chase(SEGCOLOR(1), (SEGCOLOR(2) != BLACK) ? SEGCOLOR(2) : SEGCOLOR(0), SEGCOLOR(0), false);
-}
-static const char _data_FX_MODE_CHASE_RANDOM[] PROGMEM = "Chase Random@!,Width;!,,!;!";
-
-
-/*
- * Primary, secondary running on rainbow.
- */
-uint16_t mode_chase_rainbow(void) {
-  unsigned color_sep = 256 / SEGLEN;
-  if (color_sep == 0) color_sep = 1;                                           // correction for segments longer than 256 LEDs
-  unsigned color_index = SEGENV.call & 0xFF;
-  CRGBA color = SEGMENT.color_wheel(((SEGENV.step * color_sep) + color_index) & 0xFF);
-
-  return chase(color, SEGCOLOR(0), SEGCOLOR(1), false);
-}
-static const char _data_FX_MODE_CHASE_RAINBOW[] PROGMEM = "Chase Rainbow@!,Width;!,!;!";
-
-
-/*
- * Primary running on rainbow.
- */
-uint16_t mode_chase_rainbow_white(void) {
-  uint16_t n = SEGENV.step;
-  uint16_t m = (SEGENV.step + 1) % SEGLEN;
-  CRGBA color2 = SEGMENT.color_wheel(((n * 256 / SEGLEN) + (SEGENV.call & 0xFF)) & 0xFF);
-  CRGBA color3 = SEGMENT.color_wheel(((m * 256 / SEGLEN) + (SEGENV.call & 0xFF)) & 0xFF);
-
-  return chase(SEGCOLOR(0), color2, color3, false);
-}
-static const char _data_FX_MODE_CHASE_RAINBOW_WHITE[] PROGMEM = "Rainbow Runner@!,Size;Bg;!";
 
 
 /*
@@ -1080,16 +1014,6 @@ uint16_t mode_larson_scanner(void) {
   return FRAMETIME;
 }
 static const char _data_FX_MODE_LARSON_SCANNER[] PROGMEM = "Scanner@!,Trail,Delay,,,Animate palette,Bi-delay,Dual;!,!,!;!;;m12=0,c1=0,o1=0,o3=0";
-
-/*
- * Creates two Larson scanners moving in opposite directions
- * Custom mode by Keith Lord: https://github.com/kitesurfer1404/WS2812FX/blob/master/src/custom/DualLarson.h
- */
-//uint16_t mode_dual_larson_scanner(void){
-//  SEGMENT.check3 = true;
-//  return mode_larson_scanner();
-//}
-//static const char _data_FX_MODE_DUAL_LARSON_SCANNER[] PROGMEM = "Scanner Dual@!,Trail,Delay,,,Animate palette,Bi-delay;!,!,!;!;;m12=0,c1=0,o3=1";
 
 
 /*
@@ -6427,9 +6351,7 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_BLINK, &mode_blink, _data_FX_MODE_BLINK);
   addEffect(FX_MODE_BREATH, &mode_breath, _data_FX_MODE_BREATH);
   addEffect(FX_MODE_COLOR_WIPE, &mode_color_wipe, _data_FX_MODE_COLOR_WIPE);
-  addEffect(FX_MODE_COLOR_WIPE_RANDOM, &mode_color_wipe_random, _data_FX_MODE_COLOR_WIPE_RANDOM);
   addEffect(FX_MODE_RANDOM_COLOR, &mode_random_color, _data_FX_MODE_RANDOM_COLOR);
-  addEffect(FX_MODE_COLOR_SWEEP, &mode_color_sweep, _data_FX_MODE_COLOR_SWEEP);
   addEffect(FX_MODE_DYNAMIC, &mode_dynamic, _data_FX_MODE_DYNAMIC);
   addEffect(FX_MODE_RAINBOW, &mode_rainbow, _data_FX_MODE_RAINBOW);
   addEffect(FX_MODE_RAINBOW_CYCLE, &mode_rainbow_cycle, _data_FX_MODE_RAINBOW_CYCLE);
@@ -6444,15 +6366,11 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_HYPER_SPARKLE, &mode_hyper_sparkle, _data_FX_MODE_HYPER_SPARKLE);
   addEffect(FX_MODE_MULTI_STROBE, &mode_multi_strobe, _data_FX_MODE_MULTI_STROBE);
   addEffect(FX_MODE_ANDROID, &mode_android, _data_FX_MODE_ANDROID);
-  addEffect(FX_MODE_CHASE_COLOR, &mode_chase_color, _data_FX_MODE_CHASE_COLOR);
-  addEffect(FX_MODE_CHASE_RANDOM, &mode_chase_random, _data_FX_MODE_CHASE_RANDOM);
-  addEffect(FX_MODE_CHASE_RAINBOW, &mode_chase_rainbow, _data_FX_MODE_CHASE_RAINBOW);
+  addEffect(FX_MODE_CHASE, &mode_chase, _data_FX_MODE_CHASE);
   addEffect(FX_MODE_CHASE_FLASH, &mode_chase_flash, _data_FX_MODE_CHASE_FLASH);
   addEffect(FX_MODE_CHASE_FLASH_RANDOM, &mode_chase_flash_random, _data_FX_MODE_CHASE_FLASH_RANDOM);
-  addEffect(FX_MODE_CHASE_RAINBOW_WHITE, &mode_chase_rainbow_white, _data_FX_MODE_CHASE_RAINBOW_WHITE);
   addEffect(FX_MODE_COLORFUL, &mode_colorful, _data_FX_MODE_COLORFUL);
   addEffect(FX_MODE_TRAFFIC_LIGHT, &mode_traffic_light, _data_FX_MODE_TRAFFIC_LIGHT);
-  addEffect(FX_MODE_COLOR_SWEEP_RANDOM, &mode_color_sweep_random, _data_FX_MODE_COLOR_SWEEP_RANDOM);
   addEffect(FX_MODE_AURORA, &mode_aurora, _data_FX_MODE_AURORA);
   addEffect(FX_MODE_RUNNING_RANDOM, &mode_running_random, _data_FX_MODE_RUNNING_RANDOM);
   addEffect(FX_MODE_LARSON_SCANNER, &mode_larson_scanner, _data_FX_MODE_LARSON_SCANNER);

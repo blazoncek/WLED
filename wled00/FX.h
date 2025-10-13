@@ -142,39 +142,39 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_BLINK                    1
 #define FX_MODE_BREATH                   2
 #define FX_MODE_COLOR_WIPE               3
-#define FX_MODE_COLOR_WIPE_RANDOM        4
+//#define FX_MODE_COLOR_WIPE_RANDOM        4  // candidate for removal (was Wipe; use Wipe with check 3)
 #define FX_MODE_RANDOM_COLOR             5
-#define FX_MODE_COLOR_SWEEP              6
+//#define FX_MODE_COLOR_SWEEP              6  // candidate for removal (was Sweep; use Wipe with check 1)
 #define FX_MODE_DYNAMIC                  7
 #define FX_MODE_RAINBOW                  8
 #define FX_MODE_RAINBOW_CYCLE            9
 #define FX_MODE_SCAN                    10
-//#define FX_MODE_DUAL_SCAN               11  // candidate for removal (use Scan)
+//#define FX_MODE_DUAL_SCAN               11  // candidate for removal (use Scan with check 1)
 #define FX_MODE_FADE                    12
 #define FX_MODE_THEATER_CHASE           13
-//#define FX_MODE_THEATER_CHASE_RAINBOW   14  // candidate for removal (use Theater)
+//#define FX_MODE_THEATER_CHASE_RAINBOW   14  // candidate for removal (was Theater Rainbow; use Theater with check 3)
 #define FX_MODE_RUNNING_LIGHTS          15
-//#define FX_MODE_SAW                     16  // candidate for removal (use Running Lights with check 2)
+//#define FX_MODE_SAW                     16  // candidate for removal (was Saw; use Running Lights with check 2)
 #define FX_MODE_TWINKLE                 17
 #define FX_MODE_DISSOLVE                18
-//#define FX_MODE_DISSOLVE_RANDOM         19  // candidate for removal (use Dissolve with with check 3)
+//#define FX_MODE_DISSOLVE_RANDOM         19  // candidate for removal (was Dissolve random; use Dissolve with with check 3)
 #define FX_MODE_SPARKLE                 20
 #define FX_MODE_FLASH_SPARKLE           21
 #define FX_MODE_HYPER_SPARKLE           22
-//#define FX_MODE_STROBE                  23  // candidate for removal (use Blink with with check 2)
-//#define FX_MODE_STROBE_RAINBOW          24  // candidate for removal (use Blink with with check 1 & check 2)
+//#define FX_MODE_STROBE                  23  // candidate for removal (was Strobe; use Blink with with check 2)
+//#define FX_MODE_STROBE_RAINBOW          24  // candidate for removal (was Strobe Rainbow; use Blink with with check 1 & check 2)
 #define FX_MODE_MULTI_STROBE            25
-//#define FX_MODE_BLINK_RAINBOW           26  // candidate for removal (use Blink with with check 1)
+//#define FX_MODE_BLINK_RAINBOW           26  // candidate for removal (was Blink Rainbow; use Blink with with check 1)
 #define FX_MODE_ANDROID                 27
-#define FX_MODE_CHASE_COLOR             28
-#define FX_MODE_CHASE_RANDOM            29
-#define FX_MODE_CHASE_RAINBOW           30
+#define FX_MODE_CHASE                   28
+//#define FX_MODE_CHASE_RANDOM            29  // candidate for removal (was Chase Random; use Chase with check 3)
+//#define FX_MODE_CHASE_RAINBOW           30  // candidate for removal (was Chase Rainbow; use Chase with check 1 & check 3)
 #define FX_MODE_CHASE_FLASH             31
 #define FX_MODE_CHASE_FLASH_RANDOM      32
-#define FX_MODE_CHASE_RAINBOW_WHITE     33
+//#define FX_MODE_CHASE_RAINBOW_WHITE     33  // candidate for removal (was Chase Rainbow White; use Chase with check 1 & check 2 & check 3)
 #define FX_MODE_COLORFUL                34
 #define FX_MODE_TRAFFIC_LIGHT           35
-#define FX_MODE_COLOR_SWEEP_RANDOM      36
+//#define FX_MODE_COLOR_SWEEP_RANDOM      36  // candidate for removal (was Sweep Random; use Wipe with check 1 & check 3)
 //#define FX_MODE_RUNNING_COLOR           37  // candidate for removal (use Theater)
 #define FX_MODE_AURORA                  38
 #define FX_MODE_RUNNING_RANDOM          39
