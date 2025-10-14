@@ -150,7 +150,8 @@ static const char _data_FX_MODE_BLINK[] PROGMEM = "Blink@!,Duty,,,,Rainbow,Strob
 /*
  * Color wipe function
  * LEDs are turned on (color1) in sequence, then turned off (color2) in sequence.
- * if (bool rev == true) then LEDs are turned off in reverse order
+ * SEGMENT.check1 switches between Wipe and Sweep modes
+ * SEGMENT.check3 enables random colors
  */
 uint16_t mode_color_wipe() {
   if (SEGLEN <= 1) return mode_static();
@@ -165,7 +166,7 @@ uint16_t mode_color_wipe() {
     if (SEGENV.step == 2) SEGENV.step = 3; //trigger color change
   }
 
-  bool rev = SEGMENT.check1; // wipe/sweep
+  bool sweep = SEGMENT.check1; // wipe/sweep
   bool useRandomColors = SEGMENT.check3; // random colors
 
   if (useRandomColors) {
@@ -189,20 +190,14 @@ uint16_t mode_color_wipe() {
   if (rem > 255) rem = 255;
 
   CRGBA col1 = useRandomColors? SEGMENT.color_wheel(SEGENV.aux1) : SEGCOLOR(1);
-  for (unsigned i = 0; i < SEGLEN; i++)
-  {
-    unsigned index = (rev && back)? SEGLEN -1 -i : i;
+  for (unsigned i = 0; i < SEGLEN; i++) {
+    unsigned index = (sweep && back) ? SEGLEN -1 -i : i;
     CRGBA col0 = useRandomColors? SEGMENT.color_wheel(SEGENV.aux0) : SEGMENT.color_from_palette(index, true, PALETTE_FIXED, 0);
     CRGBA c1 = back ? col0 : col1;
     CRGBA c2 = back ? col1 : col0;
-    if (i < ledIndex)
-    {
-      SEGMENT.setPixelColor(index, c2);
-    } else
-    {
-      SEGMENT.setPixelColor(index, c1);
-      if (i == ledIndex) SEGMENT.setPixelColor(index, c1.nblend(c2, uint8_t(rem)));
-    }
+    if (i == ledIndex)     SEGMENT.setPixelColor(index, c1.nblend(c2, uint8_t(rem))); // blend border pixel
+    else if (i < ledIndex) SEGMENT.setPixelColor(index, c2);
+    else                   SEGMENT.setPixelColor(index, c1);
   }
   return FRAMETIME;
 }
