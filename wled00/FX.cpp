@@ -1149,17 +1149,17 @@ static const char _data_FX_MODE_FIRE_FLICKER[] PROGMEM = "Fire Flicker@!,!;!;!;0
 
 
 /*
- * Gradient run base function
+ * Gradient run / Loading
  */
-uint16_t gradient_base(bool loading) {
+uint16_t mode_gradient() {
   if (SEGLEN <= 1) return mode_static();
   const auto abs  = [](int x) { return x<0 ? -x : x; };
+  const bool loading = SEGMENT.check1;
   uint16_t counter = strip.now * ((SEGMENT.speed >> 2) + 1);
   uint16_t pp = (counter * SEGLEN) >> 16;
   if (SEGENV.call == 0) pp = 0;
   int val; //0 = sec 1 = pri
-  int brd = 1 + loading ? SEGMENT.intensity/2 : SEGMENT.intensity/4;
-  //if (brd < 1) brd = 1;
+  int brd = 1 + (loading ? SEGMENT.intensity/2 : SEGMENT.intensity/4);
   int p1 = pp-SEGLEN;
   int p2 = pp+SEGLEN;
 
@@ -1170,29 +1170,12 @@ uint16_t gradient_base(bool loading) {
       val = min(abs(pp-i),min(abs(p1-i),abs(p2-i)));
     }
     val = (brd > val) ? (val * 255) / brd : 255;
-    SEGMENT.setPixelColor(i, SEGCOLOR(0).nblend(SEGMENT.color_from_palette(i, true, PALETTE_FIXED, 1), uint8_t(val)));
+    SEGMENT.setPixelColor(i, SEGCOLOR(0).nblend(SEGMENT.color_from_palette(i, true, PALETTE_FIXED, 1), uint8_t(val))); // use SEGCOLOR(1) for background if Default palette
   }
 
   return FRAMETIME;
 }
-
-
-/*
- * Gradient run
- */
-uint16_t mode_gradient(void) {
-  return gradient_base(false);
-}
-static const char _data_FX_MODE_GRADIENT[] PROGMEM = "Gradient@!,Spread;!,!;!;;ix=16";
-
-
-/*
- * Gradient run with hard transition
- */
-uint16_t mode_loading(void) {
-  return gradient_base(true);
-}
-static const char _data_FX_MODE_LOADING[] PROGMEM = "Loading@!,Fade;!,!;!;;ix=16";
+static const char _data_FX_MODE_GRADIENT[] PROGMEM = "Gradient@!,Spread,,,,Hard;!,!;!;;ix=16";
 
 
 /*
@@ -1924,13 +1907,16 @@ uint16_t mode_fire_2012() {
         if (hw_random8() <= SEGMENT.intensity) {
           uint8_t y = hw_random8(ignition);
           uint8_t boost = (17+SEGMENT.custom3) * (ignition - y/2) / ignition; // integer math!
-          heat[y] = qadd8(heat[y], hw_random8(96+2*boost,207+boost));
+          heat[y] = qadd8(heat[y], hw_random8(96+2*boost,207+boost)); // 160-255
         }
       }
 
       // Step 4.  Map from heat cells to LED colors
       for (unsigned j = 0; j < SEGLEN; j++) {
-        SEGMENT.setPixelColor(indexToVStrip(j, stripNr), SEGMENT.color_from_palette(heat[j], false, false, 0));
+        // prevent use of blend region (241-255) from palette by limiting heat to 240 (not all palettes have a smooth blend region, though)
+        //CRGBA color = ColorFromPaletteWLED(SEGPALETTE, heat[j], 255, LINEARBLEND_NOWRAP);
+        CRGBA color = SEGMENT.color_from_palette(MIN(heat[j],240), false, false, 0);
+        SEGMENT.setPixelColor(indexToVStrip(j, stripNr), color);
       }
     }
   };
@@ -2304,7 +2290,7 @@ static const char _data_FX_MODE_RIPPLE[] PROGMEM = "Ripple@!,Waves,,,,Palette BG
 //
 //  TwinkleFOX: Twinkling 'holiday' lights that fade in and out.
 //  Colors are chosen from a palette. Read more about this effect using the link above!
-static CRGBA twinklefox_one_twinkle(uint32_t ms, uint8_t salt, bool cat)
+static CRGBA twinklefox_one_twinkle(uint32_t ms, uint8_t salt)
 {
   // Overall twinkle speed (changed)
   unsigned ticks = ms / SEGENV.aux0;
@@ -2325,11 +2311,8 @@ static CRGBA twinklefox_one_twinkle(uint32_t ms, uint8_t salt, bool cat)
     // This is like 'triwave8', which produces a
     // symmetrical up-and-down triangle sawtooth waveform, except that this
     // function produces a triangle wave with a faster attack and a slower decay
-    if (cat) { //twinklecat, variant where the leds instantly turn on and fade off
-      bright = 255 - ph;
-      if (SEGMENT.check2) { //reverse checkbox, reverses the leds to fade on and instantly turn off
-        bright = ph;
-      }
+    if (SEGMENT.check3) { //twinklecat, variant where the leds instantly turn on and fade off
+      bright = SEGMENT.check2 ? ph : 255 - ph;  // reverse checkbox, reverses the leds to fade on and instantly turn off
     } else { //vanilla twinklefox
       if (ph < 86) {
       bright = ph * 3;
@@ -2366,7 +2349,7 @@ static CRGBA twinklefox_one_twinkle(uint32_t ms, uint8_t salt, bool cat)
 //  "CalculateOneTwinkle" on each pixel.  It then displays
 //  either the twinkle color of the background color,
 //  whichever is brighter.
-static uint16_t twinklefox_base(bool cat)
+uint16_t mode_twinklefox()
 {
   // "PRNG16" is the pseudorandom number generator
   // It MUST be reset to the same starting value each time
@@ -2404,7 +2387,7 @@ static uint16_t twinklefox_base(bool cat)
     // We now have the adjusted 'clock' for this pixel, now we call
     // the function that computes what color the pixel should be based
     // on the "brightness = f( time )" idea.
-    CRGBA c = twinklefox_one_twinkle(myclock30, myunique8, cat);
+    CRGBA c = twinklefox_one_twinkle(myclock30, myunique8);
 
     unsigned cbright = c.getAverageLight();
     int deltabright = cbright - backgroundBrightness;
@@ -2424,20 +2407,7 @@ static uint16_t twinklefox_base(bool cat)
   }
   return FRAMETIME;
 }
-
-
-uint16_t mode_twinklefox()
-{
-  return twinklefox_base(false);
-}
-static const char _data_FX_MODE_TWINKLEFOX[] PROGMEM = "Twinklefox@!,Twinkle rate,,,,Cool;!,!;!";
-
-
-uint16_t mode_twinklecat()
-{
-  return twinklefox_base(true);
-}
-static const char _data_FX_MODE_TWINKLECAT[] PROGMEM = "Twinklecat@!,Twinkle rate,,,,Cool,Reverse;!,!;!";
+static const char _data_FX_MODE_TWINKLEFOX[] PROGMEM = "Twinklefox@!,Rate,,,,Cool,Reverse,Cat/Fox;!,!;!";
 
 
 uint16_t mode_halloween_eyes()
@@ -2645,7 +2615,9 @@ uint16_t mode_tri_static_pattern()
 static const char _data_FX_MODE_TRI_STATIC_PATTERN[] PROGMEM = "Solid Pattern Tri@,Size;1,2,3;;;pal=0";
 
 
-static uint16_t spots_base(uint16_t threshold)
+//Intensity slider sets number of "lights", speed sets LEDs per light
+//optionally fade in and out
+uint16_t mode_spots()
 {
   if (SEGLEN <= 1) return mode_static();
   SEGMENT.fill(SEGCOLOR(1));
@@ -2654,6 +2626,16 @@ static uint16_t spots_base(uint16_t threshold)
   unsigned zones = 1 + ((SEGMENT.intensity * maxZones) >> 8);
   unsigned zoneLen = SEGLEN / zones;
   unsigned offset = (SEGLEN - zones * zoneLen) >> 1;
+
+  uint16_t threshold;
+  if (SEGMENT.check1) {
+    // fade in and out
+    unsigned counter = strip.now * ((SEGMENT.speed >> 2) +8);
+    unsigned t = triwave16(counter);
+    threshold = (t >> 1) + (t >> 2);
+  } else {
+    threshold = (255 - SEGMENT.speed) << 8;
+  }
 
   for (unsigned z = 0; z < zones; z++)
   {
@@ -2671,25 +2653,7 @@ static uint16_t spots_base(uint16_t threshold)
 
   return FRAMETIME;
 }
-
-
-//Intensity slider sets number of "lights", speed sets LEDs per light
-uint16_t mode_spots()
-{
-  return spots_base((255 - SEGMENT.speed) << 8);
-}
-static const char _data_FX_MODE_SPOTS[] PROGMEM = "Spots@Spread,Width;!,!;!";
-
-
-//Intensity slider sets number of "lights", LEDs per light fade in and out
-uint16_t mode_spots_fade()
-{
-  unsigned counter = strip.now * ((SEGMENT.speed >> 2) +8);
-  unsigned t = triwave16(counter);
-  unsigned tr = (t >> 1) + (t >> 2);
-  return spots_base(tr);
-}
-static const char _data_FX_MODE_SPOTS_FADE[] PROGMEM = "Spots Fade@Spread,Width;!,!;!";
+static const char _data_FX_MODE_SPOTS[] PROGMEM = "Spots@Spread,Width,,,,Fade;!,!;!;1;";
 
 
 //each needs 12 bytes
@@ -2912,21 +2876,7 @@ uint16_t mode_sinelon() {
 
   return FRAMETIME;
 }
-
-//uint16_t mode_sinelon(void) {
-//  return sinelon_base(false);
-//}
 static const char _data_FX_MODE_SINELON[] PROGMEM = "Sinelon@!,Trail,,,,Rainbow,,Dual;!,!,!;!";
-
-//uint16_t mode_sinelon_dual(void) {
-//  return sinelon_base(true);
-//}
-//static const char _data_FX_MODE_SINELON_DUAL[] PROGMEM = "Sinelon Dual@!,Trail;!,!,!;!";
-
-//uint16_t mode_sinelon_rainbow(void) {
-//  return sinelon_base(false, true);
-//}
-//static const char _data_FX_MODE_SINELON_RAINBOW[] PROGMEM = "Sinelon Rainbow@!,Trail;,,!;!";
 
 
 //Glitter with palette background, inspired by https://gist.github.com/kriegsman/062e10f7f07ba8518af6
@@ -2947,16 +2897,6 @@ uint16_t mode_glitter()
   return FRAMETIME;
 }
 static const char _data_FX_MODE_GLITTER[] PROGMEM = "Glitter@!,!;,,Glitter color;!;;pal=11,m12=0"; //pixels
-
-
-//Solid colour background with glitter (can be replaced by Glitter)
-//uint16_t mode_solid_glitter()
-//{
-//  SEGMENT.fill(SEGCOLOR(0));
-//  glitter_base(SEGMENT.intensity, SEGCOLOR(2) ? SEGCOLOR(2) : ULTRAWHITE);
-//  return FRAMETIME;
-//}
-//static const char _data_FX_MODE_SOLID_GLITTER[] PROGMEM = "Solid Glitter@,!;Bg,,Glitter color;;;m12=0";
 
 
 //each needs 20 bytes
@@ -3038,7 +2978,6 @@ static const char _data_FX_MODE_POPCORN[] PROGMEM = "Popcorn@!,!;!,!,!;!;;m12=1"
 //values close to 100 produce 5Hz flicker, which looks very candle-y
 //Inspired by https://github.com/avanhanegem/ArduinoCandleEffectNeoPixel
 //and https://cpldcpu.wordpress.com/2016/01/05/reverse-engineering-a-real-candle/
-
 uint16_t mode_candle() {
   const unsigned dataSize = max(1, (int)SEGLEN -1) *3; //max. 1365 pixels (ESP8266)
   const bool multi = SEGMENT.check3 && SEGLEN > 1 && SEGENV.allocateData(dataSize);
@@ -3849,23 +3788,22 @@ static const char _data_FX_MODE_SUNRISE[] PROGMEM = "Sunrise@Time [min],Width;;!
 /*
  * Effects by Andrew Tuline
  */
-static uint16_t phased_base(uint8_t moder) {                  // We're making sine waves here. By Andrew Tuline.
-
+uint16_t mode_phased() {                        // We're making sine waves here. By Andrew Tuline.
   unsigned allfreq = 16;                                          // Base frequency.
-  float *phase = reinterpret_cast<float*>(&SEGENV.step);         // Phase change value gets calculated (float fits into unsigned long).
+  float *phase = reinterpret_cast<float*>(&SEGENV.step);          // Phase change value gets calculated (float fits into unsigned long).
   unsigned cutOff = (255-SEGMENT.intensity);                      // You can change the number of pixels.  AKA INTENSITY (was 192).
   unsigned modVal = 5;//SEGMENT.fft1/8+1;                         // You can change the modulus. AKA FFT1 (was 5).
 
   unsigned index = strip.now/64;                                  // Set color rotation speed
-  *phase += SEGMENT.speed/32.0;                                  // You can change the speed of the wave. AKA SPEED (was .4)
+  *phase += SEGMENT.speed/32.0;                                   // You can change the speed of the wave. AKA SPEED (was .4)
 
   for (unsigned i = 0; i < SEGLEN; i++) {
-    if (moder == 1) modVal = (inoise8(i*10 + i*10) /16);         // Let's randomize our mod length with some Perlin noise.
-    unsigned val = (i+1) * allfreq;                              // This sets the frequency of the waves. The +1 makes sure that led 0 is used.
+    if (SEGMENT.check1) modVal = (inoise8(i*10 + i*10) /16);      // Let's randomize our mod length with some Perlin noise.
+    unsigned val = (i+1) * allfreq;                               // This sets the frequency of the waves. The +1 makes sure that led 0 is used.
     if (modVal == 0) modVal = 1;
-    val += *phase * (i % modVal +1) /2;                          // This sets the varying phase change of the waves. By Andrew Tuline.
+    val += *phase * (i % modVal +1) /2;                           // This sets the varying phase change of the waves. By Andrew Tuline.
     unsigned b = cubicwave8(val);                                 // Now we make an 8 bit sinewave.
-    b = (b > cutOff) ? (b - cutOff) : 0;                         // A ternary operator to cutoff the light.
+    b = (b > cutOff) ? (b - cutOff) : 0;                          // A ternary operator to cutoff the light.
     SEGMENT.setPixelColor(i, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(index, false, PALETTE_FIXED, 0), uint8_t(b)));
     index += 256 / SEGLEN;
     if (SEGLEN > 256) index ++;                                  // Correction for segments longer than 256 LEDs
@@ -3873,18 +3811,7 @@ static uint16_t phased_base(uint8_t moder) {                  // We're making si
 
   return FRAMETIME;
 }
-
-
-uint16_t mode_phased(void) {
-  return phased_base(0);
-}
-static const char _data_FX_MODE_PHASED[] PROGMEM = "Phased@!,!;!,!;!";
-
-
-uint16_t mode_phased_noise(void) {
-  return phased_base(1);
-}
-static const char _data_FX_MODE_PHASEDNOISE[] PROGMEM = "Phased Noise@!,!;!,!;!";
+static const char _data_FX_MODE_PHASED[] PROGMEM = "Phased@!,!,,,,Noise;!,!;!";
 
 
 uint16_t mode_twinkleup(void) {                 // A very short twinkle routine with fade-in and dual controls. By Andrew Tuline.
@@ -6375,7 +6302,6 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_TETRIX, &mode_tetrix, _data_FX_MODE_TETRIX);
   addEffect(FX_MODE_FIRE_FLICKER, &mode_fire_flicker, _data_FX_MODE_FIRE_FLICKER);
   addEffect(FX_MODE_GRADIENT, &mode_gradient, _data_FX_MODE_GRADIENT);
-  addEffect(FX_MODE_LOADING, &mode_loading, _data_FX_MODE_LOADING);
   addEffect(FX_MODE_ROLLINGBALLS, &rolling_balls, _data_FX_MODE_ROLLINGBALLS);
   addEffect(FX_MODE_FAIRY, &mode_fairy, _data_FX_MODE_FAIRY);
   addEffect(FX_MODE_TWO_DOTS, &mode_two_dots, _data_FX_MODE_TWO_DOTS);
@@ -6405,12 +6331,10 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_RAILWAY, &mode_railway, _data_FX_MODE_RAILWAY);
   addEffect(FX_MODE_RIPPLE, &mode_ripple, _data_FX_MODE_RIPPLE);
   addEffect(FX_MODE_TWINKLEFOX, &mode_twinklefox, _data_FX_MODE_TWINKLEFOX);
-  addEffect(FX_MODE_TWINKLECAT, &mode_twinklecat, _data_FX_MODE_TWINKLECAT);
   addEffect(FX_MODE_HALLOWEEN_EYES, &mode_halloween_eyes, _data_FX_MODE_HALLOWEEN_EYES);
   addEffect(FX_MODE_STATIC_PATTERN, &mode_static_pattern, _data_FX_MODE_STATIC_PATTERN);
   addEffect(FX_MODE_TRI_STATIC_PATTERN, &mode_tri_static_pattern, _data_FX_MODE_TRI_STATIC_PATTERN);
   addEffect(FX_MODE_SPOTS, &mode_spots, _data_FX_MODE_SPOTS);
-  addEffect(FX_MODE_SPOTS_FADE, &mode_spots_fade, _data_FX_MODE_SPOTS_FADE);
   addEffect(FX_MODE_GLITTER, &mode_glitter, _data_FX_MODE_GLITTER);
   addEffect(FX_MODE_CANDLE, &mode_candle, _data_FX_MODE_CANDLE);
   addEffect(FX_MODE_STARBURST, &mode_starburst, _data_FX_MODE_STARBURST);
@@ -6428,7 +6352,6 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_TWINKLEUP, &mode_twinkleup, _data_FX_MODE_TWINKLEUP);
   addEffect(FX_MODE_NOISEPAL, &mode_noisepal, _data_FX_MODE_NOISEPAL);
   addEffect(FX_MODE_SINEWAVE, &mode_sinewave, _data_FX_MODE_SINEWAVE);
-  addEffect(FX_MODE_PHASEDNOISE, &mode_phased_noise, _data_FX_MODE_PHASEDNOISE);
   addEffect(FX_MODE_FLOW, &mode_flow, _data_FX_MODE_FLOW);
   addEffect(FX_MODE_CHUNCHUN, &mode_chunchun, _data_FX_MODE_CHUNCHUN);
   addEffect(FX_MODE_DANCING_SHADOWS, &mode_dancing_shadows, _data_FX_MODE_DANCING_SHADOWS);

@@ -185,13 +185,13 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_TETRIX                  44  //was Merry Christmas prior to 0.12.0 (use "Chase 2" with Red/Green)
 #define FX_MODE_FIRE_FLICKER            45
 #define FX_MODE_GRADIENT                46
-#define FX_MODE_LOADING                 47
+//#define FX_MODE_LOADING                 47  // candidate for removal (use Gradient with check 1)
 #define FX_MODE_ROLLINGBALLS            48  //was Police before 0.14
 #define FX_MODE_FAIRY                   49  //was Police All prior to 0.13.0-b6 (use "Two Dots" with Red/Blue and full intensity)
 #define FX_MODE_TWO_DOTS                50
 #define FX_MODE_FAIRYTWINKLE            51  //was Two Areas prior to 0.13.0-b6 (use "Two Dots" with full intensity)
 //#define FX_MODE_RUNNING_DUAL            52  // candidate for removal (use Running)
-// #define FX_MODE_HALLOWEEN               53  // removed in 0.14!
+//#define FX_MODE_HALLOWEEN               53  // removed in 0.14!
 #define FX_MODE_TRICOLOR_CHASE          54
 #define FX_MODE_TRICOLOR_WIPE           55
 #define FX_MODE_TRICOLOR_FADE           56
@@ -216,16 +216,16 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_LAKE                    75
 #define FX_MODE_METEOR                  76
 #define FX_MODE_METEOR_SMOOTH           FX_MODE_METEOR
-//#define FX_MODE_METEOR_SMOOTH           77  // replaced by Meteor
+//#define FX_MODE_METEOR_SMOOTH           77  // candidate for removal (use Meteor with check 1)
 #define FX_MODE_RAILWAY                 78
 #define FX_MODE_RIPPLE                  79
 #define FX_MODE_TWINKLEFOX              80
-#define FX_MODE_TWINKLECAT              81
+//#define FX_MODE_TWINKLECAT              81  // candidate for removal (use Twinklefox with check 3)
 #define FX_MODE_HALLOWEEN_EYES          82
 #define FX_MODE_STATIC_PATTERN          83
 #define FX_MODE_TRI_STATIC_PATTERN      84
 #define FX_MODE_SPOTS                   85
-#define FX_MODE_SPOTS_FADE              86
+//#define FX_MODE_SPOTS_FADE              86  // candidate for removal (use Spots with check 1)
 #define FX_MODE_GLITTER                 87
 #define FX_MODE_CANDLE                  88
 #define FX_MODE_STARBURST               89
@@ -248,7 +248,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_TWINKLEUP              106
 #define FX_MODE_NOISEPAL               107
 #define FX_MODE_SINEWAVE               108
-#define FX_MODE_PHASEDNOISE            109
+//#define FX_MODE_PHASEDNOISE            109  // candidate for removal (use Phased with check 1)
 #define FX_MODE_FLOW                   110
 #define FX_MODE_CHUNCHUN               111
 #define FX_MODE_DANCING_SHADOWS        112
