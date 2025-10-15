@@ -6,7 +6,7 @@
 
 constexpr uint32_t TWO_CHANNEL_MASK = 0x00FF00FF;     // mask for R and B channels or W and G if negated (poorman's SIMD; https://github.com/wled/WLED/pull/4568#discussion_r1986587221)
 
- __attribute__((optimize("-O2"))) CRGBA& CRGBA::nscale8(uint8_t scale) {
+__attribute__((optimize("-O2"))) CRGBA& CRGBA::nscale8(uint8_t scale) {
   uint8_t aO = a; // save alpha
   fast_color_scale(color32, scale);
   a = aO;        // restore alpha

@@ -2,6 +2,15 @@
 
 #include "wled.h"
 
+#if !(defined(WLED_DISABLE_PARTICLESYSTEM2D) && defined(WLED_DISABLE_PARTICLESYSTEM1D))
+  #include "FXparticleSystem.h"
+  #ifdef ESP8266
+    #if !(defined(WLED_DISABLE_PARTICLESYSTEM2D) || defined(WLED_DISABLE_PARTICLESYSTEM1D))
+    #error ESP8266 does not support 1D and 2D particle systems simultaneously. Please disable one of them.
+    #endif
+  #endif
+#endif
+
 #ifdef ARDUINO_ARCH_ESP32
 
 #include <driver/i2s.h>
@@ -589,6 +598,13 @@ static void autoResetPeak(void) {
 #define FX_MODE_FLOWSTRIPE             179
 #define FX_MODE_ROCKTAVES              185
 #define FX_MODE_2DAKEMI                186
+// particle 1D - sound reactive
+#define FX_MODE_PS1DGEQ                169
+#define FX_MODE_PS1DSONICSTREAM        170
+#define FX_MODE_PS1DSONICBOOM          171
+// particle 2D - sound reactive
+#define FX_MODE_PARTICLESGEQ           142
+#define FX_MODE_PARTICLECENTERGEQ      151
 
 static uint16_t mode_static(void) {
   SEGMENT.fill(SEGCOLOR(0));
@@ -1721,7 +1737,422 @@ static uint16_t mode_2DAkemi(void) {
   return FRAMETIME;
 } // mode_2DAkemi
 static const char _data_FX_MODE_2DAKEMI[] PROGMEM = "Akemi@Color speed,Dance;Head palette,Arms & Legs,Eyes & Mouth;Face palette;2f;si=0"; //beatsin
+
+#ifndef WLED_DISABLE_PARTICLESYSTEM2D
+/*
+  Particle base Graphical Equalizer
+  Uses palette for particle color
+  by DedeHai (Damian Schneider)
+*/
+uint16_t mode_particleGEQ(void) {
+  ParticleSystem2D *PartSys = nullptr;
+
+  if (SEGMENT.call == 0) { // initialization
+    if (!initParticleSystem2D(PartSys, 1))
+      return mode_static(); // allocation failed or not 2D
+    PartSys->setKillOutOfBounds(true);
+    PartSys->setUsedParticles(170); // use 2/3 of available particles
+  }
+  else
+    PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
+  if (PartSys == nullptr)
+    return mode_static(); // something went wrong, no data!
+
+  uint32_t i;
+  // set particle system properties
+  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->setWrapX(SEGMENT.check1);
+  PartSys->setBounceX(SEGMENT.check2);
+  PartSys->setBounceY(SEGMENT.check3);
+  //PartSys->enableParticleCollisions(false);
+  PartSys->setWallHardness(SEGMENT.custom2);
+  PartSys->setGravity(SEGMENT.custom3 << 2); // set gravity strength
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  //map the bands into 16 positions on x axis, emit some particles according to frequency loudness
+  i = 0;
+  uint32_t binwidth = (PartSys->maxX + 1)>>4; //emit poisition variation for one bin (+/-) is equal to width/16 (for 16 bins)
+  uint32_t threshold = 300 - SEGMENT.intensity;
+  uint32_t emitparticles = 0;
+
+  for (uint32_t bin = 0; bin < 16; bin++) {
+    uint32_t xposition = binwidth*bin + (binwidth>>1); // emit position according to frequency band
+    uint8_t emitspeed = ((uint32_t)fftResult[bin] * (uint32_t)SEGMENT.speed) >> 9; // emit speed according to loudness of band (127 max!)
+    emitparticles = 0;
+
+    if (fftResult[bin] > threshold) {
+      emitparticles = 1;// + (fftResult[bin]>>6);
+    }
+    else if (fftResult[bin] > 0) { // band has low volue
+      uint32_t restvolume = ((threshold - fftResult[bin])>>2) + 2;
+      if (hw_random16() % restvolume == 0)
+        emitparticles = 1;
+    }
+
+    while (i < PartSys->usedParticles && emitparticles > 0) { // emit particles if there are any left, low frequencies take priority
+      if (PartSys->particles[i].ttl == 0) { // find a dead particle
+        //set particle properties TODO: could also use the spray...
+        PartSys->particles[i].ttl = 20 + map(SEGMENT.intensity, 0,255, emitspeed>>1, emitspeed + hw_random16(emitspeed)) ; // set particle alive, particle lifespan is in number of frames
+        PartSys->particles[i].x = xposition + hw_random16(binwidth) - (binwidth>>1); // position randomly, deviating half a bin width
+        PartSys->particles[i].y = 0; // start at the bottom
+        PartSys->particles[i].vx = hw_random16(SEGMENT.custom1>>1)-(SEGMENT.custom1>>2) ; //x-speed variation: +/- custom1/4
+        PartSys->particles[i].vy = emitspeed;
+        PartSys->particles[i].hue = (bin<<4) + hw_random16(17) - 8; // color from palette according to bin
+        emitparticles--;
+      }
+      i++;
+    }
+  }
+
+  PartSys->update(); // update and render
+  return FRAMETIME;
+}
+
+static const char _data_FX_MODE_PARTICLEGEQ[] PROGMEM = "PS GEQ 2D@Speed,Intensity,Diverge,Bounce,Gravity,Cylinder,Walls,Floor;;!;2f;pal=0,sx=155,ix=200,c1=0";
+
+/*
+  Particle rotating GEQ
+  Particles sprayed from center with rotating spray
+  Uses palette for particle color
+  by DedeHai (Damian Schneider)
+*/
+#define NUMBEROFSOURCES 16
+uint16_t mode_particlecenterGEQ(void) {
+  ParticleSystem2D *PartSys = nullptr;
+  uint8_t numSprays;
+  uint32_t i;
+
+  if (SEGMENT.call == 0) { // initialization
+    if (!initParticleSystem2D(PartSys, NUMBEROFSOURCES))  // init, request 16 sources
+      return mode_static(); // allocation failed or not 2D
+
+    numSprays = min(PartSys->numSources, (uint32_t)NUMBEROFSOURCES);
+    for (i = 0; i < numSprays; i++) {
+      PartSys->sources[i].source.x = (PartSys->maxX + 1) >> 1; // center
+      PartSys->sources[i].source.y = (PartSys->maxY + 1) >> 1; // center
+      PartSys->sources[i].source.hue = i * 16; // even color distribution
+      PartSys->sources[i].maxLife = 400;
+      PartSys->sources[i].minLife = 200;
+    }
+    PartSys->setKillOutOfBounds(true);
+  }
+  else
+    PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
+
+  if (PartSys == nullptr)
+    return mode_static(); // something went wrong, no data!
+
+  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  numSprays = min(PartSys->numSources, (uint32_t)NUMBEROFSOURCES);
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  uint32_t threshold = 300 - SEGMENT.intensity;
+
+  if (SEGMENT.check2)
+    SEGENV.aux0 += SEGMENT.custom1 << 2;
+  else
+    SEGENV.aux0 -= SEGMENT.custom1 << 2;
+
+  uint16_t angleoffset = (uint16_t)0xFFFF / (uint16_t)numSprays;
+  uint32_t j = hw_random16(numSprays); // start with random spray so all get a chance to emit a particle if maximum number of particles alive is reached.
+  for (i = 0; i < numSprays; i++) {
+    if (SEGMENT.call % (32 - (SEGMENT.custom2 >> 3)) == 0 && SEGMENT.custom2 > 0)
+      PartSys->sources[j].source.hue += 1 + (SEGMENT.custom2 >> 4);
+
+    PartSys->sources[j].var = SEGMENT.custom3 >> 2;
+    int8_t emitspeed = 5 + (((uint32_t)fftResult[j] * ((uint32_t)SEGMENT.speed + 20)) >> 10); // emit speed according to loudness of band
+    uint16_t emitangle = j * angleoffset + SEGENV.aux0;
+
+    uint32_t emitparticles = 0;
+    if (fftResult[j] > threshold)
+      emitparticles = 1;
+    else if (fftResult[j] > 0) { // band has low value
+      uint32_t restvolume = ((threshold - fftResult[j]) >> 2) + 2;
+      if (hw_random16() % restvolume == 0)
+        emitparticles = 1;
+    }
+    if (emitparticles)
+      PartSys->angleEmit(PartSys->sources[j], emitangle, emitspeed);
+
+    j = (j + 1) % numSprays;
+  }
+  PartSys->update(); // update and render
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_PARTICLECIRCULARGEQ[] PROGMEM = "PS GEQ Nova@Speed,Intensity,Rotation Speed,Color Change,Nozzle,,Direction;;!;2f;pal=13,ix=180,c1=0,c2=0,c3=8";
+#endif //WLED_DISABLE_PARTICLESYSTEM2D
+
 #endif
+
+#ifndef WLED_DISABLE_PARTICLESYSTEM1D
+/*
+  Particle based 1D GEQ effect, each frequency bin gets an emitter, distributed over the strip
+  Uses palette for particle color
+  by DedeHai (Damian Schneider)
+*/
+uint16_t mode_particle1DGEQ(void) {
+  ParticleSystem1D *PartSys = nullptr;
+  uint32_t numSources;
+  uint32_t i;
+
+  if (SEGMENT.call == 0) { // initialization
+    if (!initParticleSystem1D(PartSys, 16, 255, 0, true)) // init, no additional data needed
+      return mode_static(); // allocation failed or is single pixel
+  }
+  else
+    PartSys = reinterpret_cast<ParticleSystem1D *>(SEGENV.data); // if not first call, just set the pointer to the PS
+  if (PartSys == nullptr)
+    return mode_static(); // something went wrong, no data!
+
+  // Particle System settings
+  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  numSources = PartSys->numSources;
+  PartSys->setMotionBlur(SEGMENT.custom2); // anable motion blur
+
+  uint32_t spacing = PartSys->maxX / numSources;
+  for (i = 0; i < numSources; i++) {
+    PartSys->sources[i].source.hue = i * 16; // hw_random16();   //TODO: make adjustable, maybe even colorcycle?
+    PartSys->sources[i].var = SEGMENT.speed >> 2;
+    PartSys->sources[i].minLife = 180 + (SEGMENT.intensity >> 1);
+    PartSys->sources[i].maxLife = 240 + SEGMENT.intensity;
+    PartSys->sources[i].sat = 255;
+    PartSys->sources[i].size = SEGMENT.custom1;
+    PartSys->sources[i].source.x = (spacing >> 1) + spacing * i; //distribute evenly
+  }
+
+  for (i = 0; i < PartSys->usedParticles; i++) {
+    if (PartSys->particles[i].ttl > 20) PartSys->particles[i].ttl -= 20; //ttl is linked to brightness, this allows to use higher brightness but still a short lifespan
+    else PartSys->particles[i].ttl = 0;
+  }
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  //map the bands into 16 positions on x axis, emit some particles according to frequency loudness
+  i = 0;
+  uint32_t bin = hw_random16(numSources); //current bin , start with random one to distribute available particles fairly
+  uint32_t threshold = 300 - SEGMENT.intensity;
+
+  for (i = 0; i < numSources; i++) {
+    bin++;
+    bin = bin % numSources;
+    uint32_t emitparticle = 0;
+    // uint8_t emitspeed = ((uint32_t)fftResult[bin] * (uint32_t)SEGMENT.speed) >> 10; // emit speed according to loudness of band (127 max!)
+    if (fftResult[bin] > threshold) {
+      emitparticle = 1;
+    }
+    else if (fftResult[bin] > 0) { // band has low volue
+      uint32_t restvolume = ((threshold - fftResult[bin]) >> 2) + 2;
+      if (hw_random() % restvolume == 0) {
+        emitparticle = 1;
+      }
+    }
+
+    if (emitparticle)
+      PartSys->sprayEmit(PartSys->sources[bin]);
+  }
+  //TODO: add color control?
+
+  PartSys->update(); // update and render
+
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_PS1DGEQ[] PROGMEM = "PS GEQ 1D@Speed,!,Size,Blur,,,,;,!;!;1f;pal=0,sx=50,ix=200,c1=0,c2=0,c3=0,o1=1,o2=1";
+
+/*
+  Particle based AR effect, swoop particles along the strip with selected frequency loudness
+  by DedeHai (Damian Schneider)
+*/
+uint16_t mode_particle1DsonicStream(void) {
+  ParticleSystem1D *PartSys = nullptr;
+
+  if (SEGMENT.call == 0) { // initialization
+    if (!initParticleSystem1D(PartSys, 1, 255, 0, true)) // init, no additional data needed
+      return mode_static(); // allocation failed or is single pixel
+    PartSys->setKillOutOfBounds(true);
+    PartSys->sources[0].source.x = 0; // at start
+    //PartSys->sources[1].source.x = PartSys->maxX; // at end
+    PartSys->sources[0].var = 0;//SEGMENT.custom1 >> 3;
+  }
+  else
+    PartSys = reinterpret_cast<ParticleSystem1D *>(SEGENV.data); // if not first call, just set the pointer to the PS
+  if (PartSys == nullptr)
+    return mode_static(); // something went wrong, no data!
+
+  // Particle System settings
+  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->setMotionBlur(20 + (SEGMENT.custom2 >> 1)); // anable motion blur
+  PartSys->setSmearBlur(200); // smooth out the edges
+  PartSys->sources[0].v = 5 + (SEGMENT.speed >> 2);
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  uint32_t loudness;
+  uint32_t baseBin = SEGMENT.custom3 >> 1; // 0 - 15 map(SEGMENT.custom3, 0, 31, 0, 14);
+
+  loudness = fftResult[baseBin];// + fftResult[baseBin + 1];
+  if (baseBin > 12)
+    loudness = loudness << 2; // double loudness for high frequencies (better detecion)
+
+  uint32_t threshold = 140 - (SEGMENT.intensity >> 1);
+  if (SEGMENT.check2) { // enable low pass filter for dynamic threshold
+    SEGMENT.step = (SEGMENT.step * 31500 + loudness * (32768 - 31500)) >> 15; // low pass filter for simple beat detection: add average to base threshold
+    threshold = 20 + (threshold >> 1) + SEGMENT.step; // add average to threshold
+  }
+
+  // color
+  uint32_t hueincrement = (SEGMENT.custom1 >> 3); // 0-31
+  PartSys->sources[0].sat = SEGMENT.custom1 > 0 ? 255 : 0; // color slider at zero: set to white
+  PartSys->setColorByPosition(SEGMENT.custom1 == 255);
+
+  // particle manipulation
+  for (uint32_t i = 0; i < PartSys->usedParticles; i++) {
+    if (PartSys->sources[0].sourceFlags.perpetual == false) { // age faster if not perpetual
+      if (PartSys->particles[i].ttl > 2) {
+        PartSys->particles[i].ttl -= 2; //ttl is linked to brightness, this allows to use higher brightness but still a short lifespan
+      }
+      else PartSys->particles[i].ttl = 0;
+    }
+    if (SEGMENT.check1) { // modulate colors by mid frequencies
+      int mids = sqrt32_bw((int)fftResult[5] + (int)fftResult[6] + (int)fftResult[7] + (int)fftResult[8] + (int)fftResult[9] + (int)fftResult[10]); // average the mids, bin 5 is ~500Hz, bin 10 is ~2kHz (see audio_reactive.h)
+      PartSys->particles[i].hue += (mids * perlin8(PartSys->particles[i].x << 2, SEGMENT.step << 2)) >> 9; // color by perlin noise from mid frequencies
+    }
+  }
+
+  if (loudness > threshold) {
+    SEGMENT.aux0 += hueincrement; // change color
+    PartSys->sources[0].minLife = 100 + (((unsigned)SEGMENT.intensity * loudness * loudness) >> 13);
+    PartSys->sources[0].maxLife = PartSys->sources[0].minLife;
+    PartSys->sources[0].source.hue = SEGMENT.aux0;
+    PartSys->sources[0].size = SEGMENT.speed;
+    if (PartSys->particles[SEGMENT.aux1].x > 3 * PS_P_RADIUS_1D || PartSys->particles[SEGMENT.aux1].ttl == 0) { // only emit if last particle is far enough away or dead
+      int partindex = PartSys->sprayEmit(PartSys->sources[0]); // emit a particle
+      if (partindex >= 0) SEGMENT.aux1 = partindex; // track last emitted particle
+    }
+  }
+  else loudness = 0; // required for push mode
+
+  PartSys->update(); // update and render (needs to be done before manipulation for initial particle spacing to be right)
+
+  if (SEGMENT.check3) { // push mode
+    PartSys->sources[0].sourceFlags.perpetual = true; // emitted particles dont age
+    PartSys->applyFriction(1); //slow down particles
+    int32_t movestep = (((int)SEGMENT.speed + 2) * loudness) >> 10;
+    if (movestep) {
+      for (uint32_t i = 0; i < PartSys->usedParticles; i++) {
+        if (PartSys->particles[i].ttl) {
+          PartSys->particles[i].x += movestep; // push particles
+          PartSys->particles[i].vx = 10 + (SEGMENT.speed >> 4) ; // give particles some speed for smooth movement (friction will slow them down)
+        }
+      }
+    }
+  }
+  else {
+    PartSys->sources[0].sourceFlags.perpetual = false; // emitted particles age
+    // move all particles (again) to allow faster speeds
+    for (uint32_t i = 0; i < PartSys->usedParticles; i++) {
+      if (PartSys->particles[i].vx == 0)
+        PartSys->particles[i].vx = PartSys->sources[0].v; // move static particles (after disabling push mode)
+      PartSys->particleMoveUpdate(PartSys->particles[i], PartSys->particleFlags[i], nullptr, &PartSys->advPartProps[i]);
+    }
+  }
+
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_PS1DSONICSTREAM[] PROGMEM = "PS Sonic Stream@!,!,Color,Blur,Bin,Mod,Filter,Push;,!;!;1f;c3=0,o2=1";
+
+
+/*
+  Particle based AR effect, creates exploding particles on beats
+  by DedeHai (Damian Schneider)
+*/
+uint16_t mode_particle1DsonicBoom(void) {
+  ParticleSystem1D *PartSys = nullptr;
+  if (SEGMENT.call == 0) { // initialization
+    if (!initParticleSystem1D(PartSys, 1, 255, 0, true)) // init, no additional data needed
+      return mode_static(); // allocation failed or is single pixel
+    PartSys->setKillOutOfBounds(true);
+  }
+  else
+    PartSys = reinterpret_cast<ParticleSystem1D *>(SEGENV.data); // if not first call, just set the pointer to the PS
+  if (PartSys == nullptr)
+    return mode_static(); // something went wrong, no data!
+
+  // Particle System settings
+  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->setMotionBlur(180 * SEGMENT.check3);
+  PartSys->setSmearBlur(64 * SEGMENT.check3);
+  PartSys->sources[0].var = map(SEGMENT.speed, 0, 255, 10, 127);
+
+  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
+
+  uint32_t loudness;
+  uint32_t baseBin = SEGMENT.custom3 >> 1; // 0 - 15 map(SEGMENT.custom3, 0, 31, 0, 14);
+  loudness = fftResult[baseBin];// + fftResult[baseBin + 1];
+
+  if (baseBin > 12)
+    loudness = loudness << 2; // double loudness for high frequencies (better detecion)
+  uint32_t threshold = 150 - (SEGMENT.intensity >> 1);
+  if (SEGMENT.check2) { // enable low pass filter for dynamic threshold
+    SEGMENT.step = (SEGMENT.step * 31500 + loudness * (32768 - 31500)) >> 15; // low pass filter for simple beat detection: add average to base threshold
+    threshold = 20 + (threshold >> 1) + SEGMENT.step; // add average to threshold
+  }
+
+  // particle manipulation
+  for (uint32_t i = 0; i < PartSys->usedParticles; i++) {
+    if (SEGMENT.check1) { // modulate colors by mid frequencies
+      int mids = sqrt32_bw((int)fftResult[5] + (int)fftResult[6] + (int)fftResult[7] + (int)fftResult[8] + (int)fftResult[9] + (int)fftResult[10]); // average the mids, bin 5 is ~500Hz, bin 10 is ~2kHz (see audio_reactive.h)
+      PartSys->particles[i].hue += (mids * perlin8(PartSys->particles[i].x << 2, SEGMENT.step << 2)) >> 9; // color by perlin noise from mid frequencies
+    }
+    if (PartSys->particles[i].ttl > 16) {
+      PartSys->particles[i].ttl -= 16; //ttl is linked to brightness, this allows to use higher brightness but still a (very) short lifespan
+    }
+  }
+
+  if (loudness > threshold) {
+    if (SEGMENT.aux1 == 0) { // edge detected, code only runs once per "beat"
+      // update position
+      if (SEGMENT.custom2 < 128) // fixed position
+        PartSys->sources[0].source.x = map(SEGMENT.custom2, 0, 127, 0, PartSys->maxX);
+      else if (SEGMENT.custom2 < 255) { // advances on each "beat"
+        int32_t step = PartSys->maxX / (((270 - SEGMENT.custom2) >> 3)); // step: 2 - 33 steps for full segment width
+        PartSys->sources[0].source.x = (PartSys->sources[0].source.x + step) % PartSys->maxX;
+        if (PartSys->sources[0].source.x < step) // align to be symmetrical by making the first position half a step from start
+          PartSys->sources[0].source.x = step >> 1;
+      }
+      else // position set to max, use random postion per beat
+        PartSys->sources[0].source.x = hw_random(PartSys->maxX);
+
+      // update color
+      //PartSys->setColorByPosition(SEGMENT.custom1 == 255);     // color slider at max: particle color by position
+      PartSys->sources[0].sat = SEGMENT.custom1 > 0 ? 255 : 0; // color slider at zero: set to white
+      if (SEGMENT.custom1 == 255) // emit color by position
+        SEGMENT.aux0 = map(PartSys->sources[0].source.x , 0, PartSys->maxX, 0, 255);
+      else if (SEGMENT.custom1 > 0)
+        SEGMENT.aux0 += (SEGMENT.custom1 >> 1); // change emit color per "beat"
+    }
+    SEGMENT.aux1 = 1; // track edge detection
+
+    PartSys->sources[0].minLife = 200;
+    PartSys->sources[0].maxLife = PartSys->sources[0].minLife + (((unsigned)SEGMENT.intensity * loudness * loudness) >> 13);
+    PartSys->sources[0].source.hue = SEGMENT.aux0;
+    PartSys->sources[0].size = 1; //SEGMENT.speed>>3;
+    uint32_t explosionsize = 4 + (PartSys->maxXpixel >> 2);
+    explosionsize = hw_random16((explosionsize * loudness) >> 10);
+    for (uint32_t e = 0; e < explosionsize; e++) { // emit explosion particles
+        PartSys->sprayEmit(PartSys->sources[0]); // emit a particle
+      }
+  }
+  else
+    SEGMENT.aux1 = 0; // reset edge detection
+
+  PartSys->update(); // update and render (needs to be done before manipulation for initial particle spacing to be right)
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_PS1DSONICBOOM[] PROGMEM = "PS Sonic Boom@!,!,Color,Position,Bin,Mod,Filter,Blur;,!;!;1f;c2=63,c3=0,o2=1";
+#endif // WLED_DISABLE_PARTICLESYSTEM1D
+
 
 ////////////////////
 // usermod class  //
@@ -2362,6 +2793,11 @@ class AudioReactive : public Usermod {
         strip.addEffect(FX_MODE_DJLIGHT, &mode_DJLight, _data_FX_MODE_DJLIGHT);
         strip.addEffect(FX_MODE_BLURZ, &mode_blurz, _data_FX_MODE_BLURZ);
         strip.addEffect(FX_MODE_ROCKTAVES, &mode_rocktaves, _data_FX_MODE_ROCKTAVES);
+        #ifndef WLED_DISABLE_PARTICLESYSTEM1D
+        strip.addEffect(FX_MODE_PS1DGEQ, &mode_particle1DGEQ, _data_FX_MODE_PS1DGEQ);
+        strip.addEffect(FX_MODE_PS1DSONICSTREAM, &mode_particle1DsonicStream, _data_FX_MODE_PS1DSONICSTREAM);
+        strip.addEffect(FX_MODE_PS1DSONICBOOM, &mode_particle1DsonicBoom, _data_FX_MODE_PS1DSONICBOOM);
+        #endif // WLED_DISABLE_PARTICLESYSTEM1D
         // --- 2D  effects ---
         #ifndef WLED_DISABLE_2D
         strip.addEffect(FX_MODE_2DGEQ, &mode_2DGEQ, _data_FX_MODE_2DGEQ); // audio
@@ -2369,6 +2805,10 @@ class AudioReactive : public Usermod {
         strip.addEffect(FX_MODE_2DWAVERLY, &mode_2DWaverly, _data_FX_MODE_2DWAVERLY); // audio
         strip.addEffect(FX_MODE_2DSWIRL, &mode_2DSwirl, _data_FX_MODE_2DSWIRL); // audio
         strip.addEffect(FX_MODE_2DAKEMI, &mode_2DAkemi, _data_FX_MODE_2DAKEMI); // audio
+        #ifndef WLED_DISABLE_PARTICLESYSTEM2D
+        strip.addEffect(FX_MODE_PARTICLESGEQ, &mode_particleGEQ, _data_FX_MODE_PARTICLEGEQ);
+        strip.addEffect(FX_MODE_PARTICLECENTERGEQ, &mode_particlecenterGEQ, _data_FX_MODE_PARTICLECIRCULARGEQ);
+        #endif // WLED_DISABLE_PARTICLESYSTEM2D
         #endif // WLED_DISABLE_2D
       }
 

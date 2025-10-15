@@ -295,8 +295,36 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_2DDNASPIRAL            182
 #define FX_MODE_2DBLACKHOLE            183
 #define FX_MODE_WAVESINS               184
+// particle 2D
+#define FX_MODE_PARTICLEVOLCANO         37
+#define FX_MODE_PARTICLEFIRE            47
+#define FX_MODE_PARTICLEFIREWORKS       52
+#define FX_MODE_PARTICLEVORTEX          53
+#define FX_MODE_PARTICLEPERLIN          60
+#define FX_MODE_PARTICLEPIT             77
+#define FX_MODE_PARTICLEBOX             81
+#define FX_MODE_PARTICLEATTRACTOR       86
+#define FX_MODE_PARTICLEIMPACT          93
+#define FX_MODE_PARTICLEWATERFALL       94
+#define FX_MODE_PARTICLESPRAY           99
+#define FX_MODE_PARTICLEGHOSTRIDER     102
+#define FX_MODE_PARTICLEBLOBS          103
+#define FX_MODE_PARTICLEGALAXY         109
+// particle 1D
+#define FX_MODE_PS1DDRIP                 4
+#define FX_MODE_PS1DPINBALL              6
+#define FX_MODE_PS1DDANCINGSHADOWS      11
+#define FX_MODE_PS1DFIREWORKS           14
+#define FX_MODE_PS1DSPARKLER            16
+#define FX_MODE_PS1DHOURGLASS           19
+#define FX_MODE_PS1DSPRAY               23
+#define FX_MODE_PS1DBALANCE             24
+#define FX_MODE_PS1DCHASE               26
+#define FX_MODE_PS1DSTARBURST           29
+#define FX_MODE_PS1DFIRE                33
+#define FX_MODE_PS1DSPRINGY             36
 
-#define MODE_COUNT                     187
+#define MODE_COUNT                     187  // includes audioreactive modes
 
 
 #define BLEND_STYLE_FADE            0x00  // universal
@@ -328,6 +356,9 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define BLEND_STYLE_COUNT           18
 
 #define BLEND_MODE_COUNT            20    // number of blending modes (see Segment::blendMode)
+
+class ParticleSystem1D;
+class ParticleSystem2D;
 
 typedef enum mapping1D2D {
   M12_Pixels = 0,
@@ -612,6 +643,7 @@ class Segment {
 
     // 1D strip
     uint16_t virtualLength() const;
+    uint16_t maxMappingLength() const;
     [[gnu::hot]] void setPixelColor(int n, CRGBA c) const; // set relative pixel within segment with color
     inline void setPixelColor(unsigned n, CRGBA c) const                        { setPixelColor(int(n), c); }
     inline void setPixelColor(int n, byte r, byte g, byte b, byte w = 0) const  { setPixelColor(n, CRGBA(r,g,b)); }
@@ -703,7 +735,10 @@ class Segment {
     inline void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA = 0, int8_t = 0) {}
     inline void wu_pixel(uint32_t x, uint32_t y, CRGBA c) {}
   #endif
+
   friend class WS2812FX;
+  friend class ParticleSystem1D;
+  friend class ParticleSystem2D;
 };
 
 // main "strip" class (108 bytes)
