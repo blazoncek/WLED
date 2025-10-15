@@ -8,15 +8,49 @@
   Licensed under the EUPL v. 1.2 or later
 */
 
-#ifdef WLED_DISABLE_2D
-#define WLED_DISABLE_PARTICLESYSTEM2D
-#endif
-
-#if !(defined(WLED_DISABLE_PARTICLESYSTEM2D) && defined(WLED_DISABLE_PARTICLESYSTEM1D)) // not both disabled
+#include "wled.h"
 #include "FXparticleSystem.h"
-// local shared functions (used both in 1D and 2D system)
-static int32_t calcForce_dv(const int8_t force, uint8_t &counter);
-static bool checkBoundsAndWrap(int32_t &position, const int32_t max, const int32_t particleradius, const bool wrap); // returns false if out of bounds by more than particleradius
+
+#if !defined(WLED_DISABLE_PARTICLESYSTEM2D) || !defined(WLED_DISABLE_PARTICLESYSTEM1D)
+//////////////////////////////
+// Shared Utility Functions //
+//////////////////////////////
+
+// calculate the delta speed (dV) value and update the counter for force calculation (is used several times, function saves on codesize)
+// force is in 3.4 fixedpoint notation, +/-127
+[[gnu::pure]] static int32_t calcForce_dv(const int8_t force, uint8_t &counter) {
+  if (force == 0)
+    return 0;
+  // for small forces, need to use a delay counter
+  int32_t force_abs = abs(force); // absolute value (faster than lots of if's only 7 instructions)
+  int32_t dv = 0;
+  // for small forces, need to use a delay counter, apply force only if it overflows
+  if (force_abs < 16) {
+    counter += force_abs;
+    if (counter > 15) {
+      counter -= 16;
+      dv = force < 0 ? -1 : 1; // force is either 1 or -1 if it is small (zero force is handled above)
+    }
+  }
+  else
+    dv = force / 16; // MSBs, note: cannot use bitshift as dv can be negative
+
+  return dv;
+}
+
+// check if particle is out of bounds and wrap it around if required, returns false if out of bounds
+[[gnu::pure]] static bool checkBoundsAndWrap(int32_t &position, const int32_t max, const int32_t particleradius, const bool wrap) {
+  if ((uint32_t)position > (uint32_t)max) { // check if particle reached an edge, cast to uint32_t to save negative checking (max is always positive)
+    if (wrap) {
+      position = position % (max + 1); // note: cannot optimize modulo, particles can be far out of bounds when wrap is enabled
+      if (position < 0)
+        position += max + 1;
+    }
+    else if (((position < -particleradius) || (position > max + particleradius))) // particle is leaving boundaries, out of bounds if it has fully left
+      return false; // out of bounds
+  }
+  return true; // particle is in bounds
+}
 #endif
 
 #ifndef WLED_DISABLE_PARTICLESYSTEM2D
@@ -1844,47 +1878,3 @@ void blur1D(CRGBA *colorbuffer, uint32_t size, uint32_t blur, uint32_t start)
   }
 }
 #endif // WLED_DISABLE_PARTICLESYSTEM1D
-
-#if !(defined(WLED_DISABLE_PARTICLESYSTEM2D) && defined(WLED_DISABLE_PARTICLESYSTEM1D)) // not both disabled
-
-//////////////////////////////
-// Shared Utility Functions //
-//////////////////////////////
-
-// calculate the delta speed (dV) value and update the counter for force calculation (is used several times, function saves on codesize)
-// force is in 3.4 fixedpoint notation, +/-127
-static int32_t calcForce_dv(const int8_t force, uint8_t &counter) {
-  if (force == 0)
-    return 0;
-  // for small forces, need to use a delay counter
-  int32_t force_abs = abs(force); // absolute value (faster than lots of if's only 7 instructions)
-  int32_t dv = 0;
-  // for small forces, need to use a delay counter, apply force only if it overflows
-  if (force_abs < 16) {
-    counter += force_abs;
-    if (counter > 15) {
-      counter -= 16;
-      dv = force < 0 ? -1 : 1; // force is either 1 or -1 if it is small (zero force is handled above)
-    }
-  }
-  else
-    dv = force / 16; // MSBs, note: cannot use bitshift as dv can be negative
-
-  return dv;
-}
-
-// check if particle is out of bounds and wrap it around if required, returns false if out of bounds
-static bool checkBoundsAndWrap(int32_t &position, const int32_t max, const int32_t particleradius, const bool wrap) {
-  if ((uint32_t)position > (uint32_t)max) { // check if particle reached an edge, cast to uint32_t to save negative checking (max is always positive)
-    if (wrap) {
-      position = position % (max + 1); // note: cannot optimize modulo, particles can be far out of bounds when wrap is enabled
-      if (position < 0)
-        position += max + 1;
-    }
-    else if (((position < -particleradius) || (position > max + particleradius))) // particle is leaving boundaries, out of bounds if it has fully left
-      return false; // out of bounds
-  }
-  return true; // particle is in bounds
-}
-
-#endif  // !(defined(WLED_DISABLE_PARTICLESYSTEM2D) && defined(WLED_DISABLE_PARTICLESYSTEM1D))

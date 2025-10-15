@@ -12,10 +12,8 @@
 #define WLED_DISABLE_PARTICLESYSTEM2D
 #endif
 
-#if !(defined(WLED_DISABLE_PARTICLESYSTEM2D) && defined(WLED_DISABLE_PARTICLESYSTEM1D)) // not both disabled
-
 #include <stdint.h>
-#include "wled.h"
+#include "colors.h"
 
 #define PS_P_MAXSPEED 120 // maximum speed a particle can have (vx/vy is int8)
 #define MAX_MEMIDLE 10 // max idle time (in frames) before memory is deallocated (if deallocated during an effect, it will crash!)
@@ -34,7 +32,6 @@
 static inline int32_t limitSpeed(const int32_t speed) {
   return speed > PS_P_MAXSPEED ? PS_P_MAXSPEED : (speed < -PS_P_MAXSPEED ? -PS_P_MAXSPEED : speed); // note: this is slightly faster than using min/max at the cost of 50bytes of flash
 }
-#endif
 
 #ifndef WLED_DISABLE_PARTICLESYSTEM2D
 // memory allocation (based on reasonable segment size and available FX memory)
