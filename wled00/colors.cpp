@@ -19,12 +19,12 @@ __attribute__((optimize("-O2"))) CRGBA& CRGBA::nscale8(uint8_t scale) {
 
 __attribute__((optimize("-O2"))) CRGBA& CRGBA::add(CRGBA c, bool preserveCR)
 {
-  uint32_t c2 = c.color32 & 0x00FFFFFF; // ignore alpha of color2
-  fast_color_scale(c2, c.a);            // scale color2 by its alpha
-  uint32_t c1 = color32 & 0x00FFFFFF;   // ignore alpha of color1
+  uint32_t c2 = c.color32 & 0x00FFFFFF;             // ignore alpha/white of color2
+  if (c.a < 255) fast_color_scale(c2, c.a);         // scale color2 by its alpha
+  uint32_t c1 = color32 & 0x00FFFFFF;               // ignore alpha/white of color1
+  if (a < 255) fast_color_scale(c1, a);             // scale color1 by its alpha
   uint32_t rb = ( c1     & TWO_CHANNEL_MASK) + ( c2     & TWO_CHANNEL_MASK); // mask and add two colors at once
   uint32_t wg = ((c1>>8) & TWO_CHANNEL_MASK) + ((c2>>8) & TWO_CHANNEL_MASK);
-  wg |= a << 16;                        // use original alpha
   if (preserveCR) {
     if (((rb | wg) & 0x01000100) != 0) {            // detect overflow by checking 9th bit
       auto max = [](uint32_t a, uint32_t b){ return a > b ? a : b; };
@@ -33,7 +33,6 @@ __attribute__((optimize("-O2"))) CRGBA& CRGBA::add(CRGBA c, bool preserveCR)
       maxC = (255U << 8) / maxC;                    // 0x80 - 0xFF (0x1FE - 0x100)
       rb = ((rb * maxC) >> 8) &  TWO_CHANNEL_MASK;  // mask out unused lower bits
       wg =  (wg * maxC)       & ~TWO_CHANNEL_MASK;  // mask out unused lower bits
-      wg = (wg & 0x00FFFFFF) | (a << 24);           // restore alpha (it was modified by scaling by maxC above)
     } else wg <<= 8;
   } else {
     // saturate overflows
@@ -43,6 +42,7 @@ __attribute__((optimize("-O2"))) CRGBA& CRGBA::add(CRGBA c, bool preserveCR)
     wg |= ((wg & 0x00000100) - ((wg & 0x00000100) >> 8)) & TWO_CHANNEL_MASK;
     wg <<= 8;
   }
+  wg |= min(a + c.a, 255) << 24;                    // use combined alpha/white
   color32 = rb | wg;
   return *this;
 }

@@ -158,6 +158,9 @@ struct CRGBA {
   // Assignment from 32-bit color
   inline CRGBA& operator=(uint32_t color) __attribute__((always_inline)) { color32 = color; return *this; }
 
+  // Assignment from CHSV32
+  inline CRGBA& operator=(const CHSV32& hsv) __attribute__((always_inline)) { hsv2rgb(hsv, color32); a = 255; return *this;}
+
   // Scaling assignment
   inline CRGBA& operator*=(uint8_t scale) __attribute__((always_inline)) { return nscale8(scale); }
   inline CRGBA& operator/=(uint8_t scale) __attribute__((always_inline)) { return nscale8(255 - scale); }
@@ -172,8 +175,8 @@ struct CRGBA {
   inline bool operator!=(const uint32_t rhs) __attribute__((always_inline)) { return (color32 & 0x00FFFFFF) != (rhs & 0x00FFFFFF); } // ignore white or alpha
 
   // Addition assignment with scaling of added color
-  inline CRGBA& operator+=(const CRGBA& rhs) __attribute__((always_inline)) { return add(rhs); }
-  inline CRGBA& operator+=(uint8_t x) __attribute__((always_inline))        { return add(CRGBA(x,x,x)); }
+  inline CRGBA& operator+=(const CRGBA& rhs) __attribute__((always_inline)) { return add(rhs, true); }
+  inline CRGBA& operator+=(uint8_t x) __attribute__((always_inline))        { return add(CRGBA(x,x,x), true); }
 
   inline CRGBA& operator-=(const CRGBA& rhs) __attribute__((always_inline)) {
     auto qsub8 = [](uint8_t a, uint8_t b) { return a > b ? a - b : 0; };
