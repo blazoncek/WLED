@@ -54,7 +54,23 @@
 #endif
 
 #ifndef WLED_DISABLE_PARTICLESYSTEM2D
-ParticleSystem2D::ParticleSystem2D(uint32_t width, uint32_t height, uint32_t numberofparticles, uint32_t numberofsources, bool isadvanced, bool sizecontrol) {
+ParticleSystem2D::ParticleSystem2D(uint32_t width, uint32_t height, uint32_t numberofparticles, uint32_t numberofsources, bool isadvanced, bool sizecontrol)
+/*
+  : advPartProps(nullptr)           // make sure we start out with null pointers (just in case memory was not cleared)
+  , advPartSize(nullptr)
+  , numSources(numberofsources)     // number of sources allocated in init
+  , usedParticles(numParticles)     // use all particles by default
+  , numParticles(numberofparticles) // number of particles allocated in init
+  , emitIndex(0)
+  , wallHardness(255)               // default wall hardness
+  , wallRoughness(0)                // default wall roughness
+  , collisionStartIdx(0)
+  , fireIntesity(0)
+  , particlesize(1)                 // 2x2 rendering size by default
+  , motionBlur(0)                   // no fading by default
+  , smearBlur(0)                    // no smearing by default
+*/
+{
   PSPRINTLN("\n ParticleSystem2D constructor");
   numSources = numberofsources; // number of sources allocated in init
   numParticles = numberofparticles; // number of particles allocated in init
@@ -81,7 +97,6 @@ ParticleSystem2D::ParticleSystem2D(uint32_t width, uint32_t height, uint32_t num
     sources[i].source.ttl = 1; //set source alive
     sources[i].sourceFlags.asByte = 0; // all flags disabled
   }
-
 }
 
 // update function applies gravity, moves the particles, handles collisions and renders the particles
@@ -128,58 +143,12 @@ void ParticleSystem2D::setUsedParticles(uint8_t percentage) {
   PSPRINTLN(usedParticles);
 }
 
-void ParticleSystem2D::setWallHardness(uint8_t hardness) {
-  wallHardness = hardness;
-}
-
-void ParticleSystem2D::setWallRoughness(uint8_t roughness) {
-  wallRoughness = roughness;
-}
-
-void ParticleSystem2D::setCollisionHardness(uint8_t hardness) {
-  collisionHardness = (int)hardness + 1;
-}
-
 void ParticleSystem2D::setMatrixSize(uint32_t x, uint32_t y) {
   maxXpixel = x - 1; // last physical pixel that can be drawn to
   maxYpixel = y - 1;
   maxX = x * PS_P_RADIUS - 1;  // particle system boundary for movements
   maxY = y * PS_P_RADIUS - 1;  // this value is often needed (also by FX) to calculate positions
 }
-
-void ParticleSystem2D::setWrapX(bool enable) {
-  particlesettings.wrapX = enable;
-}
-
-void ParticleSystem2D::setWrapY(bool enable) {
-  particlesettings.wrapY = enable;
-}
-
-void ParticleSystem2D::setBounceX(bool enable) {
-  particlesettings.bounceX = enable;
-}
-
-void ParticleSystem2D::setBounceY(bool enable) {
-  particlesettings.bounceY = enable;
-}
-
-void ParticleSystem2D::setKillOutOfBounds(bool enable) {
-  particlesettings.killoutofbounds = enable;
-}
-
-void ParticleSystem2D::setColorByAge(bool enable) {
-  particlesettings.colorByAge = enable;
-}
-
-void ParticleSystem2D::setMotionBlur(uint8_t bluramount) {
-  if (particlesize < 2) // only allow motion blurring on default particle sizes or advanced size (cannot combine motion blur with normal blurring used for particlesize, would require another buffer)
-    motionBlur = bluramount;
-}
-
-void ParticleSystem2D::setSmearBlur(uint8_t bluramount) {
-  smearBlur = bluramount;
-}
-
 
 // render size using smearing (see blur function)
 void ParticleSystem2D::setParticleSize(uint8_t size) {
@@ -241,7 +210,7 @@ int32_t ParticleSystem2D::sprayEmit(const PSsource &emitter) {
 // Spray emitter for particles used for flames (particle TTL depends on source TTL)
 void ParticleSystem2D::flameEmit(const PSsource &emitter) {
   int emitIndex = sprayEmit(emitter);
-  if (emitIndex > 0)  particles[emitIndex].ttl += emitter.source.ttl;
+  if (emitIndex > 0) particles[emitIndex].ttl += emitter.source.ttl;
 }
 
 // Emits a particle at given angle and speed, angle is from 0-65535 (=0-360deg), speed is also affected by emitter->var
@@ -589,29 +558,14 @@ void ParticleSystem2D::pointAttractor(const uint32_t particleindex, PSparticle &
 // warning: do not render out of bounds particles or system will crash! rendering does not check if particle is out of bounds
 // firemode is only used for PS Fire FX
 void ParticleSystem2D::render() {
-  if(framebuffer == nullptr) {
-    PSPRINTLN(F("PS render: no framebuffer!"));
-    return;
-  }
   CRGBA baseRGB;
   uint32_t brightness; // particle brightness, fades if dying
-  TBlendType blend = LINEARBLEND; // default color rendering: wrap palette
-  if (particlesettings.colorByAge) {
-    blend = LINEARBLEND_NOWRAP;
-  }
+  TBlendType blend = particlesettings.colorByAge ? LINEARBLEND_NOWRAP : LINEARBLEND; // default color rendering: wrap palette
 
   if (motionBlur) { // motion-blurring active
-    for (int32_t y = 0; y <= maxYpixel; y++) {
-      int index = y * (maxXpixel + 1);
-      for (int32_t x = 0; x <= maxXpixel; x++) {
-        //fast_color_scale(framebuffer[index], motionBlur); // note: could skip if only globalsmear is active but usually they are both active and scaling is fast enough
-        framebuffer[index].nscale8(motionBlur); // note: could skip if only globalsmear is active but usually they are both active and scaling is fast enough
-        index++;
-      }
-    }
-  }
-  else { // no blurring: clear buffer
-    memset(framebuffer, 0, (maxXpixel+1) * (maxYpixel+1) * sizeof(CRGBA));
+    SEGMENT.fadeToBlackBy(motionBlur);
+  } else { // no blurring: clear buffer
+    SEGMENT.clear();
   }
 
   // go over particles and render them to the buffer
@@ -620,23 +574,20 @@ void ParticleSystem2D::render() {
       continue;
     // generate RGB values for particle
     if (fireIntesity) { // fire mode
-      brightness = (uint32_t)particles[i].ttl * (3 + (fireIntesity >> 5)) + 5;
-      brightness = min(brightness, (uint32_t)255);
+      brightness = min((uint32_t)particles[i].ttl * (3 + (fireIntesity >> 5)) + 5, 255U);
       baseRGB = ColorFromPaletteWLED(SEGPALETTE, brightness, 255, LINEARBLEND_NOWRAP);
     }
     else {
-      brightness = min((particles[i].ttl << 1), (int)255);
+      brightness = min(particles[i].ttl << 1, 255);
       baseRGB = ColorFromPaletteWLED(SEGPALETTE, particles[i].hue, 255, blend);
       if (particles[i].sat < 255) {
-        CHSV32 baseHSV;
-        rgb2hsv(baseRGB.color32, baseHSV); // convert to HSV
+        CHSV32 baseHSV(baseRGB);
         baseHSV.s = min(baseHSV.s, particles[i].sat); // set the saturation but don't increase it
-        hsv2rgb(baseHSV, baseRGB.color32); // convert back to RGB
+        baseRGB = baseHSV;  // convert HSV back to RGB (preserves opacity)
       }
     }
-    if(gammaCorrectCol) brightness = gamma8(brightness); // apply gamma correction, used for gamma-inverted brightness distribution
-    baseRGB.a = brightness; // store brightness in alpha channel for later use
-    renderParticle(i, baseRGB, particlesettings.wrapX, particlesettings.wrapY);
+    //if (gammaCorrectCol) brightness = gamma8(brightness); // apply gamma correction, used for gamma-inverted brightness distribution
+    renderParticle(i, baseRGB, brightness, particlesettings.wrapX, particlesettings.wrapY);
   }
 
   // apply global size rendering
@@ -647,19 +598,19 @@ void ParticleSystem2D::render() {
     for (uint32_t i = 0; i < passes; i++) {
       if (i == 2) // for the last two passes, use higher amount of blur (results in a nicer brightness gradient with soft edges)
         bitshift = 1;
-      blur2D(framebuffer, maxXpixel + 1, maxYpixel + 1, bluramount << bitshift, bluramount << bitshift);
+      SEGMENT.blur2D(bluramount << bitshift, bluramount << bitshift);
       bluramount -= 64;
     }
   }
 
   // apply 2D blur to rendered frame
   if (smearBlur) {
-    blur2D(framebuffer, maxXpixel + 1, maxYpixel + 1, smearBlur, smearBlur);
+    SEGMENT.blur2D(smearBlur, smearBlur, true);
   }
 }
 
 // calculate pixel positions and brightness distribution and render the particle to local buffer or global buffer
-void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uint32_t particleindex, const CRGBA& color, const bool wrapX, const bool wrapY) {
+void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uint32_t particleindex, const CRGBA& color, uint8_t brightness, const bool wrapX, const bool wrapY) {
   uint32_t size = particlesize;
   if (advPartProps && advPartProps[particleindex].size > 0) // use advanced size properties (0 means use global size including single pixel rendering)
     size = advPartProps[particleindex].size;
@@ -668,16 +619,14 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
     uint32_t x = particles[particleindex].x >> PS_P_RADIUS_SHIFT;
     uint32_t y = particles[particleindex].y >> PS_P_RADIUS_SHIFT;
     if (x <= (uint32_t)maxXpixel && y <= (uint32_t)maxYpixel) {
-      uint32_t index = x + (maxYpixel - y) * (maxXpixel + 1); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-      framebuffer[index].add(color, true);
+      CRGBA col = color;
+      col += SEGMENT.getPixelColorXYRaw(x, maxYpixel-y); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+      SEGMENT.setPixelColorXYRaw(x, maxYpixel-y, col); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
     }
     return;
   }
+
   uint8_t pxlbrightness[4]; // brightness values for the four pixels representing a particle
-  struct {
-    int32_t x,y;
-  } pixco[4]; // particle pixel coordinates, the order is bottom left [0], bottom right[1], top right [2], top left [3] (thx @blazoncek for improved readability struct)
-  bool pixelvalid[4] = {true, true, true, true}; // is set to false if pixel is out of bounds
 
   // add half a radius as the rendering algorithm always starts at the bottom left, this leaves things positive, so shifts can be used, then shift coordinate by a full pixel (x--/y-- below)
   int32_t xoffset = particles[particleindex].x + PS_P_HALFRADIUS;
@@ -687,20 +636,12 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
   int32_t x = (xoffset >> PS_P_RADIUS_SHIFT); // divide by PS_P_RADIUS which is 64, so can bitshift (compiler can not optimize integer)
   int32_t y = (yoffset >> PS_P_RADIUS_SHIFT);
 
-  // set the four raw pixel coordinates
-  pixco[1].x = pixco[2].x = x;  // bottom right & top right
-  pixco[2].y = pixco[3].y = y;  // top right & top left
-  x--; // shift by a full pixel here, this is skipped above to not do -1 and then +1
-  y--;
-  pixco[0].x = pixco[3].x = x;      // bottom left & top left
-  pixco[0].y = pixco[1].y = y;      // bottom left & bottom right
-
   // calculate brightness values for all four pixels representing a particle using linear interpolation
   // could check for out of frame pixels here but calculating them is faster (very few are out)
   // precalculate values for speed optimization
   int32_t precal1 = (int32_t)PS_P_RADIUS - dx;
-  int32_t precal2 = ((int32_t)PS_P_RADIUS - dy) * color.a;
-  int32_t precal3 = dy * color.a;
+  int32_t precal2 = ((int32_t)PS_P_RADIUS - dy) * brightness;
+  int32_t precal3 = dy * brightness;
   pxlbrightness[0] = (precal1 * precal2) >> PS_P_SURFACE; // bottom left value equal to ((PS_P_RADIUS - dx) * (PS_P_RADIUS-dy) * brightness) >> PS_P_SURFACE
   pxlbrightness[1] = (dx * precal2) >> PS_P_SURFACE; // bottom right value equal to (dx * (PS_P_RADIUS-dy) * brightness) >> PS_P_SURFACE
   pxlbrightness[2] = (dx * precal3) >> PS_P_SURFACE; // top right value equal to (dx * dy * brightness) >> PS_P_SURFACE
@@ -709,22 +650,23 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
   // - scale brigthness with gamma correction (done in render())
   // - apply inverse gamma correction to brightness values
   // - gamma is applied again in show() -> the resulting brightness distribution is linear but gamma corrected in total
-  if(gammaCorrectCol) {
-    pxlbrightness[0] = gamma8inv(pxlbrightness[0]); // use look-up-table for invers gamma
-    pxlbrightness[1] = gamma8inv(pxlbrightness[1]);
-    pxlbrightness[2] = gamma8inv(pxlbrightness[2]);
-    pxlbrightness[3] = gamma8inv(pxlbrightness[3]);
-  }
+  //if (gammaCorrectCol) {
+  //  pxlbrightness[0] = gamma8inv(pxlbrightness[0]); // use look-up-table for inverse gamma
+  //  pxlbrightness[1] = gamma8inv(pxlbrightness[1]);
+  //  pxlbrightness[2] = gamma8inv(pxlbrightness[2]);
+  //  pxlbrightness[3] = gamma8inv(pxlbrightness[3]);
+  //}
 
-  if (advPartProps && advPartProps[particleindex].size > 1) { //render particle to a bigger size
+  if (advPartProps && advPartProps[particleindex].size > 1) { // render particle to a bigger size
     CRGBA renderbuffer[100]; // 10x10 pixel buffer
-    memset(renderbuffer, 0, sizeof(renderbuffer)); // clear buffer
+    for (int i = 0; i < 100; i++) renderbuffer[i] = CRGBA(0,0,0); // make sure buffer is cleared (memset is faster but may not work on all platforms)
+
     //particle size to pixels: < 64 is 4x4, < 128 is 6x6, < 192 is 8x8, bigger is 10x10
     //first, render the pixel to the center of the renderbuffer, then apply 2D blurring
-    renderbuffer[4 + (4 * 10)].add(color.scale8(pxlbrightness[0]), true); // order is: bottom left, bottom right, top right, top left
-    renderbuffer[5 + (4 * 10)].add(color.scale8(pxlbrightness[1]), true);
-    renderbuffer[5 + (5 * 10)].add(color.scale8(pxlbrightness[2]), true);
-    renderbuffer[4 + (5 * 10)].add(color.scale8(pxlbrightness[3]), true);
+    renderbuffer[4 + (4 * 10)] += color.scale8(pxlbrightness[0]); // order is: bottom left, bottom right, top right, top left
+    renderbuffer[5 + (4 * 10)] += color.scale8(pxlbrightness[1]);
+    renderbuffer[5 + (5 * 10)] += color.scale8(pxlbrightness[2]);
+    renderbuffer[4 + (5 * 10)] += color.scale8(pxlbrightness[3]);
     uint32_t rendersize = 2; // initialize render size, minimum is 4x4 pixels, it is incremented int he loop below to start with 4
     uint32_t offset = 4; // offset to zero coordinate to write/read data in renderbuffer (actually needs to be 3, is decremented in the loop below)
     uint32_t maxsize = advPartProps[particleindex].size;
@@ -779,13 +721,27 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
               yfb = yfb % (maxYpixel + 1); // note: without the above "negative" check, this works only for powers of 2
           }
           else
-          continue;
+            continue;
         }
-        uint32_t idx = xfb + (maxYpixel - yfb) * (maxXpixel + 1); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-        framebuffer[idx].add(renderbuffer[xrb + yrb * 10], true);
+        CRGBA col = renderbuffer[xrb + yrb * 10];
+        col += SEGMENT.getPixelColorXYRaw(xfb, maxYpixel-yfb); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+        SEGMENT.setPixelColorXYRaw(xfb, maxYpixel-yfb, col); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
       }
     }
-    } else { // standard rendering (2x2 pixels)
+  } else { // standard rendering (2x2 pixels)
+    struct {
+      int32_t x,y;
+    } pixco[4]; // particle pixel coordinates, the order is bottom left [0], bottom right[1], top right [2], top left [3] (thx @blazoncek for improved readability struct)
+    bool pixelvalid[4] = {true, true, true, true}; // is set to false if pixel is out of bounds
+  
+    // set the four raw pixel coordinates
+    pixco[1].x = pixco[2].x = x;  // bottom right & top right
+    pixco[2].y = pixco[3].y = y;  // top right & top left
+    x--; // shift by a full pixel here, this is skipped above to not do -1 and then +1
+    y--;
+    pixco[0].x = pixco[3].x = x;      // bottom left & top left
+    pixco[0].y = pixco[1].y = y;      // bottom left & bottom right
+  
     // check for out of frame pixels and wrap them if required: x,y is bottom left pixel coordinate of the particle
     if (x < 0) { // left pixels out of frame
       if (wrapX) { // wrap x to the other side if required
@@ -818,8 +774,9 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
     }
     for (uint32_t i = 0; i < 4; i++) {
       if (pixelvalid[i]) {
-        uint32_t idx = pixco[i].x + (maxYpixel - pixco[i].y) * (maxXpixel + 1); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-        framebuffer[idx].add(color.scale8(pxlbrightness[i]), true); // order is: bottom left, bottom right, top right, top left
+        CRGBA col = color.scale8(pxlbrightness[i]);
+        col += SEGMENT.getPixelColorXYRaw(pixco[i].x, maxYpixel-pixco[i].y); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+        SEGMENT.setPixelColorXYRaw(pixco[i].x, maxYpixel-pixco[i].y, col); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
       }
     }
   }
@@ -855,7 +812,7 @@ void ParticleSystem2D::handleCollisions() {
     for (uint32_t i = 0; i < usedParticles; i++) {
       if (particles[pidx].ttl > 0) { // is alive
         if (particles[pidx].x >= binStart && particles[pidx].x <= binEnd) { // >= and <= to include particles on the edge of the bin (overlap to ensure boarder particles collide with adjacent bins)
-          if(particleFlags[pidx].outofbounds == 0 && particleFlags[pidx].collide) { // particle is in frame and does collide note: checking flags is quite slow and usually these are set, so faster to check here
+          if (particleFlags[pidx].outofbounds == 0 && particleFlags[pidx].collide) { // particle is in frame and does collide note: checking flags is quite slow and usually these are set, so faster to check here
             if (binParticleCount >= maxBinParticles) { // bin is full, more particles in this bin so do the rest next frame
               nextFrameStartIdx = pidx; // bin overflow can only happen once as bin size is at least half of the particles (or half +1)
               break;
@@ -1021,7 +978,6 @@ void ParticleSystem2D::updatePSpointers(bool isadvanced, bool sizecontrol) {
   particles = reinterpret_cast<PSparticle *>(this + 1); // pointer to particles
   particleFlags = reinterpret_cast<PSparticleFlags *>(particles + numParticles); // pointer to particle flags
   sources = reinterpret_cast<PSsource *>(particleFlags + numParticles); // pointer to source(s) at data+sizeof(ParticleSystem2D)
-  framebuffer = SEGMENT.getPixels(); // pointer to framebuffer
   PSdataEnd = reinterpret_cast<uint8_t *>(sources + numSources); // pointer to first available byte after the PS for FX additional data (already aligned to 4 byte boundary)
   if (isadvanced) {
     advPartProps = reinterpret_cast<PSadvancedParticle *>(PSdataEnd);
@@ -1050,14 +1006,14 @@ void blur2D(CRGBA *colorbuffer, uint32_t xsize, uint32_t ysize, uint32_t xblur, 
   uint32_t seep = xblur >> 1;
   uint32_t width = xsize; // width of the buffer, used to calculate the index of the pixel
 
-  if (isparticle) { //first and last row are always black in first pass of particle rendering
+  if (isparticle) { // first and last row are always black in first pass of particle rendering
     ystart++;
     ysize--;
     width = 10; // buffer size is 10x10
   }
 
   for (uint32_t y = ystart; y < ystart + ysize; y++) {
-    carryover =  BLACK;
+    carryover = CRGBA(BLACK);
     uint32_t indexXY = xstart + y * width;
     for (uint32_t x = xstart; x < xstart + xsize; x++) {
       seeppart = colorbuffer[indexXY].scale8(seep); // scale it and seep to neighbours
@@ -1077,7 +1033,7 @@ void blur2D(CRGBA *colorbuffer, uint32_t xsize, uint32_t ysize, uint32_t xblur, 
 
   seep = yblur >> 1;
   for (uint32_t x = xstart; x < xstart + xsize; x++) {
-    carryover = BLACK;
+    carryover = CRGBA(BLACK);
     uint32_t indexXY = x + ystart * width;
     for (uint32_t y = ystart; y < ystart + ysize; y++) {
       seeppart = colorbuffer[indexXY].scale8(seep); // scale it and seep to neighbours
@@ -1172,21 +1128,22 @@ bool initParticleSystem2D(ParticleSystem2D *&PartSys, uint32_t requestedsources,
 ////////////////////////
 #ifndef WLED_DISABLE_PARTICLESYSTEM1D
 
-ParticleSystem1D::ParticleSystem1D(uint32_t length, uint32_t numberofparticles, uint32_t numberofsources, bool isadvanced) {
-  numSources = numberofsources;
-  numParticles = numberofparticles; // number of particles allocated in init
-  usedParticles = numParticles; // use all particles by default
-  advPartProps = nullptr; //make sure we start out with null pointers (just in case memory was not cleared)
-  //advPartSize = nullptr;
+ParticleSystem1D::ParticleSystem1D(uint32_t length, uint32_t numberofparticles, uint32_t numberofsources, bool isadvanced)
+  : advPartProps(nullptr)           // make sure we start out with null pointers (just in case memory was not cleared)
+  , numSources(numberofsources)     // number of sources allocated in init
+  , usedParticles(numParticles)     // use all particles by default
+  , numParticles(numberofparticles) // number of particles allocated in init
+  , emitIndex(0)
+  , wallHardness(255)               // default wall hardness
+  , collisionStartIdx(0)
+  , particlesize(0)                 // 1 pixel size by default
+  , motionBlur(0)                   // no fading by default
+  , smearBlur(0)                    // no smearing by default
+{
   setSize(length);
   updatePSpointers(isadvanced); // set the particle and sources pointer (call this before accessing sprays or particles)
-  setWallHardness(255); // set default wall hardness to max
   setGravity(0); //gravity disabled by default
-  setParticleSize(0); // 1 pixel size by default
-  motionBlur = 0; //no fading by default
-  smearBlur = 0; //no smearing by default
-  emitIndex = 0;
-  collisionStartIdx = 0;
+
   // initialize some default non-zero values most FX use
   for (uint32_t i = 0; i < numSources; i++) {
     sources[i].source.ttl = 1; //set source alive
@@ -1234,41 +1191,9 @@ void ParticleSystem1D::setUsedParticles(const uint8_t percentage) {
   PSPRINTLN(usedParticles);
 }
 
-void ParticleSystem1D::setWallHardness(const uint8_t hardness) {
-  wallHardness = hardness;
-}
-
 void ParticleSystem1D::setSize(const uint32_t x) {
   maxXpixel = x - 1; // last physical pixel that can be drawn to
   maxX = x * PS_P_RADIUS_1D - 1;  // particle system boundary for movements
-}
-
-void ParticleSystem1D::setWrap(const bool enable) {
-  particlesettings.wrap = enable;
-}
-
-void ParticleSystem1D::setBounce(const bool enable) {
-  particlesettings.bounce = enable;
-}
-
-void ParticleSystem1D::setKillOutOfBounds(const bool enable) {
-  particlesettings.killoutofbounds = enable;
-}
-
-void ParticleSystem1D::setColorByAge(const bool enable) {
-  particlesettings.colorByAge = enable;
-}
-
-void ParticleSystem1D::setColorByPosition(const bool enable) {
-  particlesettings.colorByPosition = enable;
-}
-
-void ParticleSystem1D::setMotionBlur(const uint8_t bluramount) {
-  motionBlur = bluramount;
-}
-
-void ParticleSystem1D::setSmearBlur(const uint8_t bluramount) {
-  smearBlur = bluramount;
 }
 
 // render size, 0 = 1 pixel, 1 = 2 pixel (interpolated), bigger sizes require adanced properties
@@ -1453,10 +1378,6 @@ void ParticleSystem1D::applyFriction(int32_t coefficient) {
 // if wrap is set, particles half out of bounds are rendered to the other side of the matrix
 // warning: do not render out of bounds particles or system will crash! rendering does not check if particle is out of bounds
 void ParticleSystem1D::render() {
-  if(framebuffer == nullptr) {
-    PSPRINTLN(F("PS render: no framebuffer!"));
-    return;
-  }
   CRGBA baseRGB;
   uint32_t brightness; // particle brightness, fades if dying
   TBlendType blend = LINEARBLEND; // default color rendering: wrap palette
@@ -1465,12 +1386,9 @@ void ParticleSystem1D::render() {
   }
 
   if (motionBlur) { // blurring active
-    for (int32_t x = 0; x <= maxXpixel; x++) {
-      framebuffer[x].nscale8(motionBlur);
-    }
-  }
-  else { // no blurring: clear buffer
-    memset(framebuffer, 0, (maxXpixel+1) * sizeof(CRGBA));
+    SEGMENT.fadeToBlackBy(motionBlur); // fade the segment buffer
+  }  else { // no blurring: clear buffer
+    SEGMENT.clear();
   }
 
   // go over particles and render them to the buffer
@@ -1484,41 +1402,30 @@ void ParticleSystem1D::render() {
 
     if (advPartProps) { //saturation is advanced property in 1D system
       if (advPartProps[i].sat < 255) {
-        CHSV32 baseHSV;
-        rgb2hsv(baseRGB.color32, baseHSV); // convert to HSV
+        CHSV32 baseHSV(baseRGB);
         baseHSV.s = min(baseHSV.s, advPartProps[i].sat); // set the saturation but don't increase it
-        hsv2rgb(baseHSV, baseRGB.color32); // convert back to RGB
+        baseRGB = baseHSV;
       }
     }
-    if(gammaCorrectCol) brightness = gamma8(brightness); // apply gamma correction, used for gamma-inverted brightness distribution
-    baseRGB.a = brightness;
-    renderParticle(i, baseRGB, particlesettings.wrap);
+    //if(gammaCorrectCol) brightness = gamma8(brightness); // apply gamma correction, used for gamma-inverted brightness distribution
+    renderParticle(i, baseRGB, brightness, particlesettings.wrap);
   }
   // apply smear-blur to rendered frame
   if (smearBlur) {
-    blur1D(framebuffer, maxXpixel + 1, smearBlur, 0);
+    SEGMENT.blur1D(smearBlur);
   }
 
   // add background color
   CRGBA bg_color = SEGCOLOR(1);
   if (bg_color != CRGBA(BLACK)) { //if not black
     for (int32_t i = 0; i <= maxXpixel; i++) {
-      framebuffer[i].add(bg_color, true);
+      SEGMENT.addPixelColorRaw(i, bg_color);
     }
   }
-#ifndef WLED_DISABLE_2D
-  // transfer local buffer to segment if using 1D->2D mapping
-  if(SEGMENT.is2D() && SEGMENT.map1D2D) {
-    for (int x = 0; x <= maxXpixel; x++) {
-    //for (int x = 0; x < SEGMENT.vLength(); x++) {
-      SEGMENT.setPixelColor(x, framebuffer[x]); // this applies the mapping
-    }
-  }
-#endif
 }
 
 // calculate pixel positions and brightness distribution and render the particle to local buffer or global buffer
-void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uint32_t particleindex, const CRGBA &color, const bool wrap) {
+void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uint32_t particleindex, const CRGBA& color, uint8_t brightness, const bool wrap) {
   uint32_t size = particlesize;
   if (advPartProps) // use advanced size properties (1D system has no large size global rendering TODO: add large global rendering?)
     size = advPartProps[particleindex].size;
@@ -1526,45 +1433,41 @@ void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uin
   if (size == 0) { //single pixel particle, can be out of bounds as oob checking is made for 2-pixel particles (and updating it uses more code)
     uint32_t x =  particles[particleindex].x >> PS_P_RADIUS_SHIFT_1D;
     if (x <= (uint32_t)maxXpixel) { //by making x unsigned there is no need to check < 0 as it will overflow
-      framebuffer[x].add(color, true);
+      CRGBA col = color;
+      col += SEGMENT.getPixelColorRaw(x);
+      SEGMENT.setPixelColorRaw(x, col);
     }
     return;
   }
   //render larger particles
-  bool pxlisinframe[2] = {true, true};
-  int32_t pxlbrightness[2];
-  int32_t pixco[2]; // physical pixel coordinates of the two pixels representing a particle
 
   // add half a radius as the rendering algorithm always starts at the bottom left, this leaves things positive, so shifts can be used, then shift coordinate by a full pixel (x-- below)
   int32_t xoffset = particles[particleindex].x + PS_P_HALFRADIUS_1D;
   int32_t dx = xoffset & (PS_P_RADIUS_1D - 1); //relativ particle position in subpixel space,  modulo replaced with bitwise AND
   int32_t x = xoffset >> PS_P_RADIUS_SHIFT_1D; // divide by PS_P_RADIUS, bitshift of negative number stays negative -> checking below for x < 0 works (but does not when using division)
-
-  // set the raw pixel coordinates
-  pixco[1] = x;  // right pixel
-  x--; // shift by a full pixel here, this is skipped above to not do -1 and then +1
-  pixco[0] = x;  // left pixel
-
+  int32_t pxlbrightness[2];
   //calculate the brightness values for both pixels using linear interpolation (note: in standard rendering out of frame pixels could be skipped but if checks add more clock cycles over all)
-  pxlbrightness[0] = (((int32_t)PS_P_RADIUS_1D - dx) * color.a) >> PS_P_SURFACE_1D;
-  pxlbrightness[1] = (dx * color.a) >> PS_P_SURFACE_1D;
+  pxlbrightness[0] = (((int32_t)PS_P_RADIUS_1D - dx) * brightness) >> PS_P_SURFACE_1D;
+  pxlbrightness[1] = (dx * brightness) >> PS_P_SURFACE_1D;
   // adjust brightness such that distribution is linear after gamma correction:
   // - scale brigthness with gamma correction (done in render())
   // - apply inverse gamma correction to brightness values
   // - gamma is applied again in show() -> the resulting brightness distribution is linear but gamma corrected in total
-  if(gammaCorrectCol) {
-    pxlbrightness[0] = gamma8inv(pxlbrightness[0]); // use look-up-table for invers gamma
-    pxlbrightness[1] = gamma8inv(pxlbrightness[1]);
-  }
+  //if (gammaCorrectCol) {
+  //  pxlbrightness[0] = gamma8inv(pxlbrightness[0]); // use look-up-table for invers gamma
+  //  pxlbrightness[1] = gamma8inv(pxlbrightness[1]);
+  //}
+
   // check if particle has advanced size properties and buffer is available
   if (advPartProps && advPartProps[particleindex].size > 1) {
     CRGBA renderbuffer[10]; // 10 pixel buffer
-    memset(renderbuffer, 0, sizeof(renderbuffer)); // clear buffer
+    for (int i = 0; i < 10; i++) renderbuffer[i] = CRGBA(BLACK); // make sure buffer is cleared (memset is faster but may not work on all platforms)
+
     //render particle to a bigger size
     //particle size to pixels: 2 - 63 is 4 pixels, < 128 is 6pixels, < 192 is 8 pixels, bigger is 10 pixels
     //first, render the pixel to the center of the renderbuffer, then apply 1D blurring
-    renderbuffer[4].add(color.scale8(pxlbrightness[0]), true);
-    renderbuffer[5].add(color.scale8(pxlbrightness[1]), true);
+    renderbuffer[4] += color.scale8(pxlbrightness[0]);
+    renderbuffer[5] += color.scale8(pxlbrightness[1]);
     uint32_t rendersize = 2; // initialize render size, minimum is 4 pixels, it is incremented int he loop below to start with 4
     uint32_t offset = 4; // offset to zero coordinate to write/read data in renderbuffer (actually needs to be 3, is decremented in the loop below)
     uint32_t blurpasses = size/64 + 1; // number of blur passes depends on size, four passes max
@@ -1595,14 +1498,19 @@ void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uin
         else
           continue;
       }
-      #ifdef ESP8266 // no local buffer on ESP8266
-      SEGMENT.addPixelColor(xfb, renderbuffer[xrb], true);
-      #else
-      framebuffer[xfb].add(renderbuffer[xrb], true);
-      #endif
+      CRGBA col = renderbuffer[xrb];
+      col += SEGMENT.getPixelColorRaw(xfb);
+      SEGMENT.setPixelColorRaw(xfb, col);
     }
   }
   else { // standard rendering (2 pixels per particle)
+    bool pxlisinframe[2] = {true, true};
+    int32_t pixco[2]; // physical pixel coordinates of the two pixels representing a particle
+    // set the raw pixel coordinates
+    pixco[1] = x;  // right pixel
+    x--; // shift by a full pixel here, this is skipped above to not do -1 and then +1
+    pixco[0] = x;  // left pixel
+  
     // check if any pixels are out of frame
     if (x < 0) { // left pixels out of frame
       if (wrap) // wrap x to the other side if required
@@ -1618,11 +1526,12 @@ void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uin
     }
     for (uint32_t i = 0; i < 2; i++) {
       if (pxlisinframe[i]) {
-        framebuffer[pixco[i]].add(color.scale8(pxlbrightness[i]), true);
+        CRGBA col = color.scale8(pxlbrightness[i]);
+        col += SEGMENT.getPixelColorRaw(pixco[i]);
+        SEGMENT.setPixelColorRaw(pixco[i], col);
       }
     }
   }
-
 }
 
 // detect collisions in an array of particles and handle them
@@ -1770,15 +1679,6 @@ void ParticleSystem1D::updatePSpointers(bool isadvanced) {
   particleFlags = reinterpret_cast<PSparticleFlags1D *>(particles + numParticles); // pointer to particle flags
   sources = reinterpret_cast<PSsource1D *>(particleFlags + numParticles); // pointer to source(s)
   PSdataEnd = reinterpret_cast<uint8_t *>(sources + numSources);   // pointer to first available byte after the PS for FX additional data (already aligned to 4 byte boundary)
-#ifndef WLED_DISABLE_2D
-  // this looks like a nonsense
-  if(SEGMENT.is2D() && SEGMENT.map1D2D) {
-    framebuffer = reinterpret_cast<CRGBA *>(sources + numSources); // use local framebuffer for 1D->2D mapping
-    PSdataEnd = reinterpret_cast<uint8_t *>(framebuffer + SEGMENT.maxMappingLength()); // pointer to first available byte after the PS for FX additional data (still aligned to 4 byte boundary)
-  }
-  else
-#endif
-    framebuffer = SEGMENT.getPixels();  // use segment buffer for standard 1D rendering
 
   if (isadvanced) {
     advPartProps = reinterpret_cast<PSadvancedParticle1D *>(PSdataEnd);

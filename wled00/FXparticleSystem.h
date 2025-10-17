@@ -158,23 +158,22 @@ public:
   void applyFriction(PSparticle &part, const int32_t coefficient); // apply friction to specific particle
   void applyFriction(const int32_t coefficient); // apply friction to all used particles
   void pointAttractor(const uint32_t particleindex, PSparticle &attractor, const uint8_t strength, const bool swallow);
-  // set options  note: inlining the set function uses more flash so dont optimize
   void setUsedParticles(const uint8_t percentage);  // set the percentage of particles used in the system, 255=100%
-  void setCollisionHardness(const uint8_t hardness); // hardness for particle collisions (255 means full hard)
-  void setWallHardness(const uint8_t hardness); // hardness for bouncing on the wall if bounceXY is set
-  void setWallRoughness(const uint8_t roughness); // wall roughness randomizes wall collisions
   void setMatrixSize(const uint32_t x, const uint32_t y);
-  void setWrapX(const bool enable);
-  void setWrapY(const bool enable);
-  void setBounceX(const bool enable);
-  void setBounceY(const bool enable);
-  void setKillOutOfBounds(const bool enable); // if enabled, particles outside of matrix instantly die
-  void setColorByAge(const bool enable);
-  void setMotionBlur(const uint8_t bluramount); // note: motion blur can only be used if 'particlesize' is set to zero
-  void setSmearBlur(const uint8_t bluramount); // enable 2D smeared blurring of full frame
   void setParticleSize(const uint8_t size);
   void setGravity(const int8_t force = 8);
   void enableParticleCollisions(const bool enable, const uint8_t hardness = 255);
+  inline void setWallHardness(uint8_t hardness)      { wallHardness = hardness; } // wall roughness randomizes wall collisions
+  inline void setWallRoughness(uint8_t roughness)    { wallRoughness = roughness; } // hardness for bouncing on the wall if bounceXY is set
+  inline void setCollisionHardness(uint8_t hardness) { collisionHardness = (int)hardness + 1; } // hardness for particle collisions (255 means full hard)
+  inline void setWrapX(bool enable)                  { particlesettings.wrapX = enable; }
+  inline void setWrapY(bool enable)                  { particlesettings.wrapY = enable; }
+  inline void setBounceX(bool enable)                { particlesettings.bounceX = enable; }
+  inline void setBounceY(bool enable)                { particlesettings.bounceY = enable; }
+  inline void setKillOutOfBounds(bool enable)        { particlesettings.killoutofbounds = enable; } // if enabled, particles outside of matrix instantly die
+  inline void setColorByAge(bool enable)             { particlesettings.colorByAge = enable; }
+  inline void setMotionBlur(uint8_t bluramount)      { if (particlesize < 2) motionBlur = bluramount; } // only allow motion blurring on default particle sizes or advanced size (cannot combine motion blur with normal blurring used for particlesize, would require another buffer)
+  inline void setSmearBlur(uint8_t bluramount)       { smearBlur = bluramount; } // enable 2D smeared blurring of full frame
 
   PSparticle *particles; // pointer to particle array
   PSparticleFlags *particleFlags; // pointer to particle flags array
@@ -191,7 +190,7 @@ public:
 private:
   //rendering functions
   void render();
-  [[gnu::hot]] void renderParticle(const uint32_t particleindex, const CRGBA& color, const bool wrapX, const bool wrapY);
+  [[gnu::hot]] void renderParticle(const uint32_t particleindex, const CRGBA& color, uint8_t brightness, const bool wrapX, const bool wrapY);
   //paricle physics applied by system if flags are set
   void applyGravity(); // applies gravity to all particles
   void handleCollisions();
@@ -202,8 +201,8 @@ private:
   bool updateSize(PSadvancedParticle *advprops, PSsizeControl *advsize); // advanced size control
   void getParticleXYsize(PSadvancedParticle *advprops, PSsizeControl *advsize, uint32_t &xsize, uint32_t &ysize);
   [[gnu::hot]] void bounce(int8_t &incomingspeed, int8_t &parallelspeed, int32_t &position, const uint32_t maxposition); // bounce on a wall
+
   // note: variables that are accessed often are 32bit for speed
-  CRGBA *framebuffer; // frame buffer for rendering. note: using CRGBA as the buffer is slower, ESP compiler seems to optimize this better giving more consistent FPS
   PSsettings2D particlesettings; // settings used when updating particles (can also used by FX to move sources), do not edit properties directly, use functions above
   uint32_t numParticles;  // total number of particles allocated by this system
   uint32_t emitIndex; // index to count through particles to emit so searching for dead pixels is faster
@@ -212,7 +211,7 @@ private:
   uint32_t wallRoughness; // randomizes wall collisions
   uint32_t particleHardRadius; // hard surface radius of a particle, used for collision detection (32bit for speed)
   uint16_t collisionStartIdx; // particle array start index for collision detection
-  uint8_t fireIntesity = 0; // fire intensity, used for fire mode (flash use optimization, better than passing an argument to render function)
+  uint8_t fireIntesity; // fire intensity, used for fire mode (flash use optimization, better than passing an argument to render function)
   uint8_t forcecounter; // counter for globally applied forces
   uint8_t gforcecounter; // counter for global gravity
   int8_t gforce; // gravity strength, default is 8 (negative is allowed, positive is downwards)
@@ -332,18 +331,18 @@ public:
   void applyFriction(const int32_t coefficient); // apply friction to all used particles
   // set options
   void setUsedParticles(const uint8_t percentage); // set the percentage of particles used in the system, 255=100%
-  void setWallHardness(const uint8_t hardness); // hardness for bouncing on the wall if bounceXY is set
   void setSize(const uint32_t x); //set particle system size (= strip length)
-  void setWrap(const bool enable);
-  void setBounce(const bool enable);
-  void setKillOutOfBounds(const bool enable); // if enabled, particles outside of matrix instantly die
-  void setColorByAge(const bool enable);
-  void setColorByPosition(const bool enable);
-  void setMotionBlur(const uint8_t bluramount); // note: motion blur can only be used if 'particlesize' is set to zero
-  void setSmearBlur(const uint8_t bluramount); // enable 1D smeared blurring of full frame
   void setParticleSize(const uint8_t size); //size 0 = 1 pixel, size 1 = 2 pixels, is overruled if advanced particle is used
   void setGravity(int8_t force = 8);
   void enableParticleCollisions(bool enable, const uint8_t hardness = 255);
+  inline void setWallHardness(const uint8_t hardness) { wallHardness = hardness; }
+  inline void setWrap(const bool enable)              { particlesettings.wrap = enable; }
+  inline void setBounce(const bool enable)            { particlesettings.bounce = enable; }
+  inline void setKillOutOfBounds(const bool enable)   { particlesettings.killoutofbounds = enable; } // if enabled, particles outside of matrix instantly die
+  inline void setColorByAge(const bool enable)        { particlesettings.colorByAge = enable; }
+  inline void setColorByPosition(const bool enable)   { particlesettings.colorByPosition = enable; }
+  inline void setMotionBlur(const uint8_t bluramount) { if (particlesize < 2) motionBlur = bluramount; } // note: motion blur can only be used if 'particlesize' is set to zero
+  inline void setSmearBlur(const uint8_t bluramount)  { smearBlur = bluramount; } // enable 1D smeared blurring of full frame
 
   PSparticle1D *particles; // pointer to particle array
   PSparticleFlags1D *particleFlags; // pointer to particle flags array
@@ -359,7 +358,7 @@ public:
 private:
   //rendering functions
   void render(void);
-  [[gnu::hot]] void renderParticle(const uint32_t particleindex, const CRGBA &color, const bool wrap);
+  [[gnu::hot]] void renderParticle(const uint32_t particleindex, const CRGBA& color, uint8_t brightness, const bool wrap);
 
   //paricle physics applied by system if flags are set
   void applyGravity(); // applies gravity to all particles
@@ -369,9 +368,8 @@ private:
   //utility functions
   void updatePSpointers(const bool isadvanced); // update the data pointers to current segment data space
   //void updateSize(PSadvancedParticle *advprops, PSsizeControl *advsize); // advanced size control
-  [[gnu::hot]] void bounce(int8_t &incomingspeed, int8_t &parallelspeed, int32_t &position, const uint32_t maxposition); // bounce on a wall
+
   // note: variables that are accessed often are 32bit for speed
-  CRGBA *framebuffer; // frame buffer for rendering. note: using CRGBA as the buffer is slower, ESP compiler seems to optimize this better giving more consistent FPS
   PSsettings1D particlesettings; // settings used when updating particles
   uint32_t numParticles;  // total number of particles allocated by this system
   uint32_t emitIndex; // index to count through particles to emit so searching for dead pixels is faster

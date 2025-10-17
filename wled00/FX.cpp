@@ -6278,7 +6278,7 @@ uint16_t mode_particlevortex(void) {
     return mode_static(); // something went wrong, no data!
 
   PartSys->updateSystem(); // update system properties (dimensions and data pointers)
-  uint32_t spraycount = min(PartSys->numSources, (uint32_t)(1 + (SEGMENT.custom1 >> 5))); // number of sprays to display, 1-8
+  uint32_t spraycount = max(1U, min(PartSys->numSources, (uint32_t)(1 + (SEGMENT.custom1 >> 5)))); // number of sprays to display, 1-8
   #ifdef ESP8266
   for (i = 1; i < 4; i++) { // need static particles in the center to reduce blinking (would be black every other frame without this hack), just set them there fixed
     int partindex = (int)PartSys->usedParticles - (int)i;
@@ -6348,7 +6348,8 @@ uint16_t mode_particlevortex(void) {
       if (SEGMENT.call & 0x01) // every other frame, do not emit to save particles
       #endif
       PartSys->angleEmit(PartSys->sources[j], SEGENV.aux0 + angleoffset * j, (SEGMENT.intensity >> 2)+1);
-      j = (j + 1) % spraycount;
+      //j = (j + 1) % spraycount;
+      ++j %= spraycount;
     }
   }
   PartSys->update(); //update all particles and render to frame
@@ -6391,7 +6392,7 @@ uint16_t mode_particlefireworks(void) {
   PartSys->setWrapX(SEGMENT.check1);
   PartSys->setBounceY(SEGMENT.check2);
   PartSys->setGravity(map(SEGMENT.custom3, 0, 31, SEGMENT.check2 ? 1 : 0, 10)); // if bounded, set gravity to minimum of 1 or they will bounce at top
-  PartSys->setMotionBlur(map(SEGMENT.custom2, 0, 255, 0, 245)); // anable motion blur
+  PartSys->setMotionBlur(map(SEGMENT.custom2, 0, 255, 0, 245)); // enable motion blur
 
   // update the rockets, set the speed state
   for (uint32_t j = 0; j < numRockets; j++) {
@@ -6448,7 +6449,7 @@ uint16_t mode_particlefireworks(void) {
       emitparticles = hw_random16(SEGMENT.intensity >> 2) + (SEGMENT.intensity >> 2) + 5; // defines the size of the explosion
       #endif
 
-      if (random16() & 1) { // 50% chance for circular explosion
+      if (hw_random16() & 1) { // 50% chance for circular explosion
         circularexplosion = true;
         speed = 2 + hw_random16(3) + ((SEGMENT.intensity >> 6));
         currentspeed = speed;
@@ -6597,7 +6598,7 @@ uint16_t mode_particlefire(void) {
 
   PartSys->updateSystem(); // update system properties (dimensions and data pointers)
   PartSys->setWrapX(SEGMENT.check2);
-  PartSys->setMotionBlur(SEGMENT.check1 * 170); // anable/disable motion blur
+  PartSys->setMotionBlur(SEGMENT.check1 * 170); // enable/disable motion blur
   PartSys->setSmearBlur(!SEGMENT.check1 * 60);  // enable smear blur if motion blur is not enabled
 
   uint32_t firespeed = max((uint8_t)100, SEGMENT.speed); //limit speed to 100 minimum, reduce frame rate to make it slower (slower speeds than 100 do not look nice)
@@ -6719,7 +6720,7 @@ uint16_t mode_particlepit(void) {
       if (PartSys->particles[i].ttl == 0) { // find a dead particle
         // emit particle at random position over the top of the matrix (random16 is not random enough)
         PartSys->particles[i].ttl = 1500 - (SEGMENT.speed << 2) + hw_random16(500); // if speed is higher, make them die sooner
-        PartSys->particles[i].x = hw_random(PartSys->maxX); //random(PartSys->maxX >> 1) + (PartSys->maxX >> 2);
+        PartSys->particles[i].x = hw_random16(PartSys->maxX); //random(PartSys->maxX >> 1) + (PartSys->maxX >> 2);
         PartSys->particles[i].y = (PartSys->maxY << 1); // particles appear somewhere above the matrix, maximum is double the height
         PartSys->particles[i].vx = (int16_t)hw_random16(SEGMENT.speed >> 1) - (SEGMENT.speed >> 2); // side speed is +/-
         PartSys->particles[i].vy = map(SEGMENT.speed, 0, 255, -5, -100); // downward speed
@@ -7376,7 +7377,7 @@ uint16_t mode_particleblobs(void) {
     //PartSys->particles[i].perpetual = SEGMENT.check2; //infinite life if set
     if (PartSys->particles[i].ttl == 0) { // find dead particle, renitialize
       PartSys->particles[i].ttl = 300 + hw_random16(((uint16_t)SEGMENT.custom2 << 3) + 100);
-      PartSys->particles[i].x = hw_random(PartSys->maxX);
+      PartSys->particles[i].x = hw_random16(PartSys->maxX);
       PartSys->particles[i].y = hw_random16(PartSys->maxY);
       PartSys->particles[i].hue = hw_random16(); // set random color
       PartSys->particleFlags[i].collide = true; // enable collision for particle
@@ -7629,7 +7630,7 @@ static const char _data_FX_MODE_PS1DDRIP[] PROGMEM = "PS DripDrop@Speed,!,Splash
 
 
 /*
-  Particle Replacement for "Bbouncing Balls by Aircoookie"
+  Particle Replacement for "Bouncing Balls by Aircoookie"
   Also replaces rolling balls and juggle (and maybe popcorn)
   Uses palette for particle color
   by DedeHai (Damian Schneider)
