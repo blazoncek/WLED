@@ -215,7 +215,6 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_COLORTWINKLE            74
 #define FX_MODE_LAKE                    75
 #define FX_MODE_METEOR                  76
-#define FX_MODE_METEOR_SMOOTH           FX_MODE_METEOR
 //#define FX_MODE_METEOR_SMOOTH           77  // candidate for removal (use Meteor with check 1)
 #define FX_MODE_RAILWAY                 78
 #define FX_MODE_RIPPLE                  79
@@ -253,10 +252,10 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_CHUNCHUN               111
 #define FX_MODE_DANCING_SHADOWS        112
 #define FX_MODE_WASHING_MACHINE        113
-#define FX_MODE_2DPLASMAROTOZOOM       114 // was Candy Cane prior to 0.14 (use Chase 2)
+#define FX_MODE_2DPLASMAROTOZOOM       114  // was Candy Cane prior to 0.14 (use Chase 2)
 #define FX_MODE_BLENDS                 115
 #define FX_MODE_TV_SIMULATOR           116
-//#define FX_MODE_DYNAMIC_SMOOTH         117 // candidate for removal (check3 in dynamic)
+//#define FX_MODE_DYNAMIC_SMOOTH         117  // candidate for removal (check3 in dynamic)
 // new 0.14 2D effects
 #define FX_MODE_2DSPACESHIPS           118 //gap fill
 #define FX_MODE_2DCRAZYBEES            119 //gap fill
@@ -492,9 +491,11 @@ class Segment {
 
     inline CRGBA *getPixels() const                           { return pixels; }
     inline void  setPixelColorRaw(unsigned i, CRGBA c) const  { pixels[i] = c; }
+    inline void  addPixelColorRaw(unsigned i, CRGBA c) const  { pixels[i] += c; }
     inline CRGBA getPixelColorRaw(unsigned i) const           { return pixels[i]; };
   #ifndef WLED_DISABLE_2D
     inline void  setPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const  { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)] = c; }
+    inline void  addPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const  { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)] += c; }
     inline CRGBA getPixelColorXYRaw(unsigned x, unsigned y) const           { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; return pixels[XY(x,y)]; };
   #endif
     void resetIfRequired();         // sets all SEGENV variables to 0 and clears data buffer
@@ -557,6 +558,7 @@ class Segment {
       // allocate render buffer (always entire segment), prefer IRAM/PSRAM. Note: impact on FPS with PSRAM buffer is low (<2% with QSPI PSRAM) on S2/S3
       pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
       if (!pixels) {
+        //clear();
         DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
         extern byte errorFlag;
         errorFlag = ERR_NORAM_PX;
@@ -655,7 +657,12 @@ class Segment {
     [[gnu::hot]] bool isPixelClipped(int i) const;
     [[gnu::hot]] CRGBA getPixelColor(int i) const;
     // 1D support functions (some implement 2D as well)
-    void blur(uint8_t, bool smear = false) const;
+    #ifdef WLED_DISABLE_2D
+    inline void blur(uint8_t amount, bool smear = false) const { blur1D(amount, smear); }
+    #else
+    void blur(uint8_t amount, bool smear = false) const;
+    #endif
+    void blur1D(uint8_t amount, bool smear = false) const;
     void clear() const { fill(BLACK); } // clear segment
     void fill(CRGBA c) const;
     void fade_out(uint8_t r) const;
