@@ -51,18 +51,59 @@
   }
   return true; // particle is in bounds
 }
+
+// blur a 1D/2D buffer, sub-size blurring can be done using start and size
+// for speed, 32bit variables are used, make sure to limit them to 8bit (0-255) or result is undefined
+// to blur a subset of the buffer, change the size and set start to the desired starting coordinates
+// interleave is used for bluring 2D buffer (vertically)
+static void blur(CRGBA *colorbuffer, uint32_t size, uint32_t blur, uint32_t start = 0, uint32_t interleave = 0) {
+  CRGBA seeppart, carryover(BLACK);
+  uint32_t seep = blur >> 1;
+  uint32_t stop = start + size;
+  for (uint32_t x = start, index = start; x < stop; ++x, ++index += interleave) {
+    seeppart = colorbuffer[index].scale8(seep); // scale it and seep to neighbours
+    if (index > 0) {
+      colorbuffer[index-1] += seeppart;
+      colorbuffer[index] += carryover; // is black on first pass
+    } else {
+      colorbuffer[index].nscale8(255-seep);
+    }
+    carryover = seeppart;
+  }
+}
+/*
+// blur a matrix in x and y direction, blur can be asymmetric in x and y
+// for speed, 1D array and 32bit variables are used, make sure to limit them to 8bit (0-255) or result is undefined
+// to blur a subset of the buffer, change the xsize/ysize and set xstart/ystart to the desired starting coordinates (default start is 0/0)
+// subset blurring only works on 10x10 buffer (single particle rendering), if other sizes are needed, buffer width must be passed as parameter
+static void blur2D(CRGBA *colorbuffer, uint32_t xsize, uint32_t ysize, uint32_t xblur, uint32_t yblur, uint32_t xstart, uint32_t ystart, uint32_t width = 10) {
+  // first and last row are always black in first pass of particle rendering
+  ystart++;
+  ysize--;
+  for (uint32_t y = ystart; y < ystart + ysize; y++) {
+    blur(colorbuffer+(y*width), xsize, xblur, xstart, 0);
+  }
+  // first and last row are now smeared
+  ystart--;
+  ysize++;
+  for (uint32_t x = xstart; x < xstart + xsize; x++) {
+    blur(colorbuffer+x, ysize, yblur, ystart, width);
+  }
+}
+*/
 #endif
 
 #ifndef WLED_DISABLE_PARTICLESYSTEM2D
-ParticleSystem2D::ParticleSystem2D(uint32_t width, uint32_t height, uint32_t numberofparticles, uint32_t numberofsources, bool isadvanced, bool sizecontrol) {
+ParticleSystem2D::ParticleSystem2D(uint32_t numberofparticles, uint32_t numberofsources, bool isadvanced, bool sizecontrol) {
   PSPRINTLN("\n ParticleSystem2D constructor");
   numSources = numberofsources; // number of sources allocated in init
   numParticles = numberofparticles; // number of particles allocated in init
   usedParticles = numParticles; // use all particles by default
   advPartProps = nullptr; //make sure we start out with null pointers (just in case memory was not cleared)
   advPartSize = nullptr;
-  setMatrixSize(width, height);
-  updatePSpointers(isadvanced, sizecontrol); // set the particle and sources pointer (call this before accessing sprays or particles)
+  isAdvanced = isadvanced;
+  sizeControl = sizecontrol;
+  updatePSpointers();
   setWallHardness(255); // set default wall hardness to max
   setWallRoughness(0); // smooth walls by default
   setGravity(0); //gravity disabled by default
@@ -668,7 +709,15 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
         bitshift = 1;
       rendersize += 2;
       offset--;
-      blur2D(renderbuffer, rendersize, rendersize, xsize << bitshift, ysize << bitshift, offset, offset, true);
+      // blur rows; first and last row are always black in first pass of particle rendering
+      for (uint32_t y = offset+1; y < offset + ysize - 1; y++) {
+        blur(renderbuffer+(y*10), rendersize, xsize << bitshift, offset, 0);
+      }
+      // blur columns (interleave = 10); first and last row are now smeared
+      for (uint32_t x = offset; x < offset + xsize; x++) {
+        blur(renderbuffer+x, rendersize, ysize << bitshift, offset, 10);
+      }
+      //blur2D(renderbuffer, rendersize, rendersize, xsize << bitshift, ysize << bitshift, offset, offset, 10);
       xsize = xsize > 64 ? xsize - 64 : 0;
       ysize = ysize > 64 ? ysize - 64 : 0;
     }
@@ -879,7 +928,8 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::collideParticles(PSparti
     particle2.vx += ximpulse;
     particle2.vy += yimpulse;
 
-    if (collisionHardness < PS_P_MINSURFACEHARDNESS && (SEGMENT.call & 0x07) == 0) { // if particles are soft, they become 'sticky' i.e. apply some friction (they do pile more nicely and stop sloshing around)
+    // if particles are soft, they become 'sticky' i.e. apply some friction (they do pile more nicely and stop sloshing around)
+    if (collisionHardness < PS_P_MINSURFACEHARDNESS && (SEGMENT.call & 0x07) == 0) {
       const uint32_t coeff = collisionHardness + (255 - PS_P_MINSURFACEHARDNESS);
       // Note: could call applyFriction, but this is faster and speed is key here
       #if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(ESP8266) // use bitshifts with rounding instead of division (2x faster)
@@ -943,17 +993,17 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::collideParticles(PSparti
 
 // update size and pointers (memory location and size can change dynamically)
 // note: do not access the PS class in FX befor running this function (or it messes up SEGENV.data)
-void ParticleSystem2D::updateSystem(void) {
+void ParticleSystem2D::updateSystem(uint32_t w, uint32_t h) {
   //PSPRINTLN("updateSystem2D");
-  setMatrixSize(SEGMENT.vWidth(), SEGMENT.vHeight());
-  updatePSpointers(advPartProps != nullptr, advPartSize != nullptr); // update pointers to PS data, also updates availableParticles
+  setMatrixSize(w, h);
+  updatePSpointers(); // update pointers to PS data, also updates availableParticles
   //PSPRINTLN("\n END update System2D, running FX...");
 }
 
 // set the pointers for the class (this only has to be done once and not on every FX call, only the class pointer needs to be reassigned to SEGENV.data every time)
 // function returns the pointer to the next byte available for the FX (if it assigned more memory for other stuff using the above allocate function)
 // FX handles the PSsources, need to tell this function how many there are
-void ParticleSystem2D::updatePSpointers(bool isadvanced, bool sizecontrol) {
+void ParticleSystem2D::updatePSpointers() {
   //PSPRINTLN("updatePSpointers");
   // Note on memory alignment:
   // a pointer MUST be 4 byte aligned. sizeof() in a struct/class is always aligned to the largest element. if it contains a 32bit, it will be padded to 4 bytes, 16bit is padded to 2byte alignment.
@@ -963,15 +1013,15 @@ void ParticleSystem2D::updatePSpointers(bool isadvanced, bool sizecontrol) {
   particleFlags = reinterpret_cast<PSparticleFlags *>(particles + numParticles); // pointer to particle flags
   sources = reinterpret_cast<PSsource *>(particleFlags + numParticles); // pointer to source(s) at data+sizeof(ParticleSystem2D)
   PSdataEnd = reinterpret_cast<uint8_t *>(sources + numSources); // pointer to first available byte after the PS for FX additional data (already aligned to 4 byte boundary)
-  if (isadvanced) {
+  if (isAdvanced) {
     advPartProps = reinterpret_cast<PSadvancedParticle *>(PSdataEnd);
     PSdataEnd = reinterpret_cast<uint8_t *>(advPartProps + numParticles);
-    if (sizecontrol) {
+    if (sizeControl) {
       advPartSize = reinterpret_cast<PSsizeControl *>(PSdataEnd);
       PSdataEnd = reinterpret_cast<uint8_t *>(advPartSize + numParticles);
     }
   }
-#ifdef DEBUG_PS
+  #ifdef WLED_DEBUG_PS
   Serial.printf_P(PSTR(" particles %p "), particles);
   Serial.printf_P(PSTR(" sources %p "), sources);
   Serial.printf_P(PSTR(" adv. props %p "), advPartProps);
@@ -979,56 +1029,6 @@ void ParticleSystem2D::updatePSpointers(bool isadvanced, bool sizecontrol) {
   Serial.printf_P(PSTR("end %p\n"), PSdataEnd);
   #endif
 
-}
-
-// blur a matrix in x and y direction, blur can be asymmetric in x and y
-// for speed, 1D array and 32bit variables are used, make sure to limit them to 8bit (0-255) or result is undefined
-// to blur a subset of the buffer, change the xsize/ysize and set xstart/ystart to the desired starting coordinates (default start is 0/0)
-// subset blurring only works on 10x10 buffer (single particle rendering), if other sizes are needed, buffer width must be passed as parameter
-void blur2D(CRGBA *colorbuffer, uint32_t xsize, uint32_t ysize, uint32_t xblur, uint32_t yblur, uint32_t xstart, uint32_t ystart, bool isparticle) {
-  CRGBA seeppart, carryover;
-  uint32_t seep = xblur >> 1;
-  uint32_t width = xsize; // width of the buffer, used to calculate the index of the pixel
-
-  if (isparticle) { // first and last row are always black in first pass of particle rendering
-    ystart++;
-    ysize--;
-    width = 10; // buffer size is 10x10
-  }
-
-  for (uint32_t y = ystart; y < ystart + ysize; y++) {
-    carryover = CRGBA(BLACK);
-    uint32_t indexXY = xstart + y * width;
-    for (uint32_t x = xstart; x < xstart + xsize; x++) {
-      seeppart = colorbuffer[indexXY].scale8(seep); // scale it and seep to neighbours
-      if (x > 0) {
-        colorbuffer[indexXY - 1].add(seeppart, true);
-        colorbuffer[indexXY].add(carryover, true);
-      }
-      carryover = seeppart;
-      indexXY++; // next pixel in x direction
-    }
-  }
-
-  if (isparticle) { // first and last row are now smeared
-    ystart--;
-    ysize++;
-  }
-
-  seep = yblur >> 1;
-  for (uint32_t x = xstart; x < xstart + xsize; x++) {
-    carryover = CRGBA(BLACK);
-    uint32_t indexXY = x + ystart * width;
-    for (uint32_t y = ystart; y < ystart + ysize; y++) {
-      seeppart = colorbuffer[indexXY].scale8(seep); // scale it and seep to neighbours
-      if (y > 0) {
-        colorbuffer[indexXY - width].add(seeppart, true);
-        colorbuffer[indexXY].add(carryover, true);
-      }
-      carryover = seeppart;
-      indexXY += width; // next pixel in y direction
-    }
-  }
 }
 
 //non class functions to use for initialization
@@ -1075,8 +1075,8 @@ bool allocateParticleSystemMemory2D(uint32_t numparticles, uint32_t numsources, 
 bool initParticleSystem2D(ParticleSystem2D *&PartSys, uint32_t requestedsources, uint32_t additionalbytes, bool advanced, bool sizecontrol) {
   PSPRINT("PS 2D init ");
   if (!strip.isMatrix) return false; // only for 2D
-  uint32_t cols = SEGMENT.virtualWidth();
-  uint32_t rows = SEGMENT.virtualHeight();
+  uint32_t cols = SEGMENT.vWidth();
+  uint32_t rows = SEGMENT.vHeight();
   uint32_t pixels = cols * rows;
 
   uint32_t numparticles = calculateNumberOfParticles2D(pixels, advanced, sizecontrol);
@@ -1084,7 +1084,7 @@ bool initParticleSystem2D(ParticleSystem2D *&PartSys, uint32_t requestedsources,
   PSPRINTLN(" request numparticles:" + String(numparticles));
   uint32_t numsources = calculateNumberOfSources2D(pixels, requestedsources);
   bool allocsuccess = false;
-  while(numparticles >= 4) { // make sure we have at least 4 particles or quit
+  while (numparticles >= 4) { // make sure we have at least 4 particles or quit
     if (allocateParticleSystemMemory2D(numparticles, numsources, advanced, sizecontrol, additionalbytes)) {
       PSPRINTLN(F("PS 2D alloc succeeded"));
       allocsuccess = true;
@@ -1098,7 +1098,8 @@ bool initParticleSystem2D(ParticleSystem2D *&PartSys, uint32_t requestedsources,
     return false; // allocation failed
   }
 
-  PartSys = new (SEGENV.data) ParticleSystem2D(cols, rows, numparticles, numsources, advanced, sizecontrol); // particle system constructor
+  PartSys = new (SEGENV.data) ParticleSystem2D(numparticles, numsources, advanced, sizecontrol); // particle system constructor
+  PartSys->setMatrixSize(cols, rows);
 
   PSPRINTLN(F("2D PS init done"));
   return true;
@@ -1112,14 +1113,13 @@ bool initParticleSystem2D(ParticleSystem2D *&PartSys, uint32_t requestedsources,
 ////////////////////////
 #ifndef WLED_DISABLE_PARTICLESYSTEM1D
 
-ParticleSystem1D::ParticleSystem1D(uint32_t length, uint32_t numberofparticles, uint32_t numberofsources, bool isadvanced) {
+ParticleSystem1D::ParticleSystem1D(uint32_t numberofparticles, uint32_t numberofsources, bool isadvanced) {
   numSources = numberofsources;
   numParticles = numberofparticles; // number of particles allocated in init
   usedParticles = numParticles; // use all particles by default
   advPartProps = nullptr; //make sure we start out with null pointers (just in case memory was not cleared)
-  //advPartSize = nullptr;
-  setSize(length);
-  updatePSpointers(isadvanced); // set the particle and sources pointer (call this before accessing sprays or particles)
+  isAdvanced = isadvanced;
+  updatePSpointers();
   setWallHardness(255); // set default wall hardness to max
   setGravity(0); //gravity disabled by default
   setParticleSize(0); // 1 pixel size by default
@@ -1461,7 +1461,7 @@ void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uin
         bitshift = 1;
       rendersize += 2;
       offset--;
-      blur1D(renderbuffer, rendersize, size << bitshift, offset);
+      blur(renderbuffer, rendersize, size << bitshift, offset);
       size = size > 64 ? size - 64 : 0;
     }
 
@@ -1646,15 +1646,15 @@ void __attribute__((optimize("-O2"))) ParticleSystem1D::collideParticles(PSparti
 
 // update size and pointers (memory location and size can change dynamically)
 // note: do not access the PS class in FX befor running this function (or it messes up SEGENV.data)
-void ParticleSystem1D::updateSystem(void) {
-  setSize(SEGMENT.vLength()); // update size
-  updatePSpointers(advPartProps != nullptr);
+void ParticleSystem1D::updateSystem(uint32_t len) {
+  setSize(len); // update size
+  updatePSpointers();
 }
 
 // set the pointers for the class (this only has to be done once and not on every FX call, only the class pointer needs to be reassigned to SEGENV.data every time)
 // function returns the pointer to the next byte available for the FX (if it assigned more memory for other stuff using the above allocate function)
 // FX handles the PSsources, need to tell this function how many there are
-void ParticleSystem1D::updatePSpointers(bool isadvanced) {
+void ParticleSystem1D::updatePSpointers() {
   // Note on memory alignment:
   // a pointer MUST be 4 byte aligned. sizeof() in a struct/class is always aligned to the largest element. if it contains a 32bit, it will be padded to 4 bytes, 16bit is padded to 2byte alignment.
   // The PS is aligned to 4 bytes, a PSparticle is aligned to 2 and a struct containing only byte sized variables is not aligned at all and may need to be padded when dividing the memoryblock.
@@ -1663,8 +1663,7 @@ void ParticleSystem1D::updatePSpointers(bool isadvanced) {
   particleFlags = reinterpret_cast<PSparticleFlags1D *>(particles + numParticles); // pointer to particle flags
   sources = reinterpret_cast<PSsource1D *>(particleFlags + numParticles); // pointer to source(s)
   PSdataEnd = reinterpret_cast<uint8_t *>(sources + numSources);   // pointer to first available byte after the PS for FX additional data (already aligned to 4 byte boundary)
-
-  if (isadvanced) {
+  if (isAdvanced) {
     advPartProps = reinterpret_cast<PSadvancedParticle1D *>(PSdataEnd);
     PSdataEnd = reinterpret_cast<uint8_t *>(advPartProps + numParticles); // since numParticles is a multiple of 4, this is always aligned to 4 bytes. No need to add padding bytes here
   }
@@ -1727,7 +1726,7 @@ bool initParticleSystem1D(ParticleSystem1D *&PartSys, const uint32_t requestedso
   uint32_t numparticles = calculateNumberOfParticles1D(fractionofparticles, advanced);
   uint32_t numsources = calculateNumberOfSources1D(requestedsources);
   bool allocsuccess = false;
-  while(numparticles >= 10) { // make sure we have at least 10 particles or quit
+  while (numparticles >= 10) { // make sure we have at least 10 particles or quit
     if (allocateParticleSystemMemory1D(numparticles, numsources, advanced, additionalbytes)) {
       PSPRINT(F("PS 1D alloc succeeded"));
       allocsuccess = true;
@@ -1740,25 +1739,9 @@ bool initParticleSystem1D(ParticleSystem1D *&PartSys, const uint32_t requestedso
     PSPRINTLN(F("PS init failed: memory depleted"));
     return false; // allocation failed
   }
-  PartSys = new (SEGENV.data) ParticleSystem1D(SEGMENT.virtualLength(), numparticles, numsources, advanced); // particle system constructor
-  return true;
-}
+  PartSys = new (SEGENV.data) ParticleSystem1D(numparticles, numsources, advanced); // particle system constructor
+  PartSys->setSize(SEGLEN);
 
-// blur a 1D buffer, sub-size blurring can be done using start and size
-// for speed, 32bit variables are used, make sure to limit them to 8bit (0-255) or result is undefined
-// to blur a subset of the buffer, change the size and set start to the desired starting coordinates
-void blur1D(CRGBA *colorbuffer, uint32_t size, uint32_t blur, uint32_t start)
-{
-  CRGBA seeppart, carryover;
-  uint32_t seep = blur >> 1;
-  carryover =  BLACK;
-  for (uint32_t x = start; x < start + size; x++) {
-    seeppart = colorbuffer[x].scale8(seep); // scale it and seep to neighbours
-    if (x > 0) {
-      colorbuffer[x-1].add(seeppart, true);
-      colorbuffer[x].add(carryover, true); // is black on first pass
-    }
-    carryover = seeppart;
-  }
+  return true;
 }
 #endif // WLED_DISABLE_PARTICLESYSTEM1D

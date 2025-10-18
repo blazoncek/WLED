@@ -137,11 +137,11 @@ typedef struct {
 // class uses approximately 60 bytes
 class ParticleSystem2D {
 public:
-  ParticleSystem2D(const uint32_t width, const uint32_t height, const uint32_t numberofparticles, const uint32_t numberofsources, const bool isadvanced = false,  const bool sizecontrol = false); // constructor
+  ParticleSystem2D(const uint32_t numberofparticles, const uint32_t numberofsources, const bool isadvanced = false,  const bool sizecontrol = false); // constructor
   // note: memory is allcated in the FX function, no deconstructor needed
   void update(void); //update the particles according to set options and render to the matrix
   void updateFire(const uint8_t intensity, const bool renderonly); // update function for fire, if renderonly is set, particles are not updated (required to fix transitions with frameskips)
-  void updateSystem(void); // call at the beginning of every FX, updates pointers and dimensions
+  void updateSystem(uint32_t w, uint32_t h); // call at the beginning of every FX, updates pointers and dimensions
   void particleMoveUpdate(PSparticle &part, PSparticleFlags &partFlags, PSsettings2D *options = NULL, PSadvancedParticle *advancedproperties = NULL); // move function
   // particle emitters
   int32_t sprayEmit(const PSsource &emitter);
@@ -197,7 +197,7 @@ private:
   [[gnu::hot]] void collideParticles(PSparticle &particle1, PSparticle &particle2, const int32_t dx, const int32_t dy, const uint32_t collDistSq);
   void fireParticleupdate();
   //utility functions
-  void updatePSpointers(const bool isadvanced, const bool sizecontrol); // update the data pointers to current segment data space
+  void updatePSpointers(); // update the data pointers to current segment data space
   bool updateSize(PSadvancedParticle *advprops, PSsizeControl *advsize); // advanced size control
   void getParticleXYsize(PSadvancedParticle *advprops, PSsizeControl *advsize, uint32_t &xsize, uint32_t &ysize);
   [[gnu::hot]] void bounce(int8_t &incomingspeed, int8_t &parallelspeed, int32_t &position, const uint32_t maxposition); // bounce on a wall
@@ -219,9 +219,10 @@ private:
   uint8_t particlesize; // global particle size, 0 = 1 pixel, 1 = 2 pixels, 255 = 10 pixels (note: this is also added to individual sized particles, set to 0 or 1 for standard advanced particle rendering)
   uint8_t motionBlur; // motion blur, values > 100 gives smoother animations. Note: motion blurring does not work if particlesize is > 0
   uint8_t smearBlur; // 2D smeared blurring of full frame
+  bool isAdvanced;
+  bool sizeControl;
 };
 
-void blur2D(CRGBA *colorbuffer, const uint32_t xsize, uint32_t ysize, const uint32_t xblur, const uint32_t yblur, const uint32_t xstart = 0, uint32_t ystart = 0, const bool isparticle = false);
 // initialization functions (not part of class)
 bool initParticleSystem2D(ParticleSystem2D *&PartSys, const uint32_t requestedsources, const uint32_t additionalbytes = 0, const bool advanced = false, const bool sizecontrol = false);
 uint32_t calculateNumberOfParticles2D(const uint32_t pixels, const bool advanced, const bool sizecontrol);
@@ -317,10 +318,10 @@ typedef struct {
 class ParticleSystem1D
 {
 public:
-  ParticleSystem1D(const uint32_t length, const uint32_t numberofparticles, const uint32_t numberofsources, const bool isadvanced = false); // constructor
+  ParticleSystem1D(const uint32_t numberofparticles, const uint32_t numberofsources, const bool isadvanced = false); // constructor
   // note: memory is allcated in the FX function, no deconstructor needed
   void update(void); //update the particles according to set options and render to the matrix
-  void updateSystem(void); // call at the beginning of every FX, updates pointers and dimensions
+  void updateSystem(uint32_t len); // call at the beginning of every FX, updates pointers and dimensions
   // particle emitters
   int32_t sprayEmit(const PSsource1D &emitter);
   void particleMoveUpdate(PSparticle1D &part, PSparticleFlags1D &partFlags, PSsettings1D *options = NULL, PSadvancedParticle1D *advancedproperties = NULL); // move function
@@ -366,7 +367,7 @@ private:
   [[gnu::hot]] void collideParticles(PSparticle1D &particle1, const PSparticleFlags1D &particle1flags, PSparticle1D &particle2, const PSparticleFlags1D &particle2flags, const int32_t dx, const uint32_t dx_abs, const uint32_t collisiondistance);
 
   //utility functions
-  void updatePSpointers(const bool isadvanced); // update the data pointers to current segment data space
+  void updatePSpointers(); // update the data pointers to current segment data space
   //void updateSize(PSadvancedParticle *advprops, PSsizeControl *advsize); // advanced size control
 
   // note: variables that are accessed often are 32bit for speed
@@ -384,11 +385,11 @@ private:
   uint8_t particlesize; // global particle size, 0 = 1 pixel, 1 = 2 pixels, is overruled by advanced particle size
   uint8_t motionBlur; // enable motion blur, values > 100 gives smoother animations
   uint8_t smearBlur; // smeared blurring of full frame
+  bool isAdvanced;
 };
 
 bool initParticleSystem1D(ParticleSystem1D *&PartSys, const uint32_t requestedsources, const uint8_t fractionofparticles = 255, const uint32_t additionalbytes = 0, const bool advanced = false);
 uint32_t calculateNumberOfParticles1D(const uint32_t fraction, const bool isadvanced);
 uint32_t calculateNumberOfSources1D(const uint32_t requestedsources);
 bool allocateParticleSystemMemory1D(const uint32_t numparticles, const uint32_t numsources, const bool isadvanced, const uint32_t additionalbytes);
-void blur1D(CRGBA *colorbuffer, uint32_t size, uint32_t blur, uint32_t start);
 #endif // WLED_DISABLE_PARTICLESYSTEM1D

@@ -1760,7 +1760,7 @@ uint16_t mode_particleGEQ(void) {
 
   uint32_t i;
   // set particle system properties
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   PartSys->setWrapX(SEGMENT.check1);
   PartSys->setBounceX(SEGMENT.check2);
   PartSys->setBounceY(SEGMENT.check3);
@@ -1843,7 +1843,7 @@ uint16_t mode_particlecenterGEQ(void) {
   if (PartSys == nullptr)
     return mode_static(); // something went wrong, no data!
 
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   numSprays = min(PartSys->numSources, (uint32_t)NUMBEROFSOURCES);
 
   simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
@@ -1907,7 +1907,7 @@ uint16_t mode_particle1DGEQ(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   numSources = PartSys->numSources;
   PartSys->setMotionBlur(SEGMENT.custom2); // anable motion blur
 
@@ -1981,7 +1981,7 @@ uint16_t mode_particle1DsonicStream(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   PartSys->setMotionBlur(20 + (SEGMENT.custom2 >> 1)); // anable motion blur
   PartSys->setSmearBlur(200); // smooth out the edges
   PartSys->sources[0].v = 5 + (SEGMENT.speed >> 2);
@@ -2080,7 +2080,7 @@ uint16_t mode_particle1DsonicBoom(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   PartSys->setMotionBlur(180 * SEGMENT.check3);
   PartSys->setSmearBlur(64 * SEGMENT.check3);
   PartSys->sources[0].var = map(SEGMENT.speed, 0, 255, 10, 127);

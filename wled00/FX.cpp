@@ -20,7 +20,7 @@
     #endif
   #endif
 #else
-  #define WLED_PS_DONT_REPLACE_FX
+  #undef WLED_PS_REPLACE_FX
 #endif
 
 #define IBN 5100
@@ -698,6 +698,7 @@ uint16_t mode_android(void) {
 static const char _data_FX_MODE_ANDROID[] PROGMEM = "Android@!,Width;!,!;!;;m12=1"; //vertical
 
 
+#if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM1D)
 /*
  * color chase function.
  * color1 = background color
@@ -779,6 +780,7 @@ uint16_t mode_chase() {
   return FRAMETIME;
 }
 static const char _data_FX_MODE_CHASE[] PROGMEM = "Chase@!,Width,,,,Rainbow Bg,Runner,Random;!,!,!;!";
+#endif
 
 
 
@@ -3061,6 +3063,7 @@ uint16_t mode_candle() {
 static const char _data_FX_MODE_CANDLE[] PROGMEM = "Candle@!,!,,,,,,Multi;!,!;!;01;sx=96,ix=224,pal=0,o3=1";
 
 
+#if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM1D)
 /*
 / Fireworks in starburst effect
 / based on the video: https://www.reddit.com/r/arduino/comments/c3sd46/i_made_this_fireworks_effect_for_my_led_strips/
@@ -3428,6 +3431,7 @@ uint16_t mode_drip(void)
   return FRAMETIME;
 }
 static const char _data_FX_MODE_DRIP[] PROGMEM = "Drip@Gravity,# of drips;!,!;;12;m12=1"; //bar
+#endif
 
 
 /*
@@ -5568,6 +5572,8 @@ uint16_t mode_2Dcrazybees(void) {
 static const char _data_FX_MODE_2DCRAZYBEES[] PROGMEM = "Crazy Bees@!,Blur;;;2";
 #undef MAX_BEES
 
+
+#if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM2D)
 /////////////////////////
 //     2D Ghost Rider  //
 /////////////////////////
@@ -5656,6 +5662,7 @@ uint16_t mode_2Dghostrider(void) {
 }
 static const char _data_FX_MODE_2DGHOSTRIDER[] PROGMEM = "Ghost Rider@Fade rate,Blur;;!;2;pal=35";
 #undef LIGHTERS_AM
+
 
 ////////////////////////////
 //     2D Floating Blobs  //
@@ -5755,6 +5762,7 @@ uint16_t mode_2Dfloatingblobs(void) {
 }
 static const char _data_FX_MODE_2DBLOBS[] PROGMEM = "Blobs@!,# blobs,Blur,Trail;!;!;2;c1=8";
 #undef MAX_BLOBS
+#endif
 
 
 ////////////////////////////
@@ -6277,7 +6285,7 @@ uint16_t mode_particlevortex(void) {
   if (PartSys == nullptr)
     return mode_static(); // something went wrong, no data!
 
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   uint32_t spraycount = max(1U, min(PartSys->numSources, (uint32_t)(1 + (SEGMENT.custom1 >> 5)))); // number of sprays to display, 1-8
   #ifdef ESP8266
   for (i = 1; i < 4; i++) { // need static particles in the center to reduce blinking (would be black every other frame without this hack), just set them there fixed
@@ -6358,6 +6366,11 @@ uint16_t mode_particlevortex(void) {
 #undef NUMBEROFSOURCES
 static const char _data_FX_MODE_PARTICLEVORTEX[] PROGMEM = "PS Vortex@Rotation Speed,Particle Speed,Arms,Flip,Nozzle,Smear,Direction,Random Flip;;!;2;pal=27,c1=200,c2=0,c3=0";
 
+
+////////////////////////////////////////////
+// PARTICLE SYSTEM EFFECTS
+////////////////////////////////////////////
+
 /*
   Particle Fireworks
   Rockets shoot up and explode in a random color, sometimes in a defined pattern
@@ -6386,7 +6399,7 @@ uint16_t mode_particlefireworks(void) {
   if (PartSys == nullptr)
     return mode_static(); // something went wrong, no data!
 
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   numRockets = map(SEGMENT.speed, 0 , 255, 4, min(PartSys->numSources, (uint32_t)NUMBEROFSOURCES));
 
   PartSys->setWrapX(SEGMENT.check1);
@@ -6559,7 +6572,7 @@ uint16_t mode_particlevolcano(void) {
   }
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   PartSys->setColorByAge(SEGMENT.check1);
   PartSys->setBounceX(SEGMENT.check2);
   PartSys->setWallHardness(SEGMENT.custom2);
@@ -6596,7 +6609,7 @@ uint16_t mode_particlefire(void) {
   if (PartSys == nullptr)
     return mode_static(); // something went wrong, no data!
 
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   PartSys->setWrapX(SEGMENT.check2);
   PartSys->setMotionBlur(SEGMENT.check1 * 170); // enable/disable motion blur
   PartSys->setSmearBlur(!SEGMENT.check1 * 60);  // enable smear blur if motion blur is not enabled
@@ -6703,7 +6716,7 @@ uint16_t mode_particlepit(void) {
   if (PartSys == nullptr)
     return mode_static(); // something went wrong, no data!
 
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
 
   PartSys->setWrapX(SEGMENT.check1);
   PartSys->setBounceX(SEGMENT.check2);
@@ -6789,7 +6802,7 @@ uint16_t mode_particlewaterfall(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   PartSys->setWrapX(SEGMENT.check1);   // cylinder
   PartSys->setBounceX(SEGMENT.check2); // walls
   PartSys->setBounceY(SEGMENT.check3); // ground
@@ -6847,7 +6860,7 @@ uint16_t mode_particlebox(void) {
   if (PartSys == nullptr)
     return mode_static(); // something went wrong, no data!
 
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   PartSys->setParticleSize(SEGMENT.custom3<<3);
   PartSys->setWallHardness(min(SEGMENT.custom2, (uint8_t)200)); // wall hardness is 200 or more
   PartSys->enableParticleCollisions(true, max(2, (int)SEGMENT.custom2)); // enable collisions and set particle collision hardness
@@ -6930,7 +6943,7 @@ uint16_t mode_particleperlin(void) {
   if (PartSys == nullptr)
     return mode_static(); // something went wrong, no data!
 
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   PartSys->setWrapX(SEGMENT.check1);
   PartSys->setBounceX(!SEGMENT.check1);
   PartSys->setWallHardness(SEGMENT.custom1); // wall hardness
@@ -6999,7 +7012,7 @@ uint16_t mode_particleimpact(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   PartSys->setWrapX(SEGMENT.check1);
   PartSys->setBounceX(SEGMENT.check2);
   PartSys->setMotionBlur(SEGMENT.custom3<<3);
@@ -7115,7 +7128,7 @@ uint16_t mode_particleattractor(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   attractor = reinterpret_cast<PSparticle *>(PartSys->PSdataEnd);
 
   PartSys->setColorByAge(SEGMENT.check1);
@@ -7200,7 +7213,7 @@ uint16_t mode_particlespray(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   PartSys->setBounceX(!SEGMENT.check2);
   PartSys->setWrapX(SEGMENT.check2);
   PartSys->setWallHardness(hardness);
@@ -7298,7 +7311,7 @@ uint16_t mode_particleghostrider(void) {
     }
   }
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   PartSys->setMotionBlur(SEGMENT.custom1);
   PartSys->sources[0].var = SEGMENT.custom3 >> 1;
 
@@ -7362,7 +7375,7 @@ uint16_t mode_particleblobs(void) {
   if (PartSys == nullptr)
     return mode_static(); // something went wrong, no data!
 
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   PartSys->setUsedParticles(map(SEGMENT.intensity, 0, 255, 25, 128)); // minimum 10%, maximum 50% of available particles (note: PS ensures at least 1)
   PartSys->enableParticleCollisions(SEGMENT.check2);
 
@@ -7443,7 +7456,7 @@ uint16_t mode_particlegalaxy(void) {
   if (PartSys == nullptr)
     return mode_static(); // something went wrong, no data!
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   uint8_t particlesize = SEGMENT.custom1;
   if(SEGMENT.check3)
     particlesize =  SEGMENT.custom1 ? 1 : 0; // set size to 0 (single pixel) or 1 (quad pixel) so motion blur works and adds streaks
@@ -7547,7 +7560,7 @@ uint16_t mode_particleDrip(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   PartSys->setBounce(true);
   PartSys->setWallHardness(50);
 
@@ -7655,7 +7668,7 @@ uint16_t mode_particlePinball(void) {
 
   // Particle System settings
   //uint32_t hardness = 240 + (SEGMENT.custom1>>4);
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   PartSys->setGravity(map(SEGMENT.custom3, 0 , 31, 0 , 16)); // set gravity (8 is default strength)
   PartSys->setBounce(SEGMENT.custom3); // disables bounce if no gravity is used
   PartSys->setMotionBlur(SEGMENT.custom2); // anable motion blur
@@ -7762,7 +7775,7 @@ uint16_t mode_particleDancingShadows(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   PartSys->setMotionBlur(SEGMENT.custom1);
   if (SEGMENT.check1)
     PartSys->setSmearBlur(120); // enable smear blur
@@ -7877,7 +7890,7 @@ uint16_t mode_particleFireworks1D(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   forcecounter = PartSys->PSdataEnd;
   PartSys->setMotionBlur(SEGMENT.custom2); // anable motion blur
   int32_t gravity = (1 + (SEGMENT.speed >> 3)); // gravity value used for rocket speed calculation
@@ -7994,7 +8007,7 @@ uint16_t mode_particleSparkler(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
 
   sparklersettings.wrap = !SEGMENT.check2;
   sparklersettings.bounce = SEGMENT.check2; // note: bounce always takes priority over wrap
@@ -8068,7 +8081,7 @@ uint16_t mode_particleHourglass(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   settingTracker = reinterpret_cast<uint32_t *>(PartSys->PSdataEnd);  //assign data pointer
   direction = reinterpret_cast<bool *>(PartSys->PSdataEnd + 4);  //assign data pointer
   PartSys->setUsedParticles(1 + ((SEGMENT.intensity * 255) >> 8));
@@ -8194,7 +8207,7 @@ uint16_t mode_particle1Dspray(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   PartSys->setBounce(SEGMENT.check2);
   PartSys->setMotionBlur(SEGMENT.custom2); // anable motion blur
   int32_t gravity = -((int32_t)SEGMENT.custom3 - 16);  // gravity setting, 0-15 is positive (down), 17 - 31 is negative (up)
@@ -8245,7 +8258,7 @@ uint16_t mode_particleBalance(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   PartSys->setMotionBlur(SEGMENT.custom2); // enable motion blur
   PartSys->setBounce(!SEGMENT.check2);
   PartSys->setWrap(SEGMENT.check2);
@@ -8325,7 +8338,7 @@ uint16_t mode_particleChase(void) {
   if (PartSys == nullptr)
     return mode_static(); // something went wrong, no data!
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   PartSys->setColorByPosition(SEGMENT.check3);
   PartSys->setMotionBlur(7 + ((SEGMENT.custom3) << 3)); // anable motion blur
   uint32_t numParticles = 1 + map(SEGMENT.intensity, 0, 255, 2, 255 / (1 + (SEGMENT.custom1 >> 6))); // depends on intensity and particle size (custom1), minimum 1
@@ -8423,7 +8436,7 @@ uint16_t mode_particleStarburst(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   PartSys->setMotionBlur(SEGMENT.custom2); // anable motion blur
   PartSys->setGravity(SEGMENT.check1 * 8); // enable gravity
 
@@ -8481,7 +8494,7 @@ uint16_t mode_particleFire1D(void) {
     return mode_static(); // something went wrong, no data!
 
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   PartSys->setMotionBlur(128 + (SEGMENT.custom2 >> 1)); // enable motion blur
   PartSys->setColorByAge(true);
   uint32_t emitparticles = 1;
@@ -8543,7 +8556,7 @@ uint16_t mode_particleSpringy(void) {
   if (PartSys == nullptr)
     return mode_static(); // something went wrong, no data!
   // Particle System settings
-  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   PartSys->setMotionBlur(220 * SEGMENT.check1); // anable motion blur
   PartSys->setSmearBlur(50); // smear a little
   PartSys->setUsedParticles(map(SEGMENT.custom1, 0, 255, 30 >> SEGMENT.check2, 255  >> (SEGMENT.check2*2))); // depends on density and particle size
@@ -8739,7 +8752,9 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_HYPER_SPARKLE, &mode_hyper_sparkle, _data_FX_MODE_HYPER_SPARKLE);
   addEffect(FX_MODE_MULTI_STROBE, &mode_multi_strobe, _data_FX_MODE_MULTI_STROBE);
   addEffect(FX_MODE_ANDROID, &mode_android, _data_FX_MODE_ANDROID);
+  #if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM1D)
   addEffect(FX_MODE_CHASE, &mode_chase, _data_FX_MODE_CHASE);
+  #endif
   addEffect(FX_MODE_CHASE_FLASH, &mode_chase_flash, _data_FX_MODE_CHASE_FLASH);
   addEffect(FX_MODE_CHASE_FLASH_RANDOM, &mode_chase_flash_random, _data_FX_MODE_CHASE_FLASH_RANDOM);
   addEffect(FX_MODE_COLORFUL, &mode_colorful, _data_FX_MODE_COLORFUL);
@@ -8768,7 +8783,9 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_PRIDE_2015, &mode_pride_2015, _data_FX_MODE_PRIDE_2015);
   addEffect(FX_MODE_JUGGLE, &mode_juggle, _data_FX_MODE_JUGGLE);
   addEffect(FX_MODE_PALETTE, &mode_palette, _data_FX_MODE_PALETTE);
+  #if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM1D)
   addEffect(FX_MODE_FIRE_2012, &mode_fire_2012, _data_FX_MODE_FIRE_2012);
+  #endif
   addEffect(FX_MODE_COLORWAVES, &mode_colorwaves, _data_FX_MODE_COLORWAVES);
   addEffect(FX_MODE_BPM, &mode_bpm, _data_FX_MODE_BPM);
   addEffect(FX_MODE_FILLNOISE8, &mode_fillnoise8, _data_FX_MODE_FILLNOISE8);
@@ -8788,12 +8805,16 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_SPOTS, &mode_spots, _data_FX_MODE_SPOTS);
   addEffect(FX_MODE_GLITTER, &mode_glitter, _data_FX_MODE_GLITTER);
   addEffect(FX_MODE_CANDLE, &mode_candle, _data_FX_MODE_CANDLE);
+  #if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM1D)
   addEffect(FX_MODE_STARBURST, &mode_starburst, _data_FX_MODE_STARBURST);
   addEffect(FX_MODE_EXPLODING_FIREWORKS, &mode_exploding_fireworks, _data_FX_MODE_EXPLODING_FIREWORKS);
   addEffect(FX_MODE_BOUNCINGBALLS, &mode_bouncing_balls, _data_FX_MODE_BOUNCINGBALLS);
+  #endif
   addEffect(FX_MODE_SINELON, &mode_sinelon, _data_FX_MODE_SINELON);
   addEffect(FX_MODE_POPCORN, &mode_popcorn, _data_FX_MODE_POPCORN);
+  #if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM1D)
   addEffect(FX_MODE_DRIP, &mode_drip, _data_FX_MODE_DRIP);
+  #endif
   addEffect(FX_MODE_PLASMA, &mode_plasma, _data_FX_MODE_PLASMA);
   addEffect(FX_MODE_PERCENT, &mode_percent, _data_FX_MODE_PERCENT);
   addEffect(FX_MODE_HEARTBEAT, &mode_heartbeat, _data_FX_MODE_HEARTBEAT);
@@ -8805,7 +8826,9 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_SINEWAVE, &mode_sinewave, _data_FX_MODE_SINEWAVE);
   addEffect(FX_MODE_FLOW, &mode_flow, _data_FX_MODE_FLOW);
   addEffect(FX_MODE_CHUNCHUN, &mode_chunchun, _data_FX_MODE_CHUNCHUN);
+  #if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM1D)
   addEffect(FX_MODE_DANCING_SHADOWS, &mode_dancing_shadows, _data_FX_MODE_DANCING_SHADOWS);
+  #endif
   addEffect(FX_MODE_WASHING_MACHINE, &mode_washing_machine, _data_FX_MODE_WASHING_MACHINE);
   addEffect(FX_MODE_BLENDS, &mode_blends, _data_FX_MODE_BLENDS);
   addEffect(FX_MODE_TV_SIMULATOR, &mode_tv_simulator, _data_FX_MODE_TV_SIMULATOR);
@@ -8831,8 +8854,10 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_2DPLASMAROTOZOOM, &mode_2Dplasmarotozoom, _data_FX_MODE_2DPLASMAROTOZOOM);
   addEffect(FX_MODE_2DSPACESHIPS, &mode_2Dspaceships, _data_FX_MODE_2DSPACESHIPS);
   addEffect(FX_MODE_2DCRAZYBEES, &mode_2Dcrazybees, _data_FX_MODE_2DCRAZYBEES);
+  #if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM2D)
   addEffect(FX_MODE_2DGHOSTRIDER, &mode_2Dghostrider, _data_FX_MODE_2DGHOSTRIDER);
   addEffect(FX_MODE_2DBLOBS, &mode_2Dfloatingblobs, _data_FX_MODE_2DBLOBS);
+  #endif
   addEffect(FX_MODE_2DSCROLLTEXT, &mode_2Dscrollingtext, _data_FX_MODE_2DSCROLLTEXT);
   addEffect(FX_MODE_2DDRIFTROSE, &mode_2Ddriftrose, _data_FX_MODE_2DDRIFTROSE);
   addEffect(FX_MODE_2DDISTORTIONWAVES, &mode_2Ddistortionwaves, _data_FX_MODE_2DDISTORTIONWAVES);

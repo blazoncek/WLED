@@ -294,7 +294,9 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_2DDNASPIRAL            182
 #define FX_MODE_2DBLACKHOLE            183
 #define FX_MODE_WAVESINS               184
+
 // particle 2D
+#ifndef WLED_DISABLE_PARTICLESYSTEM2D
 #define FX_MODE_PARTICLEVOLCANO         37
 #define FX_MODE_PARTICLEFIRE            47
 #define FX_MODE_PARTICLEFIREWORKS       52
@@ -306,22 +308,49 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_PARTICLEIMPACT          93
 #define FX_MODE_PARTICLEWATERFALL       94
 #define FX_MODE_PARTICLESPRAY           99
-#define FX_MODE_PARTICLEGHOSTRIDER     102
-#define FX_MODE_PARTICLEBLOBS          103
+#ifdef WLED_PS_REPLACE_FX
+  #define FX_MODE_PARTICLEGHOSTRIDER     120
+  #define FX_MODE_PARTICLEBLOBS          121
+  #undef FX_MODE_2DGHOSTRIDER
+  #undef FX_MODE_2DBLOBS
+#else
+  #define FX_MODE_PARTICLEGHOSTRIDER     102
+  #define FX_MODE_PARTICLEBLOBS          103
+#endif
 #define FX_MODE_PARTICLEGALAXY         109
+#endif
 // particle 1D
-#define FX_MODE_PS1DDRIP                 4
-#define FX_MODE_PS1DPINBALL              6
-#define FX_MODE_PS1DDANCINGSHADOWS      11
-#define FX_MODE_PS1DFIREWORKS           14
+#ifndef WLED_DISABLE_PARTICLESYSTEM1D
 #define FX_MODE_PS1DSPARKLER            16
 #define FX_MODE_PS1DHOURGLASS           19
 #define FX_MODE_PS1DSPRAY               23
 #define FX_MODE_PS1DBALANCE             24
-#define FX_MODE_PS1DCHASE               26
-#define FX_MODE_PS1DSTARBURST           29
-#define FX_MODE_PS1DFIRE                33
 #define FX_MODE_PS1DSPRINGY             36
+#ifdef WLED_PS_REPLACE_FX
+  #define FX_MODE_PS1DDRIP                96
+  #define FX_MODE_PS1DPINBALL             91
+  #define FX_MODE_PS1DDANCINGSHADOWS     112
+  #define FX_MODE_PS1DFIREWORKS           90
+  #define FX_MODE_PS1DCHASE               28
+  #define FX_MODE_PS1DSTARBURST           89
+  #define FX_MODE_PS1DFIRE                66
+  #undef FX_MODE_DRIP
+  #undef FX_MODE_BOUNCING_BALLS
+  #undef FX_MODE_DANCING_SHADOWS
+  #undef FX_MODE_EXPLODING_FIREWORKS
+  #undef FX_MODE_CHASE
+  #undef FX_MODE_STARBURST
+  #undef FX_MODE_FIRE_2012
+#else
+  #define FX_MODE_PS1DDRIP                 4
+  #define FX_MODE_PS1DPINBALL              6
+  #define FX_MODE_PS1DDANCINGSHADOWS      11
+  #define FX_MODE_PS1DFIREWORKS           14
+  #define FX_MODE_PS1DCHASE               26
+  #define FX_MODE_PS1DSTARBURST           29
+  #define FX_MODE_PS1DFIRE                33
+#endif
+#endif
 
 #define MODE_COUNT                     187  // includes audioreactive modes
 
