@@ -52,15 +52,18 @@
   return true; // particle is in bounds
 }
 
+#ifndef WLED_DISABLE_PARTICLESYSTEM1D
 // blur a 1D/2D buffer, sub-size blurring can be done using start and size
 // for speed, 32bit variables are used, make sure to limit them to 8bit (0-255) or result is undefined
 // to blur a subset of the buffer, change the size and set start to the desired starting coordinates
 // interleave is used for bluring 2D buffer (vertically)
-static void blur(CRGBA *colorbuffer, uint32_t size, uint32_t blur, uint32_t start = 0, uint32_t interleave = 0) {
+[[gnu::hot]] static void __attribute__((optimize("-O2"))) blur(CRGBA *colorbuffer, uint32_t size, uint32_t blur, uint32_t start = 0, uint32_t interleave = 0) {
+  if (size < 2 || size > 255) return; // nothing to blur
   CRGBA seeppart, carryover(BLACK);
   uint32_t seep = blur >> 1;
   uint32_t stop = start + size;
-  for (uint32_t x = start, index = start; x < stop; ++x, ++index += interleave) {
+  for (uint32_t x = start; x < stop; x++) {
+    uint32_t index = x + (interleave * (x - start));
     seeppart = colorbuffer[index].scale8(seep); // scale it and seep to neighbours
     if (index > 0) {
       colorbuffer[index-1] += seeppart;
@@ -71,26 +74,60 @@ static void blur(CRGBA *colorbuffer, uint32_t size, uint32_t blur, uint32_t star
     carryover = seeppart;
   }
 }
-/*
+#endif // WLED_DISABLE_PARTICLESYSTEM1D
+
+#ifndef WLED_DISABLE_PARTICLESYSTEM2D
 // blur a matrix in x and y direction, blur can be asymmetric in x and y
 // for speed, 1D array and 32bit variables are used, make sure to limit them to 8bit (0-255) or result is undefined
 // to blur a subset of the buffer, change the xsize/ysize and set xstart/ystart to the desired starting coordinates (default start is 0/0)
 // subset blurring only works on 10x10 buffer (single particle rendering), if other sizes are needed, buffer width must be passed as parameter
-static void blur2D(CRGBA *colorbuffer, uint32_t xsize, uint32_t ysize, uint32_t xblur, uint32_t yblur, uint32_t xstart, uint32_t ystart, uint32_t width = 10) {
+[[gnu::hot]] static void __attribute__((optimize("-O2"))) blur2D(CRGBA *colorbuffer, uint32_t xsize, uint32_t ysize, uint32_t xblur, uint32_t yblur, uint32_t xstart, uint32_t ystart) {
+  CRGBA seeppart, carryover;
+  uint32_t seep = xblur >> 1;
+  uint32_t width = 10;  // particle render buffer is 10x10
+
   // first and last row are always black in first pass of particle rendering
   ystart++;
   ysize--;
+
   for (uint32_t y = ystart; y < ystart + ysize; y++) {
-    blur(colorbuffer+(y*width), xsize, xblur, xstart, 0);
+    carryover = CRGBA(BLACK);
+    uint32_t indexXY = xstart + y * width;
+    for (uint32_t x = xstart; x < xstart + xsize; x++) {
+      seeppart = colorbuffer[indexXY].scale8(seep); // scale it and seep to neighbours
+      if (x > 0) {
+        colorbuffer[indexXY - 1].add(seeppart, true);
+        colorbuffer[indexXY].add(carryover, true);
+      } else {
+        colorbuffer[indexXY].nscale8(255-seep);
+      }
+      carryover = seeppart;
+      indexXY++; // next pixel in x direction
+    }
   }
+
   // first and last row are now smeared
   ystart--;
   ysize++;
+
+  seep = yblur >> 1;
   for (uint32_t x = xstart; x < xstart + xsize; x++) {
-    blur(colorbuffer+x, ysize, yblur, ystart, width);
+    carryover = CRGBA(BLACK);
+    uint32_t indexXY = x + ystart * width;
+    for (uint32_t y = ystart; y < ystart + ysize; y++) {
+      seeppart = colorbuffer[indexXY].scale8(seep); // scale it and seep to neighbours
+      if (y > 0) {
+        colorbuffer[indexXY - width].add(seeppart, true);
+        colorbuffer[indexXY].add(carryover, true);
+      } else {
+        colorbuffer[indexXY].nscale8(255-seep);
+      }
+      carryover = seeppart;
+      indexXY += width; // next pixel in y direction
+    }
   }
 }
-*/
+#endif // WLED_DISABLE_PARTICLESYSTEM2D
 #endif
 
 #ifndef WLED_DISABLE_PARTICLESYSTEM2D
@@ -611,7 +648,7 @@ void ParticleSystem2D::render() {
         baseRGB = baseHSV;  // convert HSV back to RGB (preserves opacity)
       }
     }
-    //if (gammaCorrectCol) brightness = gamma8(brightness); // apply gamma correction, used for gamma-inverted brightness distribution
+    if (gammaCorrectCol) brightness = gamma8(brightness); // apply gamma correction, used for gamma-inverted brightness distribution
     renderParticle(i, baseRGB, brightness, particlesettings.wrapX, particlesettings.wrapY);
   }
 
@@ -675,12 +712,12 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
   // - scale brigthness with gamma correction (done in render())
   // - apply inverse gamma correction to brightness values
   // - gamma is applied again in show() -> the resulting brightness distribution is linear but gamma corrected in total
-  //if (gammaCorrectCol) {
-  //  pxlbrightness[0] = gamma8inv(pxlbrightness[0]); // use look-up-table for inverse gamma
-  //  pxlbrightness[1] = gamma8inv(pxlbrightness[1]);
-  //  pxlbrightness[2] = gamma8inv(pxlbrightness[2]);
-  //  pxlbrightness[3] = gamma8inv(pxlbrightness[3]);
-  //}
+  if (gammaCorrectCol) {
+    pxlbrightness[0] = gamma8inv(pxlbrightness[0]); // use look-up-table for inverse gamma
+    pxlbrightness[1] = gamma8inv(pxlbrightness[1]);
+    pxlbrightness[2] = gamma8inv(pxlbrightness[2]);
+    pxlbrightness[3] = gamma8inv(pxlbrightness[3]);
+  }
 
   if (advPartProps && advPartProps[particleindex].size > 1) { // render particle to a bigger size
     CRGBA renderbuffer[100]; // 10x10 pixel buffer
@@ -709,15 +746,7 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
         bitshift = 1;
       rendersize += 2;
       offset--;
-      // blur rows; first and last row are always black in first pass of particle rendering
-      for (uint32_t y = offset+1; y < offset + ysize - 1; y++) {
-        blur(renderbuffer+(y*10), rendersize, xsize << bitshift, offset, 0);
-      }
-      // blur columns (interleave = 10); first and last row are now smeared
-      for (uint32_t x = offset; x < offset + xsize; x++) {
-        blur(renderbuffer+x, rendersize, ysize << bitshift, offset, 10);
-      }
-      //blur2D(renderbuffer, rendersize, rendersize, xsize << bitshift, ysize << bitshift, offset, offset, 10);
+      blur2D(renderbuffer, rendersize, rendersize, xsize << bitshift, ysize << bitshift, offset, offset);
       xsize = xsize > 64 ? xsize - 64 : 0;
       ysize = ysize > 64 ? ysize - 64 : 0;
     }
@@ -1391,7 +1420,7 @@ void ParticleSystem1D::render() {
         baseRGB = baseHSV;
       }
     }
-    //if(gammaCorrectCol) brightness = gamma8(brightness); // apply gamma correction, used for gamma-inverted brightness distribution
+    if(gammaCorrectCol) brightness = gamma8(brightness); // apply gamma correction, used for gamma-inverted brightness distribution
     renderParticle(i, baseRGB, brightness, particlesettings.wrap);
   }
   // apply smear-blur to rendered frame
@@ -1437,10 +1466,10 @@ void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uin
   // - scale brigthness with gamma correction (done in render())
   // - apply inverse gamma correction to brightness values
   // - gamma is applied again in show() -> the resulting brightness distribution is linear but gamma corrected in total
-  //if (gammaCorrectCol) {
-  //  pxlbrightness[0] = gamma8inv(pxlbrightness[0]); // use look-up-table for invers gamma
-  //  pxlbrightness[1] = gamma8inv(pxlbrightness[1]);
-  //}
+  if (gammaCorrectCol) {
+    pxlbrightness[0] = gamma8inv(pxlbrightness[0]); // use look-up-table for invers gamma
+    pxlbrightness[1] = gamma8inv(pxlbrightness[1]);
+  }
 
   // check if particle has advanced size properties and buffer is available
   if (advPartProps && advPartProps[particleindex].size > 1) {
