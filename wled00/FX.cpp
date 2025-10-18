@@ -7428,8 +7428,8 @@ uint16_t mode_particlegalaxy(void) {
     if (!initParticleSystem2D(PartSys, 1, 0, true)) // init using 1 source and advanced particle settings
       return mode_static(); // allocation failed or not 2D
     PartSys->sources[0].source.vx = -4; // will collide with wall and get random bounce direction
-    PartSys->sources[0].source.x =  PartSys->maxX >> 1; // start in the center
-    PartSys->sources[0].source.y =  PartSys->maxY >> 1;
+    PartSys->sources[0].source.x = PartSys->maxX >> 1; // start in the center
+    PartSys->sources[0].source.y = PartSys->maxY >> 1;
     PartSys->sources[0].sourceFlags.perpetual = true; //source does not age
     PartSys->sources[0].maxLife = 4000; // lifetime in frames
     PartSys->sources[0].minLife = 800;

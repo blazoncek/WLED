@@ -54,23 +54,7 @@
 #endif
 
 #ifndef WLED_DISABLE_PARTICLESYSTEM2D
-ParticleSystem2D::ParticleSystem2D(uint32_t width, uint32_t height, uint32_t numberofparticles, uint32_t numberofsources, bool isadvanced, bool sizecontrol)
-/*
-  : advPartProps(nullptr)           // make sure we start out with null pointers (just in case memory was not cleared)
-  , advPartSize(nullptr)
-  , numSources(numberofsources)     // number of sources allocated in init
-  , usedParticles(numParticles)     // use all particles by default
-  , numParticles(numberofparticles) // number of particles allocated in init
-  , emitIndex(0)
-  , wallHardness(255)               // default wall hardness
-  , wallRoughness(0)                // default wall roughness
-  , collisionStartIdx(0)
-  , fireIntesity(0)
-  , particlesize(1)                 // 2x2 rendering size by default
-  , motionBlur(0)                   // no fading by default
-  , smearBlur(0)                    // no smearing by default
-*/
-{
+ParticleSystem2D::ParticleSystem2D(uint32_t width, uint32_t height, uint32_t numberofparticles, uint32_t numberofsources, bool isadvanced, bool sizecontrol) {
   PSPRINTLN("\n ParticleSystem2D constructor");
   numSources = numberofsources; // number of sources allocated in init
   numParticles = numberofparticles; // number of particles allocated in init
@@ -210,7 +194,7 @@ int32_t ParticleSystem2D::sprayEmit(const PSsource &emitter) {
 // Spray emitter for particles used for flames (particle TTL depends on source TTL)
 void ParticleSystem2D::flameEmit(const PSsource &emitter) {
   int emitIndex = sprayEmit(emitter);
-  if (emitIndex > 0) particles[emitIndex].ttl += emitter.source.ttl;
+  if (emitIndex >= 0) particles[emitIndex].ttl += emitter.source.ttl;
 }
 
 // Emits a particle at given angle and speed, angle is from 0-65535 (=0-360deg), speed is also affected by emitter->var
@@ -1128,21 +1112,21 @@ bool initParticleSystem2D(ParticleSystem2D *&PartSys, uint32_t requestedsources,
 ////////////////////////
 #ifndef WLED_DISABLE_PARTICLESYSTEM1D
 
-ParticleSystem1D::ParticleSystem1D(uint32_t length, uint32_t numberofparticles, uint32_t numberofsources, bool isadvanced)
-  : advPartProps(nullptr)           // make sure we start out with null pointers (just in case memory was not cleared)
-  , numSources(numberofsources)     // number of sources allocated in init
-  , usedParticles(numParticles)     // use all particles by default
-  , numParticles(numberofparticles) // number of particles allocated in init
-  , emitIndex(0)
-  , wallHardness(255)               // default wall hardness
-  , collisionStartIdx(0)
-  , particlesize(0)                 // 1 pixel size by default
-  , motionBlur(0)                   // no fading by default
-  , smearBlur(0)                    // no smearing by default
-{
+ParticleSystem1D::ParticleSystem1D(uint32_t length, uint32_t numberofparticles, uint32_t numberofsources, bool isadvanced) {
+  numSources = numberofsources;
+  numParticles = numberofparticles; // number of particles allocated in init
+  usedParticles = numParticles; // use all particles by default
+  advPartProps = nullptr; //make sure we start out with null pointers (just in case memory was not cleared)
+  //advPartSize = nullptr;
   setSize(length);
   updatePSpointers(isadvanced); // set the particle and sources pointer (call this before accessing sprays or particles)
+  setWallHardness(255); // set default wall hardness to max
   setGravity(0); //gravity disabled by default
+  setParticleSize(0); // 1 pixel size by default
+  motionBlur = 0; //no fading by default
+  smearBlur = 0; //no smearing by default
+  emitIndex = 0;
+  collisionStartIdx = 0;
 
   // initialize some default non-zero values most FX use
   for (uint32_t i = 0; i < numSources; i++) {
