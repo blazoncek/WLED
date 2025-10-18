@@ -57,19 +57,17 @@
 // for speed, 32bit variables are used, make sure to limit them to 8bit (0-255) or result is undefined
 // to blur a subset of the buffer, change the size and set start to the desired starting coordinates
 // interleave is used for bluring 2D buffer (vertically)
-[[gnu::hot]] static void __attribute__((optimize("-O2"))) blur(CRGBA *colorbuffer, uint32_t size, uint32_t blur, uint32_t start = 0, uint32_t interleave = 0) {
-  if (size < 2 || size > 255) return; // nothing to blur
+[[gnu::hot]] static void __attribute__((optimize("-O2"))) blur(CRGBA *colorbuffer, uint32_t size, uint32_t blur, uint32_t start = 0) {
   CRGBA seeppart, carryover(BLACK);
   uint32_t seep = blur >> 1;
   uint32_t stop = start + size;
   for (uint32_t x = start; x < stop; x++) {
-    uint32_t index = x + (interleave * (x - start));
-    seeppart = colorbuffer[index].scale8(seep); // scale it and seep to neighbours
-    if (index > 0) {
-      colorbuffer[index-1] += seeppart;
-      colorbuffer[index] += carryover; // is black on first pass
+    seeppart = colorbuffer[x].scale8(seep); // scale it and seep to neighbours
+    if (x > 0) {
+      colorbuffer[x-1] += seeppart;
+      colorbuffer[x] += carryover; // is black on first pass
     } else {
-      colorbuffer[index].nscale8(255-seep);
+      colorbuffer[x].nscale8(255-seep);
     }
     carryover = seeppart;
   }
@@ -139,7 +137,7 @@ ParticleSystem2D::ParticleSystem2D(uint32_t numberofparticles, uint32_t numberof
   advPartProps = nullptr; //make sure we start out with null pointers (just in case memory was not cleared)
   advPartSize = nullptr;
   isAdvanced = isadvanced;
-  sizeControl = sizecontrol;
+  sizeControl = sizecontrol && isadvanced; // size control only makes sense if advanced properties are used
   updatePSpointers();
   setWallHardness(255); // set default wall hardness to max
   setWallRoughness(0); // smooth walls by default
@@ -168,7 +166,7 @@ void ParticleSystem2D::update(void) {
     applyGravity();
 
   //update size settings before handling collisions
-  if (advPartSize) {
+  if (sizeControl) {
     for (uint32_t i = 0; i < usedParticles; i++) {
       if (updateSize(&advPartProps[i], &advPartSize[i]) == false) { // if particle shrinks to 0 size
         particles[i].ttl = 0; // kill particle
@@ -182,7 +180,7 @@ void ParticleSystem2D::update(void) {
 
   //move all particles
   for (uint32_t i = 0; i < usedParticles; i++) {
-    particleMoveUpdate(particles[i], particleFlags[i], nullptr, advPartProps ? &advPartProps[i] : nullptr); // note: splitting this into two loops is slower and uses more flash
+    particleMoveUpdate(particles[i], particleFlags[i], nullptr, isAdvanced ? &advPartProps[i] : nullptr); // note: splitting this into two loops is slower and uses more flash
   }
 
   render();
@@ -258,7 +256,7 @@ int32_t ParticleSystem2D::sprayEmit(const PSsource &emitter) {
       particles[emitIndex].sat = emitter.source.sat;
       particleFlags[emitIndex].collide = emitter.sourceFlags.collide;
       particles[emitIndex].ttl = hw_random16(emitter.minLife, emitter.maxLife);
-      if (advPartProps)
+      if (isAdvanced)
         advPartProps[emitIndex].size = emitter.size;
       break;
     }
@@ -490,8 +488,7 @@ void ParticleSystem2D::applyForce(PSparticle &part, const int8_t xforce, const i
 
 // apply a force in x,y direction to individual particle using advanced particle properties
 void ParticleSystem2D::applyForce(const uint32_t particleindex, const int8_t xforce, const int8_t yforce) {
-  if (advPartProps == nullptr)
-    return; // no advanced properties available
+  if (!isAdvanced) return; // no advanced properties available
   applyForce(particles[particleindex], xforce, yforce, advPartProps[particleindex].forcecounter);
 }
 
@@ -519,8 +516,7 @@ void ParticleSystem2D::applyAngleForce(PSparticle &part, const int8_t force, con
 }
 
 void ParticleSystem2D::applyAngleForce(const uint32_t particleindex, const int8_t force, const uint16_t angle) {
-  if (advPartProps == nullptr)
-    return; // no advanced properties available
+  if (!isAdvanced) return; // no advanced properties available
   applyAngleForce(particles[particleindex], force, angle, advPartProps[particleindex].forcecounter);
 }
 
@@ -588,8 +584,7 @@ void ParticleSystem2D::applyFriction(const int32_t coefficient) {
 
 // attracts a particle to an attractor particle using the inverse square-law
 void ParticleSystem2D::pointAttractor(const uint32_t particleindex, PSparticle &attractor, const uint8_t strength, const bool swallow) {
-  if (advPartProps == nullptr)
-    return; // no advanced properties available
+  if (!isAdvanced) return; // no advanced properties available
 
   // Calculate the distance between the particle and the attractor
   int32_t dx = attractor.x - particles[particleindex].x;
@@ -674,7 +669,7 @@ void ParticleSystem2D::render() {
 // calculate pixel positions and brightness distribution and render the particle to local buffer or global buffer
 void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uint32_t particleindex, const CRGBA& color, uint8_t brightness, const bool wrapX, const bool wrapY) {
   uint32_t size = particlesize;
-  if (advPartProps && advPartProps[particleindex].size > 0) // use advanced size properties (0 means use global size including single pixel rendering)
+  if (isAdvanced && advPartProps[particleindex].size > 0) // use advanced size properties (0 means use global size including single pixel rendering)
     size = advPartProps[particleindex].size;
 
   if (size == 0) { // single pixel rendering
@@ -719,7 +714,7 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
     pxlbrightness[3] = gamma8inv(pxlbrightness[3]);
   }
 
-  if (advPartProps && advPartProps[particleindex].size > 1) { // render particle to a bigger size
+  if (isAdvanced && advPartProps[particleindex].size > 1) { // render particle to a bigger size
     CRGBA renderbuffer[100]; // 10x10 pixel buffer
     for (int i = 0; i < 100; i++) renderbuffer[i] = CRGBA(0,0,0); // make sure buffer is cleared (memset is faster but may not work on all platforms)
 
@@ -734,7 +729,7 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
     uint32_t maxsize = advPartProps[particleindex].size;
     uint32_t xsize = maxsize;
     uint32_t ysize = maxsize;
-    if (advPartSize) { // use advanced size control
+    if (sizeControl) { // use advanced size control
       if (advPartSize[particleindex].asymmetry > 0)
         getParticleXYsize(&advPartProps[particleindex], &advPartSize[particleindex], xsize, ysize);
       maxsize = (xsize > ysize) ? xsize : ysize; // choose the bigger of the two
@@ -855,7 +850,7 @@ void ParticleSystem2D::handleCollisions() {
   // if they are, collisionStartIdx is increased so each particle collides at least every second frame (which still gives decent collisions)
   constexpr int BIN_WIDTH = 6 * PS_P_RADIUS; // width of a bin in sub-pixels
   int32_t overlap = particleHardRadius << 1; // overlap bins to include edge particles to neighbouring bins
-  if (advPartProps) //may be using individual particle size
+  if (isAdvanced) //may be using individual particle size
     overlap += 512; // add 2 * max radius (approximately)
   uint32_t maxBinParticles = max((uint32_t)50, (usedParticles + 1) / 2); // assume no more than half of the particles are in the same bin, do not bin small amounts of particles
   uint32_t numBins = (maxX + (BIN_WIDTH - 1)) / BIN_WIDTH; // number of bins in x direction
@@ -891,7 +886,7 @@ void ParticleSystem2D::handleCollisions() {
       uint32_t idx_i = binIndices[i];
       for (uint32_t j = i + 1; j < binParticleCount; j++) { // check against higher number particles
         uint32_t idx_j = binIndices[j];
-        if (advPartProps) { //may be using individual particle size
+        if (isAdvanced) { //may be using individual particle size
           setParticleSize(particlesize); // updates base particleHardRadius
           collDistSq = (particleHardRadius << 1) + (((uint32_t)advPartProps[idx_i].size + (uint32_t)advPartProps[idx_j].size) >> 1); // collision distance note: not 100% clear why the >> 1 is needed, but it is.
           collDistSq = collDistSq * collDistSq; // square it for faster comparison
@@ -958,7 +953,7 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::collideParticles(PSparti
     particle2.vy += yimpulse;
 
     // if particles are soft, they become 'sticky' i.e. apply some friction (they do pile more nicely and stop sloshing around)
-    if (collisionHardness < PS_P_MINSURFACEHARDNESS && (SEGMENT.call & 0x07) == 0) {
+    if (collisionHardness < PS_P_MINSURFACEHARDNESS && (SEGMENT.call & 0x07) == 0) {  // NOTE: using SEGMENT.call here is very unorthodox and not recommended
       const uint32_t coeff = collisionHardness + (255 - PS_P_MINSURFACEHARDNESS);
       // Note: could call applyFriction, but this is faster and speed is key here
       #if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(ESP8266) // use bitshifts with rounding instead of division (2x faster)
@@ -1065,10 +1060,11 @@ uint32_t calculateNumberOfParticles2D(uint32_t const pixels, const bool isadvanc
   uint32_t numberofParticles = pixels;  // 1 particle per pixel (for example 512 particles on 32x16)
   uint32_t particlelimit = MAXPARTICLES_2D; // maximum number of paticles allowed
   numberofParticles = max((uint32_t)4, min(numberofParticles, particlelimit)); // limit to 4 - particlelimit
-  if (isadvanced) // advanced property array needs ram, reduce number of particles to use the same amount
+  if (isadvanced) {// advanced property array needs ram, reduce number of particles to use the same amount
     numberofParticles = (numberofParticles * sizeof(PSparticle)) / (sizeof(PSparticle) + sizeof(PSadvancedParticle));
-  if (sizecontrol) // advanced property array needs ram, reduce number of particles
-    numberofParticles /= 8; // if advanced size control is used, much fewer particles are needed note: if changing this number, adjust FX using this accordingly
+    if (sizecontrol) // advanced property array needs ram, reduce number of particles
+      numberofParticles /= 8; // if advanced size control is used, much fewer particles are needed note: if changing this number, adjust FX using this accordingly
+  }
 
   //make sure it is a multiple of 4 for proper memory alignment (easier than using padding bytes)
   numberofParticles = (numberofParticles+3) & ~0x03;
@@ -1091,10 +1087,11 @@ bool allocateParticleSystemMemory2D(uint32_t numparticles, uint32_t numsources, 
   // functions above make sure numparticles is a multiple of 4 bytes (to avoid alignment issues)
   requiredmemory += sizeof(PSparticleFlags) * numparticles;
   requiredmemory += sizeof(PSparticle) * numparticles;
-  if (isadvanced)
+  if (isadvanced) {
     requiredmemory += sizeof(PSadvancedParticle) * numparticles;
-  if (sizecontrol)
-    requiredmemory += sizeof(PSsizeControl) * numparticles;
+    if (sizecontrol)
+      requiredmemory += sizeof(PSsizeControl) * numparticles;
+  }
   requiredmemory += sizeof(PSsource) * numsources;
   requiredmemory += additionalbytes;
   return(SEGMENT.allocateData(requiredmemory));
@@ -1182,7 +1179,7 @@ void ParticleSystem1D::update(void) {
 
   //move all particles
   for (uint32_t i = 0; i < usedParticles; i++) {
-    particleMoveUpdate(particles[i], particleFlags[i], nullptr, advPartProps ? &advPartProps[i] : nullptr);
+    particleMoveUpdate(particles[i], particleFlags[i], nullptr, isAdvanced ? &advPartProps[i] : nullptr);
   }
 
   if (particlesettings.colorByPosition) {
@@ -1246,7 +1243,7 @@ int32_t ParticleSystem1D::sprayEmit(const PSsource1D &emitter) {
       particleFlags[emitIndex].collide = emitter.sourceFlags.collide; // TODO: could just set all flags (asByte) but need to check if that breaks any of the FX
       particleFlags[emitIndex].reversegrav = emitter.sourceFlags.reversegrav;
       particleFlags[emitIndex].perpetual = emitter.sourceFlags.perpetual;
-      if (advPartProps) {
+      if (isAdvanced) {
         advPartProps[emitIndex].sat = emitter.sat;
         advPartProps[emitIndex].size = emitter.size;
       }
@@ -1413,7 +1410,7 @@ void ParticleSystem1D::render() {
     brightness = min(particles[i].ttl << 1, (int)255);
     baseRGB = ColorFromPaletteWLED(SEGPALETTE, particles[i].hue, 255, blend);
 
-    if (advPartProps) { //saturation is advanced property in 1D system
+    if (isAdvanced) { //saturation is advanced property in 1D system
       if (advPartProps[i].sat < 255) {
         CHSV32 baseHSV(baseRGB);
         baseHSV.s = min(baseHSV.s, advPartProps[i].sat); // set the saturation but don't increase it
@@ -1440,7 +1437,7 @@ void ParticleSystem1D::render() {
 // calculate pixel positions and brightness distribution and render the particle to local buffer or global buffer
 void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uint32_t particleindex, const CRGBA& color, uint8_t brightness, const bool wrap) {
   uint32_t size = particlesize;
-  if (advPartProps) // use advanced size properties (1D system has no large size global rendering TODO: add large global rendering?)
+  if (isAdvanced) // use advanced size properties (1D system has no large size global rendering TODO: add large global rendering?)
     size = advPartProps[particleindex].size;
 
   if (size == 0) { //single pixel particle, can be out of bounds as oob checking is made for 2-pixel particles (and updating it uses more code)
@@ -1472,7 +1469,7 @@ void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uin
   }
 
   // check if particle has advanced size properties and buffer is available
-  if (advPartProps && advPartProps[particleindex].size > 1) {
+  if (isAdvanced && advPartProps[particleindex].size > 1) {
     CRGBA renderbuffer[10]; // 10 pixel buffer
     for (int i = 0; i < 10; i++) renderbuffer[i] = CRGBA(BLACK); // make sure buffer is cleared (memset is faster but may not work on all platforms)
 
@@ -1554,7 +1551,7 @@ void ParticleSystem1D::handleCollisions() {
   // if they are, collisionStartIdx is increased so each particle collides at least every second frame (which still gives decent collisions)
   constexpr int BIN_WIDTH = 32 * PS_P_RADIUS_1D; // width of each bin, a compromise between speed and accuracy (larger bins are faster but collapse more)
   int32_t overlap = particleHardRadius << 1; // overlap bins to include edge particles to neighbouring bins
-  if (advPartProps) //may be using individual particle size
+  if (isAdvanced) //may be using individual particle size
     overlap += 256; // add 2 * max radius (approximately)
   uint32_t maxBinParticles = max((uint32_t)50, (usedParticles + 1) / 4); // do not bin small amounts, limit max to 1/4 of particles
   uint32_t numBins = (maxX + (BIN_WIDTH - 1)) / BIN_WIDTH; // calculate number of bins
@@ -1588,7 +1585,7 @@ void ParticleSystem1D::handleCollisions() {
       uint32_t idx_i = binIndices[i];
       for (uint32_t j = i + 1; j < binParticleCount; j++) { // check against higher number particles
         uint32_t idx_j = binIndices[j];
-        if (advPartProps) { // use advanced size properties
+        if (isAdvanced) { // use advanced size properties
           collisiondistance = (PS_P_MINHARDRADIUS_1D << particlesize) + ((advPartProps[idx_i].size + advPartProps[idx_j].size) >> 1);
         }
         int32_t dx = (particles[idx_j].x + particles[idx_j].vx) - (particles[idx_i].x + particles[idx_i].vx); // distance between particles with lookahead
