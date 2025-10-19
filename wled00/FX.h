@@ -521,10 +521,12 @@ class Segment {
     inline CRGBA *getPixels() const                           { return pixels; }
     inline void  setPixelColorRaw(unsigned i, CRGBA c) const  { pixels[i] = c; }
     inline void  addPixelColorRaw(unsigned i, CRGBA c) const  { pixels[i] += c; }
+    inline void  blendPixelColorRaw(unsigned i, CRGBA c, uint8_t b) const { pixels[i].nblend(c, b); }
     inline CRGBA getPixelColorRaw(unsigned i) const           { return pixels[i]; };
   #ifndef WLED_DISABLE_2D
     inline void  setPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const  { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)] = c; }
     inline void  addPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const  { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)] += c; }
+    inline void  blendPixelColorXYRaw(unsigned x, unsigned y, CRGBA c, uint8_t b) const { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)].nblend(c, b); }
     inline CRGBA getPixelColorXYRaw(unsigned x, unsigned y) const           { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; return pixels[XY(x,y)]; };
   #endif
     void resetIfRequired();         // sets all SEGENV variables to 0 and clears data buffer

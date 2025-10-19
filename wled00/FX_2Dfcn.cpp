@@ -452,8 +452,8 @@ void Segment::drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA col, bo
               px = cx + x * dx;
               py = cy + (y - adj) * dy;
           }
-          CRGBA pixCol = getPixelColorXY(px, py).nblend(col, (uint8_t)(adj ? fade : 0xFFU - fade));
-          setPixelColorXY(px, py, pixCol);
+          if (px < 0 || py < 0 || px >= (int)vWidth() || py >= (int)vHeight()) continue;
+          blendPixelColorXYRaw(px, py, col, (uint8_t)(adj ? fade : 255 - fade));
       }
       x++;
     }
@@ -462,12 +462,15 @@ void Segment::drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA col, bo
     int d = 3 - (2*radius);
     int y = radius, x = 0;
     while (y >= x) {
-    for (int i = 0; i < 4; i++) {
+      for (int i = 0; i < 4; i++) {
         int dx = (i & 1) ? -x : x;
         int dy = (i & 2) ? -y : y;
-        setPixelColorXY(cx + dx, cy + dy, col);
-        setPixelColorXY(cx + dy, cy + dx, col);
-    }
+        int px = cx + dx;
+        int py = cy + dy;
+        if (px < 0 || py < 0) continue;
+        if (px < (int)vWidth() && py < (int)vHeight()) setPixelColorXYRaw(px, py, col);
+        if (py < (int)vWidth() && px < (int)vHeight()) setPixelColorXYRaw(py, px, col);
+      }
       x++;
       if (d > 0) {
         y--;
@@ -492,7 +495,7 @@ void Segment::fillCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA col, bo
       if (x * x + y * y <= radius * radius &&
           int(cx)+x >= 0 && int(cy)+y >= 0 &&
           int(cx)+x < vW && int(cy)+y < vH)
-        setPixelColorXY(cx + x, cy + y, col);
+        setPixelColorXYRaw(cx + x, cy + y, col);
     }
   }
 }
@@ -504,12 +507,12 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
   if (x0 >= vW || x1 >= vW || y0 >= vH || y1 >= vH) return;
 
-  const int dx = abs(x1-x0), sx = x0<x1 ? 1 : -1; // x distance & step
-  const int dy = abs(y1-y0), sy = y0<y1 ? 1 : -1; // y distance & step
+  const int dx = abs(int(x1)-int(x0)); // x distance
+  const int dy = abs(int(y1)-int(y0)); // y distance
 
   // single pixel (line length == 0)
   if (dx+dy == 0) {
-    setPixelColorXY(x0, y0, c);
+    setPixelColorXYRaw(x0, y0, c);
     return;
   }
 
@@ -534,16 +537,18 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
       int y = int(intersectY);
       if (steep) std::swap(x,y);  // temporaryly swap if steep
       // pixel coverage is determined by fractional part of y co-ordinate
-      blendPixelColorXY(x, y, c, seep);
-      blendPixelColorXY(x+int(steep), y+int(!steep), c, keep);
+      if (x >= 0 && y >= 0 && x < vW && y < vH) blendPixelColorXYRaw(x, y, c, seep);
+      if (x+int(steep) >= 0 && y+int(!steep) >= 0 && x+int(steep) < vW && y+int(!steep) < vH) blendPixelColorXYRaw(x+int(steep), y+int(!steep), c, keep);
       intersectY += gradient;
       if (steep) std::swap(x,y);  // restore if steep
     }
   } else {
     // Bresenham's algorithm
-    int err = (dx>dy ? dx : -dy)/2;   // error direction
+    const int sx = x0<x1 ? 1 : -1;  // x step
+    const int sy = y0<y1 ? 1 : -1;  // y step
+    int err = (dx>dy ? dx : -dy)/2; // error direction
     for (;;) {
-      setPixelColorXY(x0, y0, c);
+      setPixelColorXYRaw(x0, y0, c);
       if (x0==x1 && y0==y1) break;
       int e2 = err;
       if (e2 >-dx) { err -= dy; x0 += sx; }
