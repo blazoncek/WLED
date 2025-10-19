@@ -52,77 +52,36 @@
   return true; // particle is in bounds
 }
 
-#ifndef WLED_DISABLE_PARTICLESYSTEM1D
 // blur a 1D/2D buffer, sub-size blurring can be done using start and size
-// for speed, 32bit variables are used, make sure to limit them to 8bit (0-255) or result is undefined
 // to blur a subset of the buffer, change the size and set start to the desired starting coordinates
 // interleave is used for bluring 2D buffer (vertically)
-[[gnu::hot]] static void __attribute__((optimize("-O2"))) blur(CRGBA *colorbuffer, uint32_t size, uint32_t blur, uint32_t start = 0) {
+[[gnu::hot]] static void __attribute__((optimize("-O2"))) blur(CRGBA *colorbuffer, uint32_t size, uint32_t blur, uint32_t start = 0, uint32_t interleave = 1) {
   CRGBA seeppart, carryover(BLACK);
   uint32_t seep = blur >> 1;
   uint32_t stop = start + size;
-  for (uint32_t x = start; x < stop; x++) {
-    seeppart = colorbuffer[x].scale8(seep); // scale it and seep to neighbours
-    if (x > 0) {
-      colorbuffer[x-1] += seeppart;
-      colorbuffer[x] += carryover; // is black on first pass
+  for (uint32_t x = start, index = 0; x < stop; x++, index += interleave) {
+    seeppart = colorbuffer[index].scale8(seep); // scale it and seep to neighbours
+    if (index > 0) {
+      colorbuffer[index-interleave] += seeppart;
+      colorbuffer[index] += carryover; // is black on first pass
     } else {
-      colorbuffer[x].nscale8(255-seep);
+      colorbuffer[index].nscale8(255-seep);
     }
     carryover = seeppart;
   }
 }
-#endif // WLED_DISABLE_PARTICLESYSTEM1D
 
 #ifndef WLED_DISABLE_PARTICLESYSTEM2D
-// blur a matrix in x and y direction, blur can be asymmetric in x and y
-// for speed, 1D array and 32bit variables are used, make sure to limit them to 8bit (0-255) or result is undefined
+// blur a 10x10 colorbuffer (CRGBA colorbuffer[100]) in x and y direction, blur can be asymmetric in x and y
 // to blur a subset of the buffer, change the xsize/ysize and set xstart/ystart to the desired starting coordinates (default start is 0/0)
-// subset blurring only works on 10x10 buffer (single particle rendering), if other sizes are needed, buffer width must be passed as parameter
-[[gnu::hot]] static void __attribute__((optimize("-O2"))) blur2D(CRGBA *colorbuffer, uint32_t xsize, uint32_t ysize, uint32_t xblur, uint32_t yblur, uint32_t xstart, uint32_t ystart) {
-  CRGBA seeppart, carryover;
-  uint32_t seep = xblur >> 1;
-  uint32_t width = 10;  // particle render buffer is 10x10
-
+static inline void blur2D(CRGBA *colorbuffer, uint32_t xsize, uint32_t ysize, uint32_t xblur, uint32_t yblur, uint32_t xstart, uint32_t ystart) {
   // first and last row are always black in first pass of particle rendering
-  ystart++;
-  ysize--;
-
-  for (uint32_t y = ystart; y < ystart + ysize; y++) {
-    carryover = CRGBA(BLACK);
-    uint32_t indexXY = xstart + y * width;
-    for (uint32_t x = xstart; x < xstart + xsize; x++) {
-      seeppart = colorbuffer[indexXY].scale8(seep); // scale it and seep to neighbours
-      if (x > 0) {
-        colorbuffer[indexXY - 1].add(seeppart, true);
-        colorbuffer[indexXY].add(carryover, true);
-      } else {
-        colorbuffer[indexXY].nscale8(255-seep);
-      }
-      carryover = seeppart;
-      indexXY++; // next pixel in x direction
-    }
+  for (uint32_t y = ystart + 1; y < ystart + ysize - 2; y++) {
+    blur(&colorbuffer[xstart + y * 10], xsize, xblur, xstart, 1);
   }
-
   // first and last row are now smeared
-  ystart--;
-  ysize++;
-
-  seep = yblur >> 1;
   for (uint32_t x = xstart; x < xstart + xsize; x++) {
-    carryover = CRGBA(BLACK);
-    uint32_t indexXY = x + ystart * width;
-    for (uint32_t y = ystart; y < ystart + ysize; y++) {
-      seeppart = colorbuffer[indexXY].scale8(seep); // scale it and seep to neighbours
-      if (y > 0) {
-        colorbuffer[indexXY - width].add(seeppart, true);
-        colorbuffer[indexXY].add(carryover, true);
-      } else {
-        colorbuffer[indexXY].nscale8(255-seep);
-      }
-      carryover = seeppart;
-      indexXY += width; // next pixel in y direction
-    }
+    blur(&colorbuffer[x + ystart * 10], ysize, yblur, ystart, 10);
   }
 }
 #endif // WLED_DISABLE_PARTICLESYSTEM2D
@@ -724,7 +683,7 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
     renderbuffer[5 + (4 * 10)] += color.scale8(pxlbrightness[1]);
     renderbuffer[5 + (5 * 10)] += color.scale8(pxlbrightness[2]);
     renderbuffer[4 + (5 * 10)] += color.scale8(pxlbrightness[3]);
-    uint32_t rendersize = 2; // initialize render size, minimum is 4x4 pixels, it is incremented int he loop below to start with 4
+    uint32_t rendersize = 2; // initialize render size, minimum is 4x4 pixels, it is incremented in the loop below to start with 4
     uint32_t offset = 4; // offset to zero coordinate to write/read data in renderbuffer (actually needs to be 3, is decremented in the loop below)
     uint32_t maxsize = advPartProps[particleindex].size;
     uint32_t xsize = maxsize;
