@@ -698,7 +698,7 @@ uint16_t mode_android(void) {
 static const char _data_FX_MODE_ANDROID[] PROGMEM = "Android@!,Width;!,!;!;;m12=1"; //vertical
 
 
-#if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM1D)
+#if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM1D)
 /*
  * color chase function.
  * color1 = background color
@@ -3063,7 +3063,7 @@ uint16_t mode_candle() {
 static const char _data_FX_MODE_CANDLE[] PROGMEM = "Candle@!,!,,,,,,Multi;!,!;!;01;sx=96,ix=224,pal=0,o3=1";
 
 
-#if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM1D)
+#if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM1D)
 /*
 / Fireworks in starburst effect
 / based on the video: https://www.reddit.com/r/arduino/comments/c3sd46/i_made_this_fireworks_effect_for_my_led_strips/
@@ -5573,7 +5573,7 @@ static const char _data_FX_MODE_2DCRAZYBEES[] PROGMEM = "Crazy Bees@!,Blur;;;2";
 #undef MAX_BEES
 
 
-#if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM2D)
+#if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM2D)
 /////////////////////////
 //     2D Ghost Rider  //
 /////////////////////////
@@ -5705,11 +5705,11 @@ uint16_t mode_2Dfloatingblobs(void) {
     }
   }
 
-  SEGMENT.fadeToBlackBy((SEGMENT.custom2>>3)+1);
+  SEGMENT.fadeToBlackBy(((255-SEGMENT.custom2)>>3)+1);
 
   // Bounce balls around
   for (size_t i = 0; i < Amount; i++) {
-    if (SEGENV.step < strip.now) blob->color[i] = add8(blob->color[i], 4); // slowly change color
+    if (SEGENV.step < strip.now) blob->color[i] += 4; // slowly change color
     // change radius if needed
     if (blob->grow[i]) {
       // enlarge radius until it is >= 4
@@ -5724,9 +5724,12 @@ uint16_t mode_2Dfloatingblobs(void) {
         blob->grow[i] = true;
       }
     }
+    int x = roundf(blob->x[i]);
+    int y = roundf(blob->y[i]);
     CRGBA c = SEGMENT.color_from_palette(blob->color[i], false, PALETTE_FIXED, 0);
-    if (blob->r[i] > 1.f) SEGMENT.fillCircle(roundf(blob->x[i]), roundf(blob->y[i]), roundf(blob->r[i]), c);
-    else                  SEGMENT.setPixelColorXY((int)roundf(blob->x[i]), (int)roundf(blob->y[i]), c);
+    if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(roundf(blob->x[i-1]), roundf(blob->y[i-1]), x, y, SEGCOLOR(2), SEGMENT.check1);
+    if (blob->r[i] > 1.f) SEGMENT.fillCircle(x, y, roundf(blob->r[i]), c, SEGMENT.check1);
+    else                  SEGMENT.setPixelColorXY(x, y, c);
     // move x
     if (blob->x[i] + blob->r[i] >= cols - 1) blob->x[i] += (blob->sX[i] * ((cols - 1 - blob->x[i]) / blob->r[i] + 0.005f));
     else if (blob->x[i] - blob->r[i] <= 0)   blob->x[i] += (blob->sX[i] * (blob->x[i] / blob->r[i] + 0.005f));
@@ -5756,11 +5759,11 @@ uint16_t mode_2Dfloatingblobs(void) {
   }
   SEGMENT.blur(SEGMENT.custom1>>2);
 
-  if (SEGENV.step < strip.now) SEGENV.step = strip.now + 2000; // change colors every 2 seconds
+  if (SEGENV.step < strip.now) SEGENV.step = strip.now + 1000; // change colors every second
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DBLOBS[] PROGMEM = "Blobs@!,# blobs,Blur,Trail;!;!;2;c1=8";
+static const char _data_FX_MODE_2DBLOBS[] PROGMEM = "Blobs@!,# blobs,Blur,Trail,,Smooth,,Lines;!,,!;!;2;c1=0,o1=0,o3=0,pal=1";
 #undef MAX_BLOBS
 #endif
 
@@ -8752,7 +8755,7 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_HYPER_SPARKLE, &mode_hyper_sparkle, _data_FX_MODE_HYPER_SPARKLE);
   addEffect(FX_MODE_MULTI_STROBE, &mode_multi_strobe, _data_FX_MODE_MULTI_STROBE);
   addEffect(FX_MODE_ANDROID, &mode_android, _data_FX_MODE_ANDROID);
-  #if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM1D)
+  #if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM1D)
   addEffect(FX_MODE_CHASE, &mode_chase, _data_FX_MODE_CHASE);
   #endif
   addEffect(FX_MODE_CHASE_FLASH, &mode_chase_flash, _data_FX_MODE_CHASE_FLASH);
@@ -8783,7 +8786,7 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_PRIDE_2015, &mode_pride_2015, _data_FX_MODE_PRIDE_2015);
   addEffect(FX_MODE_JUGGLE, &mode_juggle, _data_FX_MODE_JUGGLE);
   addEffect(FX_MODE_PALETTE, &mode_palette, _data_FX_MODE_PALETTE);
-  #if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM1D)
+  #if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM1D)
   addEffect(FX_MODE_FIRE_2012, &mode_fire_2012, _data_FX_MODE_FIRE_2012);
   #endif
   addEffect(FX_MODE_COLORWAVES, &mode_colorwaves, _data_FX_MODE_COLORWAVES);
@@ -8805,14 +8808,14 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_SPOTS, &mode_spots, _data_FX_MODE_SPOTS);
   addEffect(FX_MODE_GLITTER, &mode_glitter, _data_FX_MODE_GLITTER);
   addEffect(FX_MODE_CANDLE, &mode_candle, _data_FX_MODE_CANDLE);
-  #if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM1D)
+  #if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM1D)
   addEffect(FX_MODE_STARBURST, &mode_starburst, _data_FX_MODE_STARBURST);
   addEffect(FX_MODE_EXPLODING_FIREWORKS, &mode_exploding_fireworks, _data_FX_MODE_EXPLODING_FIREWORKS);
   addEffect(FX_MODE_BOUNCINGBALLS, &mode_bouncing_balls, _data_FX_MODE_BOUNCINGBALLS);
   #endif
   addEffect(FX_MODE_SINELON, &mode_sinelon, _data_FX_MODE_SINELON);
   addEffect(FX_MODE_POPCORN, &mode_popcorn, _data_FX_MODE_POPCORN);
-  #if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM1D)
+  #if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM1D)
   addEffect(FX_MODE_DRIP, &mode_drip, _data_FX_MODE_DRIP);
   #endif
   addEffect(FX_MODE_PLASMA, &mode_plasma, _data_FX_MODE_PLASMA);
@@ -8826,7 +8829,7 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_SINEWAVE, &mode_sinewave, _data_FX_MODE_SINEWAVE);
   addEffect(FX_MODE_FLOW, &mode_flow, _data_FX_MODE_FLOW);
   addEffect(FX_MODE_CHUNCHUN, &mode_chunchun, _data_FX_MODE_CHUNCHUN);
-  #if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM1D)
+  #if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM1D)
   addEffect(FX_MODE_DANCING_SHADOWS, &mode_dancing_shadows, _data_FX_MODE_DANCING_SHADOWS);
   #endif
   addEffect(FX_MODE_WASHING_MACHINE, &mode_washing_machine, _data_FX_MODE_WASHING_MACHINE);
@@ -8854,7 +8857,7 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_2DPLASMAROTOZOOM, &mode_2Dplasmarotozoom, _data_FX_MODE_2DPLASMAROTOZOOM);
   addEffect(FX_MODE_2DSPACESHIPS, &mode_2Dspaceships, _data_FX_MODE_2DSPACESHIPS);
   addEffect(FX_MODE_2DCRAZYBEES, &mode_2Dcrazybees, _data_FX_MODE_2DCRAZYBEES);
-  #if !defined(WLED_PS_REPLACE_FX) && !defined(WLED_DISABLE_PARTICLESYSTEM2D)
+  #if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM2D)
   addEffect(FX_MODE_2DGHOSTRIDER, &mode_2Dghostrider, _data_FX_MODE_2DGHOSTRIDER);
   addEffect(FX_MODE_2DBLOBS, &mode_2Dfloatingblobs, _data_FX_MODE_2DBLOBS);
   #endif
