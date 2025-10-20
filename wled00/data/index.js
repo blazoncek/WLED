@@ -2823,9 +2823,9 @@ function loadPalettesData(callback = null)
 	var lsPalData = localStorage.getItem(lsKey);
 	if (lsPalData) {
 		try {
-			var d = JSON.parse(lsPalData);
-			if (d && d.vid == d.vid) {
-				palettesData = d.p;
+			var dp = JSON.parse(lsPalData);
+			if (dp && isObj(dp.p)) {
+				palettesData = dp.p;
 				if (callback) callback();
 				return;
 			}
@@ -2835,8 +2835,7 @@ function loadPalettesData(callback = null)
 	palettesData = {};
 	getPalettesData(0, ()=>{
 		localStorage.setItem(lsKey, JSON.stringify({
-			p: palettesData,
-			vid: lastinfo.vid
+			"p": palettesData
 		}));
 		redrawPalPrev();
 		if (callback) setTimeout(callback, 99);
