@@ -190,7 +190,7 @@ public:
 private:
   //rendering functions
   void render();
-  [[gnu::hot]] void renderParticle(const uint32_t particleindex, const CRGBA& color, uint8_t brightness, const bool wrapX, const bool wrapY);
+  [[gnu::hot]] void renderParticle(const uint32_t particleindex, CRGBA color, uint8_t brightness, const bool wrapX, const bool wrapY);
   //paricle physics applied by system if flags are set
   void applyGravity(); // applies gravity to all particles
   void handleCollisions();
@@ -359,7 +359,7 @@ public:
 private:
   //rendering functions
   void render(void);
-  [[gnu::hot]] void renderParticle(const uint32_t particleindex, const CRGBA& color, uint8_t brightness, const bool wrap);
+  [[gnu::hot]] void renderParticle(const uint32_t particleindex, CRGBA color, uint8_t brightness, const bool wrap);
 
   //paricle physics applied by system if flags are set
   void applyGravity(); // applies gravity to all particles

@@ -3252,7 +3252,7 @@ uint16_t mode_exploding_fireworks(void)
     // launch
     if (flare->vel > 12 * gravity) {
       // flare
-      if (is2D) SEGMENT.wu_pixel(uint32_t(flare->posX*255.f), uint32_t(((float)rows - flare->pos - 1.f)*255.f), CRGBA(flare->col, flare->col, flare->col));
+      if (is2D) SEGMENT.setWuPixelColor(uint32_t(flare->posX*255.f), uint32_t(((float)rows - flare->pos - 1.f)*255.f), CRGBA(flare->col, flare->col, flare->col));
       else      SEGMENT.setPixelColor((flare->posX > 0.0f) ? rows - int(flare->pos) - 1 : int(flare->pos), CRGBA(flare->col, flare->col, flare->col));
       flare->pos  += flare->vel;
       flare->pos  = constrain(flare->pos, 0, rows-1);
@@ -3317,7 +3317,7 @@ uint16_t mode_exploding_fireworks(void)
             c.g = qsub8(c.g, cooling);
             c.b = qsub8(c.b, cooling * 2);
           }
-          if (is2D) SEGMENT.wu_pixel(uint32_t(sparks[i].posX*255.f), uint32_t(((float)rows - sparks[i].pos - 1.f)*255.f), c);
+          if (is2D) SEGMENT.setWuPixelColor(uint32_t(sparks[i].posX*255.f), uint32_t(((float)rows - sparks[i].pos - 1.f)*255.f), c);
           else      SEGMENT.setPixelColor(int(sparks[i].posX) ? rows - int(sparks[i].pos) - 1 : int(sparks[i].pos), c);
         }
       }
@@ -5625,7 +5625,7 @@ uint16_t mode_2Dghostrider(void) {
     SEGMENT.fadeToBlackBy((SEGMENT.speed>>2)+64);
 
     CRGBA color = ULTRAWHITE;
-    SEGMENT.wu_pixel(lighter->gPosX * 256 / 10, lighter->gPosY * 256 / 10, color);
+    SEGMENT.setWuPixelColor(lighter->gPosX * 256 / 10, lighter->gPosY * 256 / 10, color);
 
     lighter->gPosX += lighter->Vspeed * sin_t(radians(lighter->gAngle));
     lighter->gPosY += lighter->Vspeed * cos_t(radians(lighter->gAngle));
@@ -5653,7 +5653,7 @@ uint16_t mode_2Dghostrider(void) {
         lighter->lightersPosX[i] += -7 * sin_t(radians(lighter->Angle[i]));
         lighter->lightersPosY[i] += -7 * cos_t(radians(lighter->Angle[i]));
       }
-      SEGMENT.wu_pixel(lighter->lightersPosX[i] * 256 / 10, lighter->lightersPosY[i] * 256 / 10, SEGMENT.color_from_palette((256 - lighter->time[i]), false, false, 255));
+      SEGMENT.setWuPixelColor(lighter->lightersPosX[i] * 256 / 10, lighter->lightersPosY[i] * 256 / 10, SEGMENT.color_from_palette((256 - lighter->time[i]), false, false, 255));
     }
     SEGMENT.blur(SEGMENT.intensity>>3);
   }
@@ -5935,7 +5935,7 @@ uint16_t mode_2Ddriftrose(void) {
     float angle = radians(i * 10);
     uint32_t x = (CX + (sin_t(angle) * (beatsin8_t(i, 0, L*2)-L))) * 255.f;
     uint32_t y = (CY + (cos_t(angle) * (beatsin8_t(i, 0, L*2)-L))) * 255.f;
-    SEGMENT.wu_pixel(x, y, SEGMENT.color_wheel(map(i, 1,37, 0,255)));
+    SEGMENT.setWuPixelColor(x, y, SEGMENT.color_wheel(map(i, 1,37, 0,255)));
   }
   if (SEGMENT.intensity>>4) SEGMENT.blur(SEGMENT.intensity>>4);
 
@@ -6740,13 +6740,13 @@ uint16_t mode_particlepit(void) {
         PartSys->particles[i].y = (PartSys->maxY << 1); // particles appear somewhere above the matrix, maximum is double the height
         PartSys->particles[i].vx = (int16_t)hw_random16(SEGMENT.speed >> 1) - (SEGMENT.speed >> 2); // side speed is +/-
         PartSys->particles[i].vy = map(SEGMENT.speed, 0, 255, -5, -100); // downward speed
-        PartSys->particles[i].hue = hw_random16(); // set random color
+        PartSys->particles[i].hue = hw_random8(); // set random color
         PartSys->particleFlags[i].collide = true; // enable collision for particle
         PartSys->particles[i].sat = ((SEGMENT.custom3) << 3) + 7;
         // set particle size
         if (SEGMENT.custom1 == 255) {
           PartSys->setParticleSize(1); // set global size to 1 for advanced rendering (no single pixel particles)
-          PartSys->advPartProps[i].size = hw_random16(SEGMENT.custom1); // set each particle to random size
+          PartSys->advPartProps[i].size = hw_random8(64,255); // set each particle to random size
         } else {
           PartSys->setParticleSize(SEGMENT.custom1); // set global size
           PartSys->advPartProps[i].size = 0; // use global size

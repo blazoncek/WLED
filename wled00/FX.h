@@ -520,12 +520,12 @@ class Segment {
 
     inline CRGBA *getPixels() const                           { return pixels; }
     inline void  setPixelColorRaw(unsigned i, CRGBA c) const  { pixels[i] = c; }
-    inline void  addPixelColorRaw(unsigned i, CRGBA c) const  { pixels[i] += c; }
+    inline void  addPixelColorRaw(unsigned i, CRGBA c) const  { pixels[i] += c; } // somehow this crashes ESP
     inline void  blendPixelColorRaw(unsigned i, CRGBA c, uint8_t b) const { pixels[i].nblend(c, b); }
     inline CRGBA getPixelColorRaw(unsigned i) const           { return pixels[i]; };
   #ifndef WLED_DISABLE_2D
     inline void  setPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const  { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)] = c; }
-    inline void  addPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const  { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)] += c; }
+    inline void  addPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const  { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)] += c; } // somehow this crashes ESP
     inline void  blendPixelColorXYRaw(unsigned x, unsigned y, CRGBA c, uint8_t b) const { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)].nblend(c, b); }
     inline CRGBA getPixelColorXYRaw(unsigned x, unsigned y) const           { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; return pixels[XY(x,y)]; };
   #endif
@@ -740,11 +740,12 @@ class Segment {
     void moveX(int delta, bool wrap = false) const;
     void moveY(int delta, bool wrap = false) const;
     void move(unsigned dir, unsigned delta, bool wrap = false) const;
-    void drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA c, bool soft = false) const;
-    void fillCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA c, bool soft = false) const;
+    void drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA c, bool soft = false) const;
+    void fillCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA c, bool soft = false) const;
+    void drawEllipse(uint32_t cx, uint32_t cy, uint32_t rx, uint32_t ry, CRGBA color, bool fill = false, bool soft = false);
     void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft = false) const;
     void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA col2 = 0, int8_t rotate = 0) const;
-    void wu_pixel(uint32_t x, uint32_t y, CRGBA c) const;
+    void setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const;
   #else
     inline bool is2D() const                                                            { return false; }
     inline void setPixelColorXY(int x, int y, CRGBA c) const                            { setPixelColor(x, c); }
@@ -771,7 +772,7 @@ class Segment {
     inline void fillCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA c, bool soft = false) {}
     inline void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft = false) {}
     inline void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA = 0, int8_t = 0) {}
-    inline void wu_pixel(uint32_t x, uint32_t y, CRGBA c) {}
+    inline void setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) {}
   #endif
 
   friend class WS2812FX;

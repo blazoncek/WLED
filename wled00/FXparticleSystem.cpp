@@ -74,7 +74,7 @@
 #ifndef WLED_DISABLE_PARTICLESYSTEM2D
 // blur a 10x10 colorbuffer (CRGBA colorbuffer[100]) in x and y direction, blur can be asymmetric in x and y
 // to blur a subset of the buffer, change the xsize/ysize and set xstart/ystart to the desired starting coordinates (default start is 0/0)
-static inline void blur2D(CRGBA *colorbuffer, uint32_t xsize, uint32_t ysize, uint32_t xblur, uint32_t yblur, uint32_t xstart, uint32_t ystart) {
+static inline void blur2D(CRGBA *colorbuffer, uint32_t xsize, uint32_t ysize, uint32_t xblur, uint32_t yblur, uint32_t xstart = 0, uint32_t ystart = 0) {
   // first and last row are always black in first pass of particle rendering
   for (uint32_t y = ystart + 1; y < ystart + ysize - 2; y++) {
     blur(&colorbuffer[xstart + y * 10], xsize, xblur, xstart, 1);
@@ -84,6 +84,59 @@ static inline void blur2D(CRGBA *colorbuffer, uint32_t xsize, uint32_t ysize, ui
     blur(&colorbuffer[x + ystart * 10], ysize, yblur, ystart, 10);
   }
 }
+/*
+// see https://www.geeksforgeeks.org/dsa/midpoint-ellipse-drawing-algorithm/
+static void drawEllipse(CRGBA *buffer, uint32_t cx, uint32_t cy, uint32_t rx, uint32_t ry, CRGBA color) {
+  // all coodinates and radii are in 16.8 fixed point notation (use >> 8 to convert to pixel coordinates)
+  int32_t rxSq = (rx * rx);
+  int32_t rySq = (ry * ry);
+  int32_t x = 0, y = ry;
+  auto drawLine = [&](uint32_t x1, uint32_t x2, uint32_t y) {
+    for (uint32_t lx = x1; lx <= x2; lx++) {
+      buffer[y * 10 + lx] = color;
+    }
+  };
+
+  // Region 1
+  int32_t d1 = roundf((float)(rySq - (rxSq * ry)) + (0.25f * rxSq)); // initial decision parameter
+  int32_t dx = 2 * rySq * x;
+  int32_t dy = 2 * rxSq * y;
+
+  while (dx < dy) {
+    drawLine((cx - x)>>8, (cx + x)>>8, (cy + y)>>8);
+    drawLine((cx - x)>>8, (cx + x)>>8, (cy - y)>>8);
+    if (d1 < 0) {
+      x  += 256; // increment x by 1 in 16.8 pixel notation
+      dx += (2 * rySq);
+      d1 += dx + rySq;
+    } else {
+      x  += 256;
+      y  -= 256;
+      dx += (2 * rySq);
+      dy -= (2 * rxSq);
+      d1 += dx - dy + rySq;
+    }
+  }
+
+  // Region 2
+  int32_t d2 = (rxSq * ((x + 0.5f) * (x + 0.5f))) + (rxSq * ((y - 1) * (y - 1))) - (rxSq * rySq);
+  while (y >= 0) {
+    drawLine((cx - x)>>8, (cx + x)>>8, (cy + y)>>8);
+    drawLine((cx - x)>>8, (cx + x)>>8, (cy - y)>>8);
+    if (d2 > 0) {
+      y  -= 256;
+      dy -= (2 * rxSq);
+      d2 += rxSq - dy;
+    } else {
+      y  -= 256;
+      x  += 256;
+      dx += (2 * rySq);
+      dy -= (2 * rxSq);
+      d2 += dx - dy + rxSq;
+    }
+  }
+}
+*/
 #endif // WLED_DISABLE_PARTICLESYSTEM2D
 #endif
 
@@ -606,19 +659,6 @@ void ParticleSystem2D::render() {
     renderParticle(i, baseRGB, brightness, particlesettings.wrapX, particlesettings.wrapY);
   }
 
-  // apply global size rendering
-  if (particlesize > 1) {
-    uint32_t passes = particlesize / 64 + 1; // number of blur passes, four passes max
-    uint32_t bluramount = particlesize;
-    uint32_t bitshift = 0;
-    for (uint32_t i = 0; i < passes; i++) {
-      if (i == 2) // for the last two passes, use higher amount of blur (results in a nicer brightness gradient with soft edges)
-        bitshift = 1;
-      SEGMENT.blur2D(bluramount << bitshift, bluramount << bitshift);
-      bluramount -= 64;
-    }
-  }
-
   // apply 2D blur to rendered frame
   if (smearBlur) {
     SEGMENT.blur2D(smearBlur, smearBlur, true);
@@ -626,7 +666,7 @@ void ParticleSystem2D::render() {
 }
 
 // calculate pixel positions and brightness distribution and render the particle to local buffer or global buffer
-void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uint32_t particleindex, const CRGBA& color, uint8_t brightness, const bool wrapX, const bool wrapY) {
+void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color, uint8_t brightness, const bool wrapX, const bool wrapY) {
   uint32_t size = particlesize;
   if (isAdvanced && advPartProps[particleindex].size > 0) // use advanced size properties (0 means use global size including single pixel rendering)
     size = advPartProps[particleindex].size;
@@ -635,9 +675,10 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
     uint32_t x = particles[particleindex].x >> PS_P_RADIUS_SHIFT;
     uint32_t y = particles[particleindex].y >> PS_P_RADIUS_SHIFT;
     if (x <= (uint32_t)maxXpixel && y <= (uint32_t)maxYpixel) {
-      CRGBA col = color;
-      col += SEGMENT.getPixelColorXYRaw(x, maxYpixel-y); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-      SEGMENT.setPixelColorXYRaw(x, maxYpixel-y, col); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+      color += SEGMENT.getPixelColorXYRaw(x, maxYpixel-y); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+      SEGMENT.setPixelColorXYRaw(x, maxYpixel-y, color); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+      // for some odd reason this will crash
+      //SEGMENT.addPixelColorXYRaw(x, maxYpixel-y, color); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
     }
     return;
   }
@@ -673,29 +714,41 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
     pxlbrightness[3] = gamma8inv(pxlbrightness[3]);
   }
 
-  if (isAdvanced && advPartProps[particleindex].size > 1) { // render particle to a bigger size
+  if (size > 1) { // render particle to a bigger size
     CRGBA renderbuffer[100]; // 10x10 pixel buffer
-    for (int i = 0; i < 100; i++) renderbuffer[i] = CRGBA(0,0,0); // make sure buffer is cleared (memset is faster but may not work on all platforms)
-
+    memset(renderbuffer, 0, sizeof(renderbuffer)); // will also clear alpha channel/makes buffer transparent
+/*
+    uint32_t rx, ry;
+    if (sizeControl && advPartSize[particleindex].asymmetry > 0) {
+      getParticleXYsize(&advPartProps[particleindex], &advPartSize[particleindex], rx, ry);
+      rx <<= 1; // multiply by 2 to get radius in subpixel space
+      ry <<= 1;
+    } else {
+      rx = ry = size << 1; // multiply by 2 to get radius in subpixel space
+    }
+    if (rx > 1152) rx = 1152; // limit to max radius of 4.5 pixels
+    if (ry > 1152) ry = 1152;
+    drawEllipse(renderbuffer, 1280, 1280, rx, ry, color); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+    blur2D(renderbuffer, 10, 10, 64, 64, 0, 0); // apply initial blur to make edges smoother
+*/
     //particle size to pixels: < 64 is 4x4, < 128 is 6x6, < 192 is 8x8, bigger is 10x10
-    //first, render the pixel to the center of the renderbuffer, then apply 2D blurring
+    //first, render the pixel to the center of the renderbuffer, then apply 2D blurring to expand it (requires different amount of blurring to achieve good visual results)
     renderbuffer[4 + (4 * 10)] += color.scale8(pxlbrightness[0]); // order is: bottom left, bottom right, top right, top left
     renderbuffer[5 + (4 * 10)] += color.scale8(pxlbrightness[1]);
     renderbuffer[5 + (5 * 10)] += color.scale8(pxlbrightness[2]);
     renderbuffer[4 + (5 * 10)] += color.scale8(pxlbrightness[3]);
     uint32_t rendersize = 2; // initialize render size, minimum is 4x4 pixels, it is incremented in the loop below to start with 4
     uint32_t offset = 4; // offset to zero coordinate to write/read data in renderbuffer (actually needs to be 3, is decremented in the loop below)
-    uint32_t maxsize = advPartProps[particleindex].size;
-    uint32_t xsize = maxsize;
-    uint32_t ysize = maxsize;
-    if (sizeControl) { // use advanced size control
-      if (advPartSize[particleindex].asymmetry > 0)
-        getParticleXYsize(&advPartProps[particleindex], &advPartSize[particleindex], xsize, ysize);
-      maxsize = (xsize > ysize) ? xsize : ysize; // choose the bigger of the two
+    uint32_t xsize = size;
+    uint32_t ysize = size;
+    // use advanced size control
+    if (sizeControl && advPartSize[particleindex].asymmetry > 0) {
+      getParticleXYsize(&advPartProps[particleindex], &advPartSize[particleindex], xsize, ysize);
+      size = (xsize > ysize) ? xsize : ysize; // choose the bigger of the two
     }
-    maxsize = maxsize/64 + 1; // number of blur passes depends on maxsize, four passes max
+    size = size/64 + 1; // number of blur passes depends on size, four passes max
     uint32_t bitshift = 0;
-    for (uint32_t i = 0; i < maxsize; i++) {
+    for (uint32_t i = 0; i < size; i++) {
       if (i == 2) //for the last two passes, use higher amount of blur (results in a nicer brightness gradient with soft edges)
         bitshift = 1;
       rendersize += 2;
@@ -705,7 +758,7 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
       ysize = ysize > 64 ? ysize - 64 : 0;
     }
 
-    // calculate origin coordinates to render the particle to in the framebuffer
+    // calculate origin coordinates to render the particle into framebuffer
     uint32_t xfb_orig = x - (rendersize>>1) + 1 - offset;
     uint32_t yfb_orig = y - (rendersize>>1) + 1 - offset;
     uint32_t xfb, yfb; // coordinates in frame buffer to write to note: by making this uint, only overflow has to be checked (spits a warning though)
@@ -739,9 +792,8 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
           else
             continue;
         }
-        CRGBA col = renderbuffer[xrb + yrb * 10];
-        col += SEGMENT.getPixelColorXYRaw(xfb, maxYpixel-yfb); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-        SEGMENT.setPixelColorXYRaw(xfb, maxYpixel-yfb, col); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+        renderbuffer[xrb + yrb * 10] += SEGMENT.getPixelColorXYRaw(xfb, maxYpixel-yfb); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+        SEGMENT.setPixelColorXYRaw(xfb, maxYpixel-yfb, renderbuffer[xrb + yrb * 10]); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
       }
     }
   } else { // standard rendering (2x2 pixels)
@@ -795,6 +847,12 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
         SEGMENT.setPixelColorXYRaw(pixco[i].x, maxYpixel-pixco[i].y, col); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
       }
     }
+/*
+    // this works as well but produces less visually pleasing results (Wu pixel may need refining for PS use)
+    uint32_t x = particles[particleindex].x << (8 - PS_P_RADIUS_SHIFT);
+    uint32_t y = ((maxYpixel+1) << 8) - (particles[particleindex].y << (8 - PS_P_RADIUS_SHIFT)); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+    SEGMENT.setWuPixelColor(x, y, color); // render Wu pixel for anti-aliasing
+*/
   }
 }
 
@@ -1394,7 +1452,7 @@ void ParticleSystem1D::render() {
 }
 
 // calculate pixel positions and brightness distribution and render the particle to local buffer or global buffer
-void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uint32_t particleindex, const CRGBA& color, uint8_t brightness, const bool wrap) {
+void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uint32_t particleindex, CRGBA color, uint8_t brightness, const bool wrap) {
   uint32_t size = particlesize;
   if (isAdvanced) // use advanced size properties (1D system has no large size global rendering TODO: add large global rendering?)
     size = advPartProps[particleindex].size;
@@ -1402,9 +1460,8 @@ void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uin
   if (size == 0) { //single pixel particle, can be out of bounds as oob checking is made for 2-pixel particles (and updating it uses more code)
     uint32_t x =  particles[particleindex].x >> PS_P_RADIUS_SHIFT_1D;
     if (x <= (uint32_t)maxXpixel) { //by making x unsigned there is no need to check < 0 as it will overflow
-      CRGBA col = color;
-      col += SEGMENT.getPixelColorRaw(x);
-      SEGMENT.setPixelColorRaw(x, col);
+      color += SEGMENT.getPixelColorRaw(x);
+      SEGMENT.setPixelColorRaw(x, color);
     }
     return;
   }
@@ -1467,9 +1524,8 @@ void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uin
         else
           continue;
       }
-      CRGBA col = renderbuffer[xrb];
-      col += SEGMENT.getPixelColorRaw(xfb);
-      SEGMENT.setPixelColorRaw(xfb, col);
+      renderbuffer[xrb] += SEGMENT.getPixelColorRaw(xfb);
+      SEGMENT.setPixelColorRaw(xfb, renderbuffer[xrb]);
     }
   }
   else { // standard rendering (2 pixels per particle)

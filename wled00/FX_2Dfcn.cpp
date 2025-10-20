@@ -426,7 +426,7 @@ void Segment::move(unsigned dir, unsigned delta, bool wrap) const {
   }
 }
 
-void Segment::drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA col, bool soft) const {
+void Segment::drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, bool soft) const {
   if (!isActive() || radius == 0) return; // not active
   if (soft) {
     // Xiaolin Wu’s algorithm
@@ -446,11 +446,11 @@ void Segment::drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA col, bo
           int dx = (i & 1) ? -1 : 1;     // 1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1
           int dy = (i & 2) ? -1 : 1;     // 1,  1, -1, -1,  1,  1, -1, -1,  1,  1, -1, -1,  1,  1, -1, -1
           if (swaps) {
-              px = cx + (y - adj) * dx;
-              py = cy + x * dy;
+            px = cx + (y - adj) * dx;
+            py = cy + x * dy;
           } else {
-              px = cx + x * dx;
-              py = cy + (y - adj) * dy;
+            px = cx + x * dx;
+            py = cy + (y - adj) * dy;
           }
           if (px < 0 || py < 0 || px >= (int)vWidth() || py >= (int)vHeight()) continue;
           blendPixelColorXYRaw(px, py, col, (uint8_t)(adj ? fade : 255 - fade));
@@ -483,22 +483,95 @@ void Segment::drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA col, bo
 }
 
 // by stepko, taken from https://editor.soulmatelights.com/gallery/573-blobs
-void Segment::fillCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA col, bool soft) const {
+void Segment::fillCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, bool soft) const {
   if (!isActive() || radius == 0) return; // not active
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
   // draw soft bounding circle
   if (soft) drawCircle(cx, cy, radius, col, soft);
   // fill it
+  uint32_t rSq = radius * radius;
   for (int y = -radius; y <= radius; y++) {
     for (int x = -radius; x <= radius; x++) {
-      if (x * x + y * y <= radius * radius &&
+      if (x * x + y * y <= rSq &&
           int(cx)+x >= 0 && int(cy)+y >= 0 &&
-          int(cx)+x < vW && int(cy)+y < vH)
+          int(cx)+x < vW && int(cy)+y < vH) {
+        col += getPixelColorXYRaw(cx + x, cy + y);
         setPixelColorXYRaw(cx + x, cy + y, col);
+      }
     }
   }
 }
+
+/*
+// see https://www.geeksforgeeks.org/dsa/midpoint-ellipse-drawing-algorithm/
+void Segment::drawEllipse(uint32_t cx, uint32_t cy, uint32_t rx, uint32_t ry, CRGBA color, bool fill, bool soft) {
+  // all coodinates and radii are in 16.8 fixed point notation (use >> 8 to convert to pixel coordinates)
+  if (!isActive()) return; // not active
+  const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
+  const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
+  if (cx >= vW<<8 || cy >= vH<<8) return; // center outside segment
+  int32_t rxSq = (rx * rx);
+  int32_t rySq = (ry * ry);
+  int32_t x = 0, y = ry;
+  //auto fEllipse = [&](int32_t x, int32_t y) {
+  //  return (rySq * x * x) + (rxSq * y * y) - (rxSq * rySq);
+  //};
+
+  // Region 1
+  int32_t d1 = roundf((float)(rySq - (rxSq * ry)) + (0.25f * rxSq)); // initial decision parameter
+  int32_t dx = 2 * rySq * x;
+  int32_t dy = 2 * rxSq * y;
+
+  while (dx < dy) {
+    if (fill) {
+      drawLine((cx - x)>>8, (cy + y)>>8, (cx + x)>>8, (cy + y)>>8, color, false);
+      drawLine((cx - x)>>8, (cy - y)>>8, (cx + x)>>8, (cy - y)>>8, color, false);
+    } else {
+      setWuPixelColor(cx - x, cy + y, color);
+      setWuPixelColor(cx + x, cy + y, color);
+      setWuPixelColor(cx - x, cy - y, color);
+      setWuPixelColor(cx + x, cy - y, color);
+    }
+    if (d1 < 0) {
+      x  += 256; // increment x by 1 in 16.8 pixel notation
+      dx += (2 * rySq);
+      d1 += dx + rySq;
+    } else {
+      x  += 256;
+      y  -= 256;
+      dx += (2 * rySq);
+      dy -= (2 * rxSq);
+      d1 += dx - dy + rySq;
+    }
+  }
+
+  // Region 2
+  int32_t d2 = (rxSq * ((x + 0.5f) * (x + 0.5f))) + (rxSq * ((y - 1) * (y - 1))) - (rxSq * rySq);
+  while (y >= 0) {
+    if (fill) {
+      drawLine((cx - x)>>8, (cy + y)>>8, (cx + x)>>8, (cy + y)>>8, color, false);
+      drawLine((cx - x)>>8, (cy - y)>>8, (cx + x)>>8, (cy - y)>>8, color, false);
+    } else {
+      setWuPixelColor(cx - x, cy + y, color);
+      setWuPixelColor(cx + x, cy + y, color);
+      setWuPixelColor(cx - x, cy - y, color);
+      setWuPixelColor(cx + x, cy - y, color);
+    }
+    if (d2 > 0) {
+      y  -= 256;
+      dy -= (2 * rxSq);
+      d2 += rxSq - dy;
+    } else {
+      y  -= 256;
+      x  += 256;
+      dx += (2 * rySq);
+      dy -= (2 * rxSq);
+      d2 += dx - dy + rxSq;
+    }
+  }
+}
+*/
 
 //line function
 void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft) const {
@@ -605,7 +678,7 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
 // https://gist.github.com/sutaburosu/32a203c2efa2bb584f4b846a91066583#file-cakeday_hack-ino-L154
 // @param x 16.8 fixed point
 // @param y 16.8 fixed point
-void Segment::wu_pixel(uint32_t x, uint32_t y, CRGBA c) const {
+void Segment::setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const {
   if (!isActive()) return; // not active
   // extract the fractional parts and derive their inverses
   unsigned xx = x & 0xff, yy = y & 0xff, ix = 255 - xx, iy = 255 - yy;
@@ -616,10 +689,10 @@ void Segment::wu_pixel(uint32_t x, uint32_t y, CRGBA c) const {
   for (int i = 0; i < 4; i++) {
     int wu_x = (x >> 8) + (i & 1);        // precalculate x
     int wu_y = (y >> 8) + ((i >> 1) & 1); // precalculate y
-    CRGBA led = getPixelColorXY(wu_x, wu_y);
-    c.a = wu[i]; // set alpha to weight
-    led += c;
-    setPixelColorXY(wu_x, wu_y, led);
+    if (/*wu_x >= 0 && wu_y >= 0 && */wu_x < (int)vWidth() && wu_y < (int)vHeight()) {
+      c.a = wu[i]; // set alpha to weight
+      setPixelColorXYRaw(wu_x, wu_y, getPixelColorXYRaw(wu_x, wu_y).add(c, true)); // also modifies resulting opacity; should use addPixelColorXYRaw but that crashes ESP
+    }
   }
 }
 
