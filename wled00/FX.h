@@ -740,9 +740,8 @@ class Segment {
     void moveX(int delta, bool wrap = false) const;
     void moveY(int delta, bool wrap = false) const;
     void move(unsigned dir, unsigned delta, bool wrap = false) const;
-    void drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA c, bool soft = false) const;
-    void fillCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA c, bool soft = false) const;
-    void drawEllipse(uint32_t cx, uint32_t cy, uint32_t rx, uint32_t ry, CRGBA color, bool fill = false, bool soft = false);
+    void drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA c, bool fill = false, bool soft = false) const;
+    void drawEllipse(uint32_t cx, uint32_t cy, uint32_t rx, uint32_t ry, CRGBA color, bool fill = false) const;
     void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft = false) const;
     void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA col2 = 0, int8_t rotate = 0) const;
     void setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const;

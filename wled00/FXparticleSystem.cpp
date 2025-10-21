@@ -84,27 +84,39 @@ static inline void blur2D(CRGBA *colorbuffer, uint32_t xsize, uint32_t ysize, ui
     blur(&colorbuffer[x + ystart * 10], ysize, yblur, ystart, 10);
   }
 }
+
 /*
+// Draws filled ellipse into a 10x10 CRGBA buffer.
 // see https://www.geeksforgeeks.org/dsa/midpoint-ellipse-drawing-algorithm/
 static void drawEllipse(CRGBA *buffer, uint32_t cx, uint32_t cy, uint32_t rx, uint32_t ry, CRGBA color) {
-  // all coodinates and radii are in 16.8 fixed point notation (use >> 8 to convert to pixel coordinates)
-  int32_t rxSq = (rx * rx);
-  int32_t rySq = (ry * ry);
-  int32_t x = 0, y = ry;
-  auto drawLine = [&](uint32_t x1, uint32_t x2, uint32_t y) {
-    for (uint32_t lx = x1; lx <= x2; lx++) {
+  // all coodinates and radii are in 16.8 fixed point notation
+  auto mul168 = [](int32_t a, int32_t b) { return ((int64_t)a * b) >> 8; };  // 16.8 fixed point multiplication
+  auto sqr168 = [&](int32_t a) { return mul168(a, a); };                        // 16.8 fixed point squaring
+  auto int168 = [](int32_t a)  { return a >> 8; };                           // convert 16.8 fixed point to integer
+  auto drawLine = [&](int32_t x1, int32_t x2, int32_t y) {
+    uint8_t k1 = 255 - (x1 && 0xFF);
+    uint8_t k2 =        x2 && 0xFF;
+    x1 = int168(x1);
+    x2 = int168(x2);
+    y  = int168(y);
+    for (uint32_t lx = x1; lx <= x2; lx++)
       buffer[y * 10 + lx] = color;
-    }
+    buffer[y * 10 + x1].setOpacity(k1); // soften edges
+    buffer[y * 10 + x2].setOpacity(k2);
   };
 
-  // Region 1
-  int32_t d1 = roundf((float)(rySq - (rxSq * ry)) + (0.25f * rxSq)); // initial decision parameter
-  int32_t dx = 2 * rySq * x;
-  int32_t dy = 2 * rxSq * y;
+  int32_t rxSq = sqr168(rx);
+  int32_t rySq = sqr168(ry);
+  int32_t x = 0, y = ry;
 
+  int32_t dx = 0; //2 * rySq * x;
+  int32_t dy = mul168(2 * rxSq, y);
+
+  // Region 1
+  int32_t d1 = (rySq - mul168(rxSq, ry)) + (rxSq >> 2); // initial decision parameter
   while (dx < dy) {
-    drawLine((cx - x)>>8, (cx + x)>>8, (cy + y)>>8);
-    drawLine((cx - x)>>8, (cx + x)>>8, (cy - y)>>8);
+    drawLine((cx - x), (cx + x), (cy + y));
+    drawLine((cx - x), (cx + x), (cy - y));
     if (d1 < 0) {
       x  += 256; // increment x by 1 in 16.8 pixel notation
       dx += (2 * rySq);
@@ -119,10 +131,12 @@ static void drawEllipse(CRGBA *buffer, uint32_t cx, uint32_t cy, uint32_t rx, ui
   }
 
   // Region 2
-  int32_t d2 = (rxSq * ((x + 0.5f) * (x + 0.5f))) + (rxSq * ((y - 1) * (y - 1))) - (rxSq * rySq);
+  const int32_t x_plus_half = x + 128;
+  const int32_t y_minus_1 = y - 256;
+  int32_t d2 = mul168(rySq, sqr168(x_plus_half)) + mul168(rxSq, sqr168(y_minus_1)) - mul168(rxSq, rySq);
   while (y >= 0) {
-    drawLine((cx - x)>>8, (cx + x)>>8, (cy + y)>>8);
-    drawLine((cx - x)>>8, (cx + x)>>8, (cy - y)>>8);
+    drawLine((cx - x), (cx + x), (cy + y));
+    drawLine((cx - x), (cx + x), (cy - y));
     if (d2 > 0) {
       y  -= 256;
       dy -= (2 * rxSq);
@@ -387,8 +401,7 @@ void ParticleSystem2D::fireParticleupdate() {
 
 // update advanced particle size control, returns false if particle shrinks to 0 size
 bool ParticleSystem2D::updateSize(PSadvancedParticle *advprops, PSsizeControl *advsize) {
-  if (advsize == nullptr) // safety check
-    return false;
+  // no need for pointer check, done in update()/updatePSpointers()
   // grow/shrink particle
   int32_t newsize = advprops->size;
   uint32_t counter = advsize->sizecounter;
@@ -439,8 +452,7 @@ bool ParticleSystem2D::updateSize(PSadvancedParticle *advprops, PSsizeControl *a
 
 // calculate x and y size for asymmetrical particles (advanced size control)
 void ParticleSystem2D::getParticleXYsize(PSadvancedParticle *advprops, PSsizeControl *advsize, uint32_t &xsize, uint32_t &ysize) {
-  if (advsize == nullptr) // if advsize is valid, also advanced properties pointer is valid (handled by updatePSpointers())
-    return;
+  // no need for pointer check, done in renderParticle()/updatePSpointers()
   int32_t size = advprops->size;
   int32_t asymdir = advsize->asymdir;
   int32_t deviation = ((uint32_t)size * (uint32_t)advsize->asymmetry + 255) >> 8; // deviation from symmetrical size
@@ -645,8 +657,7 @@ void ParticleSystem2D::render() {
     if (fireIntesity) { // fire mode
       brightness = min((uint32_t)particles[i].ttl * (3 + (fireIntesity >> 5)) + 5, 255U);
       baseRGB = ColorFromPaletteWLED(SEGPALETTE, brightness, 255, LINEARBLEND_NOWRAP);
-    }
-    else {
+    } else {
       brightness = min(particles[i].ttl << 1, 255);
       baseRGB = ColorFromPaletteWLED(SEGPALETTE, particles[i].hue, 255, blend);
       if (particles[i].sat < 255) {
@@ -718,6 +729,7 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
     CRGBA renderbuffer[100]; // 10x10 pixel buffer
     memset(renderbuffer, 0, sizeof(renderbuffer)); // will also clear alpha channel/makes buffer transparent
 /*
+    // might consider using ellipse drawing for advanced size control in the future
     uint32_t rx, ry;
     if (sizeControl && advPartSize[particleindex].asymmetry > 0) {
       getParticleXYsize(&advPartProps[particleindex], &advPartSize[particleindex], rx, ry);
@@ -849,6 +861,7 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::renderParticle(const uin
     }
 /*
     // this works as well but produces less visually pleasing results (Wu pixel may need refining for PS use)
+    // the result is more "precise" but the brightness distribution looks worse
     uint32_t x = particles[particleindex].x << (8 - PS_P_RADIUS_SHIFT);
     uint32_t y = ((maxYpixel+1) << 8) - (particles[particleindex].y << (8 - PS_P_RADIUS_SHIFT)); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
     SEGMENT.setWuPixelColor(x, y, color); // render Wu pixel for anti-aliasing
@@ -1032,18 +1045,15 @@ void __attribute__((optimize("-O2"))) ParticleSystem2D::collideParticles(PSparti
   }
 }
 
-// update size and pointers (memory location and size can change dynamically)
-// note: do not access the PS class in FX befor running this function (or it messes up SEGENV.data)
+// update "matrix" size and pointers (memory location and size can change dynamically)
+// note: do not access the PS class in FX before running this function (or it messes up SEGENV.data)
 void ParticleSystem2D::updateSystem(uint32_t w, uint32_t h) {
   //PSPRINTLN("updateSystem2D");
   setMatrixSize(w, h);
-  updatePSpointers(); // update pointers to PS data, also updates availableParticles
+  updatePSpointers(); // needed if memory location of SEGMENT.data changed
   //PSPRINTLN("\n END update System2D, running FX...");
 }
 
-// set the pointers for the class (this only has to be done once and not on every FX call, only the class pointer needs to be reassigned to SEGENV.data every time)
-// function returns the pointer to the next byte available for the FX (if it assigned more memory for other stuff using the above allocate function)
-// FX handles the PSsources, need to tell this function how many there are
 void ParticleSystem2D::updatePSpointers() {
   //PSPRINTLN("updatePSpointers");
   // Note on memory alignment:
@@ -1073,7 +1083,7 @@ void ParticleSystem2D::updatePSpointers() {
 }
 
 //non class functions to use for initialization
-uint32_t calculateNumberOfParticles2D(uint32_t const pixels, const bool isadvanced, const bool sizecontrol) {
+static uint32_t calculateNumberOfParticles2D(const uint32_t pixels, const bool isadvanced, const bool sizecontrol) {
   uint32_t numberofParticles = pixels;  // 1 particle per pixel (for example 512 particles on 32x16)
   uint32_t particlelimit = MAXPARTICLES_2D; // maximum number of paticles allowed
   numberofParticles = max((uint32_t)4, min(numberofParticles, particlelimit)); // limit to 4 - particlelimit
@@ -1088,7 +1098,7 @@ uint32_t calculateNumberOfParticles2D(uint32_t const pixels, const bool isadvanc
   return numberofParticles;
 }
 
-uint32_t calculateNumberOfSources2D(uint32_t pixels, uint32_t requestedsources) {
+static uint32_t calculateNumberOfSources2D(uint32_t pixels, uint32_t requestedsources) {
   int numberofSources = min((pixels) / SOURCEREDUCTIONFACTOR, (uint32_t)requestedsources);
   numberofSources = max(1, min(numberofSources, MAXSOURCES_2D)); // limit
   // make sure it is a multiple of 4 for proper memory alignment
@@ -1097,7 +1107,7 @@ uint32_t calculateNumberOfSources2D(uint32_t pixels, uint32_t requestedsources) 
 }
 
 //allocate memory for particle system class, particles, sprays plus additional memory requested by FX //TODO: add percentofparticles like in 1D to reduce memory footprint of some FX?
-bool allocateParticleSystemMemory2D(uint32_t numparticles, uint32_t numsources, bool isadvanced, bool sizecontrol, uint32_t additionalbytes) {
+static bool allocateParticleSystemMemory2D(uint32_t numparticles, uint32_t numsources, bool isadvanced, bool sizecontrol, uint32_t additionalbytes) {
   PSPRINTLN("PS 2D alloc");
   PSPRINTLN("numparticles:" + String(numparticles) + " numsources:" + String(numsources) + " additionalbytes:" + String(additionalbytes));
   uint32_t requiredmemory = sizeof(ParticleSystem2D);
@@ -1412,10 +1422,13 @@ void ParticleSystem1D::render() {
     blend = LINEARBLEND_NOWRAP;
   }
 
+  // this deviates from 2D rendering where fadeToBlack is used
   if (motionBlur) { // blurring active
-    SEGMENT.fadeToBlackBy(motionBlur); // fade the segment buffer
-  }  else { // no blurring: clear buffer
-    SEGMENT.clear();
+    //SEGMENT.fadeToBlackBy(motionBlur); // fade the segment buffer
+    SEGMENT.fadeToSecondaryBy(motionBlur); // fade the segment buffer
+  }  else { // no blurring: clear buffer with background color
+    //SEGMENT.clear();
+    SEGMENT.fill(SEGCOLOR(1));
   }
 
   // go over particles and render them to the buffer
@@ -1437,17 +1450,10 @@ void ParticleSystem1D::render() {
     if(gammaCorrectCol) brightness = gamma8(brightness); // apply gamma correction, used for gamma-inverted brightness distribution
     renderParticle(i, baseRGB, brightness, particlesettings.wrap);
   }
+
   // apply smear-blur to rendered frame
   if (smearBlur) {
     SEGMENT.blur1D(smearBlur);
-  }
-
-  // add background color
-  CRGBA bg_color = SEGCOLOR(1);
-  if (bg_color != CRGBA(BLACK)) { //if not black
-    for (int32_t i = 0; i <= maxXpixel; i++) {
-      SEGMENT.addPixelColorRaw(i, bg_color);
-    }
   }
 }
 
@@ -1460,8 +1466,7 @@ void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uin
   if (size == 0) { //single pixel particle, can be out of bounds as oob checking is made for 2-pixel particles (and updating it uses more code)
     uint32_t x =  particles[particleindex].x >> PS_P_RADIUS_SHIFT_1D;
     if (x <= (uint32_t)maxXpixel) { //by making x unsigned there is no need to check < 0 as it will overflow
-      color += SEGMENT.getPixelColorRaw(x);
-      SEGMENT.setPixelColorRaw(x, color);
+      SEGMENT.setPixelColorRaw(x, SEGMENT.getPixelColorRaw(x) + color);
     }
     return;
   }
@@ -1485,9 +1490,9 @@ void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uin
   }
 
   // check if particle has advanced size properties and buffer is available
-  if (isAdvanced && advPartProps[particleindex].size > 1) {
+  if (size > 1) {
     CRGBA renderbuffer[10]; // 10 pixel buffer
-    for (int i = 0; i < 10; i++) renderbuffer[i] = CRGBA(BLACK); // make sure buffer is cleared (memset is faster but may not work on all platforms)
+    memset(renderbuffer, 0, sizeof(renderbuffer)); // make sure buffer is cleared/also set transparent
 
     //render particle to a bigger size
     //particle size to pixels: 2 - 63 is 4 pixels, < 128 is 6pixels, < 192 is 8 pixels, bigger is 10 pixels
@@ -1520,15 +1525,12 @@ void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uin
             xfb = (maxXpixel + 1) + (int32_t)xfb; // this always overflows to within bounds
           else
             xfb = xfb % (maxXpixel + 1); // note: without the above "negative" check, this works only for powers of 2
-        }
-        else
+        } else
           continue;
       }
-      renderbuffer[xrb] += SEGMENT.getPixelColorRaw(xfb);
-      SEGMENT.setPixelColorRaw(xfb, renderbuffer[xrb]);
+      SEGMENT.setPixelColorRaw(xfb, SEGMENT.getPixelColorRaw(xfb) + renderbuffer[xrb]);
     }
-  }
-  else { // standard rendering (2 pixels per particle)
+  } else { // standard rendering (2 pixels per particle)
     bool pxlisinframe[2] = {true, true};
     int32_t pixco[2]; // physical pixel coordinates of the two pixels representing a particle
     // set the raw pixel coordinates
@@ -1542,8 +1544,7 @@ void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uin
         pixco[0] = maxXpixel;
       else
         pxlisinframe[0] = false; // pixel is out of matrix boundaries, do not render
-    }
-    else if (pixco[1] > (int32_t)maxXpixel) { // right pixel, only has to be checkt if left pixel did not overflow
+    } else if (pixco[1] > (int32_t)maxXpixel) { // right pixel, only has to be checked if left pixel did not overflow
       if (wrap) // wrap y to the other side if required
         pixco[1] = 0;
       else
@@ -1551,9 +1552,7 @@ void __attribute__((optimize("-O2"))) ParticleSystem1D::renderParticle(const uin
     }
     for (uint32_t i = 0; i < 2; i++) {
       if (pxlisinframe[i]) {
-        CRGBA col = color.scale8(pxlbrightness[i]);
-        col += SEGMENT.getPixelColorRaw(pixco[i]);
-        SEGMENT.setPixelColorRaw(pixco[i], col);
+        SEGMENT.setPixelColorRaw(pixco[i], SEGMENT.getPixelColorRaw(pixco[i]) + color.scale8(pxlbrightness[i]));
       }
     }
   }
@@ -1692,9 +1691,6 @@ void ParticleSystem1D::updateSystem(uint32_t len) {
   updatePSpointers();
 }
 
-// set the pointers for the class (this only has to be done once and not on every FX call, only the class pointer needs to be reassigned to SEGENV.data every time)
-// function returns the pointer to the next byte available for the FX (if it assigned more memory for other stuff using the above allocate function)
-// FX handles the PSsources, need to tell this function how many there are
 void ParticleSystem1D::updatePSpointers() {
   // Note on memory alignment:
   // a pointer MUST be 4 byte aligned. sizeof() in a struct/class is always aligned to the largest element. if it contains a 32bit, it will be padded to 4 bytes, 16bit is padded to 2byte alignment.
@@ -1722,7 +1718,7 @@ void ParticleSystem1D::updatePSpointers() {
 }
 
 //non class functions to use for initialization, fraction is uint8_t: 255 means 100%
-uint32_t calculateNumberOfParticles1D(const uint32_t fraction, const bool isadvanced) {
+static uint32_t calculateNumberOfParticles1D(const uint32_t fraction, const bool isadvanced) {
   uint32_t numberofParticles = SEGMENT.virtualLength();  // one particle per pixel (if possible)
   uint32_t particlelimit = MAXPARTICLES_1D; // maximum number of paticles allowed
   numberofParticles = min(numberofParticles, particlelimit); // limit to particlelimit
@@ -1736,7 +1732,7 @@ uint32_t calculateNumberOfParticles1D(const uint32_t fraction, const bool isadva
   return numberofParticles;
 }
 
-uint32_t calculateNumberOfSources1D(const uint32_t requestedsources) {
+static uint32_t calculateNumberOfSources1D(const uint32_t requestedsources) {
   int numberofSources = max(1, min((int)requestedsources,MAXSOURCES_1D)); // limit
   // make sure it is a multiple of 4 for proper memory alignment (so minimum is acutally 4)
   numberofSources = (numberofSources+3) & ~0x03;
@@ -1744,16 +1740,12 @@ uint32_t calculateNumberOfSources1D(const uint32_t requestedsources) {
 }
 
 //allocate memory for particle system class, particles, sprays plus additional memory requested by FX
-bool allocateParticleSystemMemory1D(const uint32_t numparticles, const uint32_t numsources, const bool isadvanced, const uint32_t additionalbytes) {
+static bool allocateParticleSystemMemory1D(const uint32_t numparticles, const uint32_t numsources, const bool isadvanced, const uint32_t additionalbytes) {
   uint32_t requiredmemory = sizeof(ParticleSystem1D);
   // functions above make sure these are a multiple of 4 bytes (to avoid alignment issues)
   requiredmemory += sizeof(PSparticleFlags1D) * numparticles;
   requiredmemory += sizeof(PSparticle1D) * numparticles;
   requiredmemory += sizeof(PSsource1D) * numsources;
-#ifndef WLED_DISABLE_2D
-  if(SEGMENT.is2D() && SEGMENT.map1D2D)
-    requiredmemory += sizeof(CRGBA) * SEGMENT.maxMappingLength(); // need local buffer for mapped rendering
-#endif
   requiredmemory += additionalbytes;
   if (isadvanced)
     requiredmemory += sizeof(PSadvancedParticle1D) * numparticles;

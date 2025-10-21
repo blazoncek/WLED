@@ -1049,7 +1049,7 @@ void Segment::fade_out(uint8_t rate) const {
 void Segment::fadeToSecondaryBy(uint8_t fadeBy) const {
   if (!isActive() || fadeBy == 0) return;   // optimization - no scaling to apply
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
-  for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, getPixelColorRaw(i).nblend(colors[1], fadeBy));
+  for (unsigned i = 0; i < length(); i++) blendPixelColorRaw(i, colors[1], fadeBy);
 }
 
 // fades all pixels to black using nscale8()

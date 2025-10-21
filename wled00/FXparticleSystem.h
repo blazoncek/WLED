@@ -225,9 +225,6 @@ private:
 
 // initialization functions (not part of class)
 bool initParticleSystem2D(ParticleSystem2D *&PartSys, const uint32_t requestedsources, const uint32_t additionalbytes = 0, const bool advanced = false, const bool sizecontrol = false);
-uint32_t calculateNumberOfParticles2D(const uint32_t pixels, const bool advanced, const bool sizecontrol);
-uint32_t calculateNumberOfSources2D(const uint32_t pixels, const uint32_t requestedsources);
-bool allocateParticleSystemMemory2D(const uint32_t numparticles, const uint32_t numsources, const bool advanced, const bool sizecontrol, const uint32_t additionalbytes);
 #endif // WLED_DISABLE_PARTICLESYSTEM2D
 
 ////////////////////////
@@ -389,7 +386,4 @@ private:
 };
 
 bool initParticleSystem1D(ParticleSystem1D *&PartSys, const uint32_t requestedsources, const uint8_t fractionofparticles = 255, const uint32_t additionalbytes = 0, const bool advanced = false);
-uint32_t calculateNumberOfParticles1D(const uint32_t fraction, const bool isadvanced);
-uint32_t calculateNumberOfSources1D(const uint32_t requestedsources);
-bool allocateParticleSystemMemory1D(const uint32_t numparticles, const uint32_t numsources, const bool isadvanced, const uint32_t additionalbytes);
 #endif // WLED_DISABLE_PARTICLESYSTEM1D

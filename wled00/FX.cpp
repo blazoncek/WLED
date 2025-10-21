@@ -2252,7 +2252,7 @@ static uint16_t ripple_base() {
         unsigned cx = rippleorigin >> 8;
         unsigned cy = rippleorigin & 0xFF;
         unsigned mag = scale8(sin8_t((propF>>2)), amp);
-        if (propI > 0) SEGMENT.drawCircle(cx, cy, propI, SEGMENT.getPixelColorXY(cx + propI, cy).nblend(col, (uint8_t)mag), true);
+        if (propI > 0) SEGMENT.drawCircle(cx, cy, propI, SEGMENT.getPixelColorXY(cx + propI, cy).nblend(col, (uint8_t)mag), false, true);
       } else
       #endif
       {
@@ -5728,7 +5728,7 @@ uint16_t mode_2Dfloatingblobs(void) {
     int y = roundf(blob->y[i]);
     CRGBA c = SEGMENT.color_from_palette(blob->color[i], false, PALETTE_FIXED, 0);
     if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(roundf(blob->x[i-1]), roundf(blob->y[i-1]), x, y, SEGCOLOR(2), SEGMENT.check1);
-    if (blob->r[i] > 1.f) SEGMENT.fillCircle(x, y, roundf(blob->r[i]), c, SEGMENT.check1);
+    if (blob->r[i] > 1.f) SEGMENT.drawCircle(x, y, roundf(blob->r[i]), c, true, SEGMENT.check1);
     else                  SEGMENT.setPixelColorXY(x, y, c);
     // move x
     if (blob->x[i] + blob->r[i] >= cols - 1) blob->x[i] += (blob->sX[i] * ((cols - 1 - blob->x[i]) / blob->r[i] + 0.005f));
@@ -6252,6 +6252,10 @@ uint16_t mode_2Dwavingcell() {
 static const char _data_FX_MODE_2DWAVINGCELL[] PROGMEM = "Waving Cell@!,,Amplitude 1,Amplitude 2,Amplitude 3;;!;2";
 
 
+////////////////////////////////////////////
+// PARTICLE SYSTEM EFFECTS
+////////////////////////////////////////////
+
 #ifndef WLED_DISABLE_PARTICLESYSTEM2D
 /*
   Particle System Vortex
@@ -6369,10 +6373,6 @@ uint16_t mode_particlevortex(void) {
 #undef NUMBEROFSOURCES
 static const char _data_FX_MODE_PARTICLEVORTEX[] PROGMEM = "PS Vortex@Rotation Speed,Particle Speed,Arms,Flip,Nozzle,Smear,Direction,Random Flip;;!;2;pal=27,c1=200,c2=0,c3=0";
 
-
-////////////////////////////////////////////
-// PARTICLE SYSTEM EFFECTS
-////////////////////////////////////////////
 
 /*
   Particle Fireworks
@@ -7424,12 +7424,12 @@ uint16_t mode_particleblobs(void) {
   }
   #endif
 
-  PartSys->setMotionBlur(((SEGMENT.custom3) << 3) + 7);
+  PartSys->setMotionBlur(255 - ((SEGMENT.custom3 << 3) + 7));
   PartSys->update(); // update and render
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_PARTICLEBLOBS[] PROGMEM = "PS Blobs@Speed,Blobs,Size,Life,Blur,Wobble,Collide,Pulsate;;!;2v;sx=30,ix=64,c1=200,c2=130,c3=0,o3=1";
+static const char _data_FX_MODE_PARTICLEBLOBS[] PROGMEM = "PS Blobs@Speed,Blobs,Size,Life,Trail,Wobble,Collide,Pulsate;;!;2v;sx=30,ix=64,c1=200,c2=130,c3=0,o3=1";
 
 /*
   Particle Galaxy, particles spiral like in a galaxy

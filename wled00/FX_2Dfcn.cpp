@@ -426,8 +426,10 @@ void Segment::move(unsigned dir, unsigned delta, bool wrap) const {
   }
 }
 
-void Segment::drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, bool soft) const {
+void Segment::drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, bool fill, bool soft) const {
   if (!isActive() || radius == 0) return; // not active
+  const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
+  const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
   if (soft) {
     // Xiaolin Wu’s algorithm
     const int rsq = radius*radius;
@@ -440,20 +442,20 @@ void Segment::drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, b
       if (oldFade > fade) y--;
       oldFade = fade;
       int px, py;
-      for (uint8_t i = 0; i < 16; i++) {
-          int swaps = (i & 0x4 ? 1 : 0); // 0,  0,  0,  0,  1,  1,  1,  1,  0,  0,  0,  0,  1,  1,  1,  1
-          int adj =  (i < 8) ? 0 : 1;    // 0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,  1,  1,  1,  1
-          int dx = (i & 1) ? -1 : 1;     // 1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1
-          int dy = (i & 2) ? -1 : 1;     // 1,  1, -1, -1,  1,  1, -1, -1,  1,  1, -1, -1,  1,  1, -1, -1
-          if (swaps) {
-            px = cx + (y - adj) * dx;
-            py = cy + x * dy;
-          } else {
-            px = cx + x * dx;
-            py = cy + (y - adj) * dy;
-          }
-          if (px < 0 || py < 0 || px >= (int)vWidth() || py >= (int)vHeight()) continue;
-          blendPixelColorXYRaw(px, py, col, (uint8_t)(adj ? fade : 255 - fade));
+      for (size_t i = 0; i < 16; i++) {
+        int swaps = (i & 0x4 ? 1 : 0); // 0,  0,  0,  0,  1,  1,  1,  1,  0,  0,  0,  0,  1,  1,  1,  1
+        int adj =  (i < 8) ? 0 : 1;    // 0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,  1,  1,  1,  1
+        int dx = (i & 1) ? -1 : 1;     // 1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1
+        int dy = (i & 2) ? -1 : 1;     // 1,  1, -1, -1,  1,  1, -1, -1,  1,  1, -1, -1,  1,  1, -1, -1
+        if (swaps) {
+          px = cx + (y - adj) * dx;
+          py = cy + x * dy;
+        } else {
+          px = cx + x * dx;
+          py = cy + (y - adj) * dy;
+        }
+        if (px < 0 || py < 0 || px >= vW || py >= vH) continue;
+        blendPixelColorXYRaw(px, py, col, (uint8_t)(adj ? fade : 255 - fade));
       }
       x++;
     }
@@ -467,9 +469,10 @@ void Segment::drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, b
         int dy = (i & 2) ? -y : y;
         int px = cx + dx;
         int py = cy + dy;
-        if (px < 0 || py < 0) continue;
-        if (px < (int)vWidth() && py < (int)vHeight()) setPixelColorXYRaw(px, py, col);
-        if (py < (int)vWidth() && px < (int)vHeight()) setPixelColorXYRaw(py, px, col);
+        if (px >= 0 && py >= 0 && px < vW && py < vH) setPixelColorXYRaw(px, py, getPixelColorXYRaw(px, py) + col);
+        px = cx + dy;
+        py = cy + dx;
+        if (px >= 0 && py >= 0 && py < vW && px < vH) setPixelColorXYRaw(py, px, getPixelColorXYRaw(py, px) + col);
       }
       x++;
       if (d > 0) {
@@ -480,58 +483,67 @@ void Segment::drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, b
       }
     }
   }
-}
-
-// by stepko, taken from https://editor.soulmatelights.com/gallery/573-blobs
-void Segment::fillCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, bool soft) const {
-  if (!isActive() || radius == 0) return; // not active
-  const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
-  const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
-  // draw soft bounding circle
-  if (soft) drawCircle(cx, cy, radius, col, soft);
-  // fill it
-  uint32_t rSq = radius * radius;
-  for (int y = -radius; y <= radius; y++) {
-    for (int x = -radius; x <= radius; x++) {
-      if (x * x + y * y <= rSq &&
-          int(cx)+x >= 0 && int(cy)+y >= 0 &&
-          int(cx)+x < vW && int(cy)+y < vH) {
-        col += getPixelColorXYRaw(cx + x, cy + y);
-        setPixelColorXYRaw(cx + x, cy + y, col);
+  if (fill) {
+    // fill it
+    // by stepko, taken from https://editor.soulmatelights.com/gallery/573-blobs
+    uint32_t rSq = radius * radius;
+    for (int y = -radius; y <= radius; y++) {
+      for (int x = -radius; x <= radius; x++) {
+        if (x * x + y * y <= rSq &&
+            int(cx)+x >= 0 && int(cy)+y >= 0 &&
+            int(cx)+x < vW && int(cy)+y < vH) {
+          setPixelColorXYRaw(cx + x, cy + y, getPixelColorXYRaw(cx + x, cy + y) + col);
+        }
       }
     }
   }
 }
 
-/*
 // see https://www.geeksforgeeks.org/dsa/midpoint-ellipse-drawing-algorithm/
-void Segment::drawEllipse(uint32_t cx, uint32_t cy, uint32_t rx, uint32_t ry, CRGBA color, bool fill, bool soft) {
-  // all coodinates and radii are in 16.8 fixed point notation (use >> 8 to convert to pixel coordinates)
-  if (!isActive()) return; // not active
+void Segment::drawEllipse(uint32_t cx, uint32_t cy, uint32_t rx, uint32_t ry, CRGBA color, bool fill) const {
+  if (!isActive() || rx == 0 || ry == 0) return;
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
-  if (cx >= vW<<8 || cy >= vH<<8) return; // center outside segment
-  int32_t rxSq = (rx * rx);
-  int32_t rySq = (ry * ry);
+  // all coodinates and radii are in 16.8 fixed point notation
+  auto int168 = [](int32_t a)  { return a >> 8; };                          // convert 16.8 fixed point to integer
+  auto mul168 = [](int32_t a, int32_t b) { return ((int64_t)a * b) >> 8; }; // 16.8 fixed point multiplication
+  auto sqr168 = [&](int32_t a) { return mul168(a, a); };                    // 16.8 fixed point squaring
+  auto line = [&](int32_t x1, int32_t x2, int32_t y) {                      // draws horizontal line between simertically placed points
+    y  = int168(y);
+    if (y < 0 || y >= vH) return;
+    uint8_t k1 = 255 - (x1 && 0xFF);                                        // softness factor for first point
+    uint8_t k2 =        x2 && 0xFF;
+    x1 = int168(x1);
+    x2 = int168(x2);
+    if (x2 > x1) {
+      for (uint32_t x = x1+1; x <= x2-1; x++) if (x >= 0 && x < vW) setPixelColorXYRaw(x, y, color);
+      if (x1 >= 0 && x1 < vW) setPixelColorXYRaw(x1, y, color.setOpacity(k1)); // soften edges
+    }
+    if (x2 >= 0 && x2 < vW) setPixelColorXYRaw(x2, y, color.setOpacity(k2));
+  };
+  auto point  = [&](int32_t x, int32_t y) { if (x >= 0 && y >= 0 && x < vW && y < vH) setPixelColorXYRaw(x, y, color); }; // draws a single point
+  auto points = [&](int32_t x, int32_t y) { // draws 4 simertically placed points
+    point(int168(cx + x), int168(cy + y));
+    point(int168(cx - x), int168(cy + y));
+    point(int168(cx + x), int168(cy - y));
+    point(int168(cx - x), int168(cy - y));
+  };
+
+  int32_t rxSq = sqr168(rx);
+  int32_t rySq = sqr168(ry);
   int32_t x = 0, y = ry;
-  //auto fEllipse = [&](int32_t x, int32_t y) {
-  //  return (rySq * x * x) + (rxSq * y * y) - (rxSq * rySq);
-  //};
+
+  int32_t dx = 0; //2 * rySq * x;
+  int32_t dy = mul168(2 * rxSq, y);
 
   // Region 1
-  int32_t d1 = roundf((float)(rySq - (rxSq * ry)) + (0.25f * rxSq)); // initial decision parameter
-  int32_t dx = 2 * rySq * x;
-  int32_t dy = 2 * rxSq * y;
-
+  int32_t d1 = (rySq - mul168(rxSq, ry)) + (rxSq >> 2); // initial decision parameter
   while (dx < dy) {
     if (fill) {
-      drawLine((cx - x)>>8, (cy + y)>>8, (cx + x)>>8, (cy + y)>>8, color, false);
-      drawLine((cx - x)>>8, (cy - y)>>8, (cx + x)>>8, (cy - y)>>8, color, false);
+      line((cx - x), (cx + x), (cy + y));
+      line((cx - x), (cx + x), (cy - y));
     } else {
-      setWuPixelColor(cx - x, cy + y, color);
-      setWuPixelColor(cx + x, cy + y, color);
-      setWuPixelColor(cx - x, cy - y, color);
-      setWuPixelColor(cx + x, cy - y, color);
+      points(x, y);
     }
     if (d1 < 0) {
       x  += 256; // increment x by 1 in 16.8 pixel notation
@@ -547,16 +559,15 @@ void Segment::drawEllipse(uint32_t cx, uint32_t cy, uint32_t rx, uint32_t ry, CR
   }
 
   // Region 2
-  int32_t d2 = (rxSq * ((x + 0.5f) * (x + 0.5f))) + (rxSq * ((y - 1) * (y - 1))) - (rxSq * rySq);
+  const int32_t x_plus_half = x + 128;
+  const int32_t y_minus_1 = y - 256;
+  int32_t d2 = mul168(rySq, sqr168(x_plus_half)) + mul168(rxSq, sqr168(y_minus_1)) - mul168(rxSq, rySq);
   while (y >= 0) {
     if (fill) {
-      drawLine((cx - x)>>8, (cy + y)>>8, (cx + x)>>8, (cy + y)>>8, color, false);
-      drawLine((cx - x)>>8, (cy - y)>>8, (cx + x)>>8, (cy - y)>>8, color, false);
+      line((cx - x), (cx + x), (cy + y));
+      line((cx - x), (cx + x), (cy - y));
     } else {
-      setWuPixelColor(cx - x, cy + y, color);
-      setWuPixelColor(cx + x, cy + y, color);
-      setWuPixelColor(cx - x, cy - y, color);
-      setWuPixelColor(cx + x, cy - y, color);
+      points(x, y);
     }
     if (d2 > 0) {
       y  -= 256;
@@ -571,7 +582,6 @@ void Segment::drawEllipse(uint32_t cx, uint32_t cy, uint32_t rx, uint32_t ry, CR
     }
   }
 }
-*/
 
 //line function
 void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft) const {
@@ -590,6 +600,7 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
   }
 
   if (soft) {
+    // https://en.wikipedia.org/wiki/Xiaolin_Wu%27s_line_algorithm
     // Xiaolin Wu’s algorithm
     const bool steep = dy > dx;
     if (steep) {
@@ -602,17 +613,19 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
       std::swap(x0,x1);
       std::swap(y0,y1);
     }
-    float gradient = x1-x0 == 0 ? 1.0f : float(y1-y0) / float(x1-x0);
-    float intersectY = y0;
+    int32_t grad = x1==x0 ? 1 << 8 : ((y1-y0)<<8)/(x1-x0); // gradient in 16.8 fixed point
+    int32_t intY = (y0<<8); // y intersection in 16.8 fixed point
     for (int x = x0; x <= x1; x++) {
-      uint8_t keep = float(0xFF) * (intersectY-int(intersectY)); // how much color to keep
-      uint8_t seep = 0xFF - keep; // how much background to keep
-      int y = int(intersectY);
+      uint8_t keep = (intY & 0xFF); // fractional part of y in 16.8 fixed point
+      uint8_t seep = 0xFF - keep;
+      int y = intY >> 8;
       if (steep) std::swap(x,y);  // temporaryly swap if steep
       // pixel coverage is determined by fractional part of y co-ordinate
-      if (x >= 0 && y >= 0 && x < vW && y < vH) blendPixelColorXYRaw(x, y, c, seep);
-      if (x+int(steep) >= 0 && y+int(!steep) >= 0 && x+int(steep) < vW && y+int(!steep) < vH) blendPixelColorXYRaw(x+int(steep), y+int(!steep), c, keep);
-      intersectY += gradient;
+      int x2 = x + steep;
+      int y2 = y + !steep;
+      if (x  >= 0 && y  >= 0 && x  < vW && y  < vH) blendPixelColorXYRaw(x,  y,  c, seep);
+      if (x2 >= 0 && y2 >= 0 && x2 < vW && y2 < vH) blendPixelColorXYRaw(x2, y2, c, keep);
+      intY += grad;
       if (steep) std::swap(x,y);  // restore if steep
     }
   } else {
@@ -621,7 +634,7 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
     const int sy = y0<y1 ? 1 : -1;  // y step
     int err = (dx>dy ? dx : -dy)/2; // error direction
     for (;;) {
-      setPixelColorXYRaw(x0, y0, c);
+      setPixelColorXYRaw(x0, y0, getPixelColorXYRaw(x0, y0) + c);
       if (x0==x1 && y0==y1) break;
       int e2 = err;
       if (e2 >-dx) { err -= dy; x0 += sx; }
@@ -691,7 +704,7 @@ void Segment::setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const {
     int wu_y = (y >> 8) + ((i >> 1) & 1); // precalculate y
     if (/*wu_x >= 0 && wu_y >= 0 && */wu_x < (int)vWidth() && wu_y < (int)vHeight()) {
       c.a = wu[i]; // set alpha to weight
-      setPixelColorXYRaw(wu_x, wu_y, getPixelColorXYRaw(wu_x, wu_y).add(c, true)); // also modifies resulting opacity; should use addPixelColorXYRaw but that crashes ESP
+      setPixelColorXYRaw(wu_x, wu_y, getPixelColorXYRaw(wu_x, wu_y) + c); // also modifies resulting opacity; should use addPixelColorXYRaw but that crashes ESP
     }
   }
 }
