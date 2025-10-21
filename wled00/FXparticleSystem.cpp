@@ -655,7 +655,7 @@ void ParticleSystem2D::render() {
       continue;
     // generate RGB values for particle
     if (fireIntesity) { // fire mode
-      brightness = min((uint32_t)particles[i].ttl * (3 + (fireIntesity >> 5)) + 5, 255U);
+      brightness = min((uint32_t)particles[i].ttl * (3 + (fireIntesity >> 5)) + 5, (uint32_t)255);
       baseRGB = ColorFromPaletteWLED(SEGPALETTE, brightness, 255, LINEARBLEND_NOWRAP);
     } else {
       brightness = min(particles[i].ttl << 1, 255);

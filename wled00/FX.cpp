@@ -6293,7 +6293,7 @@ uint16_t mode_particlevortex(void) {
     return mode_static(); // something went wrong, no data!
 
   PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
-  uint32_t spraycount = max(1U, min(PartSys->numSources, (uint32_t)(1 + (SEGMENT.custom1 >> 5)))); // number of sprays to display, 1-8
+  uint32_t spraycount = max((uint32_t)1, min(PartSys->numSources, (uint32_t)(1 + (SEGMENT.custom1 >> 5)))); // number of sprays to display, 1-8
   #ifdef ESP8266
   for (i = 1; i < 4; i++) { // need static particles in the center to reduce blinking (would be black every other frame without this hack), just set them there fixed
     int partindex = (int)PartSys->usedParticles - (int)i;
