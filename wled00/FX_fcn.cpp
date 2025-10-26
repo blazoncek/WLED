@@ -200,7 +200,7 @@ void Segment::resetIfRequired() {
   //DEBUGFX_PRINTF_P(PSTR("-- Segment reset: %p\n"), this);
   if (data && _dataLen > 0) memset(data, 0, _dataLen);  // prevent heap fragmentation (just erase buffer instead of deallocateData())
   if (_dataLen > FAIR_DATA_PER_SEG) deallocateData();   // do not keep large allocations
-  if (pixels) for (size_t i = 0; i < length(); i++) pixels[i] = BLACK; // clear pixel buffer
+  if (pixels) for (size_t i = 0; i < length(); i++) pixels[i] = hasWhite() ? BLACK : CRGBA(BLACK); // clear pixel buffer
   next_time = 0; step = 0; call = 0; aux0 = 0; aux1 = 0;
   reset = false;
 }
@@ -669,6 +669,15 @@ uint16_t Segment::virtualLength() const {
   return vLength;
 }
 
+#ifndef WLED_DISABLE_2D
+// maximum length of a mapped 1D segment, used in PS for buffer allocation
+uint16_t Segment::maxMappingLength() const {
+  uint32_t vW = virtualWidth();
+  uint32_t vH = virtualHeight();
+  return max(sqrt32_bw(vH*vH + vW*vW), (uint32_t)getPinwheelLength(vW, vH)); // use diagonal
+}
+#endif
+
 // pixel is clipped if it falls outside clipping range
 // if clipping start > stop the clipping range is inverted
 bool Segment::isPixelClipped(int i) const {
@@ -863,7 +872,7 @@ void Segment::setPixelColor(int i, CRGBA col) const
 
 #ifdef WLED_USE_AA_PIXELS
 // anti-aliased normalized version of setPixelColor()
-void Segment::setPixelColor(float i, uint32_t col, bool aa) const
+void Segment::setPixelColor(float i, CRGBA col, bool aa) const
 {
   if (!isActive()) return; // not active
   int vStrip = int(i/10.0f); // hack to allow running on virtual strips (2D segment columns/rows)
@@ -877,14 +886,14 @@ void Segment::setPixelColor(float i, uint32_t col, bool aa) const
     unsigned iR = roundf(fC+0.49f);
     float    dL = (fC - iL)*(fC - iL);
     float    dR = (iR - fC)*(iR - fC);
-    uint32_t cIL = getPixelColor(iL | (vStrip<<16));
-    uint32_t cIR = getPixelColor(iR | (vStrip<<16));
+    CRGBA cIL = getPixelColor(iL | (vStrip<<16));
+    CRGBA cIR = getPixelColor(iR | (vStrip<<16));
     if (iR!=iL) {
       // blend L pixel
-      cIL = color_blend(col, cIL, uint8_t(dL*255.0f));
+      cIL.nblend(col, 255 - uint8_t(dL*255.0f));
       setPixelColor(iL | (vStrip<<16), cIL);
       // blend R pixel
-      cIR = color_blend(col, cIR, uint8_t(dR*255.0f));
+      cIR.nblend(col, 255 - uint8_t(dR*255.0f));
       setPixelColor(iR | (vStrip<<16), cIR);
     } else {
       // exact match (x & y land on a pixel)
@@ -1040,7 +1049,7 @@ void Segment::fade_out(uint8_t rate) const {
 void Segment::fadeToSecondaryBy(uint8_t fadeBy) const {
   if (!isActive() || fadeBy == 0) return;   // optimization - no scaling to apply
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
-  for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, getPixelColorRaw(i).nblend(colors[1], fadeBy));
+  for (unsigned i = 0; i < length(); i++) blendPixelColorRaw(i, colors[1], fadeBy);
 }
 
 // fades all pixels to black using nscale8()
@@ -1055,20 +1064,24 @@ void Segment::fadeToBlackBy(uint8_t fadeBy) const {
  * blurs segment content, source: FastLED colorutils.cpp
  * Note: for blur_amount > 215 this function does not work properly (creates alternating pattern)
  */
-void Segment::blur(uint8_t blur_amount, bool smear) const {
-  if (!isActive() || blur_amount == 0) return; // optimization: 0 means "don't blur"
 #ifndef WLED_DISABLE_2D
+void Segment::blur(uint8_t blur_amount, bool smear) const {
   if (is2D()) {
     // compatibility with 2D
     blur2D(blur_amount, blur_amount, smear); // symmetrical 2D blur
     //box_blur(map(blur_amount,1,255,1,3), smear);
-    return;
-  }
+  } else
+    // 1D blur
+    blur1D(blur_amount, smear);
+}
 #endif
+
+void Segment::blur1D(uint8_t blur_amount, bool smear) const {
+  if (!isActive() || blur_amount == 0) return; // optimization: 0 means "don't blur"
   uint8_t keep = smear ? 255 : 255 - blur_amount;
   uint8_t seep = blur_amount >> (1 + smear);
-  unsigned vlength = vLength();
-  CRGBA carryover = BLACK;
+  unsigned vlength = Segment::vLength();
+  CRGBA carryover(BLACK);
   // we can use get/setPixelColorRaw() and vLength() since is2D() handles possible 1D->2D mapping (blurs entire 2D segment)
   // we will also blur alpha channel if we have RGB only strip
   for (unsigned i = 0; i < vlength; i++) {

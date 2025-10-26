@@ -215,7 +215,6 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_COLORTWINKLE            74
 #define FX_MODE_LAKE                    75
 #define FX_MODE_METEOR                  76
-#define FX_MODE_METEOR_SMOOTH           FX_MODE_METEOR
 //#define FX_MODE_METEOR_SMOOTH           77  // candidate for removal (use Meteor with check 1)
 #define FX_MODE_RAILWAY                 78
 #define FX_MODE_RIPPLE                  79
@@ -253,10 +252,10 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_CHUNCHUN               111
 #define FX_MODE_DANCING_SHADOWS        112
 #define FX_MODE_WASHING_MACHINE        113
-#define FX_MODE_2DPLASMAROTOZOOM       114 // was Candy Cane prior to 0.14 (use Chase 2)
+#define FX_MODE_2DPLASMAROTOZOOM       114  // was Candy Cane prior to 0.14 (use Chase 2)
 #define FX_MODE_BLENDS                 115
 #define FX_MODE_TV_SIMULATOR           116
-//#define FX_MODE_DYNAMIC_SMOOTH         117 // candidate for removal (check3 in dynamic)
+//#define FX_MODE_DYNAMIC_SMOOTH         117  // candidate for removal (check3 in dynamic)
 // new 0.14 2D effects
 #define FX_MODE_2DSPACESHIPS           118 //gap fill
 #define FX_MODE_2DCRAZYBEES            119 //gap fill
@@ -296,7 +295,64 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_2DBLACKHOLE            183
 #define FX_MODE_WAVESINS               184
 
-#define MODE_COUNT                     187
+// particle 2D
+#ifndef WLED_DISABLE_PARTICLESYSTEM2D
+#define FX_MODE_PARTICLEVOLCANO         37
+#define FX_MODE_PARTICLEFIRE            47
+#define FX_MODE_PARTICLEFIREWORKS       52
+#define FX_MODE_PARTICLEVORTEX          53
+#define FX_MODE_PARTICLEPERLIN          60
+#define FX_MODE_PARTICLEPIT             77
+#define FX_MODE_PARTICLEBOX             81
+#define FX_MODE_PARTICLEATTRACTOR       86
+#define FX_MODE_PARTICLEIMPACT          93
+#define FX_MODE_PARTICLEWATERFALL       94
+#define FX_MODE_PARTICLESPRAY           99
+#ifdef WLED_PS_REPLACE_FX
+  #define FX_MODE_PARTICLEGHOSTRIDER     120
+  #define FX_MODE_PARTICLEBLOBS          121
+  #undef FX_MODE_2DGHOSTRIDER
+  #undef FX_MODE_2DBLOBS
+#else
+  #define FX_MODE_PARTICLEGHOSTRIDER     102
+  #define FX_MODE_PARTICLEBLOBS          103
+#endif
+#define FX_MODE_PARTICLEGALAXY         109
+#endif
+// particle 1D
+#ifndef WLED_DISABLE_PARTICLESYSTEM1D
+#define FX_MODE_PS1DSPARKLER            16
+#define FX_MODE_PS1DHOURGLASS           19
+#define FX_MODE_PS1DSPRAY               23
+#define FX_MODE_PS1DBALANCE             24
+#define FX_MODE_PS1DSPRINGY             36
+#ifdef WLED_PS_REPLACE_FX
+  #define FX_MODE_PS1DDRIP                96
+  #define FX_MODE_PS1DPINBALL             91
+  #define FX_MODE_PS1DDANCINGSHADOWS     112
+  #define FX_MODE_PS1DFIREWORKS           90
+  #define FX_MODE_PS1DCHASE               28
+  #define FX_MODE_PS1DSTARBURST           89
+  #define FX_MODE_PS1DFIRE                66
+  #undef FX_MODE_DRIP
+  #undef FX_MODE_BOUNCING_BALLS
+  #undef FX_MODE_DANCING_SHADOWS
+  #undef FX_MODE_EXPLODING_FIREWORKS
+  #undef FX_MODE_CHASE
+  #undef FX_MODE_STARBURST
+  #undef FX_MODE_FIRE_2012
+#else
+  #define FX_MODE_PS1DDRIP                 4
+  #define FX_MODE_PS1DPINBALL              6
+  #define FX_MODE_PS1DDANCINGSHADOWS      11
+  #define FX_MODE_PS1DFIREWORKS           14
+  #define FX_MODE_PS1DCHASE               26
+  #define FX_MODE_PS1DSTARBURST           29
+  #define FX_MODE_PS1DFIRE                33
+#endif
+#endif
+
+#define MODE_COUNT                     187  // includes audioreactive modes
 
 
 #define BLEND_STYLE_FADE            0x00  // universal
@@ -328,6 +384,9 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define BLEND_STYLE_COUNT           18
 
 #define BLEND_MODE_COUNT            20    // number of blending modes (see Segment::blendMode)
+
+class ParticleSystem1D;
+class ParticleSystem2D;
 
 typedef enum mapping1D2D {
   M12_Pixels = 0,
@@ -461,9 +520,13 @@ class Segment {
 
     inline CRGBA *getPixels() const                           { return pixels; }
     inline void  setPixelColorRaw(unsigned i, CRGBA c) const  { pixels[i] = c; }
+    inline void  addPixelColorRaw(unsigned i, CRGBA c) const  { pixels[i] += c; } // somehow this crashes ESP
+    inline void  blendPixelColorRaw(unsigned i, CRGBA c, uint8_t b) const { pixels[i].nblend(c, b); }
     inline CRGBA getPixelColorRaw(unsigned i) const           { return pixels[i]; };
   #ifndef WLED_DISABLE_2D
     inline void  setPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const  { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)] = c; }
+    inline void  addPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const  { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)] += c; } // somehow this crashes ESP
+    inline void  blendPixelColorXYRaw(unsigned x, unsigned y, CRGBA c, uint8_t b) const { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)].nblend(c, b); }
     inline CRGBA getPixelColorXYRaw(unsigned x, unsigned y) const           { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; return pixels[XY(x,y)]; };
   #endif
     void resetIfRequired();         // sets all SEGENV variables to 0 and clears data buffer
@@ -526,6 +589,7 @@ class Segment {
       // allocate render buffer (always entire segment), prefer IRAM/PSRAM. Note: impact on FPS with PSRAM buffer is low (<2% with QSPI PSRAM) on S2/S3
       pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
       if (!pixels) {
+        //clear();
         DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
         extern byte errorFlag;
         errorFlag = ERR_NORAM_PX;
@@ -612,6 +676,7 @@ class Segment {
 
     // 1D strip
     uint16_t virtualLength() const;
+    uint16_t maxMappingLength() const;
     [[gnu::hot]] void setPixelColor(int n, CRGBA c) const; // set relative pixel within segment with color
     inline void setPixelColor(unsigned n, CRGBA c) const                        { setPixelColor(int(n), c); }
     inline void setPixelColor(int n, byte r, byte g, byte b, byte w = 0) const  { setPixelColor(n, CRGBA(r,g,b)); }
@@ -623,7 +688,12 @@ class Segment {
     [[gnu::hot]] bool isPixelClipped(int i) const;
     [[gnu::hot]] CRGBA getPixelColor(int i) const;
     // 1D support functions (some implement 2D as well)
-    void blur(uint8_t, bool smear = false) const;
+    #ifdef WLED_DISABLE_2D
+    inline void blur(uint8_t amount, bool smear = false) const { blur1D(amount, smear); }
+    #else
+    void blur(uint8_t amount, bool smear = false) const;
+    #endif
+    void blur1D(uint8_t amount, bool smear = false) const;
     void clear() const { fill(BLACK); } // clear segment
     void fill(CRGBA c) const;
     void fade_out(uint8_t r) const;
@@ -670,11 +740,11 @@ class Segment {
     void moveX(int delta, bool wrap = false) const;
     void moveY(int delta, bool wrap = false) const;
     void move(unsigned dir, unsigned delta, bool wrap = false) const;
-    void drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA c, bool soft = false) const;
-    void fillCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA c, bool soft = false) const;
+    void drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA c, bool fill = false, bool soft = false) const;
+    void drawEllipse(uint16_t cx, uint16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool fill = false) const;
     void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft = false) const;
     void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA col2 = 0, int8_t rotate = 0) const;
-    void wu_pixel(uint32_t x, uint32_t y, CRGBA c) const;
+    void setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const;
   #else
     inline bool is2D() const                                                            { return false; }
     inline void setPixelColorXY(int x, int y, CRGBA c) const                            { setPixelColor(x, c); }
@@ -701,9 +771,12 @@ class Segment {
     inline void fillCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA c, bool soft = false) {}
     inline void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft = false) {}
     inline void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA = 0, int8_t = 0) {}
-    inline void wu_pixel(uint32_t x, uint32_t y, CRGBA c) {}
+    inline void setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) {}
   #endif
+
   friend class WS2812FX;
+  friend class ParticleSystem1D;
+  friend class ParticleSystem2D;
 };
 
 // main "strip" class (108 bytes)
