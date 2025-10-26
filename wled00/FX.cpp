@@ -5674,13 +5674,20 @@ uint16_t mode_2Dfloatingblobs(void) {
 
   const int cols = SEG_W;
   const int rows = SEG_H;
+  const int maxC = (cols-1)<<4;
+  const int maxR = (rows-1)<<4;
+  const int rMax = cols>8 ? (cols<<2) : (2<<4); // colos/4 or 2
+  //auto abs = [](int16_t x) { return x<0 ? -x : x; };
+  auto int124 = [](int16_t a) { return (a > 0 ? 0 : 0xF000) | (a >> 4); }; // convert 12.4 fixed point to integer
+  //auto mul124 = [](int16_t a, int16_t b) { int32_t r = ((int32_t)a * b); return (r<0 ? 0xF000 : 0) | (r >> 4); }; // 12.4 fixed point multiplication
 
   typedef struct Blob {
-    float x[MAX_BLOBS], y[MAX_BLOBS];
-    float sX[MAX_BLOBS], sY[MAX_BLOBS]; // speed
-    float r[MAX_BLOBS];
-    bool grow[MAX_BLOBS];
+    
+    int16_t x[MAX_BLOBS], y[MAX_BLOBS];   // coordinates are in 12.4 fixed point format
+    int16_t sX[MAX_BLOBS], sY[MAX_BLOBS]; // speed is in 12.4 fixed point format
+    uint16_t r[MAX_BLOBS];                // radius is in 12.4 fixed point format  
     byte color[MAX_BLOBS];
+    bool grow[MAX_BLOBS];
   } blob_t;
 
   size_t Amount = (SEGMENT.intensity>>5) + 1; // NOTE: be sure to update MAX_BLOBS if you change this
@@ -5693,13 +5700,13 @@ uint16_t mode_2Dfloatingblobs(void) {
     SEGENV.aux1 = rows;
     //SEGMENT.fill(BLACK);
     for (size_t i = 0; i < MAX_BLOBS; i++) {
-      blob->r[i]  = hw_random8(1, cols>8 ? (cols/4) : 2);
-      blob->sX[i] = (float) hw_random8(3, cols) / (float)(256 - SEGMENT.speed); // speed x
-      blob->sY[i] = (float) hw_random8(3, rows) / (float)(256 - SEGMENT.speed); // speed y
-      blob->x[i]  = hw_random8(0, cols-1);
-      blob->y[i]  = hw_random8(0, rows-1);
+      blob->r[i]  = hw_random16(1<<4, rMax);
+      blob->sX[i] = hw_random16(32, cols<<4) / (256 - SEGMENT.speed);
+      blob->sY[i] = hw_random16(32, rows<<4) / (256 - SEGMENT.speed);
+      blob->x[i]  = hw_random16(0, maxC);
+      blob->y[i]  = hw_random16(0, maxR);
       blob->color[i] = hw_random8();
-      blob->grow[i]  = (blob->r[i] < 1.f);
+      blob->grow[i]  = (blob->r[i] <= (1<<4)); // start growing if radius <= 1
       if (blob->sX[i] == 0) blob->sX[i] = 1;
       if (blob->sY[i] == 0) blob->sY[i] = 1;
     }
@@ -5707,59 +5714,57 @@ uint16_t mode_2Dfloatingblobs(void) {
 
   SEGMENT.fadeToBlackBy(((255-SEGMENT.custom2)>>3)+1);
 
+  int dT = strip.now - SEGENV.step;
   // Bounce balls around
   for (size_t i = 0; i < Amount; i++) {
-    if (SEGENV.step < strip.now) blob->color[i] += 4; // slowly change color
+    int x = int124(blob->x[i]);
+    int y = int124(blob->y[i]);
+    CRGBA c = SEGMENT.color_from_palette(blob->color[i], false, PALETTE_FIXED, 0);
+    if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(blob->x[i-1]>>4, blob->y[i-1]>>4, x, y, SEGCOLOR(2), SEGMENT.check1);
+    if (blob->r[i] > (1<<4))     SEGMENT.drawCircle(x, y, blob->r[i]>>4, c, true, SEGMENT.check1);
+    else                         SEGMENT.setPixelColorXY(x, y, c);
+
+    if (dT > 1000) blob->color[i] += 4; // slowly change color
     // change radius if needed
     if (blob->grow[i]) {
       // enlarge radius until it is >= 4
-      blob->r[i] += (fabsf(blob->sX[i]) > fabsf(blob->sY[i]) ? fabsf(blob->sX[i]) : fabsf(blob->sY[i])) * 0.05f;
-      if (blob->r[i] >= MIN(cols/4.f,2.f)) {
+      blob->r[i] += !hw_random8(10); // 10% chance to grow
+      if (blob->r[i] >= rMax) { // colos/4 or 2
         blob->grow[i] = false;
       }
     } else {
       // reduce radius until it is < 1
-      blob->r[i] -= (fabsf(blob->sX[i]) > fabsf(blob->sY[i]) ? fabsf(blob->sX[i]) : fabsf(blob->sY[i])) * 0.05f;
-      if (blob->r[i] < 1.f) {
+      blob->r[i] -= !hw_random8(10); // 10% chance to shrink
+      if (blob->r[i] < (1<<3)) {
         blob->grow[i] = true;
       }
     }
-    int x = roundf(blob->x[i]);
-    int y = roundf(blob->y[i]);
-    CRGBA c = SEGMENT.color_from_palette(blob->color[i], false, PALETTE_FIXED, 0);
-    if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(roundf(blob->x[i-1]), roundf(blob->y[i-1]), x, y, SEGCOLOR(2), SEGMENT.check1);
-    if (blob->r[i] > 1.f) SEGMENT.drawCircle(x, y, roundf(blob->r[i]), c, true, SEGMENT.check1);
-    else                  SEGMENT.setPixelColorXY(x, y, c);
-    // move x
-    if (blob->x[i] + blob->r[i] >= cols - 1) blob->x[i] += (blob->sX[i] * ((cols - 1 - blob->x[i]) / blob->r[i] + 0.005f));
-    else if (blob->x[i] - blob->r[i] <= 0)   blob->x[i] += (blob->sX[i] * (blob->x[i] / blob->r[i] + 0.005f));
-    else                                     blob->x[i] += blob->sX[i];
-    // move y
-    if (blob->y[i] + blob->r[i] >= rows - 1) blob->y[i] += (blob->sY[i] * ((rows - 1 - blob->y[i]) / blob->r[i] + 0.005f));
-    else if (blob->y[i] - blob->r[i] <= 0)   blob->y[i] += (blob->sY[i] * (blob->y[i] / blob->r[i] + 0.005f));
-    else                                     blob->y[i] += blob->sY[i];
-    // bounce x
-    if (blob->x[i] < 0.01f) {
-      blob->sX[i] = (float)hw_random8(3, cols) / (256 - SEGMENT.speed);
-      blob->x[i]  = 0.01f;
-    } else if (blob->x[i] > (float)cols - 1.01f) {
-      blob->sX[i] = (float)hw_random8(3, cols) / (256 - SEGMENT.speed);
-      blob->sX[i] = -blob->sX[i];
-      blob->x[i]  = (float)cols - 1.01f;
-    }
-    // bounce y
-    if (blob->y[i] < 0.01f) {
-      blob->sY[i] = (float)hw_random8(3, rows) / (256 - SEGMENT.speed);
-      blob->y[i]  = 0.01f;
-    } else if (blob->y[i] > (float)rows - 1.01f) {
-      blob->sY[i] = (float)hw_random8(3, rows) / (256 - SEGMENT.speed);
-      blob->sY[i] = -blob->sY[i];
-      blob->y[i]  = (float)rows - 1.01f;
+    if (dT%2) { // slow down movement update
+      // move x
+      blob->x[i] += blob->sX[i];
+      // move y
+      blob->y[i] += blob->sY[i];
+      // bounce x
+      if (blob->x[i] < 0) {
+        blob->sX[i] =   hw_random16(32, cols<<4) / (256 - SEGMENT.speed) + 1;
+        blob->x[i]  = 0;
+      } else if (blob->x[i] > maxC) {
+        blob->sX[i] = -(hw_random16(32, cols<<4) / (256 - SEGMENT.speed) + 1);
+        blob->x[i]  = maxC - 1;
+      }
+      // bounce y
+      if (blob->y[i] < 0) {
+        blob->sY[i] =   hw_random16(32, rows<<4) / (256 - SEGMENT.speed) + 1;
+        blob->y[i]  = 0;
+      } else if (blob->y[i] > maxR) {
+        blob->sY[i] = -(hw_random16(32, rows<<4) / (256 - SEGMENT.speed) + 1);
+        blob->y[i]  = maxR - 1 ;
+      }
     }
   }
   SEGMENT.blur(SEGMENT.custom1>>2);
 
-  if (SEGENV.step < strip.now) SEGENV.step = strip.now + 1000; // change colors every second
+  if (dT > 1000) SEGENV.step = strip.now; // change colors every second
 
   return FRAMETIME;
 }
