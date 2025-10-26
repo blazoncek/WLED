@@ -145,7 +145,7 @@ void WS2812FX::setUpMatrix() {
 #ifndef WLED_DISABLE_2D
 // pixel is clipped if it falls outside clipping range
 // if clipping start > stop the clipping range is inverted
-bool IRAM_ATTR Segment::isPixelXYClipped(int x, int y) const {
+bool Segment::isPixelXYClipped(int x, int y) const {
   if (blendingStyle != BLEND_STYLE_FADE && isInTransition() && _clipStart != _clipStop) {
     const bool invertX = _clipStart  > _clipStop;
     const bool invertY = _clipStartY > _clipStopY;
@@ -426,10 +426,15 @@ void Segment::move(unsigned dir, unsigned delta, bool wrap) const {
   }
 }
 
+// https://gamedev.stackexchange.com/questions/176036/how-to-draw-a-smoother-solid-fill-circle
 void Segment::drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, bool fill, bool soft) const {
   if (!isActive() || radius == 0) return; // not active
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
+  if (radius > min(vW, vH)/2) return; // too large
+  auto plot = [&](int x, int y) {
+    if (x >= 0 && y >= 0 && x < vW && y < vH) setPixelColorXYRaw(x, y, getPixelColorXYRaw(x, y) + col);
+  };
   if (soft) {
     // Xiaolin Wu’s algorithm
     const int rsq = radius*radius;
@@ -459,20 +464,17 @@ void Segment::drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, b
       }
       x++;
     }
-  } else {
+  } else if (!fill) {
     // Bresenham’s Algorithm
-    int d = 3 - (2*radius);
+    int d = 3 - (2*radius); // (5 - radius * 4)/4
     int y = radius, x = 0;
     while (y >= x) {
+      // plot the 8 octants
       for (int i = 0; i < 4; i++) {
         int dx = (i & 1) ? -x : x;
         int dy = (i & 2) ? -y : y;
-        int px = cx + dx;
-        int py = cy + dy;
-        if (px >= 0 && py >= 0 && px < vW && py < vH) setPixelColorXYRaw(px, py, getPixelColorXYRaw(px, py) + col);
-        px = cx + dy;
-        py = cy + dx;
-        if (px >= 0 && py >= 0 && py < vW && px < vH) setPixelColorXYRaw(py, px, getPixelColorXYRaw(py, px) + col);
+        plot(cx + dx, cy + dy);
+        plot(cx + dy, cy + dx);
       }
       x++;
       if (d > 0) {
@@ -487,57 +489,55 @@ void Segment::drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, b
     // fill it
     // by stepko, taken from https://editor.soulmatelights.com/gallery/573-blobs
     uint32_t rSq = radius * radius;
+    auto compR = soft ? [](int a, int b) { return a < b; } : [](int a, int b) { return a <= b; };
     for (int y = -radius; y <= radius; y++) {
       for (int x = -radius; x <= radius; x++) {
-        if (x * x + y * y <= rSq &&
-            int(cx)+x >= 0 && int(cy)+y >= 0 &&
-            int(cx)+x < vW && int(cy)+y < vH) {
-          setPixelColorXYRaw(cx + x, cy + y, getPixelColorXYRaw(cx + x, cy + y) + col);
-        }
+        // if we are within the circle radius, or on the edge (depending on soft)
+        if (compR(x * x + y * y, rSq)) plot(cx + x, cy + y);
       }
     }
   }
 }
 
 // see https://www.geeksforgeeks.org/dsa/midpoint-ellipse-drawing-algorithm/
-void Segment::drawEllipse(uint32_t cx, uint32_t cy, uint32_t rx, uint32_t ry, CRGBA color, bool fill) const {
+void Segment::drawEllipse(uint16_t cx, uint16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool fill) const {
   if (!isActive() || rx == 0 || ry == 0) return;
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
   // all coodinates and radii are in 16.8 fixed point notation
-  auto int168 = [](int32_t a)  { return a >> 8; };                          // convert 16.8 fixed point to integer
-  auto mul168 = [](int32_t a, int32_t b) { return ((int64_t)a * b) >> 8; }; // 16.8 fixed point multiplication
-  auto sqr168 = [&](int32_t a) { return mul168(a, a); };                    // 16.8 fixed point squaring
-  auto line = [&](int32_t x1, int32_t x2, int32_t y) {                      // draws horizontal line between simertically placed points
-    y  = int168(y);
+  auto int124 = [](int16_t a)  { return a >> 4; };                          // convert 12.4 fixed point to integer
+  auto mul124 = [](int16_t a, int16_t b) { return ((int32_t)a * b) >> 4; }; // 12.4 fixed point multiplication
+  auto sqr124 = [&](int16_t a) { return mul124(a, a); };                    // 12.4 fixed point squaring
+  auto line = [&](int16_t x1, int16_t x2, int16_t y) {                      // draws horizontal line between simertically placed points
+    y  = int124(y);
     if (y < 0 || y >= vH) return;
-    uint8_t k1 = 255 - (x1 && 0xFF);                                        // softness factor for first point
-    uint8_t k2 =        x2 && 0xFF;
-    x1 = int168(x1);
-    x2 = int168(x2);
+    uint8_t k1 = 255 - ((x1<<4) && 0xFF);                                        // softness factor for first point
+    uint8_t k2 =        (x2<<4) && 0xFF;
+    x1 = int124(x1);
+    x2 = int124(x2);
     if (x2 > x1) {
-      for (uint32_t x = x1+1; x <= x2-1; x++) if (x >= 0 && x < vW) setPixelColorXYRaw(x, y, color);
+      for (int x = x1+1; x <= x2-1; x++) if (x >= 0 && x < vW) setPixelColorXYRaw(x, y, color);
       if (x1 >= 0 && x1 < vW) setPixelColorXYRaw(x1, y, color.setOpacity(k1)); // soften edges
     }
     if (x2 >= 0 && x2 < vW) setPixelColorXYRaw(x2, y, color.setOpacity(k2));
   };
   auto point  = [&](int32_t x, int32_t y) { if (x >= 0 && y >= 0 && x < vW && y < vH) setPixelColorXYRaw(x, y, color); }; // draws a single point
   auto points = [&](int32_t x, int32_t y) { // draws 4 simertically placed points
-    point(int168(cx + x), int168(cy + y));
-    point(int168(cx - x), int168(cy + y));
-    point(int168(cx + x), int168(cy - y));
-    point(int168(cx - x), int168(cy - y));
+    point(int124(cx + x), int124(cy + y));
+    point(int124(cx - x), int124(cy + y));
+    point(int124(cx + x), int124(cy - y));
+    point(int124(cx - x), int124(cy - y));
   };
 
-  int32_t rxSq = sqr168(rx);
-  int32_t rySq = sqr168(ry);
+  int32_t rxSq = sqr124(rx);
+  int32_t rySq = sqr124(ry);
   int32_t x = 0, y = ry;
 
   int32_t dx = 0; //2 * rySq * x;
-  int32_t dy = mul168(2 * rxSq, y);
+  int32_t dy = mul124(2 * rxSq, y);
 
   // Region 1
-  int32_t d1 = (rySq - mul168(rxSq, ry)) + (rxSq >> 2); // initial decision parameter
+  int32_t d1 = (rySq - mul124(rxSq, ry)) + (rxSq >> 2); // initial decision parameter
   while (dx < dy) {
     if (fill) {
       line((cx - x), (cx + x), (cy + y));
@@ -561,7 +561,7 @@ void Segment::drawEllipse(uint32_t cx, uint32_t cy, uint32_t rx, uint32_t ry, CR
   // Region 2
   const int32_t x_plus_half = x + 128;
   const int32_t y_minus_1 = y - 256;
-  int32_t d2 = mul168(rySq, sqr168(x_plus_half)) + mul168(rxSq, sqr168(y_minus_1)) - mul168(rxSq, rySq);
+  int32_t d2 = mul124(rySq, sqr124(x_plus_half)) + mul124(rxSq, sqr124(y_minus_1)) - mul124(rxSq, rySq);
   while (y >= 0) {
     if (fill) {
       line((cx - x), (cx + x), (cy + y));
