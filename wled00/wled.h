@@ -929,9 +929,11 @@ WLED_GLOBAL int8_t spi_sclk  _INIT(SPISCLKPIN);
 
 // global ArduinoJson buffer
 // we will allocate buffer in PSRAM if possible from setup() otherwise we will use heap
-WLED_GLOBAL JsonDocument *pDoc _INIT(nullptr);
 #ifndef BOARD_HAS_PSRAM
 WLED_GLOBAL StaticJsonDocument<JSON_BUFFER_SIZE> gDoc;
+WLED_GLOBAL JsonDocument *pDoc _INIT(&gDoc);
+#else
+WLED_GLOBAL JsonDocument *pDoc _INIT(nullptr);
 #endif
 #if defined(ARDUINO_ARCH_ESP32)
 WLED_GLOBAL SemaphoreHandle_t jsonBufferLockMutex _INIT(xSemaphoreCreateRecursiveMutex());

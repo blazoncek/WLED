@@ -392,8 +392,6 @@ void WLED::setup()
   DEBUG_PRINTF_P(PSTR("JSON buffer allocated: %u\n"), (psramFound() ? 2 : 1)*JSON_BUFFER_SIZE);
   // if the above fails requestJsonBufferLock() will always return false preventing crashes
   DEBUG_PRINTF_P(PSTR("PSRAM: %dkB/%dkB\n"), ESP.getFreePsram()/1024, ESP.getPsramSize()/1024);
-#else
-  pDoc = &gDoc;
 #endif
 
 #ifdef ESP8266
@@ -499,6 +497,7 @@ void WLED::setup()
       #endif
     });
     ArduinoOTA.setHostname(hostName);
+    DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
   }
 #endif
 #ifdef WLED_ENABLE_DMX
@@ -709,6 +708,7 @@ void WLED::connected()
 
 #ifdef WLED_ENABLE_AOTA
   if (aOtaEnabled) ArduinoOTA.begin();
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 #endif
 
   // Set up mDNS responder:
@@ -722,8 +722,11 @@ void WLED::connected()
     MDNS.addService("http", "tcp", 80);
     MDNS.addService("wled", "tcp", 80);
     MDNS.addServiceTxt("wled", "tcp", "mac", escapedMac.c_str());
+    DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
   }
   server.begin();
+  DEBUG_PRINTLN(F("AWS started"));
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 
   if (udpPort > 0 && udpPort != ntpLocalPort) {
     udpConnected = notifierUdp.begin(udpPort);
