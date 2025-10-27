@@ -427,31 +427,39 @@ void Segment::move(unsigned dir, unsigned delta, bool wrap) const {
 }
 
 // https://gamedev.stackexchange.com/questions/176036/how-to-draw-a-smoother-solid-fill-circle
+// draws a circle at (cx,cy) with given radius (in 12.4 fixed point notation) and color
 void Segment::drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, bool fill, bool soft) const {
   if (!isActive() || radius == 0) return; // not active
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
-  if (radius > min(vW, vH)/2) return; // too large
+  auto int124 = [](int16_t a)  { return a >> 4; };                          // convert 12.4 fixed point to integer
+  auto mul124 = [](int16_t a, int16_t b) { return ((int32_t)a * b) >> 4; }; // 12.4 fixed point multiplication
+
+  if (int124(radius) > min(vW, vH)/2) return; // too large
+
   auto plot = [&](int x, int y) {
     if (x >= 0 && y >= 0 && x < vW && y < vH) setPixelColorXYRaw(x, y, getPixelColorXYRaw(x, y) + col);
   };
+
   if (soft) {
     // Xiaolin Wu’s algorithm
-    const int rsq = radius*radius;
+    const int rsq = mul124(radius,radius); // in 12.4 fixed point
     int x = 0;
-    int y = radius;
+    int y = int124(radius);
     unsigned oldFade = 0;
     while (x < y) {
-      float yf = sqrtf(float(rsq - x*x)); // needs to be floating point
-      uint8_t fade = float(0xFF) * (ceilf(yf) - yf); // how much color to keep
+      //float yf = sqrtf(float(rsq - x*x)); // needs to be floating point
+      //uint8_t fade = float(0xFF) * (ceilf(yf) - yf); // how much color to keep
+      uint32_t yInt = sqrt32_bw(rsq - ((x*x)<<4)) >> 2; // 12.4 representation of y
+      uint8_t  fade = yInt & 0xFF; // how much color to keep
       if (oldFade > fade) y--;
       oldFade = fade;
       int px, py;
       for (size_t i = 0; i < 16; i++) {
-        int swaps = (i & 0x4 ? 1 : 0); // 0,  0,  0,  0,  1,  1,  1,  1,  0,  0,  0,  0,  1,  1,  1,  1
-        int adj =  (i < 8) ? 0 : 1;    // 0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,  1,  1,  1,  1
-        int dx = (i & 1) ? -1 : 1;     // 1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1
-        int dy = (i & 2) ? -1 : 1;     // 1,  1, -1, -1,  1,  1, -1, -1,  1,  1, -1, -1,  1,  1, -1, -1
+        bool swaps = (i & 0x4);         // 0,  0,  0,  0,  1,  1,  1,  1,  0,  0,  0,  0,  1,  1,  1,  1
+        bool adj   = (i >> 3);          // 0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,  1,  1,  1,  1
+        int  dx    = (i & 1) ? -1 : 1;  // 1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1,  1, -1
+        int  dy    = (i & 2) ? -1 : 1;  // 1,  1, -1, -1,  1,  1, -1, -1,  1,  1, -1, -1,  1,  1, -1, -1
         if (swaps) {
           px = cx + (y - adj) * dx;
           py = cy + x * dy;
@@ -466,8 +474,8 @@ void Segment::drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, b
     }
   } else if (!fill) {
     // Bresenham’s Algorithm
-    int d = 3 - (2*radius); // (5 - radius * 4)/4
-    int y = radius, x = 0;
+    int d = 3 - (2 * int124(radius));
+    int y = int124(radius), x = 0;
     while (y >= x) {
       // plot the 8 octants
       for (int i = 0; i < 4; i++) {
@@ -488,12 +496,12 @@ void Segment::drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, b
   if (fill) {
     // fill it
     // by stepko, taken from https://editor.soulmatelights.com/gallery/573-blobs
-    uint32_t rSq = radius * radius;
+    uint32_t rSq = mul124(radius, radius);
     auto compR = soft ? [](int a, int b) { return a < b; } : [](int a, int b) { return a <= b; };
-    for (int y = -radius; y <= radius; y++) {
-      for (int x = -radius; x <= radius; x++) {
+    for (int y = -radius; y <= radius; y+=8) {
+      for (int x = -radius; x <= radius; x+=8) {
         // if we are within the circle radius, or on the edge (depending on soft)
-        if (compR(x * x + y * y, rSq)) plot(cx + x, cy + y);
+        if (compR(mul124(x,x) + mul124(y,y), rSq)) plot(cx + int124(x), cy + int124(y));
       }
     }
   }

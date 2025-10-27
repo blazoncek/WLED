@@ -2242,13 +2242,12 @@ static uint16_t ripple_base() {
       unsigned rippleorigin = ripples[i].pos;
       CRGBA col = SEGMENT.color_from_palette(ripples[i].color, false, PALETTE_FIXED, 255);
       unsigned propagation = ((ripplestate/rippledecay - 1) * (SEGMENT.speed + 1));
-      int propI = propagation >> 8;
+      int propI = propagation >> 5;
       unsigned propF = propagation & 0xFF;
       unsigned amp = (ripplestate < 17) ? triwave8((ripplestate-1)*8) : map(ripplestate,17,255,255,2);
 
       #ifndef WLED_DISABLE_2D
       if (is2D) {
-        propI /= 2;
         unsigned cx = rippleorigin >> 8;
         unsigned cy = rippleorigin & 0xFF;
         unsigned mag = scale8(sin8_t((propF>>2)), amp);
@@ -2256,6 +2255,7 @@ static uint16_t ripple_base() {
       } else
       #endif
       {
+        propI >>= 3; // restore 1D scale
         int left = rippleorigin - propI -1;
         int right = rippleorigin + propI +2;
         for (int v = 0; v < 4; v++) {
@@ -5740,7 +5740,7 @@ uint16_t mode_2Dfloatingblobs(void) {
     bool grow[MAX_BLOBS];
   } blob_t;
 
-  size_t Amount = (SEGMENT.intensity>>5) + 1; // NOTE: be sure to update MAX_BLOBS if you change this
+  size_t Amount = map(SEGMENT.intensity, 0, 255, 1, MAX_BLOBS);
 
   if (!SEGENV.allocateData(sizeof(blob_t))) return mode_static(); //allocation failed
   blob_t *blob = reinterpret_cast<blob_t*>(SEGENV.data);
@@ -5770,8 +5770,8 @@ uint16_t mode_2Dfloatingblobs(void) {
     int x = int124(blob->x[i]);
     int y = int124(blob->y[i]);
     CRGBA c = SEGMENT.color_from_palette(blob->color[i], false, PALETTE_FIXED, 0);
-    if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(blob->x[i-1]>>4, blob->y[i-1]>>4, x, y, SEGCOLOR(2), SEGMENT.check1);
-    if (blob->r[i] > (1<<4))     SEGMENT.drawCircle(x, y, blob->r[i]>>4, c, true, SEGMENT.check1);
+    if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(int124(blob->x[i-1]), int124(blob->y[i-1]), x, y, SEGCOLOR(2), SEGMENT.check1);
+    if (blob->r[i] > (1<<4))     SEGMENT.drawCircle(x, y, blob->r[i], c, true, SEGMENT.check1);
     else                         SEGMENT.setPixelColorXY(x, y, c);
 
     if (dT > 1000) blob->color[i] += 4; // slowly change color
@@ -5785,7 +5785,7 @@ uint16_t mode_2Dfloatingblobs(void) {
     } else {
       // reduce radius until it is < 1
       blob->r[i] -= !hw_random8(10); // 10% chance to shrink
-      if (blob->r[i] < (1<<3)) {
+      if (blob->r[i] < (1<<4)) {
         blob->grow[i] = true;
       }
     }
