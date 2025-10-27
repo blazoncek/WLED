@@ -2589,7 +2589,7 @@ function delP(i) {
 function selectSlot(b)
 {
 	var cd = gId('csl').children;
-	if (b >= cd.length || cd[b].dataset.hide == '1') return;
+	if (b >= cd.length || cd[b].classList.contains('hide')) return;
 	csel = b;
 	for (let i of cd) i.classList.remove('sl');
 	cd[b].classList.add('sl');
