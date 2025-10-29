@@ -686,10 +686,8 @@ void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color,
     uint32_t x = particles[particleindex].x >> PS_P_RADIUS_SHIFT;
     uint32_t y = particles[particleindex].y >> PS_P_RADIUS_SHIFT;
     if (x <= (uint32_t)maxXpixel && y <= (uint32_t)maxYpixel) {
-      color += SEGMENT.getPixelColorXYRaw(x, maxYpixel-y); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-      SEGMENT.setPixelColorXYRaw(x, maxYpixel-y, color); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-      // for some odd reason this will crash
-      //SEGMENT.addPixelColorXYRaw(x, maxYpixel-y, color); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+      unsigned i = Segment::XY(x, maxYpixel - y); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+      SEGMENT.addPixelColorRaw(i, color);
     }
     return;
   }
@@ -804,8 +802,8 @@ void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color,
           else
             continue;
         }
-        renderbuffer[xrb + yrb * 10] += SEGMENT.getPixelColorXYRaw(xfb, maxYpixel-yfb); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-        SEGMENT.setPixelColorXYRaw(xfb, maxYpixel-yfb, renderbuffer[xrb + yrb * 10]); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+        unsigned i = Segment::XY(xfb, maxYpixel - yfb); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+        SEGMENT.addPixelColorRaw(i, renderbuffer[xrb + yrb * 10]); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
       }
     }
   } else { // standard rendering (2x2 pixels)
@@ -854,9 +852,8 @@ void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color,
     }
     for (uint32_t i = 0; i < 4; i++) {
       if (pixelvalid[i]) {
-        CRGBA col = color.scale8(pxlbrightness[i]);
-        col += SEGMENT.getPixelColorXYRaw(pixco[i].x, maxYpixel-pixco[i].y); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-        SEGMENT.setPixelColorXYRaw(pixco[i].x, maxYpixel-pixco[i].y, col); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+        unsigned j = Segment::XY(pixco[i].x, maxYpixel - pixco[i].y); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+        SEGMENT.addPixelColorRaw(j, color.scale8(pxlbrightness[i]));
       }
     }
 /*
@@ -1466,7 +1463,7 @@ void ParticleSystem1D::renderParticle(const uint32_t particleindex, CRGBA color,
   if (size == 0) { //single pixel particle, can be out of bounds as oob checking is made for 2-pixel particles (and updating it uses more code)
     uint32_t x =  particles[particleindex].x >> PS_P_RADIUS_SHIFT_1D;
     if (x <= (uint32_t)maxXpixel) { //by making x unsigned there is no need to check < 0 as it will overflow
-      SEGMENT.setPixelColorRaw(x, SEGMENT.getPixelColorRaw(x) + color);
+      SEGMENT.addPixelColorRaw(x, color);
     }
     return;
   }
@@ -1528,7 +1525,7 @@ void ParticleSystem1D::renderParticle(const uint32_t particleindex, CRGBA color,
         } else
           continue;
       }
-      SEGMENT.setPixelColorRaw(xfb, SEGMENT.getPixelColorRaw(xfb) + renderbuffer[xrb]);
+      SEGMENT.addPixelColorRaw(xfb, renderbuffer[xrb]);
     }
   } else { // standard rendering (2 pixels per particle)
     bool pxlisinframe[2] = {true, true};
@@ -1552,7 +1549,7 @@ void ParticleSystem1D::renderParticle(const uint32_t particleindex, CRGBA color,
     }
     for (uint32_t i = 0; i < 2; i++) {
       if (pxlisinframe[i]) {
-        SEGMENT.setPixelColorRaw(pixco[i], SEGMENT.getPixelColorRaw(pixco[i]) + color.scale8(pxlbrightness[i]));
+        SEGMENT.addPixelColorRaw(pixco[i], color.scale8(pxlbrightness[i]));
       }
     }
   }

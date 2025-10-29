@@ -345,6 +345,8 @@ void Segment::box_blur(unsigned radius, bool smear) {
   delete[] tmpBSum;
 }
 */
+
+// moveX() - move all pixels in X direction delta number of pixels
 void Segment::moveX(int delta, bool wrap) const {
   if (!isActive() || !delta) return; // not active
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
@@ -371,6 +373,7 @@ void Segment::moveX(int delta, bool wrap) const {
   }
 }
 
+// moveY() - move all pixels in Y direction delta number of pixels
 void Segment::moveY(int delta, bool wrap) const {
   if (!isActive() || !delta) return; // not active
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
