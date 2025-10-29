@@ -80,7 +80,7 @@ bool ColorOrderMap::add(uint16_t start, uint16_t len, uint8_t colorOrder) {
   return true;
 }
 
-uint8_t IRAM_ATTR ColorOrderMap::getPixelColorOrder(uint16_t pix, uint8_t defaultColorOrder) const {
+uint8_t ColorOrderMap::getPixelColorOrder(uint16_t pix, uint8_t defaultColorOrder) const {
   // upper nibble contains W swap information
   // when ColorOrderMap's upper nibble contains value >0 then swap information is used from it, otherwise global swap is used
   for (const auto& map : _mappings) {
@@ -253,7 +253,7 @@ void BusDigital::setStatusPixel(uint32_t c) {
   }
 }
 
-void IRAM_ATTR BusDigital::setPixelColor(unsigned pix, uint32_t c) {
+void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
   if (!_valid) return;
   if (hasWhite()) c = autoWhiteCalc(c);
   if (Bus::_cct >= 1900) c = colorBalanceFromKelvin(Bus::_cct, c); //color correction from CCT
@@ -291,7 +291,7 @@ void IRAM_ATTR BusDigital::setPixelColor(unsigned pix, uint32_t c) {
 }
 
 // returns lossly restored color from bus (it was scaled by _bri in setPixelColor)
-uint32_t IRAM_ATTR BusDigital::getPixelColor(unsigned pix) const {
+uint32_t BusDigital::getPixelColor(unsigned pix) const {
   if (!_valid) return 0;
   if (_reversed) pix = _len - pix -1;
   pix += _skip;
@@ -943,7 +943,7 @@ void BusManager::show() {
   //DEBUGBUS_PRINTF_P(PSTR("Bus: Total current used: %u mA\n"), (unsigned)_gMilliAmpsUsed);
 }
 
-void IRAM_ATTR BusManager::setPixelColor(unsigned pix, uint32_t c) {
+void BusManager::setPixelColor(unsigned pix, uint32_t c) {
   for (auto &bus : busses) {
     if (bus->containsPixel(pix)) bus->setPixelColor(pix - bus->getStart(), c);
   }
