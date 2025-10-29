@@ -107,8 +107,8 @@ size_t printSetFormValue(Print& settingsScript, const char* key, const char* val
   return settingsScript.printf_P(PSTR("d.Sf.%s.value=\"%s\";"),key,val);
 }
 
-size_t printSetClassElementHTML(Print& settingsScript, const char* key, const int index, const char* val) {
-  return settingsScript.printf_P(PSTR("d.getElementsByClassName(\"%s\")[%d].innerHTML=\"%s\";"), key, index, val);
+size_t printSetIdHTML(Print& settingsScript, const char* key, const char* val) {
+  return settingsScript.printf_P(PSTR("gId(\"%s\").innerHTML=\"%s\";"), key, val);
 }
 
 /*

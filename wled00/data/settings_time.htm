@@ -159,12 +159,12 @@
 			<option value="23">BRT (Brasília)</option>
 		</select><br>
 		UTC offset: <input name="UO" type="number" min="-65500" max="65500" required> seconds (max. 18 hours)<br>
-		Current local time is <span class="times">unknown</span>.<br>
+		Current local time is <span id="loct">unknown</span>.<br>
 		Latitude: <select name="LTR"><option value="N">N</option><option value="S">S</option></select><input name="LT" type="number" class="xl" min="0" max="66.6" step="0.01"><br>
 		Longitude: <select name="LNR"><option value="E">E</option><option value="W">W</option></select><input name="LN" type="number" class="xl" min="0" max="180" step="0.01"><br>
 		<button type="button" id="locbtn" onclick="getLatLon()">Get location</button>
 		<div><i>(opens new tab, only works in browser)</i></div>
-		<div id="sun" class="times"></div>
+		<div id="sun"></div>
 		<h3>Clock</h3>
 		Analog Clock overlay: <input type="checkbox" name="OL" onchange="Cs()"><br>
 		<div id="cac">

@@ -217,7 +217,7 @@ Static subnet mask:<br>
 		<input type="text" name="CM" minlength="2" maxlength="32" pattern="[a-zA-Z0-9_\-]*" oninput="genUrl()"><br>
 		Enable mDNS: <input type="checkbox" name="MD" checked onchange="genUrl()"><br>
 		<div id="mi"><i>http://<span id="ml">wled</span>.local</i><br></div>
-		Client IP: <span class="sip"> Not connected </span><br>
+		Client IP: <span id="cip"></span><br>
 		<h3>WiFi</h3>
 		<button type="button" id="scan" onclick="N()">Scan</button><br>
 		<div id="wifi">
@@ -242,7 +242,7 @@ Static subnet mask:<br>
 			<option value="3">Never (use button!)</option>
 			<option value="4">Temporary</option>
 		</select><br>
-		AP IP: <span class="sip">Not active</span><br>
+		AP IP: <span id="aip"></span><br>
 		<hr class="sml">
 		<div id="ethd">
 			<h3>Ethernet Type</h3>

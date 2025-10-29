@@ -259,32 +259,32 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       #if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
       if (Network.isEthernet()) strcat_P(s ,PSTR(" (Ethernet)"));
       #endif
-      printSetClassElementHTML(settingsScript,PSTR("sip"),0,s);
+      printSetIdHTML(settingsScript,PSTR("cip"),s);
     } else
     {
-      printSetClassElementHTML(settingsScript,PSTR("sip"),0,(char*)F("Not connected"));
+      printSetIdHTML(settingsScript,PSTR("cip"),(char*)F("Not connected"));
     }
 
     if (apActive && WiFi.softAPIP()[0] != 0) //is active
     {
       IPAddress apIP = WiFi.softAPIP();
       snprintf(s, sizeof(s)-1, "%d.%d.%d.%d", apIP[0], apIP[1], apIP[2], apIP[3]);
-      printSetClassElementHTML(settingsScript,PSTR("sip"),1,s);
+      printSetIdHTML(settingsScript,PSTR("aip"),s);
     } else
     {
       // WiFi.softAPmacAddress() for AP MAC address
-      printSetClassElementHTML(settingsScript,PSTR("sip"),1,(char*)F("Not active"));
+      printSetIdHTML(settingsScript,PSTR("aip"),(char*)F("Not active"));
     }
 
     #ifndef WLED_DISABLE_ESPNOW
     if (senderESPNow[0] | senderESPNow[1] | senderESPNow[2] | senderESPNow[3] | senderESPNow[4] | senderESPNow[5]) { //Have seen an ESP-NOW Remote
       char last_signal_src[13];
       fillMAC2Str(last_signal_src, senderESPNow);
-      printSetClassElementHTML(settingsScript,PSTR("rlid"),0,last_signal_src);
+      printSetIdHTML(settingsScript,PSTR("ld"),last_signal_src);
     } else if (!enableESPNow) {
-      printSetClassElementHTML(settingsScript,PSTR("rlid"),0,(char*)F("(Enable ESP-NOW to listen)"));
+      printSetIdHTML(settingsScript,PSTR("ld"),(char*)F("(Enable ESP-NOW to listen)"));
     } else {
-      printSetClassElementHTML(settingsScript,PSTR("rlid"),0,(char*)F("None"));
+      printSetIdHTML(settingsScript,PSTR("ld"),(char*)F("None"));
     }
     #endif
   }
@@ -527,7 +527,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       default: sprintf_P(hueErrorString,PSTR("Bridge Error %i"),hueError);
     }
 
-    printSetClassElementHTML(settingsScript,PSTR("sip"),0,hueErrorString);
+    printSetIdHTML(settingsScript,PSTR("hue"),hueErrorString);
     #else
     settingsScript.print(F("toggle('Hue');"));    // hide Hue Sync settings
     #endif
@@ -550,10 +550,10 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     dtostrf(latitude,4,2,tm);
     printSetFormValue(settingsScript,PSTR("LT"),tm);
     getTimeString(tm);
-    printSetClassElementHTML(settingsScript,PSTR("times"),0,tm);
+    printSetIdHTML(settingsScript,PSTR("loct"),tm);
     if ((int)(longitude*10.0f) || (int)(latitude*10.0f)) {
       sprintf_P(tm, PSTR("Sunrise: %02d:%02d Sunset: %02d:%02d"), hour(sunrise), minute(sunrise), hour(sunset), minute(sunset));
-      printSetClassElementHTML(settingsScript,PSTR("times"),1,tm);
+      printSetIdHTML(settingsScript,PSTR("sun"),tm);
     }
     printSetFormCheckbox(settingsScript,PSTR("OL"),overlayCurrent);
     printSetFormValue(settingsScript,PSTR("O1"),overlayMin);
@@ -611,7 +611,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormCheckbox(settingsScript,PSTR("SU"),otaSameSubnet);
     char tmp_buf[128];
     fillWLEDVersion(tmp_buf,sizeof(tmp_buf));
-    printSetClassElementHTML(settingsScript,PSTR("sip"),0,tmp_buf);
+    printSetIdHTML(settingsScript,PSTR("ver"),tmp_buf);
     settingsScript.printf_P(PSTR("sd=\"%s\";"), serverDescription);
     //hide settings if not compiled
     #ifdef WLED_DISABLE_OTA
@@ -673,7 +673,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
   {
     char tmp_buf[128];
     fillWLEDVersion(tmp_buf,sizeof(tmp_buf));
-    printSetClassElementHTML(settingsScript,PSTR("sip"),0,tmp_buf);
+    printSetIdHTML(settingsScript,PSTR("ver"),tmp_buf);
     #ifndef ARDUINO_ARCH_ESP32
     settingsScript.print(F("toggle('rev');"));  // hide revert button on ESP8266
     #endif
