@@ -244,23 +244,18 @@ void Segment::blur2D(uint8_t blur_x, uint8_t blur_y, bool smear) const {
   if (!isActive()) return; // not active
   const unsigned cols = vWidth();
   const unsigned rows = vHeight();
-  const auto XY = [&](unsigned x, unsigned y){ return x + y*cols; };
   if (blur_x) {
     const uint8_t keepx = smear ? 255 : 255 - blur_x;
     const uint8_t seepx = blur_x >> (1 + smear);
     for (unsigned row = 0; row < rows; row++) { // blur rows (x direction)
       CRGBA carryover = BLACK;
       for (unsigned x = 0; x < cols; x++) {
-        CRGBA cur = getPixelColorRaw(XY(x, row));
+        CRGBA cur = getPixelColorXYRaw(x, row);
         CRGBA part = cur.scale8(seepx); // we are assuming RGBW pixels here as we also want to blur alpha channel
         cur.nscale8(keepx);
         cur += carryover;
-        if (x > 0) {
-          CRGBA c = getPixelColorRaw(XY(x - 1, row));
-          c += part;
-          setPixelColorRaw(XY(x - 1, row), c);
-        }
-        setPixelColorRaw(XY(x, row), cur); // first pixel
+        if (x > 0) addPixelColorXYRaw(x - 1, row, part);
+        setPixelColorXYRaw(x, row, cur); // first pixel
         carryover = part;
       }
     }
@@ -271,16 +266,12 @@ void Segment::blur2D(uint8_t blur_x, uint8_t blur_y, bool smear) const {
     for (unsigned col = 0; col < cols; col++) {
       CRGBA carryover = BLACK;
       for (unsigned y = 0; y < rows; y++) {
-        CRGBA cur = getPixelColorRaw(XY(col, y));
+        CRGBA cur = getPixelColorXYRaw(col, y);
         CRGBA part = cur.scale8(seepy);
         cur.nscale8(keepy);
         cur += carryover;
-        if (y > 0) {
-          CRGBA c = getPixelColorRaw(XY(col, y - 1));
-          c += part;
-          setPixelColorRaw(XY(col, y - 1), c);
-        }
-        setPixelColorRaw(XY(col, y), cur); // first pixel
+        if (y > 0) addPixelColorXYRaw(col, y - 1, part);
+        setPixelColorXYRaw(col, y, cur); // first pixel
         carryover = part;
       }
     }
@@ -358,7 +349,6 @@ void Segment::moveX(int delta, bool wrap) const {
   if (!isActive() || !delta) return; // not active
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
-  const auto XY = [&](unsigned x, unsigned y){ return x + y*vW; };
   int absDelta = abs(delta);
   if (absDelta >= vW) return;
   CRGBA newPxCol[vW];
@@ -375,9 +365,9 @@ void Segment::moveX(int delta, bool wrap) const {
     for (int x = 0; x < stop; x++) {
       int srcX = x + newDelta;
       if (wrap) srcX %= vW; // Wrap using modulo when `wrap` is true
-      newPxCol[x] = getPixelColorRaw(XY(srcX, y));
+      newPxCol[x] = getPixelColorXYRaw(srcX, y);
     }
-    for (int x = 0; x < stop; x++) setPixelColorRaw(XY(x + start, y), newPxCol[x]);
+    for (int x = 0; x < stop; x++) setPixelColorXYRaw(x + start, y, newPxCol[x]);
   }
 }
 
@@ -385,7 +375,6 @@ void Segment::moveY(int delta, bool wrap) const {
   if (!isActive() || !delta) return; // not active
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
-  const auto XY = [&](unsigned x, unsigned y){ return x + y*vW; };
   int absDelta = abs(delta);
   if (absDelta >= vH) return;
   CRGBA newPxCol[vH];
@@ -402,9 +391,9 @@ void Segment::moveY(int delta, bool wrap) const {
     for (int y = 0; y < stop; y++) {
       int srcY = y + newDelta;
       if (wrap) srcY %= vH; // Wrap using modulo when `wrap` is true
-      newPxCol[y] = getPixelColorRaw(XY(x, srcY));
+      newPxCol[y] = getPixelColorXYRaw(x, srcY);
     }
-    for (int y = 0; y < stop; y++) setPixelColorRaw(XY(x, y + start), newPxCol[y]);
+    for (int y = 0; y < stop; y++) setPixelColorXYRaw(x, y + start, newPxCol[y]);
   }
 }
 
@@ -438,7 +427,7 @@ void Segment::drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA col, b
   if (int124(radius) > min(vW, vH)/2) return; // too large
 
   auto plot = [&](int x, int y) {
-    if (x >= 0 && y >= 0 && x < vW && y < vH) setPixelColorXYRaw(x, y, getPixelColorXYRaw(x, y) + col);
+    if (x >= 0 && y >= 0 && x < vW && y < vH) addPixelColorXYRaw(x, y, col);
   };
 
   if (soft) {
@@ -524,12 +513,12 @@ void Segment::drawEllipse(uint16_t cx, uint16_t cy, uint16_t rx, uint16_t ry, CR
     x1 = int124(x1);
     x2 = int124(x2);
     if (x2 > x1) {
-      for (int x = x1+1; x <= x2-1; x++) if (x >= 0 && x < vW) setPixelColorXYRaw(x, y, color);
-      if (x1 >= 0 && x1 < vW) setPixelColorXYRaw(x1, y, color.setOpacity(k1)); // soften edges
+      for (int x = x1+1; x <= x2-1; x++) if (x >= 0 && x < vW) addPixelColorXYRaw(x, y, color);
+      if (x1 >= 0 && x1 < vW) addPixelColorXYRaw(x1, y, color.setOpacity(k1)); // soften edges
     }
-    if (x2 >= 0 && x2 < vW) setPixelColorXYRaw(x2, y, color.setOpacity(k2));
+    if (x2 >= 0 && x2 < vW) addPixelColorXYRaw(x2, y, color.setOpacity(k2));
   };
-  auto point  = [&](int32_t x, int32_t y) { if (x >= 0 && y >= 0 && x < vW && y < vH) setPixelColorXYRaw(x, y, color); }; // draws a single point
+  auto point  = [&](int32_t x, int32_t y) { if (x >= 0 && y >= 0 && x < vW && y < vH) addPixelColorXYRaw(x, y, color); }; // draws a single point
   auto points = [&](int32_t x, int32_t y) { // draws 4 simertically placed points
     point(int124(cx + x), int124(cy + y));
     point(int124(cx - x), int124(cy + y));
@@ -642,7 +631,7 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
     const int sy = y0<y1 ? 1 : -1;  // y step
     int err = (dx>dy ? dx : -dy)/2; // error direction
     for (;;) {
-      setPixelColorXYRaw(x0, y0, getPixelColorXYRaw(x0, y0) + c);
+      addPixelColorXYRaw(x0, y0, c);
       if (x0==x1 && y0==y1) break;
       int e2 = err;
       if (e2 >-dx) { err -= dy; x0 += sx; }
@@ -712,7 +701,7 @@ void Segment::setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const {
     int wu_y = (y >> 8) + ((i >> 1) & 1); // precalculate y
     if (/*wu_x >= 0 && wu_y >= 0 && */wu_x < (int)vWidth() && wu_y < (int)vHeight()) {
       c.a = wu[i]; // set alpha to weight
-      setPixelColorXYRaw(wu_x, wu_y, getPixelColorXYRaw(wu_x, wu_y) + c); // also modifies resulting opacity; should use addPixelColorXYRaw but that crashes ESP
+      addPixelColorXYRaw(wu_x, wu_y, c); // also modifies resulting opacity
     }
   }
 }

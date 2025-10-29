@@ -702,6 +702,8 @@ void Segment::setPixelColor(int i, CRGBA col) const
 {
   if (!isActive() || i < 0) return; // not active or invalid index
 #ifndef WLED_DISABLE_2D
+  const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
+  const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
   int vStrip = i>>16; // hack to allow running on virtual strips (2D segment columns/rows)
 #endif
   const int vL = vLength();
@@ -712,25 +714,22 @@ void Segment::setPixelColor(int i, CRGBA col) const
 
 #ifndef WLED_DISABLE_2D
   if (is2D()) {
-    const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
-    const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
-    const auto XY = [&](unsigned x, unsigned y) { return x + y*vW; };
     switch (map1D2D) {
       case M12_Pixels:
         // use all available pixels as a long strip (respect transpose)
-        setPixelColorRaw(XY(i % vW, i / vW), col);
+        setPixelColorXYRaw(i % vW, i / vW, col);
         break;
       case M12_pBar:
         // expand 1D effect vertically or have it play on virtual strips
-        if (vStrip > 0)                   setPixelColorRaw(XY(vStrip - 1, vH - i - 1), col);
-        else for (int x = 0; x < vW; x++) setPixelColorRaw(XY(x, vH - i - 1), col);
+        if (vStrip > 0)                   setPixelColorXYRaw(vStrip - 1, vH - i - 1, col);
+        else for (int x = 0; x < vW; x++) setPixelColorXYRaw(x, vH - i - 1, col);
         break;
       case M12_pArc: {
         // expand 1D effect in a circular manner
         // adapted code by @brandon502 wled#4994
-        if (i == 0)    { setPixelColorRaw(XY(0, 0), col);       break; }  // with only 1 pixel to draw, return early
-        if (i == vL-1) { setPixelColorRaw(XY(vW-1, vH-1), col); break; }  // extreme (last) pixel is always in corner
-        if (i == 2)      setPixelColorRaw(XY(1, 1), col);                 // cover anomally (missing pixel with square detection)
+        if (i == 0)    { setPixelColorXYRaw(0, 0, col);       break; }  // with only 1 pixel to draw, return early
+        if (i == vL-1) { setPixelColorXYRaw(vW-1, vH-1, col); break; }  // extreme (last) pixel is always in corner
+        if (i == 2)      setPixelColorXYRaw(1, 1, col);                 // cover anomally (missing pixel with square detection)
         // Tony Barrera's circle algorithm
         // https://softwareengineering.stackexchange.com/questions/287478/drawing-concentric-circles-without-gaps/357445#357445
         int x = 0, y = i;  // i is the radius
@@ -738,8 +737,8 @@ void Segment::setPixelColor(int i, CRGBA col) const
         while (x <= y) {
           if (i != x || i != y) { // prevent early square
             // as segment may not be square limit pixel drawing (faster than letting setPixelColorXY() decide)
-            if (x < vW && y < vH) setPixelColorRaw(XY(x, y), col);
-            if (y < vW && x < vH) setPixelColorRaw(XY(y, x), col);
+            if (x < vW && y < vH) setPixelColorXYRaw(x, y, col);
+            if (y < vW && x < vH) setPixelColorXYRaw(y, x, col);
           }
           if (d <= 0) d += ++x;
           else        d -= --y;
@@ -752,8 +751,8 @@ void Segment::setPixelColor(int i, CRGBA col) const
         // drawing in that particular dimension
         int w = min(i, vW - 1);
         int h = min(i, vH - 1);
-        if (i < vH) for (int x = 0; x <= w; x++) setPixelColorRaw(XY(x, i), col);
-        if (i < vW) for (int y = 0; y <= h; y++) setPixelColorRaw(XY(i, y), col);
+        if (i < vH) for (int x = 0; x <= w; x++) setPixelColorXYRaw(x, i, col);
+        if (i < vW) for (int y = 0; y <= h; y++) setPixelColorXYRaw(i, y, col);
         break;
       }
       case M12_sPinwheel: {
@@ -842,7 +841,7 @@ void Segment::setPixelColor(int i, CRGBA col) const
                   (!onLine1 && (!onLine2 || drawLast))  || // Middle pixels and line2 if drawLast
                   (!onLine2 && (!onLine1 || drawFirst))    // Middle pixels and line1 if drawFirst
                 ) {
-                if (x < vW && y < vH) setPixelColorRaw(XY(x, y), col);
+                if (x < vW && y < vH) setPixelColorXYRaw(x, y, col);
               }
             }
           }
@@ -856,13 +855,10 @@ void Segment::setPixelColor(int i, CRGBA col) const
   } else if (Segment::maxHeight != 1 && (width() == 1 || height() == 1)) {
     if (start < Segment::maxWidth*Segment::maxHeight) {
       // we have a vertical or horizontal 1D segment (WARNING: virtual...() may be transposed)
-      const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
-      const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
-      const auto XY = [&](unsigned x, unsigned y) { return x + y*vW; };
       int x = 0, y = 0;
       if (vH > 1) y = i;
       if (vW > 1) x = i;
-      if (x < vW && y < vH) setPixelColorRaw(XY(x, y), col);
+      if (x < vW && y < vH) setPixelColorXYRaw(x, y, col);
       return;
     }
   }
@@ -919,7 +915,6 @@ CRGBA Segment::getPixelColor(int i) const
   if (is2D()) {
     const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
     const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
-    const auto XY = [&](unsigned x, unsigned y){ return x + y*vW;};
     int x = 0, y = 0;
     switch (map1D2D) {
       case M12_Pixels:
@@ -1057,7 +1052,7 @@ void Segment::fadeToBlackBy(uint8_t fadeBy) const {
   if (!isActive() || fadeBy == 0) return;   // optimization - no scaling to apply
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
   uint8_t scale = 255 - fadeBy; // slight optimization
-  for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, getPixelColorRaw(i).nscale8(scale)); // will not fade white channel
+  for (unsigned i = 0; i < length(); i++) fadePixelColorRaw(i, scale); // will not fade white channel
 }
 
 /*
@@ -1089,11 +1084,7 @@ void Segment::blur1D(uint8_t blur_amount, bool smear) const {
     CRGBA part = cur.scale8(seep);
     cur.nscale8(keep);
     cur += carryover;
-    if (i > 0) {
-      CRGBA c = getPixelColorRaw(i - 1);
-      c += part;
-      setPixelColorRaw(i - 1, c);
-    }
+    if (i > 0) addPixelColorRaw(i - 1, part);
     setPixelColorRaw(i, cur); // first pixel
     carryover = part;
   }

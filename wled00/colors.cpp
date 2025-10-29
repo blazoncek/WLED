@@ -6,19 +6,16 @@
 
 constexpr uint32_t TWO_CHANNEL_MASK = 0x00FF00FF;     // mask for R and B channels or W and G if negated (poorman's SIMD; https://github.com/wled/WLED/pull/4568#discussion_r1986587221)
 
-__attribute__((optimize("-O2"))) CRGBA& CRGBA::nscale8(uint8_t scale) {
+//#pragma GCC optimize ("-O2")
+
+CRGBA& CRGBA::nscale8(uint8_t scale) {
   uint8_t aO = a; // save alpha
   fast_color_scale(color32, scale);
   a = aO;        // restore alpha
-  //uint32_t s = scale + 1; // 1-256
-  //r = (r * s) >> 8;
-  //g = (g * s) >> 8;
-  //b = (b * s) >> 8;
   return *this;
 }
 
-__attribute__((optimize("-O2"))) CRGBA& CRGBA::add(CRGBA c, bool preserveCR)
-{
+CRGBA& CRGBA::nadd(CRGBA c, bool preserveCR) {
   uint32_t c2 = c.color32 & 0x00FFFFFF;             // ignore alpha/white of color2
   if (c.a < 255) fast_color_scale(c2, c.a);         // scale color2 by its alpha
   uint32_t c1 = color32 & 0x00FFFFFF;               // ignore alpha/white of color1
@@ -51,8 +48,7 @@ __attribute__((optimize("-O2"))) CRGBA& CRGBA::add(CRGBA c, bool preserveCR)
  * color blend function, based on FastLED blend function
  * the calculation for each color is: result = (A*(amountOfA) + A + B*(amountOfB) + B) / 256 with amountOfA = 255 - amountOfB
  */
-__attribute__((optimize("-O2"))) uint32_t color_blend(uint32_t color1, uint32_t color2, uint8_t blend)
-{
+uint32_t color_blend(uint32_t color1, uint32_t color2, uint8_t blend) {
   // min / max blend checking is omitted: calls with 0 or 255 are rare, checking lowers overall performance
   uint32_t rb1 =  color1       & TWO_CHANNEL_MASK;  // extract R & B channels from color1
   uint32_t wg1 = (color1 >> 8) & TWO_CHANNEL_MASK;  // extract W & G channels from color1 (shifted for multiplication later)
@@ -68,8 +64,7 @@ __attribute__((optimize("-O2"))) uint32_t color_blend(uint32_t color1, uint32_t 
  * original idea: https://github.com/wled/WLED/pull/2465 by https://github.com/Proto-molecule
  * speed optimisations by @dedehai
  */
-__attribute__((optimize("-O2"))) uint32_t color_add(uint32_t c1, uint32_t c2, bool preserveCR)
-{
+uint32_t color_add(uint32_t c1, uint32_t c2, bool preserveCR) {
   if (preserveCR) { fast_color_add(c1, c2); return c1; }
   if (c1 == BLACK) return c2;
   if (c2 == BLACK) return c1;
@@ -83,8 +78,7 @@ __attribute__((optimize("-O2"))) uint32_t color_add(uint32_t c1, uint32_t c2, bo
 }
 
 // fast color scale function (scales c1 as c1 * scale / 256)
-__attribute__((optimize("-O2"))) void fast_color_scale(uint32_t &c1, uint8_t scale)
-{
+void fast_color_scale(uint32_t &c1, uint8_t scale) {
   uint32_t s = scale + 1;
   uint32_t rb = ((( c1     & TWO_CHANNEL_MASK) * s) >> 8) &  TWO_CHANNEL_MASK;
   uint32_t wg =  (((c1>>8) & TWO_CHANNEL_MASK) * s)       & ~TWO_CHANNEL_MASK;
@@ -92,8 +86,7 @@ __attribute__((optimize("-O2"))) void fast_color_scale(uint32_t &c1, uint8_t sca
 }
 
 // fast color add function that preserves ratio
-__attribute__((optimize("-O2"))) void fast_color_add(uint32_t &c1, uint32_t c2, uint8_t scale)
-{
+void fast_color_add(uint32_t &c1, uint32_t c2, uint8_t scale) {
   if (c2 == BLACK) return;                              // adding black does nothing
   if (scale < 255) fast_color_scale(c2, scale);         // scale added color
   if (c1 == BLACK) { c1 = c2; return; }                 // source is black, just assign c2
@@ -115,8 +108,7 @@ __attribute__((optimize("-O2"))) void fast_color_add(uint32_t &c1, uint32_t c2, 
  * fades color toward black
  * if using "video" method the resulting color will never become black unless it is already black
  */
-__attribute__((optimize("-O2"))) uint32_t color_fade(uint32_t c1, uint8_t amount, bool video)
-{
+uint32_t color_fade(uint32_t c1, uint8_t amount, bool video) {
   if (amount == 255) return c1; // no fading
   uint32_t addRemains = 0;
   if (video && amount) { // video scaling: make sure colors do not dim to zero if they started non-zero
@@ -134,8 +126,7 @@ __attribute__((optimize("-O2"))) uint32_t color_fade(uint32_t c1, uint8_t amount
 // Blending also occurs between the 16th and 1st elements when blendType is LINEARBLEND, producing wrap-around palette.
 // If you do not want wrap-around, use LINEARBLEND_NOWRAP which effectively reduces color entris count to 240.
 // If you do not want any blending at all, use NOBLEND which effectively reduces color entries count to 16.
-__attribute__((optimize("-O2"))) CRGBA ColorFromPaletteWLED(const CRGBPalette16& pal, uint8_t index, uint8_t brightness, TBlendType blendType)
-{
+CRGBA ColorFromPaletteWLED(const CRGBPalette16& pal, uint8_t index, uint8_t brightness, TBlendType blendType) {
   if (blendType == LINEARBLEND_NOWRAP) {
     index = (index*240) >> 8; // Blend range is affected by lo4 blend of values, remap to avoid wrapping
   }
@@ -164,6 +155,8 @@ __attribute__((optimize("-O2"))) CRGBA ColorFromPaletteWLED(const CRGBPalette16&
   }
   return CRGBA(red1, green1, blue1);
 }
+
+//#pragma GCC optimize ("-O0")
 
 void setRandomColor(byte* rgb)
 {

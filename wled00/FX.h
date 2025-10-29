@@ -518,16 +518,19 @@ class Segment {
     inline static unsigned getUsedSegmentData()            { return Segment::_usedSegmentData; }
     inline static void     addUsedSegmentData(int len)     { Segment::_usedSegmentData += len; }
 
-    inline CRGBA *getPixels() const                           { return pixels; }
-    inline void  setPixelColorRaw(unsigned i, CRGBA c) const  { pixels[i] = c; }
-    inline void  addPixelColorRaw(unsigned i, CRGBA c) const  { pixels[i] += c; } // somehow this crashes ESP
-    inline void  blendPixelColorRaw(unsigned i, CRGBA c, uint8_t b) const { pixels[i].nblend(c, b); }
-    inline CRGBA getPixelColorRaw(unsigned i) const           { return pixels[i]; };
+    inline CRGBA *getPixels() const                                                     { return pixels; }
+    inline void  setPixelColorRaw(unsigned i, CRGBA c) const                            { pixels[i] = c; }
+    inline void  addPixelColorRaw(unsigned i, CRGBA c) const                            { pixels[i] = pixels[i].add(c,true); }      // pixels[i].nadd(c); will crash ESP
+    inline void  blendPixelColorRaw(unsigned i, CRGBA c, uint8_t b) const               { pixels[i].nblend(c, b); }
+    inline void  fadePixelColorRaw(unsigned i, uint8_t b) const                         { pixels[i] = pixels[i].scale8_video(b); }  // pixels[i].nscale8(b); will crash ESP
+    inline CRGBA getPixelColorRaw(unsigned i) const                                     { return pixels[i]; };
   #ifndef WLED_DISABLE_2D
-    inline void  setPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const  { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)] = c; }
-    inline void  addPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const  { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)] += c; } // somehow this crashes ESP
-    inline void  blendPixelColorXYRaw(unsigned x, unsigned y, CRGBA c, uint8_t b) const { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; pixels[XY(x,y)].nblend(c, b); }
-    inline CRGBA getPixelColorXYRaw(unsigned x, unsigned y) const           { auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::vWidth(); }; return pixels[XY(x,y)]; };
+    inline static unsigned XY(unsigned x, unsigned y)                                   { return x + y*Segment::vWidth(); }
+    inline void  setPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const              { pixels[XY(x,y)] = c; }
+    inline void  addPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const              { pixels[XY(x,y)] = pixels[XY(x,y)].add(c,true); }      // pixels[XY(x,y)].nadd(c); will crash ESP
+    inline void  blendPixelColorXYRaw(unsigned x, unsigned y, CRGBA c, uint8_t b) const { pixels[XY(x,y)].nblend(c, b); }
+    inline void  fadePixelColorXYRaw(unsigned x, unsigned y, uint8_t b) const           { pixels[XY(x,y)] = pixels[XY(x,y)].scale8_video(b); }  // pixels[XY(x,y)].nscale8(b); will crash ESP
+    inline CRGBA getPixelColorXYRaw(unsigned x, unsigned y) const                       { return pixels[XY(x,y)]; };
   #endif
     void resetIfRequired();         // sets all SEGENV variables to 0 and clears data buffer
     CRGBPalette16 &loadPalette(CRGBPalette16 &tgt, uint8_t pal);
