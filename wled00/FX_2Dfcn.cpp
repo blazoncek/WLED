@@ -511,8 +511,8 @@ void Segment::drawEllipse(uint16_t cx, uint16_t cy, uint16_t rx, uint16_t ry, CR
   auto line = [&](int16_t x1, int16_t x2, int16_t y) {                      // draws horizontal line between simertically placed points
     y  = int124(y);
     if (y < 0 || y >= vH) return;
-    uint8_t k1 = 255 - ((x1<<4) && 0xFF);                                        // softness factor for first point
-    uint8_t k2 =        (x2<<4) && 0xFF;
+    uint8_t k1 = 255 - ((x1<<4) & 0xFF);                                    // softness factor for first point
+    uint8_t k2 =        (x2<<4) & 0xFF;
     x1 = int124(x1);
     x2 = int124(x2);
     if (x2 > x1) {
