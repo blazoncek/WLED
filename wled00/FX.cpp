@@ -2672,8 +2672,8 @@ static const char _data_FX_MODE_SPOTS[] PROGMEM = "Spots@Spread,Width,,,,Fade;!,
 //each needs 12 bytes
 typedef struct Ball {
   unsigned long lastBounceTime;
-  float impactVelocity;
-  float height;
+  uint16_t impactVelocity;  // in 4.12 fixed point format
+  int16_t height;           // in 4.12 fixed point format
 } ball;
 
 /*
@@ -2683,13 +2683,17 @@ uint16_t mode_bouncing_balls(void) {
   if (SEGLEN <= 1) return mode_static();
   //allocate segment data
   const unsigned strips = SEGMENT.nrOfVStrips(); // adapt for 2D
-  const size_t maxNumBalls = 16;
+  #ifdef ESP8266
+  constexpr size_t maxNumBalls = 8;
+  #else
+  constexpr size_t maxNumBalls = 16;
+  #endif
   unsigned dataSize = sizeof(ball) * maxNumBalls;
   if (!SEGENV.allocateData(dataSize * strips)) return mode_static(); //allocation failed
 
   Ball* balls = reinterpret_cast<Ball*>(SEGENV.data);
 
-  SEGMENT.fill(SEGCOLOR(2) != BLACK ? BLACK : SEGCOLOR(1));
+  SEGMENT.fadeToBlackBy(64);
 
   // virtualStrip idea by @ewowi (Ewoud Wijma)
   // requires virtual strip # to be embedded into upper 16 bits of index in setPixelColor()
@@ -2699,31 +2703,30 @@ uint16_t mode_bouncing_balls(void) {
       // number of balls based on intensity setting to max of 7 (cycles colors)
       // non-chosen color is a random color
       unsigned numBalls = (SEGMENT.intensity * (maxNumBalls - 1)) / 255 + 1; // minimum 1 ball
-      const float gravity = -9.81f; // standard value of gravity
-      const bool hasCol2 = SEGCOLOR(2) != BLACK;
-      const unsigned long time = strip.now;
+      constexpr int32_t g = -(0x9D00); //-9.81f in 4.12 format; standard value of gravity
+      const bool hasCol2 = SEGCOLOR(2) != CRGBA(BLACK);
 
       if (SEGENV.call == 0) {
-        for (size_t i = 0; i < maxNumBalls; i++) balls[i].lastBounceTime = time;
+        for (size_t i = 0; i < maxNumBalls; i++) balls[i].lastBounceTime = strip.now;
+        return;
       }
 
       for (size_t i = 0; i < numBalls; i++) {
-        float timeSinceLastBounce = (time - balls[i].lastBounceTime)/((255-SEGMENT.speed)/64 +1);
-        float timeSec = timeSinceLastBounce/1000.0f;
-        balls[i].height = (0.5f * gravity * timeSec + balls[i].impactVelocity) * timeSec; // avoid use pow(x, 2) - its extremely slow !
+        const int32_t t = (strip.now - balls[i].lastBounceTime) * 2;
+        const int32_t a = g * (128 + SEGMENT.speed) / 256;  // adjusted gravity based on speed
+        balls[i].height = ((((a * t)/8192) + balls[i].impactVelocity) * t) / 4096; // h = ((g * t)/2 + v0) * t
 
-        if (balls[i].height <= 0.0f) {
-          balls[i].height = 0.0f;
+        if (balls[i].height <= 0) {
+          balls[i].height = 0;
           //damping for better effect using multiple balls
-          float dampening = 0.9f - float(i)/float(numBalls * numBalls); // avoid use pow(x, 2) - its extremely slow !
-          balls[i].impactVelocity = dampening * balls[i].impactVelocity;
-          balls[i].lastBounceTime = time;
+          const uint16_t dampening = 0xE60 - (i<<12)/(numBalls * numBalls);
+          balls[i].impactVelocity = (dampening * balls[i].impactVelocity) >> 12; // v0 = d * v0
+          balls[i].lastBounceTime = strip.now;
 
-          if (balls[i].impactVelocity < 0.015f) {
-            float impactVelocityStart = sqrtf(-2.0f * gravity) * hw_random8(5,11)/10.0f; // randomize impact velocity
-            balls[i].impactVelocity = impactVelocityStart;
+          if (balls[i].impactVelocity < 256) { // if impact velocity < ~0.05
+            balls[i].impactVelocity = (18144 * hw_random16(128,282)) >> 8; // randomize impact velocity (0.5 - 1.1) * sqrt(2 * -g) -> ~2.2 - ~4.8
           }
-        } else if (balls[i].height > 1.0f) {
+        } else if (balls[i].height > 1<<12) {
           continue; // do not draw OOB ball
         }
 
@@ -2734,13 +2737,8 @@ uint16_t mode_bouncing_balls(void) {
           color = SEGCOLOR(i % NUM_COLORS);
         }
 
-        int pos = roundf(balls[i].height * (SEGLEN - 1));
-        #ifdef WLED_USE_AA_PIXELS
-        if (SEGLEN<32) SEGMENT.setPixelColor(indexToVStrip(pos, stripNr), color); // encode virtual strip into index
-        else           SEGMENT.setPixelColor(balls[i].height + (stripNr+1)*10.0f, color);
-        #else
+        int pos = (balls[i].height * SEGLEN) >> 12; // map height to LED position
         SEGMENT.setPixelColor(indexToVStrip(pos, stripNr), color); // encode virtual strip into index
-        #endif
       }
     }
   };
@@ -2750,7 +2748,7 @@ uint16_t mode_bouncing_balls(void) {
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_BOUNCINGBALLS[] PROGMEM = "Bouncing Balls@Gravity,# of balls;!,!,!;!;1;m12=1"; //bar
+static const char _data_FX_MODE_BOUNCINGBALLS[] PROGMEM = "Bouncing Balls@Gravity,# of balls;1,2,3;!;1;m12=1"; //bar
 
 
 /*

@@ -866,41 +866,6 @@ void Segment::setPixelColor(int i, CRGBA col) const
   setPixelColorRaw(i, col);
 }
 
-#ifdef WLED_USE_AA_PIXELS
-// anti-aliased normalized version of setPixelColor()
-void Segment::setPixelColor(float i, CRGBA col, bool aa) const
-{
-  if (!isActive()) return; // not active
-  int vStrip = int(i/10.0f); // hack to allow running on virtual strips (2D segment columns/rows)
-  i -= int(i);
-
-  if (i<0.0f || i>1.0f) return; // not normalized
-
-  float fC = i * (virtualLength()-1);
-  if (aa) {
-    unsigned iL = roundf(fC-0.49f);
-    unsigned iR = roundf(fC+0.49f);
-    float    dL = (fC - iL)*(fC - iL);
-    float    dR = (iR - fC)*(iR - fC);
-    CRGBA cIL = getPixelColor(iL | (vStrip<<16));
-    CRGBA cIR = getPixelColor(iR | (vStrip<<16));
-    if (iR!=iL) {
-      // blend L pixel
-      cIL.nblend(col, 255 - uint8_t(dL*255.0f));
-      setPixelColor(iL | (vStrip<<16), cIL);
-      // blend R pixel
-      cIR.nblend(col, 255 - uint8_t(dR*255.0f));
-      setPixelColor(iR | (vStrip<<16), cIR);
-    } else {
-      // exact match (x & y land on a pixel)
-      setPixelColor(iL | (vStrip<<16), col);
-    }
-  } else {
-    setPixelColor(int(roundf(fC)) | (vStrip<<16), col);
-  }
-}
-#endif
-
 CRGBA Segment::getPixelColor(int i) const
 {
   if (!isActive() || i < 0) return 0; // not active or invalid index
