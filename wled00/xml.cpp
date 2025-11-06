@@ -322,7 +322,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       const Bus *bus = BusManager::getBus(s);
       if (!bus || !bus->isOk()) break; // should not happen but for safety
       int offset = s < 10 ? '0' : 'A' - 10;
-      char lp[4] = "L0"; lp[2] = offset+s; lp[3] = 0; //ascii 0-9 //strip data pin
+      char lp[4] = "G0"; lp[2] = offset+s; lp[3] = 0; //ascii 0-9 //strip data pin
       char lc[4] = "LC"; lc[2] = offset+s; lc[3] = 0; //strip length
       char co[4] = "CO"; co[2] = offset+s; co[3] = 0; //strip color order
       char lt[4] = "LT"; lt[2] = offset+s; lt[3] = 0; //strip type
@@ -411,9 +411,8 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormValue(settingsScript,PSTR("RL"),rlyPin);
     printSetFormCheckbox(settingsScript,PSTR("RM"),rlyMde);
     printSetFormCheckbox(settingsScript,PSTR("RO"),rlyOpenDrain);
-    int i = 0;
     for (const auto &button : buttons) {
-      settingsScript.printf_P(PSTR("addBtn(%d,%d,%d);"), i++, button.pin, button.type);
+      settingsScript.printf_P(PSTR("addBtn(%d,%d);"), button.pin, button.type);
     }
     printSetFormCheckbox(settingsScript,PSTR("IP"),disablePullUp);
     printSetFormValue(settingsScript,PSTR("TT"),touchThreshold);

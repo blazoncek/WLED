@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2510310
+#define VERSION 2511050
 #else
 #define VERSION BUILD
 #endif

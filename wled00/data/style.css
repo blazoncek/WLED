@@ -95,7 +95,7 @@ input[type="number"] {
 input[type="number"].xxl {
   width: 100px;
 }
-input[type="number"].xl {
+select.s, input[type="number"].xl {
   width: 85px;
 }
 input[type="number"].l {

@@ -168,7 +168,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     bool busesChanged = false;
     for (int s = 0; s < 36; s++) { // theoretical limit is 36 : "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
       int offset = s < 10 ? '0' : 'A' - 10;
-      char lp[4] = "L0"; lp[2] = offset+s; lp[3] = 0; //ascii 0-9 //strip data pin
+      char lp[4] = "G0"; lp[2] = offset+s; lp[3] = 0; //ascii 0-9 //strip data pin
       char lc[4] = "LC"; lc[2] = offset+s; lc[3] = 0; //strip length
       char co[4] = "CO"; co[2] = offset+s; co[3] = 0; //strip color order
       char lt[4] = "LT"; lt[2] = offset+s; lt[3] = 0; //strip type

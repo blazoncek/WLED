@@ -39,6 +39,7 @@
 				setABL();
 				d.Sf.addEventListener("submit", trySubmit);
 				if (d.um_p[0]==-1) d.um_p.shift();
+				updateTypeDropdowns(true);
 				pinDropdowns();
 			});	// If we set async false, file is loaded and executed, then next statement is processed
 			if (loc) d.Sf.action = getURL('/settings/leds');
@@ -59,61 +60,13 @@
 		function isC3()   { return maxA ==  6 && maxD ==  2; } // NOTE: see const.h
 		function isS2()   { return maxA ==  8 && maxD == 12 && maxV == 4; } // NOTE: see const.h
 		function isS3()   { return maxA ==  8 && maxD == 12 && maxV == 6; } // NOTE: see const.h
-		function pinsOK() {
-			var ok = true;
-			var nList = d.Sf.querySelectorAll("#mLC input[name^=L]");
-			nList.forEach((LC,i)=>{
-				if (!ok) return; // prevent iteration after conflict
-				let nm = LC.name.substring(0,2);  // field name : /L./
-				if (nm.search(/^L[0-4]/) < 0) return; // not pin fields
-				let n = LC.name.substring(2,3);   // bus number (0-Z)
-				let t = parseInt(gN("LT"+n).value, 10); // LED type SELECT
-				// ignore IP address
-				if (isNet(t)) return;
-				//check for pin conflicts
-				if (LC.value!="" && LC.value!="-1") {
-					let p = d.rsvd.concat(d.um_p); // used pin array
-					d.Sf.querySelectorAll("select.pin").forEach((e)=>{if(e.value>-1)p.push(parseInt(e.value));}) // buttons, IR & relay
-					if (p.some((e)=>e==parseInt(LC.value))) {
-						alert(`Sorry, pins ${JSON.stringify(p)} can't be used.`);
-						LC.value="";
-						LC.focus();
-						ok = false;
-						return;
-					} else if (d.ro_gpio.some((e)=>e==parseInt(LC.value))) {
-						alert(`Sorry, pins ${JSON.stringify(d.ro_gpio)} are input only.`);
-						LC.value="";
-						LC.focus();
-						ok = false;
-						return;
-					}
-					for (j=i+1; j<nList.length; j++) {
-						let n2 = nList[j].name.substring(0,2); // field name /L./
-						if (n2.search(/^L[0-4]/) == 0) { // pin fields
-							let m  = nList[j].name.substring(2,3); // bus number (0-Z)
-							let t2 = parseInt(gN("LT"+m).value, 10);
-							if (isVir(t2)) continue;
-							if (nList[j].value!="" && nList[i].value==nList[j].value) {
-								alert(`Pin conflict between ${LC.name}/${nList[j].name}!`);
-								nList[j].value="";
-								nList[j].focus();
-								ok = false;
-								return;
-							}
-						}
-					}
-				}
-			});
-			return ok;
-		}
 		function trySubmit(e) {
 			d.Sf.data.value = '';
 			e.preventDefault();
-			if (!pinsOK()) {e.stopPropagation();return false;} // Prevent form submission and contact with server
 			if (bquot > 100) {var msg = "Too many LEDs for me to handle!"; if (maxM < 10000) msg += "\n\rConsider using an ESP32."; alert(msg);}
 			if (!d.Sf.ABL.checked || d.Sf.PPL.checked) d.Sf.MA.value = 0; // submit 0 as ABL (PPL will handle it)
 			if (d.Sf.checkValidity()) {
-				d.Sf.querySelectorAll("#mLC select[name^=LT]").forEach((s)=>{s.disabled=false;}); // just in case
+				d.querySelectorAll(".iST select[name^=LT]").forEach((s)=>{s.disabled=false;}); // just in case
 				d.Sf.submit(); //https://stackoverflow.com/q/37323914
 			}
 		}
@@ -124,8 +77,6 @@
 			if (!en) {
 				// limiter disabled
 				d.Sf.PPL.checked = false;
-//				d.Sf.querySelectorAll("#mLC select[name^=LL]").forEach((e)=>{e.selectedIndex = 0;}); // select default LED mA
-//				d.Sf.querySelectorAll("#mLC input[name^=LA]").forEach((e)=>{e.min = 0; e.value = 0;}); // set min & value to 0
 			}
 			UI();
 		}
@@ -139,7 +90,7 @@
 			gId("psuMA").style.display = ppl ? 'none' : 'inline';
 			gId("ppldis").style.display = ppl ? 'inline' : 'none';
 			// set PPL minimum value and clear actual PPL limit if ABL is disabled
-			d.Sf.querySelectorAll("#mLC input[name^=MA]").forEach((i,x)=>{
+			d.querySelectorAll(".iST input[name^=MA]").forEach((i,x)=>{
 				var n = chrID(x);
 				gId("PSU"+n).style.display = ppl ? "inline" : "none";
 				const t = parseInt(gN("LT"+n).value); // LED type SELECT
@@ -163,12 +114,12 @@
 		function setABL() {
 			let en = parseInt(d.Sf.MA.value) > 0;
 			// check if ABL is enabled (max mA entered per output)
-			d.Sf.querySelectorAll("#mLC input[name^=MA]").forEach((i,n)=>{
+			d.querySelectorAll(".iST input[name^=MA]").forEach((i,n)=>{
 				if (parseInt(i.value) > 0) en = true;
 			});
 			d.Sf.ABL.checked = en;
 			// select appropriate LED current
-			d.Sf.querySelectorAll("#mLC select[name^=LL]").forEach((sel)=>{
+			d.querySelectorAll(".iST select[name^=LL]").forEach((sel)=>{
 				sel.value = 0; // set custom
 				var n = sel.name.substring(2); // bus number (0-Z)
 				if (en)
@@ -196,7 +147,7 @@
 			let mul = 1;
 			if (isDig(t)) {
 				if (is16b(t)) len *= 2; // 16 bit LEDs
-				if (is8266() && gN("L0"+n).value == 3) { //8266 DMA uses 5x the mem
+				if (is8266() && gN("G0"+n).value == 3) { //8266 DMA uses 5x the mem
 					mul = 5;
 				}
 				let parallelI2S = d.Sf.PR.checked && (is32() || isS2() || isS3()) && !isD2P(t);
@@ -218,10 +169,8 @@
 			let busMA = 0;
 			let sLC = 0, sPC = 0, sDI = 0, maxLC = 0;
 
-			// enable/disable LED fields
-			updateTypeDropdowns(change);
 			let dC = 0; // count of digital buses (for parallel I2S)
-			let LTs = d.Sf.querySelectorAll("#mLC select[name^=LT]");
+			let LTs = d.querySelectorAll(".iST select[name^=LT]");
 			LTs.forEach((s,i)=>{
 				var n = s.name.substring(2,3); // bus number (0-Z)
 				var t = parseInt(s.value);
@@ -229,9 +178,15 @@
 				dC += isD1P(t);        // count digital buses
 				gRGBW |= hasW(t);      // RGBW checkbox
 			});
-			// enable/disable add/remove buttons
-			gId("+").style.display = (LTs.length<36) ? "inline":"none"; // now: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".length
-			gId("-").style.display = (LTs.length>1) ? "inline":"none";
+			// enable/disable add/remove buttons for LED busses, color order overrides and "buttons"
+			gId("+").style.display = (LTs.length < 36) ? "inline" : "none"; // now: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".length
+			gId("-").style.display = (LTs.length > 1)  ? "inline" : "none";
+			let b = gId("btns").children.length;
+			gId("btn+").style.display = (b < maxBT)    ? "inline" : "none";
+			gId("btn-").style.display = (b > 1)        ? "inline" : "none";
+			let m = gId("com_e").children.length;
+			gId("com+").style.display = (m < maxCO)    ? "inline" : "none";
+			gId("com-").style.display = (m > 0)        ? "inline" : "none";
 
 			// display global white channel overrides
 			gId("wc").style.display = (gRGBW) ? 'inline':'none';
@@ -241,9 +196,7 @@
 			}
 			// update start indexes, max values, calculate current, etc
 			let sameType = 0;
-			var nList = d.Sf.querySelectorAll("#mLC input[name^=L]");
-			nList.forEach((LC,i)=>{
-				let nm = LC.name.substring(0,2);     // field name : /L./
+			d.querySelectorAll("#mLC input[name^=LC]").forEach((LC,i)=>{
 				let n  = LC.name.substring(2,3);     // bus number (0-Z)
 				let t  = parseInt(gN("LT"+n).value); // LED type SELECT
 				if (isDig(t)) {
@@ -251,56 +204,22 @@
 					else if (sameType != t) sameType = -1; // different bus type
 				}
 				// do we have a led count field
-				if (nm=="LC") {
-					LC.max = isAna(t) ? 1 : (isDig(t) ? maxPB : 16384); // set max value
-					let c = parseInt(LC.value,10); //get LED count
-					if (!customStarts || !startsDirty[toNum(n)]) gId("ls"+n).value = sLC; //update start value
-					gId("ls"+n).disabled = !customStarts; //enable/disable field editing
-					if (c) {
-						let s = parseInt(gId("ls"+n).value); //start value
-						if (s+c > sLC) sLC = s+c; //update total count
-						if (!isVir(t)) sPC += c; //virtual out busses do not count towards physical LEDs
-						if (isDig(t)) {
-							if (c > maxLC) maxLC = c; //max per output
-							sDI += c; // summarize digital LED count
-							let maPL = parseInt(gN("LA"+n).value);
-							if (maPL == 255) maPL = 12; // wacky WS2815 mode (255 == 12mA per LED)
-							busMA += maPL*c; // summarize maximum bus current (calculated)
-						}
-					} // increase led count
-					return;
-				}
-				// ignore IP address (stored in pins for virtual busses)
-				if (nm.search(/^L[0-3]/) == 0) { // pin fields
-					if (isVir(t)) {
-						LC.max = 255;
-						LC.min = 0;
-						LC.style.color="#fff";
-						return; // do not check conflicts
-					} else {
-						LC.max = d.max_gpio-1;
-						LC.min = -1;
+				LC.max = isAna(t) ? 1 : (isDig(t) ? maxPB : 16384); // set max value
+				let c = parseInt(LC.value,10); //get LED count
+				if (!customStarts || !startsDirty[toNum(n)]) gId("ls"+n).value = sLC; //update start value
+				gId("ls"+n).disabled = !customStarts; //enable/disable field editing
+				if (c) {
+					let s = parseInt(gId("ls"+n).value); //start value
+					if (s+c > sLC) sLC = s+c; //update total count
+					if (!isVir(t)) sPC += c; //virtual out busses do not count towards physical LEDs
+					if (isDig(t)) {
+						if (c > maxLC) maxLC = c; //max per output
+						sDI += c; // summarize digital LED count
+						let maPL = parseInt(gN("LA"+n).value);
+						if (maPL == 255) maPL = 12; // wacky WS2815 mode (255 == 12mA per LED)
+						busMA += maPL*c; // summarize maximum bus current (calculated)
 					}
-				}
-				// check for pin conflicts & color fields
-				if (nm.search(/^L[0-4]/) == 0) // pin fields
-					if (LC.value!="" && LC.value!="-1") {
-						let p = d.rsvd.concat(d.um_p); // used pin array
-						d.Sf.querySelectorAll("select.pin").forEach((e)=>{if(e.value>-1)p.push(parseInt(e.value));}) // buttons, IR & relay
-						for (j=0; j<nList.length; j++) {
-							if (i==j) continue;
-							let n2 = nList[j].name.substring(0,2); // field name : /L./
-							if (n2.search(/^L[0-4]/) == 0) { // pin fields
-								let m  = nList[j].name.substring(2,3); // bus number (0-Z)
-								let t2 = parseInt(gN("LT"+m).value, 10);
-								if (isVir(t2)) continue;
-								if (nList[j].value!="" && nList[j].value!="-1") p.push(parseInt(nList[j].value,10));  // add current pin
-							}
-						}
-						// now check for conflicts
-						if (p.some((e)=>e==parseInt(LC.value))) LC.style.color = "red";
-						else LC.style.color = d.ro_gpio.some((e)=>e==parseInt(LC.value)) ? "orange" : "#fff";
-					} else LC.style.color = "#fff";
+				} // increase led count
 			});
 			if (is32() || isS2() || isS3()) {
 				if (maxLC > 600 || dC < 2 || sameType <= 0) {
@@ -343,13 +262,12 @@
 		function lastEnd(i) {
 			if (i-- < 1) return 0;
 			var s = chrID(i);
-			v = parseInt(gN("LS"+s).value) + parseInt(gN("LC"+s).value);
 			var t = parseInt(gN("LT"+s).value);
-			if (isPWM(t)) v = 1; //PWM busses
+			let v = isPWM(t) ? 1 : parseInt(gN("LS"+s).value) + parseInt(gN("LC"+s).value);
 			return isNaN(v) ? 0 : v;
 		}
 		function addLEDs(n,init=true) {
-			var o = gEBCN("iST");
+			var o = gEBCN("iST"); // d.querySelectorAll(".iST");
 			var i = o.length;
 			var f = gId("mLC");
 
@@ -361,7 +279,7 @@
 				var cn = `<div class="iST" draggable="true" ondragstart="hDS(event)" id="l${s}" style="cursor:grab;">
 <hr class="sml">
 <span id="n${s}">${++i}</span>:
-<select name="LT${s}" onchange="UI(true)"></select><br>
+<select name="LT${s}" onchange="updateTypeDropdowns(true,this);UI(true)"></select><br>
 <div id="abl${s}">
 mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
 <option value="55" selected>55mA (typ. 5V WS281x)</option>
@@ -389,11 +307,13 @@ mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
 <span id="psd${s}">Start:</span> <input type="number" name="LS${s}" id="ls${s}" class="l starts" min="0" max="8191" value="${lastEnd(i-1)}" oninput="startsDirty[${i}]=true;UI();" required />&nbsp;
 <div id="dig${s}c" style="display:inline">Length: <input type="number" name="LC${s}" class="l" min="1" max="${maxPB}" value="1" required oninput="UI()" /></div><br>
 </div>
-<span id="p0d${s}">GPIO:</span><input type="number" name="L0${s}" required class="s" onchange="UI();pinUpd(this);"/>
-<span id="p1d${s}"></span><input type="number" name="L1${s}" class="s" onchange="UI();pinUpd(this);"/>
-<span id="p2d${s}"></span><input type="number" name="L2${s}" class="s" onchange="UI();pinUpd(this);"/>
-<span id="p3d${s}"></span><input type="number" name="L3${s}" class="s" onchange="UI();pinUpd(this);"/>
-<span id="p4d${s}"></span><input type="number" name="L4${s}" class="s" onchange="UI();pinUpd(this);"/>
+<div id="pins${s}" style="display:inline">
+<span id="p0d${s}">GPIO:</span><input type="number" name="G0${s}" required class="s" onchange="UI();pinUpd(this);"/>
+<span id="p1d${s}"></span><input type="number" name="G1${s}" class="s" onchange="UI();pinUpd(this);"/>
+<span id="p2d${s}"></span><input type="number" name="G2${s}" class="s" onchange="UI();pinUpd(this);"/>
+<span id="p3d${s}"></span><input type="number" name="G3${s}" class="s" onchange="UI();pinUpd(this);"/>
+<span id="p4d${s}"></span><input type="number" name="G4${s}" class="s" onchange="UI();pinUpd(this);"/>
+</div>
 <div id="net${s}h" class="hide">Host: <input type="text" name="HS${s}" maxlength="32" pattern="[a-zA-Z0-9_\\-]*" onchange="UI()"/>.local</div>
 <div id="dig${s}r" style="display:inline"><br><span id="rev${s}">Reversed</span>: <input type="checkbox" name="CV${s}"></div>
 <div id="dig${s}s" style="display:inline"><br>Skip first LEDs: <input type="number" name="SL${s}" min="0" max="255" value="0" oninput="UI()"></div>
@@ -418,6 +338,7 @@ mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
 					sel.selectedIndex = sel.querySelector('option:not([data-type])').index; // select On/Off by default (prevent selecting first type which may be invalid)
 					updateTypeDropdowns(true, sel);
 					sel.selectedIndex = sel.querySelector('option:not(:disabled)').index; // select 1st valid
+					updateTypeDropdowns(true, sel); // do it again as type may have changed
 				}
 			}
 			if (n==-1) {
@@ -428,11 +349,11 @@ mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
 		}
 
 		function addCOM(start=0,len=1,co=0) {
-			var i = gEBCN("com_entry").length;
+			let e = gId("com_e");
+			let i = e.children.length;
 			if (i >= maxCO) return;
-			var s = chrID(i);
-			var b = `<div class="com_entry">
-<hr class="sml">
+			let s = chrID(i);
+			let b = `<div id="com_e${i}"><hr class="sml">
 ${i+1}: Start: <input type="number" name="XS${s}" id="xs${s}" class="l starts" min="0" max="65535" value="${start}" oninput="UI();" required="">&nbsp;
 Length: <input type="number" name="XC${s}" id="xc${s}" class="l" min="1" max="65535" value="${len}" required="" oninput="UI()">
 <div>Color Order:
@@ -451,70 +372,48 @@ Swap: <select id="xw${s}" name="XW${s}">
 <option value="3">W & R</option>
 </select>
 </div></div>`;
-			gId("com_entries").insertAdjacentHTML("beforeend", b);
+			e.insertAdjacentHTML("beforeend", b);
 			gId("xo"+s).value = co & 0x0F;
 			gId("xw"+s).value = co >> 4;
-			btnCOM(i+1);
-			UI();
 		}
 
 		function remCOM() {
-			var entries = gEBCN("com_entry");
-			var i = entries.length;
-			if (i === 0) return;
-			entries[i-1].remove();
-			btnCOM(i-1);
-			UI();
+			var e = gId("com_e");
+			if (e.children.length <= 0) return;
+			e.lastElementChild.remove();
 		}
 
 		function resetCOM(_newMaxCOOverrides=undefined) {
 			if (_newMaxCOOverrides) {
 				maxCO = _newMaxCOOverrides;
 			}
-			for (let e of gEBCN("com_entry")) {
-				e.remove();
-			}
-			btnCOM(0);
+			gId("com_e").innerHTML = "";
 		}
 
-		function btnCOM(i) {
-			gId("com_add").style.display = (i<maxCO) ? "inline":"none";
-			gId("com_rem").style.display = (i>0) ? "inline":"none";
-		}
-
-		function addBtn(i,p,t) {
-			var b = gId("btns");
-			var s = chrID(i);
-			var c = `<div id="btn${i}">#${i} GPIO: <input type="number" name="BT${s}" onchange="UI()" min="-1" max="${d.max_gpio}" class="xs" value="${p}">`;
+		function addBtn(p,t) {
+			let b = gId("btns");
+			let i = b.children.length
+			let s = chrID(i);
+			let c = `<div id="btn${i}">#${i} GPIO: <input type="number" name="BT${s}" onchange="UI()" min="-1" max="${d.max_gpio}" class="xs" value="${p}">`;
 			c += `&nbsp;<select name="BE${s}">`
-			c += `<option value="0" ${t==0?"selected":""}>Disabled</option>`;
-			c += `<option value="2" ${t==2?"selected":""}>Pushbutton</option>`;
-			c += `<option value="3" ${t==3?"selected":""}>Push inverted</option>`;
-			c += `<option value="4" ${t==4?"selected":""}>Switch</option>`;
-			c += `<option value="5" ${t==5?"selected":""}>PIR sensor</option>`;
-			c += `<option value="6" ${t==6?"selected":""}>Touch</option>`;
-			c += `<option value="7" ${t==7?"selected":""}>Analog</option>`;
-			c += `<option value="8" ${t==8?"selected":""}>Analog inverted</option>`;
-			c += `<option value="9" ${t==9?"selected":""}>Touch (switch)</option>`;
+			c += `<option value="0">Disabled</option>`;
+			c += `<option value="2">Pushbutton</option>`;
+			c += `<option value="3">Push inverted</option>`;
+			c += `<option value="4">Switch</option>`;
+			c += `<option value="5">PIR sensor</option>`;
+			c += `<option value="6">Touch</option>`;
+			c += `<option value="7">Analog</option>`;
+			c += `<option value="8">Analog inverted</option>`;
+			c += `<option value="9">Touch (switch)</option>`;
 			c += `</select>`;
 			c += `<span style="cursor: pointer;" onclick="off('BT${s}')">&nbsp;&#x2715;</span><br></div>`;
 			b.insertAdjacentHTML("beforeend", c);
-			btnBtn();
-			pinDropdowns();
-			UI();
+			b.querySelector(`select[name=BE${s}]`).selectedIndex = t;
 		}
 		function remBtn() {
 			var b = gId("btns");
 			if (b.children.length <= 1) return;
 			b.lastElementChild.remove();
-			btnBtn();
-			pinDropdowns();
-			UI();
-		}
-		function btnBtn() {
-			var b = gId("btns");
-			gId("btn_rem").style.display = (b.children.length > 1) ? "inline" : "none";
-			gId("btn_add").style.display = (b.children.length < maxBT) ? "inline" : "none";
 		}
 
 		function hDS(e) {
@@ -538,14 +437,14 @@ Swap: <select id="xw${s}" name="XW${s}">
 		}
 
 		function recalcIds() {
-			gId("mLC").querySelectorAll(".iST").forEach((e,i)=>{
+			d.querySelectorAll("#mLC .iST").forEach((e,i)=>{
 				let sOld = e.id.substring(1);
 				let sNew = chrID(i);
 				// update all element IDs and names
 				e.id = "l"+sNew;
 				e.querySelector("#n"+sOld).innerText = (i+1);
 				// names: LT,LL,LA,MA,CO,WO,SP,LS,LC,L0,L1,L2,L3,L4,HS,CV,SL,RF,AW
-				["LT","LL","LA","MA","CO","WO","SP","LS","LC","L0","L1","L2","L3","L4","HS","CV","SL","RF","AW"].forEach((n)=>{
+				["LT","LL","LA","MA","CO","WO","SP","LS","LC","G0","G1","G2","G3","G4","HS","CV","SL","RF","AW"].forEach((n)=>{
 					let el = e.querySelector("[name^="+n+"]");
 					if (el) el.name = n + sNew;
 				});
@@ -567,7 +466,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 			var cs = false;
 			for (var i=1; i < gEBCN("iST").length; i++) {
 				var s = chrID(i);
-				var p = chrID(i-1); // cover edge case 'A' previous char being '9' 
+				var p = chrID(i-1); // cover edge case 'A' previous char being '9'
 				var v = parseInt(gId("ls"+p).value) + parseInt(gN("LC"+p).value);
 				if (v != parseInt(gId("ls"+s).value)) {cs = true; startsDirty[i] = true;}
 			}
@@ -598,7 +497,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 
 			function receivedText(e) {
 				let lines = e.target.result;
-				let c = JSON.parse(lines); 
+				let c = JSON.parse(lines);
 				if (c.hw) {
 					if (c.hw.led) {
 						// remove all existing outputs
@@ -606,7 +505,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 						let l = c.hw.led;
 						l.ins.forEach((v,i,a)=>{
 							addLEDs(1);
-							for (var j=0; j<v.pin.length; j++) gN(`L${j}${i}`).value = v.pin[j];
+							for (var j=0; j<v.pin.length; j++) gN(`G${j}${i}`).value = v.pin[j];
 							gN("LT"+i).value   = v.type;
 							gN("LS"+i).value   = v.start;
 							gN("LC"+i).value   = v.len;
@@ -634,7 +533,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 					if (b) {
 						if (Array.isArray(b.ins)) gId("btns").innerHTML = "";
 						b.ins.forEach((v,i,a)=>{
-							addBtn(i,v.pin[0],v.type);
+							addBtn(v.pin[0],v.type);
 						});
 						gN("TT").value = b.tt;
 					}
@@ -659,11 +558,12 @@ Swap: <select id="xw${s}" name="XW${s}">
 		}
 		function pinDropdowns() {
 			let fields = ["IR","RL"]; // IR & relay
-			gId("btns").querySelectorAll('input[type="number"]').forEach((e)=>{fields.push(e.name);}) // buttons
+			d.querySelectorAll('#btns input[type="number"]').forEach((e)=>{fields.push(e.name);}); // buttons
+			d.querySelectorAll('.iST input[name^=G]:not([data-type^=N]):required').forEach((e)=>{fields.push(e.name);}); // LED GPIO pins
 			for (let i of d.Sf.elements) {
 				if (i.type === "number" && fields.includes(i.name)) { //select all pin select elements
 					let v = parseInt(i.value);
-					let sel = addDropdown(i.name,0);
+					let sel = addDropdown(i);
 					for (var j = -1; j < d.max_gpio; j++) {
 						if (d.rsvd.includes(j)) continue;
 						let foundPin = d.um_p.indexOf(j);
@@ -676,30 +576,37 @@ Swap: <select id="xw${s}" name="XW${s}">
 					}
 				}
 			}
-			// update select options
-			d.Sf.querySelectorAll("select.pin").forEach((e)=>{pinUpd(e);});
-			// add dataset values for LED GPIO pins
-			d.Sf.querySelectorAll(".iST input.s[name^=L]").forEach((i)=>{
-				if (i.value!=="" && i.value>=0)
-					i.dataset.val = i.value;
+			// replace select with input if changed to network output
+			d.querySelectorAll('.iST select[name^=G][data-type^=N]').forEach((e)=>{
+				let inp = cE('input');
+				inp.classList.add("s");
+				inp.type = "number";
+				inp.value = ""; //e.value;
+				inp.min = 0;
+				inp.max = 255;
+				// copy the existing select element's attributes to the new input element
+				for (const att of e.attributes) {
+					if (att.name != 'class') {
+						inp.setAttribute(att.name, att.value);
+					}
+				}
+				inp.setAttribute("onchange", "UI();pinUpd(this)");
+				// finally, replace the old select element with the new input element
+				e.parentElement.replaceChild(inp, e);
 			});
+			// update select options
+			d.querySelectorAll("select.pin").forEach((e)=>{pinUpd(e);});
 		}
 		function pinUpd(e) {
 			// update changed select options across all usermods
 			let oldV = parseInt(e.dataset.val);
 			e.dataset.val = e.value;
 			let txt = e.name;
-			let pins = [];
-			d.Sf.querySelectorAll(".iST input.s[name^=L]").forEach((i)=>{
-				if (i.value!=="" && i.value>=0 && i.max<255)
-					pins.push(i.value);
-			});
-			let selects = d.Sf.querySelectorAll("select.pin");
+			let selects = d.querySelectorAll("select.pin");
 			for (let sel of selects) {
 				if (sel == e) continue
 				Array.from(sel.options).forEach((i)=>{
-					let led = pins.includes(i.value);
-					if (!(i.value==oldV || i.value==e.value || led)) return;
+					if (!(i.value==oldV || i.value==e.value)) return;
 					if (i.value == -1) {
 						i.text = "unused";
 						return
@@ -708,32 +615,29 @@ Swap: <select id="xw${s}" name="XW${s}">
 					if (i.value==oldV) {
 						i.disabled = false;
 					}
-					if (i.value==e.value || led) {
+					if (i.value==e.value) {
 						i.disabled = true;
-						i.text += ` ${led?'LED':txt}`;
+						i.text += ` ${txt.charAt(0)=="G"?'LED':txt}`;
 					}
 					if (d.ro_gpio.includes(parseInt(i.value))) i.text += " (R/O)";
 				});
 			}
 		}
 		// https://stackoverflow.com/questions/39729741/javascript-change-input-text-to-select-option
-		function addDropdown(field) {
+		function addDropdown(inp) {
 			let sel = cE('select');
 			sel.classList.add("pin");
-			let inp = gN(field);
+			sel.classList.add("s");
 			if (inp && inp.tagName === "INPUT" && (inp.type === "text" || inp.type === "number")) {  // may also use nodeName
-				let v = inp.value;
-				let n = inp.name;
 				// copy the existing input element's attributes to the new select element
-				for (var i = 0; i < inp.attributes.length; ++ i) {
-					var att = inp.attributes[i];
+				for (const att of inp.attributes) {
 					// type and value don't apply, so skip them
 					// ** you might also want to skip style, or others -- modify as needed **
 					if (att.name != 'type' && att.name != 'value' && att.name != 'class' && att.name != 'style') {
 						sel.setAttribute(att.name, att.value);
 					}
 				}
-				sel.setAttribute("data-val", v);
+				sel.setAttribute("data-val", inp.value);
 				sel.setAttribute("onchange", "pinUpd(this)");
 				// finally, replace the old input element with the new select element
 				inp.parentElement.replaceChild(sel, inp);
@@ -756,7 +660,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 		// dynamically enforce bus type availability based on current usage
 		function updateTypeDropdowns(change=false, sel=undefined) { // change=true if called after a type change
 			const abl = d.Sf.ABL.checked;
-			let LTs = d.Sf.querySelectorAll("#mLC select[name^=LT]");
+			let LTs = d.querySelectorAll(".iST select[name^=LT]");
 			let digitalB = 0, analogB = 0, twopinB = 0, virtB = 0;
 			let setPinConfig = (n,t) => {
 				let p0d = "GPIO: ";
@@ -785,8 +689,14 @@ Swap: <select id="xw${s}" name="XW${s}">
 				gId("off"+n).innerText = off;
 				// secondary pins show/hide (type string length is equivalent to number of pins used; except for network and on/off)
 				let pins = Math.max(gT(t).t.length,1) + 3*isNet(t); // fixes network pins to 4
+				// add output type data-type to pin selects
+				for (let p=0; p<5; p++) {
+					var LK = gN("G"+p+n);
+					if (!LK) continue;
+					LK.setAttribute("data-type", gT(t).t.charAt(0)); // set data-type for pin selects
+				}
 				for (let p=1; p<5; p++) {
-					var LK = gN("L"+p+n);
+					var LK = gN("G"+p+n);
 					if (!LK) continue;
 					LK.style.display = (p < pins) ? "inline" : "none";
 					LK.required = (p < pins);
@@ -802,7 +712,11 @@ Swap: <select id="xw${s}" name="XW${s}">
 				if (isVir(t)) virtB++;
 			});
 			// now enable/disable type options according to limits in dropdowns
-			if (sel) LTs = [sel]; // only update the changed one
+			if (sel) {
+				LTs = [sel]; // only update the changed one
+				if ("DP".indexOf(gT(sel.value).t.charAt(0)) >= 0) gN("LL"+sel.name.substring(2,3)).selectedIndex = 0; // reset LED mA to default for digital
+				enLA(gN("LL"+sel.name.substring(2,3))); // update LED mA
+			}
 			LTs.forEach((s,i) => {
 				const t = parseInt(s.value);
 				const disable = (q) => s.querySelectorAll(q).forEach(o => o.disabled = true);
@@ -815,7 +729,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				if (twopinB  >= 2     && !isD2P(t)) disable('option[data-type="2P"]');
 				// determine available analog pins
 				disable(`option[data-type^="${'A'.repeat(maxA - analogB + (isPWM(t) ? numPins(t) : 0) + 1)}"]`);
-				//update UI elements
+				// update UI elements
 				let n = s.name.substring(2,3);                                              // bus number (0-Z)
 				setPinConfig(n,t);
 				gId("abl"+n).style.display = (!abl || !isDig(t)) ? "none" : "inline";       // show/hide individual ABL settings
@@ -840,6 +754,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				gId("net"+n+"h").style.display = isNet(t) && !is8266() ? "block" : "none";  // show host field for network types except on ESP8266
 				if (!isNet(t) || is8266()) gN("HS"+n).value = "";                           // cleart host field if not network type or ESP8266
 			});
+			pinDropdowns();
 		}
 	</script>
 	<style>@import url("style.css");</style>
@@ -878,7 +793,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 		<h3>Hardware setup</h3>
 		<div id="mLC" ondragover="hDO(event)" ondrop="hDrop(event)">LED outputs:</div>
 		<hr class="sml">
-		<button type="button" id="+" onclick="addLEDs(1,false)">+</button>
+		<button type="button" id="+" onclick="addLEDs(1,false);updateTypeDropdowns()">+</button>
 		<button type="button" id="-" onclick="addLEDs(-1,false)">-</button><br>
 		LED memory usage: <span id="m0">0</span> / <span id="m1">?</span> B<br>
 		<div id="dbar" style="display:inline-block; width: 100px; height: 10px; border-radius: 20px;"></div><br>
@@ -891,20 +806,20 @@ Swap: <select id="xw${s}" name="XW${s}">
 		Make a segment for each output: <input type="checkbox" name="MS" onchange="UI()"><br>
 		Custom bus start indices: <input type="checkbox" onchange="tglSi(this.checked)" id="si"><br>
 		<hr class="sml">
-		<div id="color_order_mapping">
+		<div id="com">
 			Color Order Override:
-			<div id="com_entries"></div>
+			<div id="com_e"></div>
 			<hr class="sml">
-			<button type="button" id="com_add" onclick="addCOM()">+</button>
-			<button type="button" id="com_rem" onclick="remCOM()">-</button>
+			<button type="button" id="com+" onclick="addCOM();UI()">+</button>
+			<button type="button" id="com-" onclick="remCOM();UI()">-</button>
 		</div>
 		<hr class="sml">
 		<div id="btn_wrap">
 			Buttons:
 			<div id="btns"></div>
 			<hr class="sml">
-			<button type="button" id="btn_add" onclick="addBtn(gId('btns').children.length,-1,0)">+</button>
-			<button type="button" id="btn_rem" onclick="remBtn()">-</button>
+			<button type="button" id="btn+" onclick="addBtn(-1,1);pinDropdowns();UI()">+</button>
+			<button type="button" id="btn-" onclick="remBtn();UI()">-</button>
 		</div>
 		Disable internal pull-up/down: <input type="checkbox" name="IP"><br>
 		Touch threshold: <input type="number" class="s" min="0" max="100" name="TT" required><br>
