@@ -170,15 +170,21 @@
 			let sLC = 0, sPC = 0, sDI = 0, maxLC = 0;
 
 			let dC = 0; // count of digital buses (for parallel I2S)
+			let sameType = 0;
 			let LTs = d.querySelectorAll(".iST select[name^=LT]");
 			LTs.forEach((s,i)=>{
 				var n = s.name.substring(2,3); // bus number (0-Z)
 				var t = parseInt(s.value);
 				memu += getMem(t, n);  // calc memory
-				dC += isD1P(t);        // count digital buses
 				gRGBW |= hasW(t);      // RGBW checkbox
+				if (isD1P(t)) {
+					dC++;              // count digital buses
+					if (sameType == 0) sameType = t;    // first bus type
+					if (sameType != t) sameType = -1;   // different bus type
+				}
 			});
 			// enable/disable add/remove buttons for LED busses, color order overrides and "buttons"
+			//let a = gId("mLC").children.length; // number of LED bus divs
 			gId("+").style.display = (LTs.length < 36) ? "inline" : "none"; // now: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".length
 			gId("-").style.display = (LTs.length > 1)  ? "inline" : "none";
 			let b = gId("btns").children.length;
@@ -195,32 +201,27 @@
 				d.Sf.CR.checked = false;
 			}
 			// update start indexes, max values, calculate current, etc
-			let sameType = 0;
 			d.querySelectorAll("#mLC input[name^=LC]").forEach((LC,i)=>{
-				let n  = LC.name.substring(2,3);     // bus number (0-Z)
-				let t  = parseInt(gN("LT"+n).value); // LED type SELECT
-				if (isDig(t)) {
-					if (sameType == 0) sameType = t; // first bus type
-					else if (sameType != t) sameType = -1; // different bus type
-				}
-				// do we have a led count field
+				let n = LC.name.substring(2,3);         // bus number (0-Z)
+				let t = parseInt(gN("LT"+n).value);     // LED type SELECT
 				LC.max = isAna(t) ? 1 : (isDig(t) ? maxPB : 16384); // set max value
-				let c = parseInt(LC.value,10); //get LED count
-				if (!customStarts || !startsDirty[toNum(n)]) gId("ls"+n).value = sLC; //update start value
-				gId("ls"+n).disabled = !customStarts; //enable/disable field editing
+				let c = parseInt(LC.value,10);          // get LED count
+				if (!customStarts || !startsDirty[toNum(n)]) gId("ls"+n).value = sLC; // update start value
+				gId("ls"+n).disabled = !customStarts;   // enable/disable field editing
 				if (c) {
-					let s = parseInt(gId("ls"+n).value); //start value
-					if (s+c > sLC) sLC = s+c; //update total count
-					if (!isVir(t)) sPC += c; //virtual out busses do not count towards physical LEDs
+					let s = parseInt(gId("ls"+n).value);// start value
+					if (s+c > sLC) sLC = s+c;           // update total count
+					if (!isVir(t)) sPC += c;            // virtual out busses do not count towards physical LEDs
 					if (isDig(t)) {
-						if (c > maxLC) maxLC = c; //max per output
-						sDI += c; // summarize digital LED count
+						if (isD1P(t) && c > maxLC) maxLC = c; // max per output (for parallel I2S)
+						sDI += c;                       // summarize digital LED count
 						let maPL = parseInt(gN("LA"+n).value);
-						if (maPL == 255) maPL = 12; // wacky WS2815 mode (255 == 12mA per LED)
-						busMA += maPL*c; // summarize maximum bus current (calculated)
+						if (maPL == 255) maPL = 12;     // wacky WS2815 mode (255 == 12mA per LED)
+						busMA += maPL*c;                // summarize maximum bus current (calculated)
 					}
-				} // increase led count
+				}
 			});
+			// enable/disable parallel I2S option
 			if (is32() || isS2() || isS3()) {
 				if (maxLC > 600 || dC < 2 || sameType <= 0) {
 					gN("PR").checked = false;
@@ -308,11 +309,11 @@ mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
 <div id="dig${s}c" style="display:inline">Length: <input type="number" name="LC${s}" class="l" min="1" max="${maxPB}" value="1" required oninput="UI()" /></div><br>
 </div>
 <div id="pins${s}" style="display:inline">
-<span id="p0d${s}">GPIO:</span><input type="number" name="G0${s}" required class="s" onchange="UI();pinUpd(this);"/>
-<span id="p1d${s}"></span><input type="number" name="G1${s}" class="s" onchange="UI();pinUpd(this);"/>
-<span id="p2d${s}"></span><input type="number" name="G2${s}" class="s" onchange="UI();pinUpd(this);"/>
-<span id="p3d${s}"></span><input type="number" name="G3${s}" class="s" onchange="UI();pinUpd(this);"/>
-<span id="p4d${s}"></span><input type="number" name="G4${s}" class="s" onchange="UI();pinUpd(this);"/>
+<span id="p0d${s}">GPIO:</span><input type="number" name="G0${s}" required class="s"/>
+<span id="p1d${s}"></span><input type="number" name="G1${s}" class="s"/>
+<span id="p2d${s}"></span><input type="number" name="G2${s}" class="s"/>
+<span id="p3d${s}"></span><input type="number" name="G3${s}" class="s"/>
+<span id="p4d${s}"></span><input type="number" name="G4${s}" class="s"/>
 </div>
 <div id="net${s}h" class="hide">Host: <input type="text" name="HS${s}" maxlength="32" pattern="[a-zA-Z0-9_\\-]*" onchange="UI()"/>.local</div>
 <div id="dig${s}r" style="display:inline"><br><span id="rev${s}">Reversed</span>: <input type="checkbox" name="CV${s}"></div>
@@ -557,15 +558,17 @@ Swap: <select id="xw${s}" name="XW${s}">
 			}
 		}
 		function pinDropdowns() {
+			// construct array of GPIO fields
 			let fields = ["IR","RL"]; // IR & relay
 			d.querySelectorAll('#btns input[type="number"]').forEach((e)=>{fields.push(e.name);}); // buttons
 			d.querySelectorAll('.iST input[name^=G]:not([data-type^=N]):required').forEach((e)=>{fields.push(e.name);}); // LED GPIO pins
+			// iterate through all form's pin fields and replace with dropdowns
 			for (let i of d.Sf.elements) {
 				if (i.type === "number" && fields.includes(i.name)) { //select all pin select elements
 					let v = parseInt(i.value);
 					let sel = addDropdown(i);
 					for (var j = -1; j < d.max_gpio; j++) {
-						if (d.rsvd.includes(j)) continue;
+						if (d.rsvd.includes(j)) continue; // skip reserved pins
 						let foundPin = d.um_p.indexOf(j);
 						let txt = (j === -1) ? "unused" : `${j}`;
 						if (foundPin >= 0 && j !== v) txt += ` used`; // already reserved pin
@@ -576,21 +579,20 @@ Swap: <select id="xw${s}" name="XW${s}">
 					}
 				}
 			}
-			// replace select with input if changed to network output
+			// replace select with input if bus changed to network type
 			d.querySelectorAll('.iST select[name^=G][data-type^=N]').forEach((e)=>{
 				let inp = cE('input');
 				inp.classList.add("s");
 				inp.type = "number";
 				inp.value = ""; //e.value;
-				inp.min = 0;
-				inp.max = 255;
-				// copy the existing select element's attributes to the new input element
+				// copy the existing select element's attributes to the new input element, except listed ones
 				for (const att of e.attributes) {
-					if (att.name != 'class') {
+					if (!["type","class","value","data-val","onchange"].includes(att.name)) {
 						inp.setAttribute(att.name, att.value);
 					}
 				}
-				inp.setAttribute("onchange", "UI();pinUpd(this)");
+				inp.min = 0;    // overwrite min/max for IP address input
+				inp.max = 255;  // overwrite min/max for IP address input
 				// finally, replace the old select element with the new input element
 				e.parentElement.replaceChild(inp, e);
 			});
@@ -598,7 +600,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 			d.querySelectorAll("select.pin").forEach((e)=>{pinUpd(e);});
 		}
 		function pinUpd(e) {
-			// update changed select options across all usermods
+			// update changed select options across all selects
 			let oldV = parseInt(e.dataset.val);
 			e.dataset.val = e.value;
 			let txt = e.name;
@@ -628,12 +630,12 @@ Swap: <select id="xw${s}" name="XW${s}">
 			let sel = cE('select');
 			sel.classList.add("pin");
 			sel.classList.add("s");
-			if (inp && inp.tagName === "INPUT" && (inp.type === "text" || inp.type === "number")) {  // may also use nodeName
+			if (inp && inp.tagName === "INPUT" && ["text","number"].includes(inp.type)) {  // may also use nodeName
 				// copy the existing input element's attributes to the new select element
 				for (const att of inp.attributes) {
 					// type and value don't apply, so skip them
 					// ** you might also want to skip style, or others -- modify as needed **
-					if (att.name != 'type' && att.name != 'value' && att.name != 'class' && att.name != 'style') {
+					if (!['type','value','class','style','min','max'].includes(att.name)) {
 						sel.setAttribute(att.name, att.value);
 					}
 				}
@@ -663,8 +665,8 @@ Swap: <select id="xw${s}" name="XW${s}">
 			let LTs = d.querySelectorAll(".iST select[name^=LT]");
 			let digitalB = 0, analogB = 0, twopinB = 0, virtB = 0;
 			let setPinConfig = (n,t) => {
-				let p0d = "GPIO: ";
-				let p1d = "";
+				let p0d = "GPIO:";
+				let p1d = "";//, p2d = "";
 				let off = "Off Refresh";
 				switch (gT(t).t.charAt(0)) {
 					case '2': // 2 pin digital
@@ -674,33 +676,41 @@ Swap: <select id="xw${s}" name="XW${s}">
 						p0d = "Data "+p0d;
 						break;
 					case 'A': // PWM analog
-						if (numPins(t) > 1) p0d = "GPIOs: ";
+						if (numPins(t) > 1) p0d = "GPIOs:";
 						off = "Dithering";
 						break;
 					case 'N': // network
-						p0d = "IP address: ";
+						p0d = "IP address:";
 						break;
 					case 'V': // virtual/non-GPIO based
-						p0d = "Config: "
+						p0d = "Config:";
 						break;
 				}
 				gId("p0d"+n).innerText = p0d;
 				gId("p1d"+n).innerText = p1d;
+				//gId("p2d"+n).innerText = p2d;
 				gId("off"+n).innerText = off;
 				// secondary pins show/hide (type string length is equivalent to number of pins used; except for network and on/off)
 				let pins = Math.max(gT(t).t.length,1) + 3*isNet(t); // fixes network pins to 4
 				// add output type data-type to pin selects
 				for (let p=0; p<5; p++) {
 					var LK = gN("G"+p+n);
-					if (!LK) continue;
-					LK.setAttribute("data-type", gT(t).t.charAt(0)); // set data-type for pin selects
-				}
-				for (let p=1; p<5; p++) {
-					var LK = gN("G"+p+n);
-					if (!LK) continue;
-					LK.style.display = (p < pins) ? "inline" : "none";
-					LK.required = (p < pins);
-					if (p >= pins) LK.value="";
+					if (!LK) continue; // something is wrong
+					const type = gT(t).t.charAt(0);
+					LK.setAttribute("data-type", type); // set data-type for pin selects
+					if (type == 'N') {
+						LK.min = 0;
+						LK.max = 255;
+					//} else {
+					//	LK.removeAttribute("min");
+					//	LK.removeAttribute("max");
+					//	LK.min = -1;
+					//	LK.max = d.max_gpio;
+					}
+					if (p==0) continue; // skip first pin
+					const used = LK.required = (p < pins);
+					LK.style.display = used ? "inline" : "none";
+					if (!used) LK.value="";
 				}
 			}
 			// count currently used buses (including last added bus)
