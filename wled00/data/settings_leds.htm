@@ -425,6 +425,11 @@ Swap: <select id="xw${s}" name="XW${s}">
 			e.preventDefault();
 		}
 
+		function pDS(e) {
+			e.preventDefault();
+			e.stopPropagation();
+		}
+
 		function hDrop(e) {
 			e.preventDefault();
 			let t = e.target;
@@ -765,6 +770,10 @@ Swap: <select id="xw${s}" name="XW${s}">
 				if (!isNet(t) || is8266()) gN("HS"+n).value = "";                           // cleart host field if not network type or ESP8266
 			});
 			pinDropdowns();
+			// prevent dragging input fileds but instead allow selecting content
+			// the following does not work in Firefox, see
+			// https://stackoverflow.com/questions/44855232/allow-select-text-on-a-html-5-draggable-child-element
+			d.querySelectorAll(".iST input[type=number]").forEach((e,i)=>{e.draggable=true;e.setAttribute("ondragstart","pDS(event);");})
 		}
 	</script>
 	<style>@import url("style.css");</style>
