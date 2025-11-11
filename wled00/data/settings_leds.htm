@@ -7,6 +7,7 @@
 	<script src="common.js" async type="text/javascript"></script>
 	<script>
 		var maxB=1,maxD=1,maxA=1,maxV=0,maxM=4000,maxPB=2048,maxL=1664,maxCO=5,maxBT=10; //maximum bytes for LED allocation: 4kB for 8266, 32kB for 32
+		var rsvdPins = []; // must be global for pinDropdowns()
 		var customStarts=false,startsDirty=[];
 		function off(n)    { gN(n).value = -1;}
 		// these functions correspond to C macros found in const.h
@@ -29,7 +30,7 @@
 		function S() {
 			getLoc();
 			loadJS(getURL('/settings/s.js?p=2'), false, ()=>{
-				d.ledTypes = [/*{i:22,c:1,t:"D",n:"WS2812"},{i:42,c:6,t:"AA",n:"PWM CCT"}*/]; // filled from GetV()
+				d.ledTypes = [/*{i:22,c:1,t:"D",n:"WS2812"},{i:42,c:6,t:"AA",n:"PWM CCT"},{i:127,c:6,t:"UUUUU",n:"Hub75",p:[21,22,23,24,25]}*/]; // filled from GetV()
 				d.um_p = [];
 				d.rsvd = [];
 				d.ro_gpio = [];
@@ -331,6 +332,9 @@ mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
 					if (type.t != undefined && type.t != "") {
 						opt.setAttribute('data-type', type.t);
 					}
+					if (type.p != undefined && Array.isArray(type.p) && type.p.length > 0) {
+						opt.setAttribute('data-pins', type.p.join(','));
+					}
 					sel.appendChild(opt);			
 				}
 				enLA(gN("LL"+s)); // update LED mA
@@ -584,8 +588,8 @@ Swap: <select id="xw${s}" name="XW${s}">
 					}
 				}
 			}
-			// replace select with input if bus changed to network type
-			d.querySelectorAll('.iST select[name^=G][data-type^=N]').forEach((e)=>{
+			// replace select with input if bus changed to network or Hub75 or usermod type
+			d.querySelectorAll('.iST select[name^=G]:is([data-type^=N],[data-type^=H],[data-type^=U])').forEach((e)=>{
 				let inp = cE('input');
 				inp.classList.add("s");
 				inp.type = "number";
@@ -601,18 +605,31 @@ Swap: <select id="xw${s}" name="XW${s}">
 				// finally, replace the old select element with the new input element
 				e.parentElement.replaceChild(inp, e);
 			});
-			// update select options
-			d.querySelectorAll("select.pin").forEach((e)=>{pinUpd(e);});
+			// update select options to reflect current usage and bus unchangeable pins
+			d.querySelectorAll("select.pin").forEach((e)=>{
+				pinUpd(e); // update current select across all selects
+				// now disable options that are reserved/unchangeable by other buses
+				e.querySelectorAll("option").forEach((i)=>{
+					if (rsvdPins.includes(parseInt(i.value))) {
+						i.disabled = true;
+						i.text = i.value + " reserved";
+					} else if (i.text.endsWith(" reserved")) {
+						i.disabled = false;
+						i.text = i.value;
+					}
+				});
+			});
 		}
 		function pinUpd(e) {
 			// update changed select options across all selects
-			let oldV = parseInt(e.dataset.val);
-			e.dataset.val = e.value;
-			let txt = e.name;
-			let selects = d.querySelectorAll("select.pin");
-			for (let sel of selects) {
-				if (sel == e) continue
-				Array.from(sel.options).forEach((i)=>{
+			let oldV = parseInt(e.dataset.val); // old selected value
+			e.dataset.val = e.value;            // update to new selected value
+			let txt = e.name;                   // select name for labeling options
+			// now update all other selects to reflect the change/value from current select
+			d.querySelectorAll("select.pin").forEach((sel)=>{
+				if (sel == e) return; // skip the changed select
+				sel.querySelectorAll("option").forEach((i)=>{
+					// skip options that are not relevant (not our old or new value)
 					if (!(i.value==oldV || i.value==e.value)) return;
 					if (i.value == -1) {
 						i.text = "unused";
@@ -628,7 +645,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 					}
 					if (d.ro_gpio.includes(parseInt(i.value))) i.text += " (R/O)";
 				});
-			}
+			});
 		}
 		// https://stackoverflow.com/questions/39729741/javascript-change-input-text-to-select-option
 		function addDropdown(inp) {
@@ -669,6 +686,9 @@ Swap: <select id="xw${s}" name="XW${s}">
 			const abl = d.Sf.ABL.checked;
 			let LTs = d.querySelectorAll(".iST select[name^=LT]");
 			let digitalB = 0, analogB = 0, twopinB = 0, virtB = 0;
+			let uniqueTypes = []
+			rsvdPins = [];
+			// function to set pin labels and show/hide secondary pins
 			let setPinConfig = (n,t) => {
 				let p0d = "GPIO:";
 				let p1d = "";//, p2d = "";
@@ -725,6 +745,9 @@ Swap: <select id="xw${s}" name="XW${s}">
 				if (isPWM(t)) analogB += numPins(t);
 				if (isD2P(t)) twopinB++;
 				if (isVir(t)) virtB++;
+				// types with unchangeable pins are unique (there can only be one bus of that type)
+				let d = s[s.selectedIndex].dataset;
+				if (d.pins) uniqueTypes.push(d.type)
 			});
 			// now enable/disable type options according to limits in dropdowns
 			if (sel) {
@@ -742,6 +765,10 @@ Swap: <select id="xw${s}" name="XW${s}">
 				// disallow adding more of a type that has reached its limit
 				if (digitalB >= maxDB && !isD1P(t)) disable('option[data-type="D"]');
 				if (twopinB  >= 2     && !isD2P(t)) disable('option[data-type="2P"]');
+				for (const ut of uniqueTypes) {
+					if (ut === s[s.selectedIndex].dataset.type) continue; // skip own type
+					disable(`option[data-type="${ut}"]`); // disable already used unique type
+				}
 				// determine available analog pins
 				disable(`option[data-type^="${'A'.repeat(maxA - analogB + (isPWM(t) ? numPins(t) : 0) + 1)}"]`);
 				// update UI elements
@@ -768,7 +795,15 @@ Swap: <select id="xw${s}" name="XW${s}">
 				gId("rev"+n).innerHTML = isAna(t) ? "Inverted output":"Reversed";           // change reverse text for analog else (rotated 180°)
 				gId("net"+n+"h").style.display = isNet(t) && !is8266() ? "block" : "none";  // show host field for network types except on ESP8266
 				if (!isNet(t) || is8266()) gN("HS"+n).value = "";                           // cleart host field if not network type or ESP8266
+				// record all unchangeable GPIOs (may produce duplicates)
+				const pins = s[s.selectedIndex].dataset.pins;
+				if (pins) {
+					let pns = pins.split(',').map(x=>parseInt(x));
+					rsvdPins = rsvdPins.concat(pns);
+				}
 			});
+			rsvdPins = [...new Set(rsvdPins)]; // make unique
+			// rebuild GPIO dropdowns
 			pinDropdowns();
 			// prevent dragging input fileds but instead allow selecting content
 			// the following does not work in Firefox, see
