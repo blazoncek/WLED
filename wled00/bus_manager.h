@@ -399,15 +399,12 @@ class BusHub75Matrix : public Bus {
     static std::vector<LEDType> getLEDTypes(void);
 
   private:
+    unsigned _panelWidth;
+    CRGB *_ledBuffer;
+    byte *_ledsDirty;
     static MatrixPanel_I2S_DMA *display;
     static VirtualMatrixPanel  *virtualDisp;
     static HUB75_I2S_CFG mxconfig;
-    static unsigned _panelWidth;
-    static CRGB *_ledBuffer;
-    static byte *_ledsDirty;
-    // workaround for missing constants on include path for non-MM
-    static constexpr uint32_t IS_BLACK = 0x000000;
-    static constexpr uint32_t IS_DARKGREY = 0x333333;
 };
 #endif
 
