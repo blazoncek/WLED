@@ -776,19 +776,18 @@ static void setBitArray(uint8_t* byteArray, size_t numBits, bool value) {  // se
   memset(byteArray, value * 0xFF, len);
 }
 
-BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
-: Bus(bc.type, bc.start, bc.autoWhite)
-, display(nullptr)
-, virtualDisp(nullptr)
-, _panelWidth(0)
-, _ledBuffer(nullptr)
-, _ledsDirty(nullptr) {
+BusHub75Matrix::BusHub75Matrix(const BusConfig &bc) : Bus(bc.type, bc.start, bc.autoWhite) {
   #ifdef WLED_DEBUG_BUS
   size_t lastHeap = ESP.getFreeHeap();
   #endif
   _valid = false;
   _hasRgb = true;
   _hasWhite = false;
+
+  if (BusHub75Matrix::display != nullptr) {
+    DEBUGBUS_PRINTLN("BusHub75Matrix: One bus already created!");
+    return;
+  }
 
   mxconfig.double_buff = false; // Use our own memory-optimised buffer rather than the driver's own double-buffer
   // mxconfig.driver = HUB75_I2S_CFG::ICN2038S;  // experimental - use specific shift register driver
@@ -886,9 +885,9 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 #endif
 
   constexpr size_t PIN_COUNT = sizeof(mxconfig.gpio) / sizeof(int8_t);
-  int8_t pins[PIN_COUNT];
-  memcpy(pins, &mxconfig.gpio, sizeof(mxconfig.gpio));
-  if (!PinManager::allocateMultiplePins(pins, PIN_COUNT, PinOwner::HUB75, true)) {
+  PinManagerPinType pins[PIN_COUNT];
+  for (size_t i = 0; i < PIN_COUNT; i++) pins[i] = {((uint8_t*)&mxconfig.gpio)[i], true};
+  if (!PinManager::allocateMultiplePins(pins, PIN_COUNT, PinOwner::HUB75)) {
     DEBUGBUS_PRINTLN("Failed to allocate pins for HUB75");
     return;
   }
@@ -1059,8 +1058,10 @@ void BusHub75Matrix::cleanup() {
   delete display;
   display = nullptr;
   virtualDisp = nullptr;
-  if (_ledBuffer != nullptr) free(_ledBuffer); _ledBuffer = nullptr;
-  if (_ledsDirty != nullptr) free(_ledsDirty); _ledsDirty = nullptr;
+  free(_ledBuffer); // no need to check for nullptr
+  _ledBuffer = nullptr;
+  free(_ledsDirty); // no need to check for nullptr
+  _ledsDirty = nullptr;
 }
 
 void BusHub75Matrix::deallocatePins() {
@@ -1075,8 +1076,8 @@ std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
   LEDType typeHS = {TYPE_HUB75MATRIX_HS, "H", PSTR("HUB75 (Half Scan)")};
   LEDType typeQS = {TYPE_HUB75MATRIX_QS, "H", PSTR("HUB75 (Quarter Scan)")};
   for (int i=0; i<PIN_COUNT; i++) {
-    typeHS.requiredPins.push_back(mxconfig.gpio[i]);
-    typeQS.requiredPins.push_back(mxconfig.gpio[i]);
+    typeHS.requiredPins.push_back(((uint8_t*)&mxconfig.gpio)[i]);
+    typeQS.requiredPins.push_back(((uint8_t*)&mxconfig.gpio)[i]);
   }
   return {typeHS, typeQS};
 }
@@ -1089,6 +1090,15 @@ size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
   }
   return 3;
 }
+
+// statically allocate as only one HUB75 matrix can be used
+MatrixPanel_I2S_DMA *BusHub75Matrix::display = nullptr;
+VirtualMatrixPanel  *BusHub75Matrix::virtualDisp = nullptr;
+HUB75_I2S_CFG        BusHub75Matrix::mxconfig;
+unsigned             BusHub75Matrix::_panelWidth = 0;
+CRGB                *BusHub75Matrix::_ledBuffer = nullptr;
+byte                *BusHub75Matrix::_ledsDirty = nullptr;
+
 #endif
 // ***************************************************************************
 
