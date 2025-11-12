@@ -19,6 +19,7 @@
 		function isDig(t)  { return isD1P(t) || isD2P(t); }         // is digital type
 		function isNet(t)  { return gT(t).t === "N"; }              // is network type
 		function isVir(t)  { return gT(t).t === "V" || isNet(t); }  // is virtual type
+		function isHub75(t){ return gT(t).t === "H"; }              // is HUB75 type
 		function hasRGB(t) { return !!(gT(t).c & 0x01); }           // has RGB
 		function hasW(t)   { return !!(gT(t).c & 0x02); }           // has white channel
 		function hasCCT(t) { return !!(gT(t).c & 0x04); }           // is white CCT enabled
@@ -691,7 +692,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 			// function to set pin labels and show/hide secondary pins
 			let setPinConfig = (n,t) => {
 				let p0d = "GPIO:";
-				let p1d = "";//, p2d = "";
+				let p1d = "", p2d = "";
 				let off = "Off Refresh";
 				switch (gT(t).t.charAt(0)) {
 					case '2': // 2 pin digital
@@ -710,30 +711,38 @@ Swap: <select id="xw${s}" name="XW${s}">
 					case 'V': // virtual/non-GPIO based
 						p0d = "Config:";
 						break;
+					case 'H': // Hub75
+						p0d = "Panel size: (W)";
+						p1d = "x (H)";
+						p2d = "# Panels:";
+						break;
 				}
 				gId("p0d"+n).innerText = p0d;
 				gId("p1d"+n).innerText = p1d;
-				//gId("p2d"+n).innerText = p2d;
+				gId("p2d"+n).innerText = p2d;
 				gId("off"+n).innerText = off;
 				// secondary pins show/hide (type string length is equivalent to number of pins used; except for network and on/off)
-				let pins = Math.max(gT(t).t.length,1) + 3*isNet(t); // fixes network pins to 4
+				let pins = Math.max(gT(t).t.length,1) + 3*isNet(t) + 2*isHub75(t); // fixes network pins to 4
 				// add output type data-type to pin selects
 				for (let p=0; p<5; p++) {
 					var LK = gN("G"+p+n);
 					if (!LK) continue; // something is wrong
 					const type = gT(t).t.charAt(0);
 					LK.setAttribute("data-type", type); // set data-type for pin selects
-					if (type == 'N') {
-						LK.min = 0;
-						LK.max = 255;
-					//} else {
-					//	LK.removeAttribute("min");
-					//	LK.removeAttribute("max");
-					//	LK.min = -1;
-					//	LK.max = d.max_gpio;
+					switch (type) {
+						case 'H': // Hub75
+							LK.min = p < 2 ? 32 : 1;
+							LK.max = p == 0 ? 128 : p == 1 ? 64 : p == 2 ? isS3()*6 + is32()*4 + isS2()*2 : 255;
+							LK.step = p < 2 ? 32 : 1;
+							break;
+						case 'N': // network
+							LK.min = 0;
+							LK.max = 255;
+							LK.step = 1;
+							break;
 					}
-					if (p==0) continue; // skip first pin
 					const used = LK.required = (p < pins);
+					if (p==0) continue; // skip first pin
 					LK.style.display = used ? "inline" : "none";
 					if (!used) LK.value="";
 				}
@@ -782,13 +791,13 @@ Swap: <select id="xw${s}" name="XW${s}">
 					gN("MA"+n).min = (!isDig(t)) ? 0 : 250;                                 // set minimum value for PSU mA
 				}
 				gId("rf"+n).onclick = mustR(t) ? (()=>{return false}) : (()=>{});           // prevent change change of "Refresh" checkmark when mandatory
-				gId("co"+n).style.display = (isVir(t) || isAna(t)) ? "none":"inline";       // hide color order for PWM
+				gId("co"+n).style.display = (isVir(t) || isAna(t) || isHub75(t)) ? "none":"inline";       // hide color order for PWM
 				gId("dig"+n+"w").style.display = (isDig(t) && hasW(t)) ? "inline":"none";   // show swap channels dropdown
 				gId("dig"+n+"w").querySelector("[data-opt=CCT]").disabled = !hasCCT(t);     // disable WW/CW swapping	
 				if (!(isDig(t) && hasW(t))) gN("WO"+n).value = 0;                           // reset swapping
-				gId("dig"+n+"c").style.display = (isAna(t)) ? "none":"inline";              // hide count for analog
+				gId("dig"+n+"c").style.display = (isAna(t) || isHub75(t)) ? "none":"inline";              // hide count for analog
 				gId("dig"+n+"r").style.display = (isVir(t)) ? "none":"inline";              // hide reversed for virtual
-				gId("dig"+n+"s").style.display = (isVir(t) || isAna(t)) ? "none":"inline";  // hide skip 1st for virtual & analog
+				gId("dig"+n+"s").style.display = (isVir(t) || isAna(t) || isHub75(t)) ? "none":"inline";  // hide skip 1st for virtual & analog
 				gId("dig"+n+"f").style.display = (isDig(t) || (isPWM(t) && maxL>2048)) ? "inline":"none"; // hide refresh (PWM hijacks reffresh for dithering on ESP32)
 				gId("dig"+n+"a").style.display = (hasW(t)) ? "inline":"none";               // auto calculate white
 				gId("dig"+n+"l").style.display = (isD2P(t) || isPWM(t)) ? "inline":"none";  // bus clock speed / PWM speed (relative) (not On/Off)

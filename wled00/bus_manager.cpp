@@ -764,21 +764,21 @@ constexpr uint32_t IS_DARKGREY = 0x333333;
 
 // functions to get/set bits in an array - based on functions created by @Brandon502 for GOL
 static bool getBitFromArray(const uint8_t* byteArray, size_t position) { // get bit value
-  size_t byteIndex = position / 8;
-  size_t bitIndex = position % 8;
+  size_t byteIndex = position >> 3; // position / 8
+  size_t bitIndex = position & 7;  // position % 8
   uint8_t byteValue = byteArray[byteIndex];
   return (byteValue >> bitIndex) & 1;
 }
 
 static void setBitInArray(uint8_t* byteArray, size_t position, bool value) {  // set bit - with error handling for nullptr
-    size_t byteIndex = position / 8;
-    size_t bitIndex = position % 8;
+    size_t byteIndex = position >> 3; // position / 8
+    size_t bitIndex = position & 7;  // position % 8
     if (value) byteArray[byteIndex] |=  (uint8_t)(1U << bitIndex);
     else       byteArray[byteIndex] &= ~(uint8_t)(1U << bitIndex);
 }
 
 static size_t getBitArrayBytes(size_t num_bits) { // number of bytes needed for an array with num_bits bits
-  return (num_bits + 7) / 8;
+  return (num_bits + 7) >> 3; // (num_bits + 7) / 8
 }
 
 static void setBitArray(uint8_t* byteArray, size_t numBits, bool value) {  // set all bits to same value
@@ -806,14 +806,12 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   // clamp width and height to 32, 64 or 128
   bc.pins[0] &= 0b11100000;
   bc.pins[1] &= 0b11100000;
-  if (bc.pins[0] & 0b0010000) bc.pins[0] &= 0b0010000;
-  if (bc.pins[0] & 0b0100000) bc.pins[0] &= 0b0100000;
-  if (bc.pins[0] & 0b1000000) bc.pins[0] &= 0b1000000;
-  if (bc.pins[1] & 0b0010000) bc.pins[1] &= 0b0010000;
-  if (bc.pins[1] & 0b0100000) bc.pins[1] &= 0b0100000;
-  if (bc.pins[1] & 0b1000000) bc.pins[1] &= 0b1000000;
   if (bc.pins[0] == 0) bc.pins[0] = 32;
   if (bc.pins[1] == 0) bc.pins[1] = 32;
+  // this may not be needed if sizes allowed include [96, 160, 192 and 224]
+  // prefer lower value if size is not 32, 64 or 128
+  for (int j=0; j<2; j++) for (int I=0; i<3; i++)
+    if (bc.pins[j] & (32 << i)) bc.pins[j] &= 32 << i;
 
   mxconfig.double_buff = false; // Use our own memory-optimised buffer rather than the driver's own double-buffer
   // mxconfig.driver = HUB75_I2S_CFG::ICN2038S;  // experimental - use specific shift register driver
@@ -829,8 +827,8 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     mxconfig.mx_height = bc.pins[1];
   } else if (bc.type == TYPE_HUB75MATRIX_QS) {
     mxconfig.driver = HUB75_I2S_CFG::FM6124;  // use FM6124 for "outdoor" panels - workaround until we can make the driver user-configurable
-    mxconfig.mx_width = bc.pins[0] * 2;
-    mxconfig.mx_height = bc.pins[1] / 2;
+    mxconfig.mx_width = bc.pins[0] << 1;
+    mxconfig.mx_height = bc.pins[1] >> 1;
   } else {
     DEBUGBUS_PRINTLN("Unknown type");
     return;
@@ -898,14 +896,40 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     return;
   }
 
-  if (bc.colorOrder == COL_ORDER_RGB) {
-    DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA = Default color order (RGB)");
-  } else if (bc.colorOrder == COL_ORDER_BGR) {
-    DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA = color order BGR");
-    std::swap(mxconfig.gpio.r1, mxconfig.gpio.b1);
-    std::swap(mxconfig.gpio.r2, mxconfig.gpio.b2);
-  } else {
-    DEBUGBUS_PRINTF("MatrixPanel_I2S_DMA = unsupported color order %u\nUsing RGB.\n", bc.colorOrder);
+  switch (bc.colorOrder) {
+    case COL_ORDER_BGR:
+      DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA = color order BGR");
+      std::swap(mxconfig.gpio.r1, mxconfig.gpio.b1);
+      std::swap(mxconfig.gpio.r2, mxconfig.gpio.b2);
+      break;
+    case COL_ORDER_GRB:
+      DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA = color order GRB");
+      std::swap(mxconfig.gpio.r1, mxconfig.gpio.g1);
+      std::swap(mxconfig.gpio.r2, mxconfig.gpio.g2);
+      break;
+    case COL_ORDER_GBR:
+      DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA = color order GBR");
+      std::swap(mxconfig.gpio.r1, mxconfig.gpio.b1);
+      std::swap(mxconfig.gpio.r2, mxconfig.gpio.b2);
+      std::swap(mxconfig.gpio.r1, mxconfig.gpio.g1);
+      std::swap(mxconfig.gpio.r2, mxconfig.gpio.g2);
+      break;
+    case COL_ORDER_RBG:
+      DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA = color order RBG");
+      std::swap(mxconfig.gpio.g1, mxconfig.gpio.b1);
+      std::swap(mxconfig.gpio.g2, mxconfig.gpio.b2);
+      break;
+    case COL_ORDER_BRG:
+      DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA = color order BRG");
+      std::swap(mxconfig.gpio.r1, mxconfig.gpio.g1);
+      std::swap(mxconfig.gpio.r2, mxconfig.gpio.g2);
+      std::swap(mxconfig.gpio.r1, mxconfig.gpio.b1);
+      std::swap(mxconfig.gpio.r2, mxconfig.gpio.b2);
+      break;
+    case COL_ORDER_RGB:
+    default:
+      DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA = Default color order (RGB)");
+      break;
   }
 
   DEBUGBUS_PRINTF("MatrixPanel_I2S_DMA config - %ux%u length: %u\n", mxconfig.mx_width, mxconfig.mx_height, mxconfig.chain_length);
@@ -921,6 +945,8 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     return;
   }
   // for quad-scan panels we create a virtual panel that maps to the physical one
+  // @dedehai made a nice enhancement: https://github.com/wled/WLED/pull/5026/files#diff-bd8d5165aa932055149d4e0db7571029b97f2a860f275ddd079bc591da35bf19R949-R958
+  // that will allow similar placement of panels like in 2D setup (I would prefer to reuse that logic/functionality here)
   if (bc.type == TYPE_HUB75MATRIX_QS) {
     virtualDisp = new VirtualMatrixPanel((*display), 1, 1, bc.pins[0], bc.pins[1]);
     virtualDisp->setRotation(0);
@@ -949,8 +975,8 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   }
 
   DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA created");
-  // let's adjust default brightness
-  display->setBrightness8(25);    // range is 0-255, 0 - 0%, 255 - 100%
+  // let's adjust default brightness (using hardware)
+  display->setBrightness(0);    // range is 0-255, 0 - 0%, 255 - 100%
 
   delay(24); // experimental
   DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - ESP.getFreeHeap());
@@ -999,7 +1025,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 }
 
 void __attribute__((hot)) BusHub75Matrix::setPixelColor(unsigned pix, uint32_t c) {
-  if (!_valid || pix >= _len) return;
+  if (!_valid) return;
   // if (_cct >= 1900) c = colorBalanceFromKelvin(_cct, c); //color correction from CCT
 
   if (_ledBuffer) {
@@ -1026,7 +1052,7 @@ void __attribute__((hot)) BusHub75Matrix::setPixelColor(unsigned pix, uint32_t c
 }
 
 uint32_t BusHub75Matrix::getPixelColor(unsigned pix) const {
-  if (!_valid || pix >= _len) return IS_BLACK;
+  if (!_valid) return IS_BLACK;
   if (_ledBuffer)
     //return uint32_t(_ledBuffer[pix].scale8(_bri)) & 0x00FFFFFF;  // scale8() is needed to mimic NeoPixelBus, which returns scaled-down colours
     return uint32_t(_ledBuffer[pix]) & 0x00FFFFFF;
@@ -1069,8 +1095,9 @@ void BusHub75Matrix::cleanup() {
   _panelWidth = 0;
   deallocatePins();
   DEBUGBUS_PRINTLN("HUB75 output ended.");
+  delay(30); // give some time to settle
 
-  //if (virtualDisp) delete virtualDisp;  // warning: deleting object of polymorphic class type 'VirtualMatrixPanel' which has non-virtual destructor might cause undefined behavior
+  if (virtualDisp) delete virtualDisp;
   virtualDisp = nullptr;
   delete display;
   display = nullptr;
