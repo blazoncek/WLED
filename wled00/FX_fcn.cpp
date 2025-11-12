@@ -2105,7 +2105,7 @@ bool WS2812FX::deserializeMap(unsigned n) {
         } else {
           DEBUG_PRINTF_P(PSTR("ERROR Invalid XY coordinate in %s: %s\n"), fileName, strRead.c_str());
           int pos = strRead.toInt();
-          if (pos < 0 || pos > 16384) pos = 0xFFFF;
+          if (pos < 0 || pos > MAX_LEDS) pos = 0xFFFF;
           customMappingTable[index] = pos; // fallback to direct mapping
         }
         index++;      // always increase index for 2D entries
@@ -2118,7 +2118,7 @@ bool WS2812FX::deserializeMap(unsigned n) {
     while (f.available()) { // f.position() < f.size() - 1
       String strRead = f.readStringUntil(','); // read a single number (may include array terminating "]" but not number separator ',')
       int index = strRead.toInt();
-      if (index < 0 || index > 16384) index = 0xFFFF;
+      if (index < 0 || index > MAX_LEDS) index = 0xFFFF;
       customMappingTable[customMappingSize++] = index;
       if (customMappingSize >= getLengthTotal() || strRead.indexOf(']') >= 0) break;
     }
