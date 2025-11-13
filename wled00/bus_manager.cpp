@@ -810,7 +810,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   if (bc.pins[1] == 0) bc.pins[1] = 32;
   // this may not be needed if sizes allowed include [96, 160, 192 and 224]
   // prefer lower value if size is not 32, 64 or 128
-  for (int j=0; j<2; j++) for (int I=0; i<3; i++)
+  for (int j=0; j<2; j++) for (int i=0; i<3; i++)
     if (bc.pins[j] & (32 << i)) bc.pins[j] &= 32 << i;
 
   mxconfig.double_buff = false; // Use our own memory-optimised buffer rather than the driver's own double-buffer
