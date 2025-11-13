@@ -11,12 +11,6 @@
 #include <vector>
 #include <memory>
 
-#ifdef WLED_ENABLE_HUB75MATRIX
-#include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
-#include <ESP32-VirtualMatrixPanel-I2S-DMA.h>
-#include <FastLED.h>
-#endif
-
 #if __cplusplus >= 201402L
 using std::make_unique;
 #else
@@ -381,6 +375,12 @@ class BusNetwork : public Bus {
 
 
 #ifdef WLED_ENABLE_HUB75MATRIX
+// forward declarations
+class MatrixPanel_I2S_DMA;
+class VirtualMatrixPanel;
+class HUB75_I2S_CFG;
+class CRGB;
+
 class BusHub75Matrix : public Bus {
   public:
     BusHub75Matrix(const BusConfig &bc);
@@ -388,9 +388,11 @@ class BusHub75Matrix : public Bus {
     [[gnu::hot]] uint32_t getPixelColor(unsigned pix) const override;
     void show() override;
     void setBrightness(uint8_t b) override;
+    uint16_t getFrequency() const override;
     size_t getPins(uint8_t* pinArray = nullptr) const override;
     void deallocatePins();
     void cleanup();
+
 
     ~BusHub75Matrix() {
       cleanup();

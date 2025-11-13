@@ -371,6 +371,13 @@ void getSettingsJS(byte subPage, Print& settingsScript)
           case 10000 : speed = 3; break;
           case 20000 : speed = 4; break;
         }
+      } else if (bus->isHub75()) {
+        switch (speed) {
+          default:
+          case  8000 : speed = 0; break;
+          case 16000 : speed = 2; break;
+          case 20000 : speed = 4; break;
+        }
       }
       printSetFormValue(settingsScript,sp,speed);
       printSetFormValue(settingsScript,la,bus->getLEDCurrent());

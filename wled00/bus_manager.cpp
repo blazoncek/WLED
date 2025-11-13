@@ -753,6 +753,10 @@ void BusNetwork::cleanup() {
 
 // ***************************************************************************
 #ifdef WLED_ENABLE_HUB75MATRIX
+  #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
+  #include <ESP32-VirtualMatrixPanel-I2S-DMA.h>
+  #include <FastLED.h>
+
   #if !(defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
     #error "Unsupported ESP platform for HUB75 display. Only ESP32, ESP32-S2 and ESP32-S3 are supported."
   #else
@@ -761,6 +765,11 @@ void BusNetwork::cleanup() {
 
 constexpr uint32_t IS_BLACK = 0x000000;
 constexpr uint32_t IS_DARKGREY = 0x333333;
+
+// statically allocate as only one HUB75 matrix can be used (also allows reading mxconfig in getLEDTypes())
+MatrixPanel_I2S_DMA *BusHub75Matrix::display = nullptr;
+VirtualMatrixPanel  *BusHub75Matrix::virtualDisp = nullptr;
+HUB75_I2S_CFG        BusHub75Matrix::mxconfig = HUB75_I2S_CFG();
 
 // functions to get/set bits in an array - based on functions created by @Brandon502 for GOL
 static bool getBitFromArray(const uint8_t* byteArray, size_t position) { // get bit value
@@ -792,7 +801,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 , _ledBuffer(nullptr)
 , _ledsDirty(nullptr) {
   #ifdef WLED_DEBUG_BUS
-  size_t lastHeap = ESP.getFreeHeap();
+  size_t lastHeap = getFreeHeapSize();
   #endif
   _valid = false;
   _hasRgb = true;
@@ -804,31 +813,32 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   }
 
   // clamp width and height to 32, 64 or 128
-  bc.pins[0] &= 0b11100000;
-  bc.pins[1] &= 0b11100000;
-  if (bc.pins[0] == 0) bc.pins[0] = 32;
-  if (bc.pins[1] == 0) bc.pins[1] = 32;
+  uint8_t dim[2];
+  dim[0] = bc.pins[0] & 0b11100000;
+  dim[1] = bc.pins[1] & 0b11100000;
+  if (dim[0] == 0) dim[0] = 32;
+  if (dim[1] == 0) dim[1] = 32;
   // this may not be needed if sizes allowed include [96, 160, 192 and 224]
   // prefer lower value if size is not 32, 64 or 128
   for (int j=0; j<2; j++) for (int i=0; i<3; i++)
-    if (bc.pins[j] & (32 << i)) bc.pins[j] &= 32 << i;
+    if (dim[j] & (32 << i)) dim[j] &= 32 << i;
 
   mxconfig.double_buff = false; // Use our own memory-optimised buffer rather than the driver's own double-buffer
+  mxconfig.driver = (HUB75_I2S_CFG::shift_driver)bc.pins[3];
   // mxconfig.driver = HUB75_I2S_CFG::ICN2038S;  // experimental - use specific shift register driver
   // mxconfig.driver = HUB75_I2S_CFG::FM6124;    // try this driver in case you panel stays dark, or when colors look too pastel
   // mxconfig.latch_blanking = 3;
-  // mxconfig.i2sspeed = HUB75_I2S_CFG::HZ_10M;  // experimental - 5MHZ should be enugh, but colours looks slightly better at 10MHz
+  mxconfig.i2sspeed = (HUB75_I2S_CFG::clk_speed)(bc.frequency * 1000); // correctly set in set.cpp (8000, 16000, 20000)
   // mxconfig.min_refresh_rate = 90;
   // mxconfig.min_refresh_rate = 120;
   mxconfig.clkphase = bc.reversed;
 
   if (bc.type == TYPE_HUB75MATRIX_HS) {
-    mxconfig.mx_width = bc.pins[0];
-    mxconfig.mx_height = bc.pins[1];
+    mxconfig.mx_width = dim[0];
+    mxconfig.mx_height = dim[1];
   } else if (bc.type == TYPE_HUB75MATRIX_QS) {
-    mxconfig.driver = HUB75_I2S_CFG::FM6124;  // use FM6124 for "outdoor" panels - workaround until we can make the driver user-configurable
-    mxconfig.mx_width = bc.pins[0] << 1;
-    mxconfig.mx_height = bc.pins[1] >> 1;
+    mxconfig.mx_width = dim[0] << 1;
+    mxconfig.mx_height = dim[1] >> 1;
   } else {
     DEBUGBUS_PRINTLN("Unknown type");
     return;
@@ -890,7 +900,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 
   constexpr size_t PIN_COUNT = sizeof(mxconfig.gpio) / sizeof(int8_t);
   PinManagerPinType pins[PIN_COUNT];
-  for (size_t i = 0; i < PIN_COUNT; i++) pins[i] = {((uint8_t*)&mxconfig.gpio)[i], true};
+  for (size_t i = 0; i < PIN_COUNT; i++) pins[i] = {((int8_t*)&mxconfig.gpio)[i], true};
   if (!PinManager::allocateMultiplePins(pins, PIN_COUNT, PinOwner::HUB75)) {
     DEBUGBUS_PRINTLN("Failed to allocate pins for HUB75");
     return;
@@ -941,14 +951,14 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   display = new(std::nothrow) MatrixPanel_I2S_DMA(mxconfig);
   if (display == nullptr) {
     DEBUGBUS_PRINTLN("****** MatrixPanel_I2S_DMA !KABOOM! driver allocation failed ***********");
-    DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - ESP.getFreeHeap());
+    DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - getFreeHeapSize());
     return;
   }
   // for quad-scan panels we create a virtual panel that maps to the physical one
   // @dedehai made a nice enhancement: https://github.com/wled/WLED/pull/5026/files#diff-bd8d5165aa932055149d4e0db7571029b97f2a860f275ddd079bc591da35bf19R949-R958
   // that will allow similar placement of panels like in 2D setup (I would prefer to reuse that logic/functionality here)
   if (bc.type == TYPE_HUB75MATRIX_QS) {
-    virtualDisp = new VirtualMatrixPanel((*display), 1, 1, bc.pins[0], bc.pins[1]);
+    virtualDisp = new VirtualMatrixPanel((*display), 1, 1, dim[0], dim[1]);
     virtualDisp->setRotation(0);
     switch (bc.pins[1]) {
       case 16:
@@ -979,15 +989,15 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   display->setBrightness(0);    // range is 0-255, 0 - 0%, 255 - 100%
 
   delay(24); // experimental
-  DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - ESP.getFreeHeap());
+  DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - getFreeHeapSize());
   // Allocate memory and start DMA display
   if (!display->begin()) {
       DEBUGBUS_PRINTLN("****** MatrixPanel_I2S_DMA !KABOOM! I2S memory allocation failed ***********");
-      DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - ESP.getFreeHeap());
+      DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - getFreeHeapSize());
       return;
   } else {
     DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA begin ok");
-    DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - ESP.getFreeHeap());
+    DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - getFreeHeapSize());
     delay(18);   // experiment - give the driver a moment (~ one full frame @ 60hz) to settle
     _valid = true;
     display->clearScreen();   // initially clear the screen buffer
@@ -999,7 +1009,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     if (_ledsDirty == nullptr) {
       cleanup();
       DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA not started - not enough memory for dirty bits!"));
-      DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - ESP.getFreeHeap());
+      DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - getFreeHeapSize());
       return;  //  fail is we cannot get memory for the buffer
     }
     setBitArray(_ledsDirty, _len, false);             // reset dirty bits
@@ -1114,15 +1124,8 @@ void BusHub75Matrix::deallocatePins() {
   PinManager::deallocateMultiplePins(pins, PIN_COUNT, PinOwner::HUB75);
 }
 
-std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
-  constexpr size_t PIN_COUNT = sizeof(mxconfig.gpio) / sizeof(int8_t);
-  LEDType typeHS = {TYPE_HUB75MATRIX_HS, "H", PSTR("HUB75 (Half Scan)")};
-  LEDType typeQS = {TYPE_HUB75MATRIX_QS, "H", PSTR("HUB75 (Quarter Scan)")};
-  for (int i=0; i<PIN_COUNT; i++) {
-    typeHS.requiredPins.push_back(((uint8_t*)&mxconfig.gpio)[i]);
-    typeQS.requiredPins.push_back(((uint8_t*)&mxconfig.gpio)[i]);
-  }
-  return {typeHS, typeQS};
+uint16_t BusHub75Matrix::getFrequency() const { 
+  return (uint16_t)((unsigned)BusHub75Matrix::mxconfig.i2sspeed / 1000);
 }
 
 size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
@@ -1130,17 +1133,21 @@ size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
     pinArray[0] = mxconfig.mx_width;
     pinArray[1] = mxconfig.mx_height;
     pinArray[2] = mxconfig.chain_length;
+    pinArray[3] = (uint8_t)mxconfig.driver;
   }
-  return 3;
+  return 4;
 }
 
-// statically allocate as only one HUB75 matrix can be used
-MatrixPanel_I2S_DMA *BusHub75Matrix::display = nullptr;
-VirtualMatrixPanel  *BusHub75Matrix::virtualDisp = nullptr;
-HUB75_I2S_CFG        BusHub75Matrix::mxconfig = HUB75_I2S_CFG();
-unsigned             BusHub75Matrix::_panelWidth = 0;
-CRGB                *BusHub75Matrix::_ledBuffer = nullptr;
-byte                *BusHub75Matrix::_ledsDirty = nullptr;
+std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
+  constexpr size_t PIN_COUNT = sizeof(mxconfig.gpio) / sizeof(int8_t);
+  LEDType typeHS = {TYPE_HUB75MATRIX_HS, "HHHH", PSTR("HUB75 (Half Scan)")};
+  LEDType typeQS = {TYPE_HUB75MATRIX_QS, "HHHH", PSTR("HUB75 (Quarter Scan)")};
+  for (int i=0; i<PIN_COUNT; i++) {
+    typeHS.requiredPins.push_back(((uint8_t*)&mxconfig.gpio)[i]);
+    typeQS.requiredPins.push_back(((uint8_t*)&mxconfig.gpio)[i]);
+  }
+  return {typeHS, typeQS};
+}
 
 #endif
 // ***************************************************************************

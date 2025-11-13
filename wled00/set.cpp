@@ -220,6 +220,15 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
           case 3 : freq = 10000; break;
           case 4 : freq = 20000; break;
         }
+      } else if (Bus::isHub75(type)) {
+        switch (freq) {
+          default:
+          case 0 : // fallthrough
+          case 1 : freq =  8000; break; // 8 MHz see HUB75_I2S_CFG::clk_speed
+          case 2 : // fallthrough
+          case 3 : freq = 16000; break;
+          case 4 : freq = 20000; break;
+        }
       } else {
         freq = 0;
       }

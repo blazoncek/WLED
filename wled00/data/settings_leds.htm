@@ -692,8 +692,9 @@ Swap: <select id="xw${s}" name="XW${s}">
 			// function to set pin labels and show/hide secondary pins
 			let setPinConfig = (n,t) => {
 				let p0d = "GPIO:";
-				let p1d = "", p2d = "";
+				let p1d = "", p2d = "", p3d = "";
 				let off = "Off Refresh";
+				let rev = "Reversed";
 				switch (gT(t).t.charAt(0)) {
 					case '2': // 2 pin digital
 						p1d = "Clock "+p0d;
@@ -715,14 +716,18 @@ Swap: <select id="xw${s}" name="XW${s}">
 						p0d = "Panel size: (W)";
 						p1d = "x (H)";
 						p2d = "# Panels:";
+						p3d = "Shift reg.:"
+						rev = "Phase";
 						break;
 				}
 				gId("p0d"+n).innerText = p0d;
 				gId("p1d"+n).innerText = p1d;
 				gId("p2d"+n).innerText = p2d;
+				gId("p3d"+n).innerText = p3d;
 				gId("off"+n).innerText = off;
+				gId("rev"+n).innerText = rev;
 				// secondary pins show/hide (type string length is equivalent to number of pins used; except for network and on/off)
-				let pins = Math.max(gT(t).t.length,1) + 3*isNet(t) + 2*isHub75(t); // fixes network pins to 4
+				let pins = Math.max(gT(t).t.length,1) + 3*isNet(t); // fixes network pins to 4
 				// add output type data-type to pin selects
 				for (let p=0; p<5; p++) {
 					var LK = gN("G"+p+n);
@@ -782,6 +787,27 @@ Swap: <select id="xw${s}" name="XW${s}">
 				disable(`option[data-type^="${'A'.repeat(maxA - analogB + (isPWM(t) ? numPins(t) : 0) + 1)}"]`);
 				// update UI elements
 				let n = s.name.substring(2,3);                                              // bus number (0-Z)
+				let g3 = gN("G3"+n);
+				if (isHub75(t) && g3.tagName === "INPUT") {
+					// this is a hack to allow dropdown selection for Hub75 shift register type (stored in pin 4)
+					g3 = addDropdown(g3);           // pin 4 is shift register type for Hub75
+					g3.classList.remove("pin");     // not a pin select
+					g3.removeAttribute("onchange"); // not a pin select
+					addOption(g3, "SHIFTREG", 0);
+					addOption(g3, "FM6124", 1);
+					addOption(g3, "FM6126A", 2);
+					addOption(g3, "ICN2038S", 3);
+					addOption(g3, "MBI5124", 4);
+					addOption(g3, "SM5266P", 5);
+					addOption(g3, "DP3246/SM5368", 6);
+				} else if (g3.tagName === "SELECT") {
+					// replace select with input
+					let inp = cE('input');
+					inp.type = "number";
+					inp.classList.add("s");
+					inp.name = "G3"+n;
+					gN("G3"+n).parentElement.replaceChild(inp, gN("G3"+n));
+				}
 				setPinConfig(n,t);
 				gId("abl"+n).style.display = (!abl || !isDig(t)) ? "none" : "inline";       // show/hide individual ABL settings
 				if (change) {                                                               // did we change LED type?
@@ -791,7 +817,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 					gN("MA"+n).min = (!isDig(t)) ? 0 : 250;                                 // set minimum value for PSU mA
 				}
 				gId("rf"+n).onclick = mustR(t) ? (()=>{return false}) : (()=>{});           // prevent change change of "Refresh" checkmark when mandatory
-				gId("co"+n).style.display = (isVir(t) || isAna(t) || isHub75(t)) ? "none":"inline";       // hide color order for PWM
+				gId("co"+n).style.display = (isVir(t) || isAna(t)) ? "none":"inline";       // hide color order for PWM
 				gId("dig"+n+"w").style.display = (isDig(t) && hasW(t)) ? "inline":"none";   // show swap channels dropdown
 				gId("dig"+n+"w").querySelector("[data-opt=CCT]").disabled = !hasCCT(t);     // disable WW/CW swapping	
 				if (!(isDig(t) && hasW(t))) gN("WO"+n).value = 0;                           // reset swapping
@@ -800,7 +826,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				gId("dig"+n+"s").style.display = (isVir(t) || isAna(t) || isHub75(t)) ? "none":"inline";  // hide skip 1st for virtual & analog
 				gId("dig"+n+"f").style.display = (isDig(t) || (isPWM(t) && maxL>2048)) ? "inline":"none"; // hide refresh (PWM hijacks reffresh for dithering on ESP32)
 				gId("dig"+n+"a").style.display = (hasW(t)) ? "inline":"none";               // auto calculate white
-				gId("dig"+n+"l").style.display = (isD2P(t) || isPWM(t)) ? "inline":"none";  // bus clock speed / PWM speed (relative) (not On/Off)
+				gId("dig"+n+"l").style.display = (isD2P(t) || isPWM(t) || isHub75(t)) ? "inline":"none";  // bus clock speed / PWM speed (relative) (not On/Off)
 				gId("rev"+n).innerHTML = isAna(t) ? "Inverted output":"Reversed";           // change reverse text for analog else (rotated 180°)
 				gId("net"+n+"h").style.display = isNet(t) && !is8266() ? "block" : "none";  // show host field for network types except on ESP8266
 				if (!isNet(t) || is8266()) gN("HS"+n).value = "";                           // cleart host field if not network type or ESP8266
