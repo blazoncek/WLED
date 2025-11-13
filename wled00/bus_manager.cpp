@@ -196,21 +196,7 @@ void BusDigital::estimateCurrentAndLimitBri() {
 
   byte actualMilliampsPerLed = getLEDCurrent() == 255 ? 12 : getLEDCurrent(); // from testing an actual WS2815 strip
 
-  // WARNING: _busPowerSum is accumulated/summed in setPixelColor() calls (if not, use the following)
-  /*
-  bool useWackyWS2815PowerModel = getLEDCurrent() == 255;
-  uint32_t busPowerSum = 0;
-  for (unsigned i = 0; i < getLength(); i++) {  // sum up the usage of each LED
-    uint32_t c = getPixelColor(i);
-    byte r = R(c), g = G(c), b = B(c), w = W(c);
-    if (useWackyWS2815PowerModel) {             // ignore white component on WS2815 power calculation
-      busPowerSum += (max(max(r,g),b)) * 3;
-    } else {
-      busPowerSum += (r + g + b + w);
-    }
-  }
-  _busPowerSum = busPowerSum;
-  */
+  // WARNING: _busPowerSum is accumulated/summed in setPixelColor() calls
 
   if (hasWhite()) {     // RGBW led total output with white LEDs enabled is still 50mA, so each channel uses less
     _busPowerSum *= 3;
@@ -295,30 +281,6 @@ void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
     if (_type == TYPE_WS2812_WWA) c = RGBW32(cctWW, cctCW, 0, W(c));
   }
   PolyBus::setPixelColor(_busPtr, _iType, pix, c, co, wwcw);
-}
-
-// returns lossly restored color from bus (it was scaled by _bri in setPixelColor)
-uint32_t BusDigital::getPixelColor(unsigned pix) const {
-  if (!_valid) return 0;
-  if (_reversed) pix = _len - pix -1;
-  pix += _skip;
-  const uint8_t co = _colorOrderMap.getPixelColorOrder(pix+_start, _colorOrder);
-  uint32_t c = restoreColorLossy(PolyBus::getPixelColor(_busPtr, _iType, (_type==TYPE_WS2812_1CH_X3) ? IC_INDEX_WS2812_1CH_3X(pix) : pix, co), _bri);
-  if (_type == TYPE_WS2812_1CH_X3) { // map to correct IC, each controls 3 LEDs
-    unsigned r = R(c);
-    unsigned g = _reversed ? B(c) : G(c); // should G and B be switched if _reversed?
-    unsigned b = _reversed ? G(c) : B(c);
-    switch (pix % 3) { // get only the single channel
-      case 0: c = RGBW32(g, g, g, g); break;
-      case 1: c = RGBW32(r, r, r, r); break;
-      case 2: c = RGBW32(b, b, b, b); break;
-    }
-  }
-  if (_type == TYPE_WS2812_WWA) {
-    uint8_t w = R(c) | G(c);
-    c = RGBW32(w, w, 0, w);
-  }
-  return c;
 }
 
 size_t BusDigital::getPins(uint8_t* pinArray) const {
@@ -490,27 +452,6 @@ void BusPwm::setPixelColor(unsigned pix, uint32_t c) {
   }
 }
 
-//does no index check
-uint32_t BusPwm::getPixelColor(unsigned pix) const {
-  if (!_valid) return 0;
-  // TODO getting the reverse from CCT is involved (a quick approximation when CCT blending is ste to 0 implemented)
-  switch (_type) {
-    case TYPE_ANALOG_1CH: //one channel (white), relies on auto white calculation
-      return RGBW32(0, 0, 0, _data[0]);
-    case TYPE_ANALOG_2CH: //warm white + cold white
-      if (cctICused) return RGBW32(0, 0, 0, _data[0]);
-      else           return RGBW32(0, 0, 0, _data[0] + _data[1]);
-    case TYPE_ANALOG_5CH: //RGB + warm white + cold white
-      if (cctICused) return RGBW32(_data[0], _data[1], _data[2], _data[3]);
-      else           return RGBW32(_data[0], _data[1], _data[2], _data[3] + _data[4]);
-    case TYPE_ANALOG_4CH: //RGBW
-      return RGBW32(_data[0], _data[1], _data[2], _data[3]);
-    case TYPE_ANALOG_3CH: //standard dumb RGB
-      return RGBW32(_data[0], _data[1], _data[2], 0);
-  }
-  return RGBW32(_data[0], _data[0], _data[0], _data[0]);
-}
-
 void BusPwm::show() {
   if (!_valid) return;
   // if _needsRefresh is true (UI hack) we are using dithering (credit @dedehai & @zalatnaicsongor)
@@ -632,11 +573,6 @@ void BusOnOff::setPixelColor(unsigned pix, uint32_t c) {
   _data = bool(r|g|b|w) && bool(_bri) ? 0xFF : 0;
 }
 
-uint32_t BusOnOff::getPixelColor(unsigned pix) const {
-  if (!_valid) return 0;
-  return RGBW32(_data, _data, _data, _data);
-}
-
 void BusOnOff::show() {
   if (!_valid) return;
   digitalWrite(_pin, _reversed ? !(bool)_data : (bool)_data);
@@ -696,12 +632,6 @@ void BusNetwork::setPixelColor(unsigned pix, uint32_t c) {
   _data[offset+1] = G(c);
   _data[offset+2] = B(c);
   if (_hasWhite) _data[offset+3] = W(c);
-}
-
-uint32_t BusNetwork::getPixelColor(unsigned pix) const {
-  if (!_valid || pix >= _len) return 0;
-  unsigned offset = pix * _UDPchannels;
-  return RGBW32(_data[offset], _data[offset+1], _data[offset+2], (hasWhite() ? _data[offset+3] : 0));
 }
 
 void BusNetwork::show() {
@@ -1061,15 +991,6 @@ void __attribute__((hot)) BusHub75Matrix::setPixelColor(unsigned pix, uint32_t c
   }
 }
 
-uint32_t BusHub75Matrix::getPixelColor(unsigned pix) const {
-  if (!_valid) return IS_BLACK;
-  if (_ledBuffer)
-    //return uint32_t(_ledBuffer[pix].scale8(_bri)) & 0x00FFFFFF;  // scale8() is needed to mimic NeoPixelBus, which returns scaled-down colours
-    return uint32_t(_ledBuffer[pix]) & 0x00FFFFFF;
-  else
-    return getBitFromArray(_ledsDirty, pix) ? IS_DARKGREY : IS_BLACK;   // just a hack - we only know if the pixel is black or not
-}
-
 void BusHub75Matrix::setBrightness(uint8_t b) {
   _bri = b;
   if (display) display->setBrightness(_bri);
@@ -1375,14 +1296,6 @@ void BusManager::setSegmentCCT(int16_t cct, bool allowWBCorrection) {
     if (allowWBCorrection) cct = 1900 + (cct << 5);
   } else cct = -1; // will use kelvin approximation from RGB
   Bus::setCCT(cct);
-}
-
-uint32_t BusManager::getPixelColor(unsigned pix) {
-  for (auto &bus : busses) {
-    if (!bus->containsPixel(pix)) continue;
-    return bus->getPixelColor(pix - bus->getStart());
-  }
-  return 0;
 }
 
 bool BusManager::canAllShow() {

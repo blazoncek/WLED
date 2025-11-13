@@ -125,7 +125,6 @@ class Bus {
     virtual void     setBrightness(uint8_t b)                   { _bri = b; };
     virtual void     setColorOrder(uint8_t co)                  {}
     virtual uint8_t  getBrightness() const                      { return _bri; }
-    virtual uint32_t getPixelColor(unsigned pix) const          { return 0; }
     virtual size_t   getPins(uint8_t* pinArray = nullptr) const { return 0; }
     virtual uint16_t getLength() const                          { return isOk() ? _len : 0; }
     virtual uint8_t  getColorOrder() const                      { return COL_ORDER_RGB; }
@@ -247,7 +246,6 @@ class BusDigital : public Bus {
     void setStatusPixel(uint32_t c) override;
     [[gnu::hot]] void setPixelColor(unsigned pix, uint32_t c) override;
     void setColorOrder(uint8_t colorOrder) override;
-    [[gnu::hot]] uint32_t getPixelColor(unsigned pix) const override;
     uint8_t  getColorOrder() const override  { return _colorOrder; }
     size_t   getPins(uint8_t* pinArray = nullptr) const override;
     unsigned skippedLeds() const override    { return _skip; }
@@ -301,7 +299,6 @@ class BusPwm : public Bus {
     ~BusPwm() { cleanup(); }
 
     void setPixelColor(unsigned pix, uint32_t c) override;
-    uint32_t getPixelColor(unsigned pix) const override; //does no index check
     size_t   getPins(uint8_t* pinArray = nullptr) const override;
     uint16_t getFrequency() const override { return _frequency; }
     size_t   getBusSize() const override   { return sizeof(BusPwm); }
@@ -329,7 +326,6 @@ class BusOnOff : public Bus {
     ~BusOnOff() { cleanup(); }
 
     void setPixelColor(unsigned pix, uint32_t c) override;
-    uint32_t getPixelColor(unsigned pix) const override;
     size_t   getPins(uint8_t* pinArray) const override;
     size_t   getBusSize() const override { return sizeof(BusOnOff); }
     void show() override;
@@ -350,7 +346,6 @@ class BusNetwork : public Bus {
 
     bool canShow() const override  { return !_broadcastLock; } // this should be a return value from UDP routine if it is still sending data out
     [[gnu::hot]] void setPixelColor(unsigned pix, uint32_t c) override;
-    [[gnu::hot]] uint32_t getPixelColor(unsigned pix) const override;
     size_t getPins(uint8_t* pinArray = nullptr) const override;
     size_t getBusSize() const override  { return sizeof(BusNetwork) + (isOk() ? _len * _UDPchannels : 0); }
     void   show() override;
@@ -385,7 +380,6 @@ class BusHub75Matrix : public Bus {
   public:
     BusHub75Matrix(const BusConfig &bc);
     [[gnu::hot]] void setPixelColor(unsigned pix, uint32_t c) override;
-    [[gnu::hot]] uint32_t getPixelColor(unsigned pix) const override;
     void show() override;
     void setBrightness(uint8_t b) override;
     uint16_t getFrequency() const override;
@@ -499,7 +493,6 @@ namespace BusManager {
   void off();
 
   [[gnu::hot]] void     setPixelColor(unsigned pix, uint32_t c);
-  [[gnu::hot]] uint32_t getPixelColor(unsigned pix);
   void        show();
   bool        canAllShow();
   inline void setStatusPixel(uint32_t c) { for (auto &bus : busses) bus->setStatusPixel(c);}
