@@ -964,7 +964,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   }
 }
 
-void __attribute__((hot)) BusHub75Matrix::setPixelColor(unsigned pix, uint32_t c) {
+void BusHub75Matrix::setPixelColor(unsigned pix, uint32_t c) {
   if (!_valid) return;
   // if (_cct >= 1900) c = colorBalanceFromKelvin(_cct, c); //color correction from CCT
 
