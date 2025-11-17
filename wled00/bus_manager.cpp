@@ -1119,22 +1119,37 @@ size_t BusManager::memUsage() {
 
 int BusManager::add(const BusConfig &bc) {
   DEBUGBUS_PRINTF_P(PSTR("Bus: Adding bus (p:%d v:%d)\n"), getNumBusses(), getNumVirtualBusses());
+  #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)
+  const unsigned maxDigital = WLED_MAX_RMT_CHANNELS + (PolyBus::isParallelI2S1Output() ? WLED_MAX_DIGITAL_CHANNELS - WLED_MAX_RMT_CHANNELS : 1);
+  #elif defined(CONFIG_IDF_TARGET_ESP32S3)
+  const unsigned maxDigital = WLED_MAX_RMT_CHANNELS + (PolyBus::isParallelI2S1Output() ? WLED_MAX_DIGITAL_CHANNELS - WLED_MAX_RMT_CHANNELS : 0);
+  #else
+  const unsigned maxDigital = WLED_MAX_DIGITAL_CHANNELS; // ESP8266 and ESP32-C3
+  #endif
   unsigned digital = 0;
   unsigned analog  = 0;
   unsigned twoPin  = 0;
+  unsigned hub75   = 0;
   for (const auto &bus : busses) {
     if (bus->isPWM()) analog += bus->getPins(); // number of analog channels used
     if (bus->isDigital() && !bus->is2Pin()) digital++;
     if (bus->is2Pin()) twoPin++;
+    if (bus->isHub75()) hub75++;
   }
-  if (digital > WLED_MAX_DIGITAL_CHANNELS || analog > WLED_MAX_ANALOG_CHANNELS) return -1;
   if (Bus::isVirtual(bc.type)) {
     busses.push_back(make_unique<BusNetwork>(bc));
+  #ifdef WLED_ENABLE_HUB75MATRIX
+  } else if (Bus::isHub75(bc.type)) {
+    if (hub75 > 0) return -1; // only one HUB75 matrix bus allowed
+    busses.push_back(make_unique<BusHub75Matrix>(bc));
+  #endif
   } else if (Bus::isDigital(bc.type)) {
+    if (digital >= maxDigital && !Bus::is2Pin(bc.type)) return -1; // too many digital channels used
     busses.push_back(make_unique<BusDigital>(bc, Bus::is2Pin(bc.type) ? twoPin : digital));
   } else if (Bus::isOnOff(bc.type)) {
     busses.push_back(make_unique<BusOnOff>(bc));
   } else {
+    if (analog >= WLED_MAX_ANALOG_CHANNELS) return -1;
     busses.push_back(make_unique<BusPwm>(bc));
   }
   return busses.back()->isOk() ? busses.size() : -1;
@@ -1169,6 +1184,9 @@ String BusManager::getLEDTypesJSONString() {
   json += LEDTypesToJson(BusDigital::getLEDTypes());
   json += LEDTypesToJson(BusOnOff::getLEDTypes());
   json += LEDTypesToJson(BusPwm::getLEDTypes());
+  #ifdef WLED_ENABLE_HUB75MATRIX
+  json += LEDTypesToJson(BusHub75Matrix::getLEDTypes());
+  #endif
   json += LEDTypesToJson(BusNetwork::getLEDTypes());
   //json += LEDTypesToJson(BusVirtual::getLEDTypes());
   json.setCharAt(json.length()-1, ']'); // replace last comma with bracket

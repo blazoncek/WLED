@@ -1185,7 +1185,7 @@ void WS2812FX::finalizeInit() {
     #endif
     if (mem + maxI2S <= MAX_LED_MEMORY) {
       if (BusManager::add(bus) < 0) {
-        DEBUG_PRINTF_P(PSTR("Bus %d (%d) #%u created but not valid!\n"), (int)bus.type, (int)bus.count, digitalCount);
+        DEBUG_PRINTF_P(PSTR("Bus %d (%d) #%u not created or not valid!\n"), (int)bus.type, (int)bus.count, digitalCount);
         break;
       }
     } else {
