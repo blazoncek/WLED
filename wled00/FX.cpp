@@ -4753,7 +4753,7 @@ typedef struct Cell {
 uint16_t mode_2Dgameoflife(void) { // Written by Ewoud Wijma, inspired by https://natureofcode.com/book/chapter-7-cellular-automata/
                                    // and https://github.com/DougHaber/nlife-color , Modified By: Brandon Butler
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
-  const int cols = SEG_W, rows = SEG_H;
+  const unsigned cols = SEG_W, rows = SEG_H;
   const unsigned maxIndex = cols * rows;
 
   if (!SEGENV.allocateData(SEGMENT.length() * sizeof(Cell))) return mode_static(); // allocation failed
@@ -4797,7 +4797,7 @@ uint16_t mode_2Dgameoflife(void) { // Written by Ewoud Wijma, inspired by https:
     }
   }
 
-  if (paused || (strip.now - SEGENV.step < 1000 / map(SEGMENT.speed,0,255,1,42))) {
+  if (paused || (strip.now - SEGENV.step < 1000UL / map(SEGMENT.speed,0,255,1,42))) {
     // Redraw if paused or between updates to remove blur
     for (unsigned i = maxIndex; i--; ) {  // decrease i in condition (at the start of loop)
       if (!cells[i].alive) {

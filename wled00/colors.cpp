@@ -277,9 +277,9 @@ void loadCustomPalettes() {
   byte tcp[72]; //support gradient palettes with up to 18 entries
   CRGBPalette16 targetPalette;
   customPalettes.clear(); // start fresh
-  for (int index = 0; index < WLED_MAX_CUSTOM_PALETTES; index++) {
+  for (unsigned index = 0; index < WLED_MAX_CUSTOM_PALETTES; index++) {
     char fileName[32];
-    sprintf_P(fileName, PSTR("/palette%d.json"), index);
+    sprintf_P(fileName, PSTR("/palette%u.json"), index);
 
     StaticJsonDocument<1536> pDoc; // barely enough to fit 72 numbers
     if (WLED_FS.exists(fileName)) {
