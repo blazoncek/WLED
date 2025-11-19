@@ -3553,49 +3553,32 @@ static const char _data_FX_MODE_PLASMA[] PROGMEM = "Plasma@Phase,!;!;!";
  * Intensity values from 0-100 turn on the leds.
  */
 uint16_t mode_percent(void) {
-
   unsigned percent = SEGMENT.intensity;
   percent = constrain(percent, 0, 200);
-  unsigned active_leds = (percent < 100) ? roundf(SEGLEN * percent / 100.0f)
-                                         : roundf(SEGLEN * (200 - percent) / 100.0f);
+  unsigned active_leds;
   const bool oneColor = SEGMENT.check1;
+  const bool reverse = percent > 100;
 
-  unsigned size = (1 + ((SEGMENT.speed * SEGLEN) >> 11));
-  if (SEGMENT.speed == 255) size = 255;
-
-  if (percent <= 100) {
-    for (unsigned i = 0; i < SEGLEN; i++) {
-    	if (i < SEGENV.aux1) {
-        if (oneColor)
-          SEGMENT.setPixelColor(i, SEGMENT.color_from_palette(map(percent,0,100,0,255), false, PALETTE_FIXED, 0));
-        else
-          SEGMENT.setPixelColor(i, SEGMENT.color_from_palette(i, true, PALETTE_FIXED, 0));
-    	}
-    	else {
-        SEGMENT.setPixelColor(i, SEGCOLOR(1));
-    	}
-    }
-  } else {
-    for (unsigned i = 0; i < SEGLEN; i++) {
-    	if (i < (SEGLEN - SEGENV.aux1)) {
-        SEGMENT.setPixelColor(i, SEGCOLOR(1));
-    	}
-    	else {
-        if (oneColor)
-          SEGMENT.setPixelColor(i, SEGMENT.color_from_palette(map(percent,100,200,255,0), false, PALETTE_FIXED, 0));
-        else
-          SEGMENT.setPixelColor(i, SEGMENT.color_from_palette(i, true, PALETTE_FIXED, 0));
-    	}
-    }
+  if (reverse) percent = 200 - percent;
+  active_leds = ((SEGLEN * percent) + 50) / 100;  // +50 for integer rounding
+  for (unsigned i = 0; i < SEGLEN; i++) {
+    const bool lit = reverse ? (i >= (SEGLEN - SEGENV.aux1)) : (i < SEGENV.aux1);
+    CRGBA c = lit ? SEGMENT.color_from_palette(oneColor ? map(percent,0,100,255,0) : i, !oneColor, PALETTE_FIXED, 0) : SEGCOLOR(1);
+    SEGMENT.setPixelColor(i, c);
   }
 
-  if(active_leds > SEGENV.aux1) {  // smooth transition to the target value
-    SEGENV.aux1 += size;
-    if (SEGENV.aux1 > active_leds) SEGENV.aux1 = active_leds;
-  } else if (active_leds < SEGENV.aux1) {
-    if (SEGENV.aux1 > size) SEGENV.aux1 -= size; else SEGENV.aux1 = 0;
-    if (SEGENV.aux1 < active_leds) SEGENV.aux1 = active_leds;
-  }
+  if (SEGMENT.speed < 255) {
+    // smooth transition to the target value
+    unsigned size = (1 + ((SEGMENT.speed * SEGLEN) >> 11));
+    if (SEGENV.aux1 < active_leds) {
+      SEGENV.aux1 += size;
+      if (SEGENV.aux1 > active_leds) SEGENV.aux1 = active_leds;
+    } else if (active_leds < SEGENV.aux1) {
+      if (SEGENV.aux1 > size) SEGENV.aux1 -= size; else SEGENV.aux1 = 0;
+      if (SEGENV.aux1 < active_leds) SEGENV.aux1 = active_leds;
+    }
+  } else
+    SEGMENT.aux1 = active_leds;
 
  	return FRAMETIME;
 }
