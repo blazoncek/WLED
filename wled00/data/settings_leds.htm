@@ -281,10 +281,8 @@
 // npm run build has trouble minimizing spaces inside string
 				var cn = `<div class="iST" draggable="true" ondragstart="hDS(event)" id="l${s}" style="cursor:grab;">
 <hr class="sml">
-<span id="n${s}">${++i}</span>:
-<select name="LT${s}" onchange="updateTypeDropdowns(true,this);UI(true)"></select><br>
-<div id="abl${s}">
-mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
+<span id="n${s}">${++i}</span>: <select name="LT${s}" onchange="updateTypeDropdowns(true,this);UI(true)"></select><br>
+<div id="abl${s}">mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
 <option value="55" selected>55mA (typ. 5V WS281x)</option>
 <option value="35">35mA (eco WS2812)</option>
 <option value="30">30mA (typ. 12V)</option>
@@ -304,24 +302,18 @@ mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
 <option value="4">BGR</option>
 <option value="5">GBR</option>
 </select></div>
-<div id="dig${s}w" style="display:none">Swap: <select name="WO${s}"><option value="0">None</option><option value="1">W & B</option><option value="2">W & G</option><option value="3">W & R</option><option data-opt="CCT" value="4">WW & CW</option></select></div>
-<div id="dig${s}l" style="display:none">Clock: <select name="SP${s}"><option value="0">Slowest</option><option value="1">Slow</option><option value="2">Normal</option><option value="3">Fast</option><option value="4">Fastest</option></select></div>
+<div id="dig${s}w">Swap: <select name="WO${s}"><option value="0">None</option><option value="1">W & B</option><option value="2">W & G</option><option value="3">W & R</option><option data-opt="CCT" value="4">WW & CW</option></select></div>
+<div id="dig${s}l">Clock: <select name="SP${s}"><option value="0">Slowest</option><option value="1">Slow</option><option value="2">Normal</option><option value="3">Fast</option><option value="4">Fastest</option></select></div>
 <div>
-<span id="psd${s}">Start:</span> <input type="number" name="LS${s}" id="ls${s}" class="l starts" min="0" max="8191" value="${lastEnd(i-1)}" oninput="startsDirty[${i}]=true;UI();" required />&nbsp;
-<div id="dig${s}c" style="display:inline">Length: <input type="number" name="LC${s}" class="l" min="1" max="${maxPB}" value="1" required oninput="UI()" /></div><br>
+<span id="psd${s}">Start: </span><input type="number" name="LS${s}" id="ls${s}" class="l starts" min="0" max="8191" value="${lastEnd(i-1)}" oninput="startsDirty[${i}]=true;UI();" required />&nbsp;
+<div id="dig${s}c">Length: <input type="number" name="LC${s}" class="l" min="1" max="${maxPB}" value="1" required oninput="UI()" /></div><br>
 </div>
-<div id="pins${s}" style="display:inline">
-<span id="p0d${s}">GPIO:</span><input type="number" name="G0${s}" required class="s"/>
-<span id="p1d${s}"></span><input type="number" name="G1${s}" class="s"/>
-<span id="p2d${s}"></span><input type="number" name="G2${s}" class="s"/>
-<span id="p3d${s}"></span><input type="number" name="G3${s}" class="s"/>
-<span id="p4d${s}"></span><input type="number" name="G4${s}" class="s"/>
-</div>
+<div id="pins${s}"><span id="p0d${s}"></span><input type="number" name="G0${s}" required class="s"/><span id="p1d${s}"></span><input type="number" name="G1${s}" class="s"/><span id="p2d${s}"></span><input type="number" name="G2${s}" class="s"/><span id="p3d${s}"></span><input type="number" name="G3${s}" class="s"/><span id="p4d${s}"></span><input type="number" name="G4${s}" class="s"/></div>
 <div id="net${s}h" class="hide">Host: <input type="text" name="HS${s}" maxlength="32" pattern="[a-zA-Z0-9_\\-]*" onchange="UI()"/>.local</div>
-<div id="dig${s}r" style="display:inline"><br><span id="rev${s}"></span>: <input type="checkbox" name="CV${s}"></div>
-<div id="dig${s}s" style="display:inline"><br>Skip first LEDs: <input type="number" name="SL${s}" min="0" max="255" value="0" oninput="UI()"></div>
-<div id="dig${s}f" style="display:inline"><br><span id="off${s}"></span>: <input id="rf${s}" type="checkbox" name="RF${s}"></div>
-<div id="dig${s}a" style="display:inline"><br>Auto-calculate W channel from RGB:<br><select name="AW${s}"><option value=0>None</option><option value=1>Brighter</option><option value=2>Accurate</option><option value=3>Dual</option><option value=4>Max</option></select>&nbsp;</div>
+<div id="dig${s}r"><span id="rev${s}"></span>: <input type="checkbox" name="CV${s}"></div>
+<div id="dig${s}s">Skip <input type="number" name="SL${s}" min="0" max="255" value="0" oninput="UI()"> LEDs</div>
+<div id="dig${s}f"><span id="off${s}"></span>: <input id="rf${s}" type="checkbox" name="RF${s}"></div>
+<div id="dig${s}a">Auto-calculate W channel from RGB:<br><select name="AW${s}"><option value=0>None</option><option value=1>Brighter</option><option value=2>Accurate</option><option value=3>Dual</option><option value=4>Max</option></select>&nbsp;</div>
 </div>`;
 				f.insertAdjacentHTML("beforeend", cn);
 				// fill led types (credit @netmindz)
@@ -678,7 +670,8 @@ Swap: <select id="xw${s}" name="XW${s}">
 				let p1d = "", p2d = "", p3d = "";
 				let off = "Off Refresh";
 				let rev = "Reversed";
-				switch (gT(t).t.charAt(0)) {
+				const type = gT(t).t.charAt(0);
+				switch (type) {
 					case '2': // 2 pin digital
 						p1d = "Clock "+p0d;
 						// fallthrough
@@ -693,6 +686,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 						break;
 					case 'N': // network
 						p0d = "IP address:";
+						p1d = p2d = p3d = ".";
 						break;
 					case 'V': // virtual/non-GPIO based
 						p0d = "Config:";
@@ -705,7 +699,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 						rev = "Phase";
 						break;
 				}
-				gId("p0d"+n).innerText = p0d;
+				gId("p0d"+n).innerText = p0d + " ";
 				gId("p1d"+n).innerText = p1d;
 				gId("p2d"+n).innerText = p2d;
 				gId("p3d"+n).innerText = p3d;
@@ -713,7 +707,6 @@ Swap: <select id="xw${s}" name="XW${s}">
 				gId("rev"+n).innerText = rev;
 				// secondary pins show/hide (type string length is equivalent to number of pins used; except for network and on/off)
 				let pins = Math.max(gT(t).t.length,1) + 3*isNet(t); // fixes network pins to 4
-				const type = gT(t).t.charAt(0);
 				// add output type data-type to pin selects
 				for (let p=0; p<5; p++) {
 					var LK = gN("G"+p+n);
@@ -845,10 +838,10 @@ Swap: <select id="xw${s}" name="XW${s}">
 				gId("dig"+n+"w").querySelector("[data-opt=CCT]").disabled = !hasCCT(t);     // disable WW/CW swapping	
 				if (!(isDig(t) && hasW(t))) gN("WO"+n).value = 0;                           // reset swapping
 				gId("dig"+n+"c").style.display = (isAna(t) || isHub75(t)) ? "none":"inline";              // hide count for analog
-				gId("dig"+n+"r").style.display = (isVir(t)) ? "none":"inline";              // hide reversed for virtual
-				gId("dig"+n+"s").style.display = (isVir(t) || isAna(t) || isHub75(t)) ? "none":"inline";  // hide skip 1st for virtual & analog
-				gId("dig"+n+"f").style.display = (isDig(t) || (isPWM(t) && maxL>2048)) ? "inline":"none"; // hide refresh (PWM hijacks reffresh for dithering on ESP32)
-				gId("dig"+n+"a").style.display = (hasW(t)) ? "inline":"none";               // auto calculate white
+				gId("dig"+n+"r").style.display = (isVir(t)) ? "none":"block";               // hide reversed for virtual
+				gId("dig"+n+"s").style.display = (isVir(t) || isAna(t) || isHub75(t)) ? "none":"block";   // hide skip 1st for virtual & analog
+				gId("dig"+n+"f").style.display = (isDig(t) || (isPWM(t) && maxL>2048)) ? "block":"none"; // hide refresh (PWM hijacks reffresh for dithering on ESP32)
+				gId("dig"+n+"a").style.display = (hasW(t)) ? "block":"none";                // auto calculate white
 				gId("dig"+n+"l").style.display = (isD2P(t) || isPWM(t) || isHub75(t)) ? "inline":"none";  // bus clock speed / PWM speed (relative) (not On/Off)
 				gId("net"+n+"h").style.display = isNet(t) && !is8266() ? "block" : "none";  // show host field for network types except on ESP8266
 				if (!isNet(t) || is8266()) gN("HS"+n).value = "";                           // cleart host field if not network type or ESP8266
