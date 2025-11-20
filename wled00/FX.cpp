@@ -1861,6 +1861,7 @@ uint16_t mode_palette() {
 static const char _data_FX_MODE_PALETTE[] PROGMEM = "Palette@Shift,Size,Rotation,,,Animate Shift,Animate Rotation,Anamorphic;;!;12;c1=128,c2=128,c3=128,o1=1,o2=0,o3=0";
 
 
+#if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM1D)
 // WLED limitation: Analog Clock overlay will NOT work when Fire2012 is active
 // Fire2012 by Mark Kriegsman, July 2012
 // as part of "Five Elements" shown here: http://youtu.be/knWiGsmgycY
@@ -1950,6 +1951,8 @@ uint16_t mode_fire_2012() {
   return FRAMETIME;
 }
 static const char _data_FX_MODE_FIRE_2012[] PROGMEM = "Fire 2012@Cooling,Spark rate,,2D Blur,Boost;;!;1;pal=35,sx=64,ix=160,m12=1,c2=128"; // bars
+#endif
+
 
 // colored stripes pulsing at a defined Beats-Per-Minute (BPM)
 uint16_t mode_bpm() {
@@ -2669,6 +2672,7 @@ uint16_t mode_spots()
 static const char _data_FX_MODE_SPOTS[] PROGMEM = "Spots@Spread,Width,,,,Fade;!,!;!;1;";
 
 
+#if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM1D)
 //each needs 12 bytes
 typedef struct Ball {
   unsigned long lastBounceTime;
@@ -2749,6 +2753,7 @@ uint16_t mode_bouncing_balls(void) {
   return FRAMETIME;
 }
 static const char _data_FX_MODE_BOUNCINGBALLS[] PROGMEM = "Bouncing Balls@Gravity,# of balls;1,2,3;!;1;m12=1"; //bar
+#endif
 
 
 /*
@@ -2890,9 +2895,9 @@ uint16_t mode_sinelon() {
 static const char _data_FX_MODE_SINELON[] PROGMEM = "Sinelon@!,Trail,,,,Rainbow,,Dual;!,!,!;!";
 
 
+#if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM1D)
 //Glitter with palette background, inspired by https://gist.github.com/kriegsman/062e10f7f07ba8518af6
-uint16_t mode_glitter()
-{
+uint16_t mode_glitter() {
   // use "* Color 1" palette for solid background (replacing "Solid glitter")
   unsigned counter = 0;
   if (SEGMENT.speed != 0) {
@@ -2908,6 +2913,7 @@ uint16_t mode_glitter()
   return FRAMETIME;
 }
 static const char _data_FX_MODE_GLITTER[] PROGMEM = "Glitter@!,!;,,Glitter color;!;;pal=11,m12=0"; //pixels
+#endif
 
 
 //each needs 20 bytes
@@ -8842,7 +8848,9 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_STATIC_PATTERN, &mode_static_pattern, _data_FX_MODE_STATIC_PATTERN);
   addEffect(FX_MODE_TRI_STATIC_PATTERN, &mode_tri_static_pattern, _data_FX_MODE_TRI_STATIC_PATTERN);
   addEffect(FX_MODE_SPOTS, &mode_spots, _data_FX_MODE_SPOTS);
+  #if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM1D)
   addEffect(FX_MODE_GLITTER, &mode_glitter, _data_FX_MODE_GLITTER);
+  #endif
   addEffect(FX_MODE_CANDLE, &mode_candle, _data_FX_MODE_CANDLE);
   #if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM1D)
   addEffect(FX_MODE_STARBURST, &mode_starburst, _data_FX_MODE_STARBURST);
@@ -8876,7 +8884,7 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_WAVESINS, &mode_wavesins, _data_FX_MODE_WAVESINS);
   #ifndef WLED_DISABLE_PARTICLESYSTEM1D
   addEffect(FX_MODE_PS1DDRIP, &mode_particleDrip, _data_FX_MODE_PS1DDRIP);
-  addEffect(FX_MODE_PS1DPINBALL, &mode_particlePinball, _data_FX_MODE_PS1DPINBALL); //potential replacement for: bouncing balls, rollingballs, popcorn
+  addEffect(FX_MODE_PS1DPINBALL, &mode_particlePinball, _data_FX_MODE_PS1DPINBALL);
   addEffect(FX_MODE_PS1DDANCINGSHADOWS, &mode_particleDancingShadows, _data_FX_MODE_PS1DDANCINGSHADOWS);
   addEffect(FX_MODE_PS1DFIREWORKS, &mode_particleFireworks1D, _data_FX_MODE_PS1DFIREWORKS);
   addEffect(FX_MODE_PS1DSPARKLER, &mode_particleSparkler, _data_FX_MODE_PS1DSPARKLER);

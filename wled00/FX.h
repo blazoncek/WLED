@@ -321,7 +321,6 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #endif
 // particle 1D
 #ifndef WLED_DISABLE_PARTICLESYSTEM1D
-#define FX_MODE_PS1DSPARKLER            16
 #define FX_MODE_PS1DHOURGLASS           19
 #define FX_MODE_PS1DSPRAY               23
 #define FX_MODE_PS1DBALANCE             24
@@ -334,6 +333,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
   #define FX_MODE_PS1DCHASE               28
   #define FX_MODE_PS1DSTARBURST           89
   #define FX_MODE_PS1DFIRE                66
+  #define FX_MODE_PS1DSPARKLER            87
   #undef FX_MODE_DRIP
   #undef FX_MODE_BOUNCING_BALLS
   #undef FX_MODE_DANCING_SHADOWS
@@ -341,11 +341,13 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
   #undef FX_MODE_CHASE
   #undef FX_MODE_STARBURST
   #undef FX_MODE_FIRE_2012
+  #undef FX_MODE_GLITTER
 #else
   #define FX_MODE_PS1DDRIP                 4
   #define FX_MODE_PS1DPINBALL              6
   #define FX_MODE_PS1DDANCINGSHADOWS      11
   #define FX_MODE_PS1DFIREWORKS           14
+  #define FX_MODE_PS1DSPARKLER            16
   #define FX_MODE_PS1DCHASE               26
   #define FX_MODE_PS1DSTARBURST           29
   #define FX_MODE_PS1DFIRE                33
