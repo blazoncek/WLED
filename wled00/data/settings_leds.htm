@@ -140,9 +140,8 @@
 			gId('m1').innerHTML = maxM;
 		}
 		//returns mem usage
-		function getMem(t, n) {
+		function getMem(len, t, n) {
 			if (isAna(t)) return 5;	// analog
-			let len = parseInt(gN("LC"+n).value);
 			len += parseInt(gN("SL"+n).value); // skipped LEDs are allocated too
 			let dbl = 0;
 			let ch = 3*hasRGB(t) + hasW(t) + hasCCT(t);
@@ -177,7 +176,6 @@
 			LTs.forEach((s,i)=>{
 				var n = s.name.substring(2,3); // bus number (0-Z)
 				var t = parseInt(s.value);
-				memu += getMem(t, n);  // calc memory
 				gRGBW |= hasW(t);      // RGBW checkbox
 				if (isD1P(t)) {
 					dC++;              // count digital buses
@@ -206,12 +204,14 @@
 			d.querySelectorAll("#mLC input[name^=LC]").forEach((LC,i)=>{
 				let n = LC.name.substring(2,3);         // bus number (0-Z)
 				let t = parseInt(gN("LT"+n).value);     // LED type SELECT
-				LC.max = isAna(t) ? 1 : (isDig(t) ? maxPB : 16384); // set max value
+				// update LED count for Hub75 panels
+				if (gT(t).t.charAt(0) === 'H') LC.value = parseInt(gN("G0"+n).value) * parseInt(gN("G1"+n).value) * parseInt(gN("G2"+n).value);
 				let c = parseInt(LC.value,10);          // get LED count
-				if (!customStarts || !startsDirty[toNum(n)]) gId("ls"+n).value = sLC; // update start value
-				gId("ls"+n).disabled = !customStarts;   // enable/disable field editing
+				if (c > 0) memu += getMem(c, t, n);     // calc memory (depends on LED count)
+				if (!customStarts || !startsDirty[toNum(n)]) gN("LS"+n).value = sLC; // update start value
+				gN("LS"+n).disabled = !customStarts;    // enable/disable field editing
 				if (c) {
-					let s = parseInt(gId("ls"+n).value);// start value
+					let s = parseInt(gN("LS"+n).value); // start value
 					if (s+c > sLC) sLC = s+c;           // update total count
 					if (!isVir(t)) sPC += c;            // virtual out busses do not count towards physical LEDs
 					if (isDig(t)) {
@@ -305,7 +305,7 @@
 <div id="dig${s}w">Swap: <select name="WO${s}"><option value="0">None</option><option value="1">W & B</option><option value="2">W & G</option><option value="3">W & R</option><option data-opt="CCT" value="4">WW & CW</option></select></div>
 <div id="dig${s}l">Clock: <select name="SP${s}"><option value="0">Slowest</option><option value="1">Slow</option><option value="2">Normal</option><option value="3">Fast</option><option value="4">Fastest</option></select></div>
 <div>
-<span id="psd${s}">Start: </span><input type="number" name="LS${s}" id="ls${s}" class="l starts" min="0" max="8191" value="${lastEnd(i-1)}" oninput="startsDirty[${i}]=true;UI();" required />&nbsp;
+Start: <input type="number" name="LS${s}" class="l starts" min="0" max="8191" value="${lastEnd(i-1)}" oninput="startsDirty[${i}]=true;UI();" required />&nbsp;
 <div id="dig${s}c">Length: <input type="number" name="LC${s}" class="l" min="1" max="${maxPB}" value="1" required oninput="UI()" /></div><br>
 </div>
 <div id="pins${s}"><span id="p0d${s}"></span><input type="number" name="G0${s}" required class="s"/><span id="p1d${s}"></span><input type="number" name="G1${s}" class="s"/><span id="p2d${s}"></span><input type="number" name="G2${s}" class="s"/><span id="p3d${s}"></span><input type="number" name="G3${s}" class="s"/><span id="p4d${s}"></span><input type="number" name="G4${s}" class="s"/></div>
@@ -451,8 +451,8 @@ Swap: <select id="xw${s}" name="XW${s}">
 					let el = e.querySelector("[name^="+n+"]");
 					if (el) el.name = n + sNew;
 				});
-				// IDs: l,n,abl,LAdis,PSU,co,ls,dig?w,dig?l,psd,dig?c,p0d,p1d,p2d,p3d,p4d,net?h,dig?r,dig?s,dig?f,dig?a
-				["l","n","abl","LAdis","PSU","co","ls","dig?w","dig?l","psd","dig?c","p0d","p1d","p2d","p3d","p4d","net?h","dig?r","dig?s","dig?f","dig?a"].forEach((n)=>{
+				// IDs: l,n,abl,LAdis,PSU,co,dig?w,dig?l,dig?c,p0d,p1d,p2d,p3d,p4d,net?h,dig?r,dig?s,dig?f,dig?a
+				["l","n","abl","LAdis","PSU","co","dig?w","dig?l","dig?c","p0d","p1d","p2d","p3d","p4d","net?h","dig?r","dig?s","dig?f","dig?a"].forEach((n)=>{
 					if (n.indexOf("?") < 0) n += "?";
 					let el = e.querySelector("#"+n.replace("?", sOld));
 					if (el) el.id = n.replace("?", sNew);
@@ -470,10 +470,10 @@ Swap: <select id="xw${s}" name="XW${s}">
 			for (var i=1; i < gEBCN("iST").length; i++) {
 				var s = chrID(i);
 				var p = chrID(i-1); // cover edge case 'A' previous char being '9'
-				var v = parseInt(gId("ls"+p).value) + parseInt(gN("LC"+p).value);
-				if (v != parseInt(gId("ls"+s).value)) {cs = true; startsDirty[i] = true;}
+				var v = parseInt(gN("LS"+p).value) + parseInt(gN("LC"+p).value);
+				if (v != parseInt(gN("LS"+s).value)) {cs = true; startsDirty[i] = true;}
 			}
-			if (gId("ls0") && parseInt(gId("ls0").value) != 0) {cs = true; startsDirty[0] = true;}
+			if (gN("LS0") && parseInt(gN("LS0").value) != 0) {cs = true; startsDirty[0] = true;}
 			gId("si").checked = cs;
 			tglSi(cs);
 		}
@@ -694,8 +694,8 @@ Swap: <select id="xw${s}" name="XW${s}">
 					case 'H': // Hub75
 						p0d = "Panel size: (W)";
 						p1d = "x (H)";
-						p2d = "# Panels:";
-						p3d = "Shift reg.:"
+						p2d = " # Panels:";
+						p3d = " Shift reg.:"
 						rev = "Phase";
 						break;
 				}
@@ -755,7 +755,6 @@ Swap: <select id="xw${s}" name="XW${s}">
 								LK = addDropdown(LK);           // pin 4 is shift register type for Hub75
 								LK.classList.remove("pin");     // not a pin select
 								LK.classList.add("panel");      // panels
-								LK.removeAttribute("onchange"); // not a pin select
 								addOption(LK, "1x1", 1);
 								addOption(LK, "2x1", 2);
 								if (!isS2()) {
@@ -771,15 +770,18 @@ Swap: <select id="xw${s}" name="XW${s}">
 									}
 								}
 							}
+							if (p<3) LK.onchange = ()=>{UI();}; 
 							LK.min = p < 2 ? 32 : 1;
 							LK.max = p == 0 ? 128 : p == 1 ? 64 : 255;
 							LK.step = p < 2 ? 32 : 1;
+							if (LK.value == "") LK.value = LK.min;
 							break;
 						case 'V': // virtual
 						case 'N': // network
 							LK.min = 0;
 							LK.max = 255;
 							LK.step = 1;
+							if (LK.value == "") LK.value = LK.min;
 							break;
 					}
 					LK.setAttribute("data-type", type); // set data-type for pin selects
@@ -840,11 +842,12 @@ Swap: <select id="xw${s}" name="XW${s}">
 				gId("dig"+n+"c").style.display = (isAna(t) || isHub75(t)) ? "none":"inline";              // hide count for analog
 				gId("dig"+n+"r").style.display = (isVir(t)) ? "none":"block";               // hide reversed for virtual
 				gId("dig"+n+"s").style.display = (isVir(t) || isAna(t) || isHub75(t)) ? "none":"block";   // hide skip 1st for virtual & analog
-				gId("dig"+n+"f").style.display = (isDig(t) || (isPWM(t) && maxL>2048)) ? "block":"none"; // hide refresh (PWM hijacks reffresh for dithering on ESP32)
+				gId("dig"+n+"f").style.display = (isDig(t) || (isPWM(t) && maxL>2048)) ? "block":"none";  // hide refresh (PWM hijacks reffresh for dithering on ESP32)
 				gId("dig"+n+"a").style.display = (hasW(t)) ? "block":"none";                // auto calculate white
 				gId("dig"+n+"l").style.display = (isD2P(t) || isPWM(t) || isHub75(t)) ? "inline":"none";  // bus clock speed / PWM speed (relative) (not On/Off)
 				gId("net"+n+"h").style.display = isNet(t) && !is8266() ? "block" : "none";  // show host field for network types except on ESP8266
 				if (!isNet(t) || is8266()) gN("HS"+n).value = "";                           // cleart host field if not network type or ESP8266
+				gN("LC"+n).max = isAna(t) ? 1 : (isDig(t) ? maxPB : 16384);                 // set max value for LED count field
 				// record all unchangeable GPIOs (may produce duplicates)
 				const pins = s[s.selectedIndex].dataset.pins;
 				if (pins) {
