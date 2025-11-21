@@ -18,9 +18,8 @@
 		function isD2P(t)  { return gT(t).t === "2P"; }             // is digital 2 pin type
 		function isDig(t)  { return isD1P(t) || isD2P(t); }         // is digital type
 		function isNet(t)  { return gT(t).t === "N"; }              // is network type
-		function isVir(t)  { return gT(t).t === "V" || isNet(t); }  // is virtual type
+		function isVir(t)  { return gT(t).t.charAt(0) === "V" || isNet(t); }  // is virtual type
 		function isHub75(t){ return gT(t).t.charAt(0) === "H"; }    // is HUB75 type
-		function isUser(t) { return gT(t).t.charAt(0) === "U"; }    // is usermod type
 		function hasRGB(t) { return !!(gT(t).c & 0x01); }           // has RGB
 		function hasW(t)   { return !!(gT(t).c & 0x02); }           // has white channel
 		function hasCCT(t) { return !!(gT(t).c & 0x04); }           // is white CCT enabled
@@ -32,7 +31,7 @@
 		function S() {
 			getLoc();
 			loadJS(getURL('/settings/s.js?p=2'), false, ()=>{
-				d.ledTypes = [/*{i:22,c:1,t:"D",n:"WS2812"},{i:42,c:6,t:"AA",n:"PWM CCT"},{i:127,c:6,t:"UUUUU",n:"Hub75",p:[21,22,23,24,25]}*/]; // filled from GetV()
+				d.ledTypes = [/*{i:22,c:1,t:"D",n:"WS2812"},{i:42,c:6,t:"AA",n:"PWM CCT"},{i:127,c:1,t:"VVVV",n:"Usermod (virtual)",p:[21,22,23]}*/]; // filled from GetV()
 				d.um_p = [];
 				d.rsvd = [];
 				d.ro_gpio = [];
@@ -572,7 +571,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 			// construct array of GPIO fields
 			let fields = ["IR","RL"]; // IR & relay
 			d.querySelectorAll('#btns input[type="number"]').forEach((e)=>{fields.push(e.name);}); // buttons
-			d.querySelectorAll('.iST input[name^=G]:not(:is([data-type^=N],[data-type^=H],[data-type^=U])):required').forEach((e)=>{fields.push(e.name);}); // LED GPIO pins
+			d.querySelectorAll('.iST input[name^=G]:not(:is([data-type^=N],[data-type^=V],[data-type^=H])):required').forEach((e)=>{fields.push(e.name);}); // LED GPIO pins
 			// iterate through all form's pin fields and replace with dropdowns
 			for (let i of d.Sf.elements) {
 				if (i.type === "number" && fields.includes(i.name)) { //select all pin select elements
@@ -590,23 +589,6 @@ Swap: <select id="xw${s}" name="XW${s}">
 					}
 				}
 			}
-			/*
-			// replace select with input if bus changed to network or Hub75 or usermod type
-			d.querySelectorAll('.iST select.pin[name^=G]:is([data-type^=N],[data-type^=H],[data-type^=U])').forEach((e)=>{
-				let inp = cE('input');
-				inp.classList.add("s");
-				inp.type = "number";
-				inp.value = ""; //e.value;
-				// copy the existing select element's attributes to the new input element, except listed ones
-				for (const att of e.attributes) {
-					if (!["type","class","value","data-val","onchange"].includes(att.name)) {
-						inp.setAttribute(att.name, att.value);
-					}
-				}
-				// finally, replace the old select element with the new input element
-				e.parentElement.replaceChild(inp, e);
-			});
-			*/
 			// update select options to reflect current usage and bus unchangeable pins
 			d.querySelectorAll("select.pin").forEach((e)=>{
 				pinUpd(e); // update current select across all selects
@@ -736,7 +718,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				for (let p=0; p<5; p++) {
 					var LK = gN("G"+p+n);
 					if (!LK) continue; // something is wrong
-					if (type.length > 0 && "HNUV".includes(type)) {
+					if (type.length > 0 && "HNV".includes(type)) {
 						// replace pin select with input
 						if (LK.tagName === "SELECT" && LK.classList.contains("pin")) {
 							let inp = cE('input');
@@ -748,7 +730,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 						}
 					}
 					// if switching from Hub75, replace pin 4 select with input (remove hack)
-					if (type !== 'H' && p === 3 && LK.tagName === "SELECT" && !LK.classList.contains("pin")) {
+					if (type !== 'H' && [2,3].includes(p) && LK.tagName === "SELECT" && !LK.classList.contains("pin")) {
 						// replace select with input
 						let inp = cE('input');
 						inp.type = "number";
@@ -774,12 +756,33 @@ Swap: <select id="xw${s}" name="XW${s}">
 								addOption(LK, "SM5266P", 5);
 								addOption(LK, "DP3246/SM5368", 6);
 							}
+							if (p == 2 && LK.tagName === "INPUT") {
+								// pin 3 is number of panels for Hub75
+								// this is a hack to allow dropdown selection
+								LK = addDropdown(LK);           // pin 4 is shift register type for Hub75
+								LK.classList.remove("pin");     // not a pin select
+								LK.classList.add("panel");      // panels
+								LK.removeAttribute("onchange"); // not a pin select
+								addOption(LK, "1x1", 1);
+								addOption(LK, "2x1", 2);
+								if (!isS2()) {
+									addOption(LK, "3x1", 3);
+									addOption(LK, "4x1", 4);
+									addOption(LK, "2x2", 5);
+									if (isS3()) {
+										addOption(LK, "3x2", 6);
+										addOption(LK, "4x2", 8);
+										addOption(LK, "3x3", 9);
+										addOption(LK, "4x3", 12);
+										addOption(LK, "4x4", 16);
+									}
+								}
+							}
 							LK.min = p < 2 ? 32 : 1;
-							LK.max = p == 0 ? 128 : p == 1 ? 64 : p == 2 ? isS3()*6 + is32()*4 + isS2()*2 : 255;
+							LK.max = p == 0 ? 128 : p == 1 ? 64 : 255;
 							LK.step = p < 2 ? 32 : 1;
 							break;
 						case 'V': // virtual
-						case 'U': // usermod
 						case 'N': // network
 							LK.min = 0;
 							LK.max = 255;

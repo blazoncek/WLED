@@ -704,14 +704,14 @@ HUB75_I2S_CFG        BusHub75Matrix::mxconfig = HUB75_I2S_CFG();
 // functions to get/set bits in an array - based on functions created by @Brandon502 for GOL
 static bool getBitFromArray(const uint8_t* byteArray, size_t position) { // get bit value
   size_t byteIndex = position >> 3; // position / 8
-  size_t bitIndex = position & 7;  // position % 8
+  size_t bitIndex  = position & 7;  // position % 8
   uint8_t byteValue = byteArray[byteIndex];
   return (byteValue >> bitIndex) & 1;
 }
 
 static void setBitInArray(uint8_t* byteArray, size_t position, bool value) {  // set bit - with error handling for nullptr
     size_t byteIndex = position >> 3; // position / 8
-    size_t bitIndex = position & 7;  // position % 8
+    size_t bitIndex  = position & 7;  // position % 8
     if (value) byteArray[byteIndex] |=  (uint8_t)(1U << bitIndex);
     else       byteArray[byteIndex] &= ~(uint8_t)(1U << bitIndex);
 }
@@ -721,7 +721,7 @@ static size_t getBitArrayBytes(size_t num_bits) { // number of bytes needed for 
 }
 
 static void setBitArray(uint8_t* byteArray, size_t numBits, bool value) {  // set all bits to same value
-  size_t len =  getBitArrayBytes(numBits);
+  size_t len = getBitArrayBytes(numBits);
   memset(byteArray, value * 0xFF, len);
 }
 
@@ -755,33 +755,41 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 
   mxconfig.double_buff = false; // Use our own memory-optimised buffer rather than the driver's own double-buffer
   mxconfig.driver = (HUB75_I2S_CFG::shift_driver)bc.pins[3];
-  // mxconfig.driver = HUB75_I2S_CFG::ICN2038S;  // experimental - use specific shift register driver
-  // mxconfig.driver = HUB75_I2S_CFG::FM6124;    // try this driver in case you panel stays dark, or when colors look too pastel
   // mxconfig.latch_blanking = 3;
   mxconfig.i2sspeed = (HUB75_I2S_CFG::clk_speed)(bc.frequency * 1000); // correctly set in set.cpp (8000, 16000, 20000)
   // mxconfig.min_refresh_rate = 90;
   // mxconfig.min_refresh_rate = 120;
   mxconfig.clkphase = bc.reversed;
 
-  if (bc.type == TYPE_HUB75MATRIX_HS) {
-    mxconfig.mx_width = dim[0];
-    mxconfig.mx_height = dim[1];
-  } else if (bc.type == TYPE_HUB75MATRIX_QS) {
-    mxconfig.mx_width = dim[0] << 1;
-    mxconfig.mx_height = dim[1] >> 1;
+  uint8_t chainLength = bc.pins[2];
+  uint8_t _rows = 1 + (chainLength-1)/4, _cols = (chainLength % 5); // possible combinations: (simple) 1x1, 2x1, 3x1, 4x1, (complex) 2x2=5, 3x2, 4x2, 3x3, 4x3, 4x4
+  switch (chainLength) {
+    case 5:  _cols = 2; chainLength--; break;  // 4 panels in a 2x2 arrangement
+    case 9:  _rows = 3; // fallthrough;           9 panels in a 3x3 arrangement
+    case 6:  _cols = 3;                break;  // 6 panels in a 3x2 arrangement
+    case 16: _rows = 4; // fallthrough;          16 panels in a 4x4 arrangement
+    case 8:  _cols = 4;                break;  // 8 panels in a 4x2 arrangement
+    case 12: _cols = 4; _rows = 3;     break;  //12 panels in a 4x3 arrangement
+  }
+  mxconfig.chain_length = chainLength;  // allows chaining multiple panels
+
+  if (_type == TYPE_HUB75MATRIX_HS) {
+    mxconfig.mx_width = dim[0];   // panel width in pixels
+    mxconfig.mx_height = dim[1];  // panel height in pixels
+  } else if (_type == TYPE_HUB75MATRIX_QS) {
+    mxconfig.mx_width = dim[0] << 1;  // panel width in pixels for quarter-scan is double
+    mxconfig.mx_height = dim[1] >> 1; // panel height in pixels for quarter-scan is half
   } else {
     DEBUGBUS_PRINTLN("Unknown type");
     return;
   }
 
-  mxconfig.chain_length = max((uint8_t) 1, min(bc.pins[2], (uint8_t) 4)); // prevent bad data preventing boot due to low memory
-
 #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)// classic esp32, or esp32-s2: reduce bitdepth for large panels
+  mxconfig.setPixelColorDepthBits(8);
   if (mxconfig.mx_height >= 64) {
     if      (mxconfig.chain_length * mxconfig.mx_width > 192) mxconfig.setPixelColorDepthBits(3);
     else if (mxconfig.chain_length * mxconfig.mx_width > 64)  mxconfig.setPixelColorDepthBits(4);
-    else mxconfig.setPixelColorDepthBits(8);
-  } else mxconfig.setPixelColorDepthBits(8);
+  }
 #endif
 
   if (mxconfig.mx_height >= 64 && (mxconfig.chain_length > 1)) {
@@ -884,12 +892,13 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - getFreeHeapSize());
     return;
   }
-  // for quad-scan panels we create a virtual panel that maps to the physical one
-  // @dedehai made a nice enhancement: https://github.com/wled/WLED/pull/5026/files#diff-bd8d5165aa932055149d4e0db7571029b97f2a860f275ddd079bc591da35bf19R949-R958
-  // that will allow similar placement of panels like in 2D setup (I would prefer to reuse that logic/functionality here)
-  if (bc.type == TYPE_HUB75MATRIX_QS) {
-    virtualDisp = new VirtualMatrixPanel((*display), 1, 1, dim[0], dim[1]);
+  // for quad-scan panels or 2 or more rows we create a virtual panel that maps to the physical one
+  if (_rows > 1 || _type == TYPE_HUB75MATRIX_QS) {
+    PANEL_CHAIN_TYPE chainType = CHAIN_NONE; // default for quarter-scan panels that do not use chaining
+    if (_rows > 1 || _cols > 1) chainType = CHAIN_BOTTOM_LEFT_UP; // CHAIN_TOP_RIGHT_DOWN might be more natural fit
+    virtualDisp = new VirtualMatrixPanel((*display), _rows, _cols, dim[0], dim[1], chainType);
     virtualDisp->setRotation(0);
+    // adjust scan rate based on height
     switch (bc.pins[1]) {
       case 16:
         virtualDisp->setPhysicalPanelScanRate(FOUR_SCAN_16PX_HIGH);
@@ -1053,7 +1062,7 @@ size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
   if (pinArray) {
     pinArray[0] = mxconfig.mx_width;
     pinArray[1] = mxconfig.mx_height;
-    pinArray[2] = mxconfig.chain_length;
+    pinArray[2] = mxconfig.chain_length + (mxconfig.chain_length == 4 && virtualDisp != nullptr); // add one if 2x2 arrangement
     pinArray[3] = (uint8_t)mxconfig.driver;
   }
   return 4;
