@@ -7,6 +7,7 @@
 	<script src="common.js" async type="text/javascript"></script>
 	<script>
 		var maxB=1,maxD=1,maxA=1,maxV=0,maxM=4000,maxPB=2048,maxL=1664,maxCO=5,maxBT=10; //maximum bytes for LED allocation: 4kB for 8266, 32kB for 32
+		var rsvdPins = []; // must be global for pinDropdowns()
 		var customStarts=false,startsDirty=[];
 		function off(n)    { gN(n).value = -1;}
 		// these functions correspond to C macros found in const.h
@@ -17,7 +18,7 @@
 		function isD2P(t)  { return gT(t).t === "2P"; }             // is digital 2 pin type
 		function isDig(t)  { return isD1P(t) || isD2P(t); }         // is digital type
 		function isNet(t)  { return gT(t).t === "N"; }              // is network type
-		function isVir(t)  { return gT(t).t === "V" || isNet(t); }  // is virtual type
+		function isVir(t)  { return gT(t).t.charAt(0) === "V" || isNet(t); }  // is virtual type
 		function hasRGB(t) { return !!(gT(t).c & 0x01); }           // has RGB
 		function hasW(t)   { return !!(gT(t).c & 0x02); }           // has white channel
 		function hasCCT(t) { return !!(gT(t).c & 0x04); }           // is white CCT enabled
@@ -29,7 +30,7 @@
 		function S() {
 			getLoc();
 			loadJS(getURL('/settings/s.js?p=2'), false, ()=>{
-				d.ledTypes = [/*{i:22,c:1,t:"D",n:"WS2812"},{i:42,c:6,t:"AA",n:"PWM CCT"}*/]; // filled from GetV()
+				d.ledTypes = [/*{i:22,c:1,t:"D",n:"WS2812"},{i:42,c:6,t:"AA",n:"PWM CCT"},{i:127,c:6,t:"VVVV",n:"Usermod (virtual)",p:[21,22,23,24,25]}*/]; // filled from GetV()
 				d.um_p = [];
 				d.rsvd = [];
 				d.ro_gpio = [];
@@ -279,10 +280,8 @@
 // npm run build has trouble minimizing spaces inside string
 				var cn = `<div class="iST" draggable="true" ondragstart="hDS(event)" id="l${s}" style="cursor:grab;">
 <hr class="sml">
-<span id="n${s}">${++i}</span>:
-<select name="LT${s}" onchange="updateTypeDropdowns(true,this);UI(true)"></select><br>
-<div id="abl${s}">
-mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
+<span id="n${s}">${++i}</span>: <select name="LT${s}" onchange="updateTypeDropdowns(true,this);UI(true)"></select><br>
+<div id="abl${s}">mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
 <option value="55" selected>55mA (typ. 5V WS281x)</option>
 <option value="35">35mA (eco WS2812)</option>
 <option value="30">30mA (typ. 12V)</option>
@@ -302,24 +301,18 @@ mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
 <option value="4">BGR</option>
 <option value="5">GBR</option>
 </select></div>
-<div id="dig${s}w" style="display:none">Swap: <select name="WO${s}"><option value="0">None</option><option value="1">W & B</option><option value="2">W & G</option><option value="3">W & R</option><option data-opt="CCT" value="4">WW & CW</option></select></div>
-<div id="dig${s}l" style="display:none">Clock: <select name="SP${s}"><option value="0">Slowest</option><option value="1">Slow</option><option value="2">Normal</option><option value="3">Fast</option><option value="4">Fastest</option></select></div>
+<div id="dig${s}w">Swap: <select name="WO${s}"><option value="0">None</option><option value="1">W & B</option><option value="2">W & G</option><option value="3">W & R</option><option data-opt="CCT" value="4">WW & CW</option></select></div>
+<div id="dig${s}l">Clock: <select name="SP${s}"><option value="0">Slowest</option><option value="1">Slow</option><option value="2">Normal</option><option value="3">Fast</option><option value="4">Fastest</option></select></div>
 <div>
-<span id="psd${s}">Start:</span> <input type="number" name="LS${s}" id="ls${s}" class="l starts" min="0" max="8191" value="${lastEnd(i-1)}" oninput="startsDirty[${i}]=true;UI();" required />&nbsp;
-<div id="dig${s}c" style="display:inline">Length: <input type="number" name="LC${s}" class="l" min="1" max="${maxPB}" value="1" required oninput="UI()" /></div><br>
+<span id="psd${s}">Start: </span><input type="number" name="LS${s}" id="ls${s}" class="l starts" min="0" max="8191" value="${lastEnd(i-1)}" oninput="startsDirty[${i}]=true;UI();" required />&nbsp;
+<div id="dig${s}c">Length: <input type="number" name="LC${s}" class="l" min="1" max="${maxPB}" value="1" required oninput="UI()" /></div><br>
 </div>
-<div id="pins${s}" style="display:inline">
-<span id="p0d${s}">GPIO:</span><input type="number" name="G0${s}" required class="s"/>
-<span id="p1d${s}"></span><input type="number" name="G1${s}" class="s"/>
-<span id="p2d${s}"></span><input type="number" name="G2${s}" class="s"/>
-<span id="p3d${s}"></span><input type="number" name="G3${s}" class="s"/>
-<span id="p4d${s}"></span><input type="number" name="G4${s}" class="s"/>
-</div>
+<div id="pins${s}"><span id="p0d${s}"></span><input type="number" name="G0${s}" required class="s"/><span id="p1d${s}"></span><input type="number" name="G1${s}" class="s"/><span id="p2d${s}"></span><input type="number" name="G2${s}" class="s"/><span id="p3d${s}"></span><input type="number" name="G3${s}" class="s"/><span id="p4d${s}"></span><input type="number" name="G4${s}" class="s"/></div>
 <div id="net${s}h" class="hide">Host: <input type="text" name="HS${s}" maxlength="32" pattern="[a-zA-Z0-9_\\-]*" onchange="UI()"/>.local</div>
-<div id="dig${s}r" style="display:inline"><br><span id="rev${s}">Reversed</span>: <input type="checkbox" name="CV${s}"></div>
-<div id="dig${s}s" style="display:inline"><br>Skip first LEDs: <input type="number" name="SL${s}" min="0" max="255" value="0" oninput="UI()"></div>
-<div id="dig${s}f" style="display:inline"><br><span id="off${s}">Off Refresh</span>: <input id="rf${s}" type="checkbox" name="RF${s}"></div>
-<div id="dig${s}a" style="display:inline"><br>Auto-calculate W channel from RGB:<br><select name="AW${s}"><option value=0>None</option><option value=1>Brighter</option><option value=2>Accurate</option><option value=3>Dual</option><option value=4>Max</option></select>&nbsp;</div>
+<div id="dig${s}r"><span id="rev${s}"></span>: <input type="checkbox" name="CV${s}"></div>
+<div id="dig${s}s">Skip <input type="number" name="SL${s}" min="0" max="255" value="0" oninput="UI()"> LEDs</div>
+<div id="dig${s}f"><span id="off${s}"></span>: <input id="rf${s}" type="checkbox" name="RF${s}"></div>
+<div id="dig${s}a">Auto-calculate W channel from RGB:<br><select name="AW${s}"><option value=0>None</option><option value=1>Brighter</option><option value=2>Accurate</option><option value=3>Dual</option><option value=4>Max</option></select>&nbsp;</div>
 </div>`;
 				f.insertAdjacentHTML("beforeend", cn);
 				// fill led types (credit @netmindz)
@@ -330,6 +323,9 @@ mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
 					opt.text = type.n;
 					if (type.t != undefined && type.t != "") {
 						opt.setAttribute('data-type', type.t);
+					}
+					if (type.p != undefined && Array.isArray(type.p) && type.p.length > 0) {
+						opt.setAttribute('data-pins', type.p.join(','));
 					}
 					sel.appendChild(opt);			
 				}
@@ -566,7 +562,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 			// construct array of GPIO fields
 			let fields = ["IR","RL"]; // IR & relay
 			d.querySelectorAll('#btns input[type="number"]').forEach((e)=>{fields.push(e.name);}); // buttons
-			d.querySelectorAll('.iST input[name^=G]:not([data-type^=N]):required').forEach((e)=>{fields.push(e.name);}); // LED GPIO pins
+			d.querySelectorAll('.iST input[name^=G]:not(:is([data-type^=N],[data-type^=V])):required').forEach((e)=>{fields.push(e.name);}); // LED GPIO pins
 			// iterate through all form's pin fields and replace with dropdowns
 			for (let i of d.Sf.elements) {
 				if (i.type === "number" && fields.includes(i.name)) { //select all pin select elements
@@ -584,35 +580,31 @@ Swap: <select id="xw${s}" name="XW${s}">
 					}
 				}
 			}
-			// replace select with input if bus changed to network type
-			d.querySelectorAll('.iST select[name^=G][data-type^=N]').forEach((e)=>{
-				let inp = cE('input');
-				inp.classList.add("s");
-				inp.type = "number";
-				inp.value = ""; //e.value;
-				// copy the existing select element's attributes to the new input element, except listed ones
-				for (const att of e.attributes) {
-					if (!["type","class","value","data-val","onchange"].includes(att.name)) {
-						inp.setAttribute(att.name, att.value);
+			// update select options to reflect current usage and bus unchangeable pins
+			d.querySelectorAll("select.pin").forEach((e)=>{
+				pinUpd(e); // update current select across all selects
+				// now disable options that are reserved/unchangeable by other buses
+				e.querySelectorAll("option").forEach((i)=>{
+					if (rsvdPins.includes(parseInt(i.value))) {
+						i.disabled = true;
+						i.text = i.value + " reserved";
+					} else if (i.text.endsWith(" reserved")) {
+						i.disabled = false;
+						i.text = i.value;
 					}
-				}
-				inp.min = 0;    // overwrite min/max for IP address input
-				inp.max = 255;  // overwrite min/max for IP address input
-				// finally, replace the old select element with the new input element
-				e.parentElement.replaceChild(inp, e);
+				});
 			});
-			// update select options
-			d.querySelectorAll("select.pin").forEach((e)=>{pinUpd(e);});
 		}
 		function pinUpd(e) {
 			// update changed select options across all selects
-			let oldV = parseInt(e.dataset.val);
-			e.dataset.val = e.value;
-			let txt = e.name;
-			let selects = d.querySelectorAll("select.pin");
-			for (let sel of selects) {
-				if (sel == e) continue
-				Array.from(sel.options).forEach((i)=>{
+			let oldV = parseInt(e.dataset.val); // old selected value
+			e.dataset.val = e.value;            // update to new selected value
+			let txt = e.name;                   // select name for labeling options
+			// now update all other selects to reflect the change/value from current select
+			d.querySelectorAll("select.pin").forEach((sel)=>{
+				if (sel == e) return; // skip the changed select
+				sel.querySelectorAll("option").forEach((i)=>{
+					// skip options that are not relevant (not our old or new value)
 					if (!(i.value==oldV || i.value==e.value)) return;
 					if (i.value == -1) {
 						i.text = "unused";
@@ -628,7 +620,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 					}
 					if (d.ro_gpio.includes(parseInt(i.value))) i.text += " (R/O)";
 				});
-			}
+			});
 		}
 		// https://stackoverflow.com/questions/39729741/javascript-change-input-text-to-select-option
 		function addDropdown(inp) {
@@ -640,7 +632,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				for (const att of inp.attributes) {
 					// type and value don't apply, so skip them
 					// ** you might also want to skip style, or others -- modify as needed **
-					if (!['type','value','class','style','min','max'].includes(att.name)) {
+					if (!['type','value','class','style'].includes(att.name)) {
 						sel.setAttribute(att.name, att.value);
 					}
 				}
@@ -669,11 +661,16 @@ Swap: <select id="xw${s}" name="XW${s}">
 			const abl = d.Sf.ABL.checked;
 			let LTs = d.querySelectorAll(".iST select[name^=LT]");
 			let digitalB = 0, analogB = 0, twopinB = 0, virtB = 0;
+			let uniqueTypes = []
+			rsvdPins = [];
+			// function to set pin labels and show/hide secondary pins
 			let setPinConfig = (n,t) => {
 				let p0d = "GPIO:";
-				let p1d = "";//, p2d = "";
+				let p1d = "", p2d = "", p3d = "";
 				let off = "Off Refresh";
-				switch (gT(t).t.charAt(0)) {
+				let rev = "Reversed";
+				const type = gT(t).t.charAt(0);
+				switch (type) {
 					case '2': // 2 pin digital
 						p1d = "Clock "+p0d;
 						// fallthrough
@@ -683,37 +680,46 @@ Swap: <select id="xw${s}" name="XW${s}">
 					case 'A': // PWM analog
 						if (numPins(t) > 1) p0d = "GPIOs:";
 						off = "Dithering";
+					case '': // On/Off
+						rev = "Inverted";
 						break;
 					case 'N': // network
 						p0d = "IP address:";
+						p1d = p2d = p3d = ".";
 						break;
 					case 'V': // virtual/non-GPIO based
 						p0d = "Config:";
 						break;
 				}
-				gId("p0d"+n).innerText = p0d;
+				gId("p0d"+n).innerText = p0d + " ";
 				gId("p1d"+n).innerText = p1d;
-				//gId("p2d"+n).innerText = p2d;
+				gId("p2d"+n).innerText = p2d;
+				gId("p3d"+n).innerText = p3d;
 				gId("off"+n).innerText = off;
+				gId("rev"+n).innerText = rev;
 				// secondary pins show/hide (type string length is equivalent to number of pins used; except for network and on/off)
 				let pins = Math.max(gT(t).t.length,1) + 3*isNet(t); // fixes network pins to 4
 				// add output type data-type to pin selects
 				for (let p=0; p<5; p++) {
 					var LK = gN("G"+p+n);
 					if (!LK) continue; // something is wrong
-					const type = gT(t).t.charAt(0);
-					LK.setAttribute("data-type", type); // set data-type for pin selects
-					if (type == 'N') {
+					if (type.length > 0 && "NV".includes(type)) {
+						// replace pin select with input
+						if (LK.tagName === "SELECT" && LK.classList.contains("pin")) {
+							let inp = cE('input');
+							inp.type = "number";
+							inp.classList.add("s");
+							inp.name = "G"+p+n;
+							LK.parentElement.replaceChild(inp, LK);
+							LK = inp;
+						}
 						LK.min = 0;
 						LK.max = 255;
-					//} else {
-					//	LK.removeAttribute("min");
-					//	LK.removeAttribute("max");
-					//	LK.min = -1;
-					//	LK.max = d.max_gpio;
+						LK.step = 1;
 					}
-					if (p==0) continue; // skip first pin
+					LK.setAttribute("data-type", type); // set data-type for pin selects
 					const used = LK.required = (p < pins);
+					if (p==0) continue; // 1st input is always required and shown
 					LK.style.display = used ? "inline" : "none";
 					if (!used) LK.value="";
 				}
@@ -725,6 +731,9 @@ Swap: <select id="xw${s}" name="XW${s}">
 				if (isPWM(t)) analogB += numPins(t);
 				if (isD2P(t)) twopinB++;
 				if (isVir(t)) virtB++;
+				// types with unchangeable pins are unique (there can only be one bus of that type)
+				let d = s[s.selectedIndex].dataset;
+				if (d.pins) uniqueTypes.push(d.type)
 			});
 			// now enable/disable type options according to limits in dropdowns
 			if (sel) {
@@ -742,6 +751,10 @@ Swap: <select id="xw${s}" name="XW${s}">
 				// disallow adding more of a type that has reached its limit
 				if (digitalB >= maxDB && !isD1P(t)) disable('option[data-type="D"]');
 				if (twopinB  >= 2     && !isD2P(t)) disable('option[data-type="2P"]');
+				for (const ut of uniqueTypes) {
+					if (ut === s[s.selectedIndex].dataset.type) continue; // skip own type
+					disable(`option[data-type="${ut}"]`); // disable already used unique type
+				}
 				// determine available analog pins
 				disable(`option[data-type^="${'A'.repeat(maxA - analogB + (isPWM(t) ? numPins(t) : 0) + 1)}"]`);
 				// update UI elements
@@ -760,15 +773,22 @@ Swap: <select id="xw${s}" name="XW${s}">
 				gId("dig"+n+"w").querySelector("[data-opt=CCT]").disabled = !hasCCT(t);     // disable WW/CW swapping	
 				if (!(isDig(t) && hasW(t))) gN("WO"+n).value = 0;                           // reset swapping
 				gId("dig"+n+"c").style.display = (isAna(t)) ? "none":"inline";              // hide count for analog
-				gId("dig"+n+"r").style.display = (isVir(t)) ? "none":"inline";              // hide reversed for virtual
-				gId("dig"+n+"s").style.display = (isVir(t) || isAna(t)) ? "none":"inline";  // hide skip 1st for virtual & analog
-				gId("dig"+n+"f").style.display = (isDig(t) || (isPWM(t) && maxL>2048)) ? "inline":"none"; // hide refresh (PWM hijacks reffresh for dithering on ESP32)
-				gId("dig"+n+"a").style.display = (hasW(t)) ? "inline":"none";               // auto calculate white
+				gId("dig"+n+"r").style.display = (isVir(t)) ? "none":"block";               // hide reversed for virtual
+				gId("dig"+n+"s").style.display = (isVir(t) || isAna(t)) ? "none":"block";   // hide skip 1st for virtual & analog
+				gId("dig"+n+"f").style.display = (isDig(t) || (isPWM(t) && maxL>2048)) ? "block":"none"; // hide refresh (PWM hijacks reffresh for dithering on ESP32)
+				gId("dig"+n+"a").style.display = (hasW(t)) ? "block":"none";                // auto calculate white
 				gId("dig"+n+"l").style.display = (isD2P(t) || isPWM(t)) ? "inline":"none";  // bus clock speed / PWM speed (relative) (not On/Off)
-				gId("rev"+n).innerHTML = isAna(t) ? "Inverted output":"Reversed";           // change reverse text for analog else (rotated 180°)
 				gId("net"+n+"h").style.display = isNet(t) && !is8266() ? "block" : "none";  // show host field for network types except on ESP8266
 				if (!isNet(t) || is8266()) gN("HS"+n).value = "";                           // cleart host field if not network type or ESP8266
+				// record all unchangeable GPIOs (may produce duplicates)
+				const pins = s[s.selectedIndex].dataset.pins;
+				if (pins) {
+					let pns = pins.split(',').map(x=>parseInt(x));
+					rsvdPins = rsvdPins.concat(pns);
+				}
 			});
+			rsvdPins = [...new Set(rsvdPins)]; // make unique
+			// rebuild GPIO dropdowns
 			pinDropdowns();
 			// prevent dragging input fileds but instead allow selecting content
 			// the following does not work in Firefox, see
@@ -813,7 +833,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 		<div id="mLC" ondragover="hDO(event)" ondrop="hDrop(event)">LED outputs:</div>
 		<hr class="sml">
 		<button type="button" id="+" onclick="addLEDs(1,false);updateTypeDropdowns()">+</button>
-		<button type="button" id="-" onclick="addLEDs(-1,false)">-</button><br>
+		<button type="button" id="-" onclick="addLEDs(-1,false);updateTypeDropdowns()">-</button><br>
 		LED memory usage: <span id="m0">0</span> / <span id="m1">?</span> B<br>
 		<div id="dbar" style="display:inline-block; width: 100px; height: 10px; border-radius: 20px;"></div><br>
 		<div id="ledwarning" class="warn" style="display: none;">

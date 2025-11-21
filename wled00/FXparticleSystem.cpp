@@ -933,7 +933,7 @@ void ParticleSystem2D::handleCollisions() {
 // handle a collision if close proximity is detected, i.e. dx and/or dy smaller than 2*PS_P_RADIUS
 // takes two pointers to the particles to collide and the particle hardness (softer means more energy lost in collision, 255 means full hard)
 void ParticleSystem2D::collideParticles(PSparticle &particle1, PSparticle &particle2, int32_t dx, int32_t dy, const uint32_t collDistSq) {
-  int32_t distanceSquared = dx * dx + dy * dy;
+  unsigned distanceSquared = dx * dx + dy * dy;
   // Calculate relative velocity note: could zero check but that does not improve overall speed but deminish it as that is rarely the case and pushing is still required
   int32_t relativeVx = (int32_t)particle2.vx - (int32_t)particle1.vx;
   int32_t relativeVy = (int32_t)particle2.vy - (int32_t)particle1.vy;
