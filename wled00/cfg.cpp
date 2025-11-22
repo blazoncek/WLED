@@ -224,14 +224,14 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     int s = 0;  // bus iterator
     for (JsonObject elm : ins) {
       if (s >= WLED_MAX_BUSSES) break; // only counts physical buses
-      uint8_t pins[5] = {255, 255, 255, 255, 255};
+      uint8_t pins[OUTPUT_MAX_PINS] = {255, 255, 255, 255, 255};
       JsonArray pinArr = elm["pin"];
       if (pinArr.size() == 0) continue;
       //pins[0] = pinArr[0];
       unsigned i = 0;
       for (int p : pinArr) {
         pins[i++] = p;
-        if (i>4) break;
+        if (i >= OUTPUT_MAX_PINS) break; // max pins reached ignore the rest
       }
       uint16_t length = elm["len"] | 1;
       uint8_t colorOrder = (int)elm[F("order")]; // contains white channel swap option in upper nibble
@@ -274,7 +274,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 
     unsigned pinsIndex = 0;
     for (unsigned i = 0; i < WLED_MAX_BUSSES; i++) {
-      uint8_t defPin[OUTPUT_MAX_PINS];
+      std::vector<uint8_t> defPin;
       // if we have less types than requested outputs and they do not align, use last known type to set current type
       unsigned dataType = defDataTypes[(i < defNumTypes) ? i : defNumTypes -1];
       unsigned busPins = Bus::getNumberOfPins(dataType);
@@ -283,9 +283,8 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       if (pinsIndex + busPins > defNumPins) break;
 
       // Assign all pins first so we can check for conflicts on this bus
-      for (unsigned j = 0; j < busPins && j < OUTPUT_MAX_PINS; j++) defPin[j] = defDataPins[pinsIndex + j];
-
-      for (unsigned j = 0; j < busPins && j < OUTPUT_MAX_PINS; j++) {
+      for (unsigned j = 0; j < busPins; j++) defPin.push_back(defDataPins[pinsIndex + j]);
+      for (unsigned j = 0; j < busPins; j++) {
         bool validPin = true;
         // When booting without config (1st boot) we need to make sure GPIOs defined for LED output don't clash with hardware
         // i.e. DEBUG (GPIO1), DMX (2), SPI RAM/FLASH (16&17 on ESP32-WROVER/PICO), read/only pins, etc.
@@ -335,7 +334,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       unsigned start = 0;
       // analog always has length 1
       if (Bus::isPWM(dataType) || Bus::isOnOff(dataType)) count = 1;
-      busConfigs.emplace_back(dataType, defPin, start, count, DEFAULT_LED_COLOR_ORDER, false, 0, RGBW_MODE_MANUAL_ONLY, 0);
+      busConfigs.emplace_back(dataType, static_cast<uint8_t*>(&defPin[0]), start, count, DEFAULT_LED_COLOR_ORDER, false, 0, RGBW_MODE_MANUAL_ONLY, 0);
       doInit |= INIT_BUS;  // finalization done in beginStrip()
     }
   }
@@ -942,9 +941,9 @@ void serializeConfig() {
     ins["start"]   = bus->getStart();
     ins["len"]     = bus->getLength();
     JsonArray ins_pin = ins.createNestedArray("pin");
-    uint8_t pins[5];
-    uint8_t nPins = bus->getPins(pins);
-    for (int i = 0; i < nPins; i++) ins_pin.add(pins[i]);
+    uint8_t nPins  = bus->getPins();
+    uint8_t pins[nPins]; bus->getPins(pins);
+    for (int i = 0; i < nPins; i++) ins_pin.add(pins[i]); // may add more than OUTPUT_MAX_PINS but that's ok (ignored on load), needed for UM pin checking
     ins[F("order")]  = bus->getColorOrder();
     ins["rev"]       = bus->isReversed();
     ins[F("skip")]   = bus->skippedLeds();

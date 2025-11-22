@@ -1064,8 +1064,10 @@ size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
     pinArray[1] = mxconfig.mx_height;
     pinArray[2] = mxconfig.chain_length + (mxconfig.chain_length == 4 && virtualDisp != nullptr); // add one if 2x2 arrangement
     pinArray[3] = (uint8_t)mxconfig.driver;
+    pinArray[4] = 255; // reserved
+    memcpy(&pinArray[5], &mxconfig.gpio, sizeof(mxconfig.gpio));
   }
-  return 4;
+  return 5 + sizeof(mxconfig.gpio);
 }
 
 std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
