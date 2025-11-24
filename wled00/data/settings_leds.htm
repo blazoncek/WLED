@@ -140,10 +140,9 @@
 			gId('m1').innerHTML = maxM;
 		}
 		//returns mem usage
-		function getMem(len, t, n) {
+		function getMem(t, n, len) {
 			if (isAna(t)) return 5;	// analog
-			len += parseInt(gN("SL"+n).value); // skipped LEDs are allocated too
-			let dbl = 0;
+			let dbl = len * (gN("MS").checked ? 4 : 0); // add segment buffer per output if enabled
 			let ch = 3*hasRGB(t) + hasW(t) + hasCCT(t);
 			let mul = 1;
 			if (isDig(t)) {
@@ -159,8 +158,8 @@
 				} else if ((parallelI2S && toNum(n) < 8) || (toNum(n) == 0 && is32())) { // I2S uses extra DMA buffer
 					dbl = len * ch * 3; // DMA buffer for parallel I2S (TODO: only the bus with largst LED count should be used)
 				}
+				len += parseInt(gN("SL"+n).value); // skipped LEDs are allocated too
 			}
-			dbl += len * (gN("MS").checked ? 4 : 0); // add segment buffer per output if enabled
 			return len * ch * mul + dbl;
 		}
 
@@ -204,10 +203,11 @@
 			d.querySelectorAll("#mLC input[name^=LC]").forEach((LC,i)=>{
 				let n = LC.name.substring(2,3);         // bus number (0-Z)
 				let t = parseInt(gN("LT"+n).value);     // LED type SELECT
+				LC.max = isAna(t) ? 1 : (isDig(t) ? maxPB : maxL); // set max value
 				// update LED count for Hub75 panels
 				if (gT(t).t.charAt(0) === 'H') LC.value = parseInt(gN("G0"+n).value) * parseInt(gN("G1"+n).value) * parseInt(gN("G2"+n).value);
 				let c = parseInt(LC.value,10);          // get LED count
-				if (c > 0) memu += getMem(c, t, n);     // calc memory (depends on LED count)
+				if (c > 0) memu += getMem(t, n, c);     // calc memory (depends on LED count)
 				if (!customStarts || !startsDirty[toNum(n)]) gN("LS"+n).value = sLC; // update start value
 				gN("LS"+n).disabled = !customStarts;    // enable/disable field editing
 				if (c) {
@@ -850,7 +850,6 @@ Swap: <select id="xw${s}" name="XW${s}">
 				gId("dig"+n+"l").style.display = (isD2P(t) || isPWM(t) || isHub75(t)) ? "inline":"none";  // bus clock speed / PWM speed (relative) (not On/Off)
 				gId("net"+n+"h").style.display = isNet(t) && !is8266() ? "block" : "none";  // show host field for network types except on ESP8266
 				if (!isNet(t) || is8266()) gN("HS"+n).value = "";                           // cleart host field if not network type or ESP8266
-				gN("LC"+n).max = isAna(t) ? 1 : (isDig(t) ? maxPB : 16384);                 // set max value for LED count field
 				// record all unchangeable GPIOs (may produce duplicates)
 				const pins = s[s.selectedIndex].dataset.pins;
 				if (pins) {
