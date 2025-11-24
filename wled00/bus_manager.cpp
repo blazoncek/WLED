@@ -761,22 +761,16 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   // mxconfig.min_refresh_rate = 120;
   mxconfig.clkphase = bc.reversed;
 
-  uint8_t chainLength = bc.pins[2];
+  uint8_t chainLength = constrain(bc.pins[2], 1, 16); // number of chained panels
   // pre-calcualte rows and columns based on chain length
-  uint8_t _rows = 1 + (chainLength-1)/4, _cols = (chainLength % 5);
+  uint8_t _rows, _cols;
   // possible combinations: (simple, horizontal) 1x1, 2x1, 3x1, 4x1, (complex & vertical) 2x2=5, 3x2, 4x2, 3x3, 4x3, 1x2=13, 1x3=14, 1x4=15, 4x4
-  switch (chainLength) {
-    case 5:  _cols = 2; chainLength--; break;  // 4 panels in a 2x2 arrangement
-    case 9:  _rows = 3; // fallthrough;           9 panels in a 3x3 arrangement
-    case 6:  _cols = 3;                break;  // 6 panels in a 3x2 arrangement
-    case 16: _rows = 4; // fallthrough;          16 panels in a 4x4 arrangement
-    case 8:  _cols = 4;                break;  // 8 panels in a 4x2 arrangement
-    case 12: _cols = 4; _rows = 3;     break;  //12 panels in a 4x3 arrangement
-    case 13: // fallthrough
-    case 14: // fallthrough
-    case 15: _rows = (chainLength -= 11); _cols = 1; break; // 1x2, 1x3, 1x4 arrangements
-  }
-  mxconfig.chain_length = chainLength;  // allows chaining multiple panels
+  if      (chainLength <   5) { _rows = 1; _cols = chainLength; }       // 1 to 4 panels in a single row
+  else if (chainLength <   9) { _rows = 2; _cols = chainLength / 2; }   // 7 does not exist and 5 is rounded down for 2(x2)
+  else if (chainLength <  13) { _rows = 3; _cols = chainLength / 3; }   // 10 & 11 do not exist
+  else if (chainLength <  16) { _rows = chainLength - 11; _cols = 1; }  // hack for 1x2, 1x3, 1x4 vertical panels
+  else if (chainLength >= 16) { _rows = 4; _cols = 4; }
+  mxconfig.chain_length = _rows * _cols;  // allows chaining multiple panels
 
   if (_type == TYPE_HUB75MATRIX_HS) {
     mxconfig.mx_width = dim[0];   // panel width in pixels
@@ -789,6 +783,21 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     return;
   }
 
+  // check for too many pixels & reduce panel count if necessary
+  // ESP32: MAX_LEDS (8192) will consume 32k for LED buffer + 32k for (1) segment buffer + 8k for dirty bits = 72k RAM!!!
+  // S3: MAX_LEDS (16384) will consume 64k for LED buffer + 64k for (1) segment buffer + 16k for dirty bits = 144k RAM!!!
+  // S2: MAX_LEDS (2048) will consume 8k for LED buffer + 8k for (1) segment buffer + 1k for dirty bits = 17k RAM!!!
+  // all will also need driver's internal buffers (12-bit, 8-bit, 4-bit or 3-bit depth)
+  while (mxconfig.mx_height * mxconfig.mx_width * mxconfig.chain_length > MAX_LEDS) {
+    mxconfig.chain_length--;
+    if (mxconfig.chain_length == 10 || mxconfig.chain_length == 11) mxconfig.chain_length = 9; // skip non-existing 10 & 11
+    if (mxconfig.chain_length == 7) mxconfig.chain_length--;
+  }
+  if (mxconfig.chain_length == 0) {
+    DEBUGBUS_PRINTLN("No panels to drive (too large panel?)");
+    return;
+  }
+
 #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)// classic esp32, or esp32-s2: reduce bitdepth for large panels
   mxconfig.setPixelColorDepthBits(8);
   if (mxconfig.mx_height >= 64) {
@@ -796,11 +805,6 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     else if (mxconfig.chain_length * mxconfig.mx_width > 64)  mxconfig.setPixelColorDepthBits(4);
   }
 #endif
-
-  if (mxconfig.mx_height >= 64 && (mxconfig.chain_length > 1)) {
-    DEBUGBUS_PRINTLN("WARNING, only single panel can be used of 64 pixel boards due to memory");
-    mxconfig.chain_length = 1;
-  }
 
 //  HUB75_I2S_CFG::i2s_pins _pins={R1_PIN, G1_PIN, B1_PIN, R2_PIN, G2_PIN, B2_PIN, A_PIN, B_PIN, C_PIN, D_PIN, E_PIN, LAT_PIN, OE_PIN, CLK_PIN};
 
