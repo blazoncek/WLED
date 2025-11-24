@@ -762,7 +762,9 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   mxconfig.clkphase = bc.reversed;
 
   uint8_t chainLength = bc.pins[2];
-  uint8_t _rows = 1 + (chainLength-1)/4, _cols = (chainLength % 5); // possible combinations: (simple) 1x1, 2x1, 3x1, 4x1, (complex) 2x2=5, 3x2, 4x2, 3x3, 4x3, 4x4
+  // pre-calcualte rows and columns based on chain length
+  uint8_t _rows = 1 + (chainLength-1)/4, _cols = (chainLength % 5);
+  // possible combinations: (simple, horizontal) 1x1, 2x1, 3x1, 4x1, (complex & vertical) 2x2=5, 3x2, 4x2, 3x3, 4x3, 1x2=13, 1x3=14, 1x4=15, 4x4
   switch (chainLength) {
     case 5:  _cols = 2; chainLength--; break;  // 4 panels in a 2x2 arrangement
     case 9:  _rows = 3; // fallthrough;           9 panels in a 3x3 arrangement
@@ -770,6 +772,9 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     case 16: _rows = 4; // fallthrough;          16 panels in a 4x4 arrangement
     case 8:  _cols = 4;                break;  // 8 panels in a 4x2 arrangement
     case 12: _cols = 4; _rows = 3;     break;  //12 panels in a 4x3 arrangement
+    case 13: // fallthrough
+    case 14: // fallthrough
+    case 15: _rows = (chainLength -= 11); _cols = 1; break; // 1x2, 1x3, 1x4 arrangements
   }
   mxconfig.chain_length = chainLength;  // allows chaining multiple panels
 
@@ -1060,9 +1065,16 @@ uint16_t BusHub75Matrix::getFrequency() const {
 
 size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
   if (pinArray) {
+    uint8_t chainLength = mxconfig.chain_length;
+    // adjust for hack used in UI
+    if (virtualDisp != nullptr) {
+      // using complex display arrangement (vertical or multiple rows/columns)
+      if (mxconfig.chain_length <= 4) chainLength += 11;  // 1x2, 1x3, 1x4 arrangements
+      if (mxconfig.chain_length == 4 && virtualDisp->width() == virtualDisp->height()) chainLength = 5; // 2x2 arrangement
+    }
     pinArray[0] = mxconfig.mx_width;
     pinArray[1] = mxconfig.mx_height;
-    pinArray[2] = mxconfig.chain_length + (mxconfig.chain_length == 4 && virtualDisp != nullptr); // add one if 2x2 arrangement
+    pinArray[2] = chainLength;
     pinArray[3] = (uint8_t)mxconfig.driver;
     pinArray[4] = 255; // reserved
     memcpy(&pinArray[5], &mxconfig.gpio, sizeof(mxconfig.gpio));

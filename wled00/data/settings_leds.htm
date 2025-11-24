@@ -757,9 +757,12 @@ Swap: <select id="xw${s}" name="XW${s}">
 								LK.classList.add("panel");      // panels
 								addOption(LK, "1x1", 1);
 								addOption(LK, "2x1", 2);
+								addOption(LK, "2x1 V", 13);     // vertical (11 + 2)
 								if (!isS2()) {
 									addOption(LK, "3x1", 3);
+									addOption(LK, "3x1 V", 14); // vertical (11 + 3)
 									addOption(LK, "4x1", 4);
+									addOption(LK, "4x1 V", 15); // vertical (11 + 4)
 									addOption(LK, "2x2", 5);
 									if (isS3()) {
 										addOption(LK, "3x2", 6);
