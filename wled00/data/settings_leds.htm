@@ -139,11 +139,9 @@
 			gId('m1').innerHTML = maxM;
 		}
 		//returns mem usage
-		function getMem(t, n) {
+		function getMem(t, n, len) {
 			if (isAna(t)) return 5;	// analog
-			let len = parseInt(gN("LC"+n).value);
-			len += parseInt(gN("SL"+n).value); // skipped LEDs are allocated too
-			let dbl = 0;
+			let dbl = len * (gN("MS").checked ? 4 : 0); // add segment buffer per output if enabled
 			let ch = 3*hasRGB(t) + hasW(t) + hasCCT(t);
 			let mul = 1;
 			if (isDig(t)) {
@@ -151,16 +149,18 @@
 				if (is8266() && gN("G0"+n).value == 3) { //8266 DMA uses 5x the mem
 					mul = 5;
 				}
-				let parallelI2S = d.Sf.PR.checked && (is32() || isS2() || isS3()) && !isD2P(t);
-				if (isC3() || (isS3() && !parallelI2S)) {
-					mul = 2; // ESP32 RMT uses double buffer
-				} else if ((is32() || isS2() || isS3()) && toNum(n) > (parallelI2S ? 7 : 0)) {
-					mul = 2; // ESP32 RMT uses double buffer
-				} else if ((parallelI2S && toNum(n) < 8) || (toNum(n) == 0 && is32())) { // I2S uses extra DMA buffer
-					dbl = len * ch * 3; // DMA buffer for parallel I2S (TODO: only the bus with largst LED count should be used)
+				if (!is8266()) { // ESP32, S2, S3, C3
+					let parallelI2S = d.Sf.PR.checked && (is32() || isS2() || isS3()) && !isD2P(t);
+					if (isC3() || (isS3() && !parallelI2S)) {
+						mul = 2; // ESP32 RMT uses double buffer
+					} else if ((is32() || isS2() || isS3()) && toNum(n) > (parallelI2S ? 7 : 0)) {
+						mul = 2; // ESP32 RMT uses double buffer
+					} else if ((parallelI2S && toNum(n) < 8) || (toNum(n) == 0 && is32())) { // I2S uses extra DMA buffer
+						dbl += len * ch * 3; // DMA buffer for parallel I2S (TODO: only the bus with largest LED count should be used)
+					}
 				}
+				len += parseInt(gN("SL"+n).value); // skipped LEDs are allocated too
 			}
-			dbl += len * (gN("MS").checked ? 4 : 0); // add segment buffer per output if enabled
 			return len * ch * mul + dbl;
 		}
 
@@ -176,7 +176,6 @@
 			LTs.forEach((s,i)=>{
 				var n = s.name.substring(2,3); // bus number (0-Z)
 				var t = parseInt(s.value);
-				memu += getMem(t, n);  // calc memory
 				gRGBW |= hasW(t);      // RGBW checkbox
 				if (isD1P(t)) {
 					dC++;              // count digital buses
@@ -205,8 +204,9 @@
 			d.querySelectorAll("#mLC input[name^=LC]").forEach((LC,i)=>{
 				let n = LC.name.substring(2,3);         // bus number (0-Z)
 				let t = parseInt(gN("LT"+n).value);     // LED type SELECT
-				LC.max = isAna(t) ? 1 : (isDig(t) ? maxPB : 16384); // set max value
+				LC.max = isAna(t) ? 1 : (isDig(t) ? maxPB : maxL); // set max value
 				let c = parseInt(LC.value,10);          // get LED count
+				memu += getMem(t, n, c);                // calc memory
 				if (!customStarts || !startsDirty[toNum(n)]) gId("ls"+n).value = sLC; // update start value
 				gId("ls"+n).disabled = !customStarts;   // enable/disable field editing
 				if (c) {
