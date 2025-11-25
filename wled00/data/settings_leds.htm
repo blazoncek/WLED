@@ -697,6 +697,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 						p2d = " # Panels:";
 						p3d = " Shift reg.:"
 						rev = "Phase";
+						off = "1/4 scan"
 						break;
 				}
 				gId("p0d"+n).innerText = p0d + " ";
@@ -706,7 +707,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				gId("off"+n).innerText = off;
 				gId("rev"+n).innerText = rev;
 				// secondary pins show/hide (type string length is equivalent to number of pins used; except for network and on/off)
-				let pins = Math.max(gT(t).t.length,1) + 3*isNet(t); // fixes network pins to 4
+				let pins = Math.max(gT(t).t.length,1) + 3*(isNet(t) || isHub75(t)); // fixes network/Hub75 "pins" to 4
 				// add output type data-type to pin selects
 				for (let p=0; p<5; p++) {
 					var LK = gN("G"+p+n);

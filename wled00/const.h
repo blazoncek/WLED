@@ -361,8 +361,11 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #define TYPE_2PIN_MAX            63
 //Digital types (Hub75 matrix) (64-71)
 #define TYPE_HUB75MATRIX_MIN     64
-#define TYPE_HUB75MATRIX_HS      64
-#define TYPE_HUB75MATRIX_QS      65
+#define TYPE_HUB75MATRIX_PORTAL  64           //Adafruit Matrix Portal S3 board (https://www.adafruit.com/product/5778)
+#define TYPE_HUB75MATRIX_MOONHUB 65           //MoonHub75 board
+#define TYPE_HUB75MATRIX_FORUM   66           //ESP32 Forum/SmartMatrix board (https://github.com/rorosaurus/esp32-hub75-driver)
+#define TYPE_HUB75MATRIX_S3      67           //plain S3 Hub75 matrix board
+#define TYPE_HUB75MATRIX_TRINITY 68           //Trinity/ElectroDragon ESP32 board (https://esp32trinity.com/, https://www.electrodragon.com/product/rgb-matrix-panel-drive-interface-board-for-esp32-dma/)
 #define TYPE_HUB75MATRIX_MAX     71
 //Network types (master broadcast) (80-95)
 #define TYPE_VIRTUAL_MIN         80

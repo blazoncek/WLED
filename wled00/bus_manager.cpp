@@ -725,8 +725,35 @@ static void setBitArray(uint8_t* byteArray, size_t numBits, bool value) {  // se
   memset(byteArray, value * 0xFF, len);
 }
 
+// known controller board pinouts
+static const uint8_t * const getHub75Pins(uint8_t type) {
+  switch (type) {
+    default:
+    case TYPE_HUB75MATRIX_FORUM: {
+      static uint8_t a[] PROGMEM = { 2, 15,  4, 16, 27, 17,  5, 18, 19, 21, 12, 26, 25, 22 };
+      return a;
+    }
+    case TYPE_HUB75MATRIX_PORTAL: {
+      static uint8_t a[] PROGMEM = { 42, 41, 40, 38, 39, 37, 45, 36, 48, 35, 21, 47, 14,  2 };
+      return a;
+    }
+    case TYPE_HUB75MATRIX_MOONHUB: {
+      static uint8_t a[] PROGMEM = {  1,  5,  6,  7, 13,  9, 16, 48, 47, 21, 38,  8,  4, 18 };
+      return a;
+    }
+    case TYPE_HUB75MATRIX_TRINITY: {
+      static uint8_t a[] PROGMEM = { 25, 26, 27, 14, 12, 13, 23, 19,  5, 17, 18,  4, 15, 16 };
+      return a;
+    }
+    case TYPE_HUB75MATRIX_S3: {
+      static uint8_t a[] PROGMEM = {  1,  2, 42, 41, 40, 39, 45, 48, 47, 21, 38,  8,  3, 18 };
+      return a;
+    }
+  }
+}
+
 BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
-: Bus(bc.type, bc.start, bc.autoWhite)
+: Bus(bc.type, bc.start, bc.autoWhite, bc.count, false, bc.refreshReq)
 , _panelWidth(0)
 , _ledBuffer(nullptr)
 , _ledsDirty(nullptr) {
@@ -772,15 +799,11 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   else if (chainLength >= 16) { _rows = 4; _cols = 4; }
   mxconfig.chain_length = _rows * _cols;  // allows chaining multiple panels
 
-  if (_type == TYPE_HUB75MATRIX_HS) {
-    mxconfig.mx_width = dim[0];   // panel width in pixels
-    mxconfig.mx_height = dim[1];  // panel height in pixels
-  } else if (_type == TYPE_HUB75MATRIX_QS) {
+  mxconfig.mx_width = dim[0];   // panel width in pixels
+  mxconfig.mx_height = dim[1];  // panel height in pixels
+  if (isOffRefreshRequired()) { // we reuse off refresh flag for quarter-scan panels
     mxconfig.mx_width = dim[0] << 1;  // panel width in pixels for quarter-scan is double
     mxconfig.mx_height = dim[1] >> 1; // panel height in pixels for quarter-scan is half
-  } else {
-    DEBUGBUS_PRINTLN("Unknown type");
-    return;
   }
 
   // check for too many pixels & reduce panel count if necessary
@@ -807,43 +830,47 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 #endif
 
 //  HUB75_I2S_CFG::i2s_pins _pins={R1_PIN, G1_PIN, B1_PIN, R2_PIN, G2_PIN, B2_PIN, A_PIN, B_PIN, C_PIN, D_PIN, E_PIN, LAT_PIN, OE_PIN, CLK_PIN};
-
-#if defined(ARDUINO_ADAFRUIT_MATRIXPORTAL_ESP32S3) // MatrixPortal ESP32-S3
-
-  // https://www.adafruit.com/product/5778
-  DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA - Matrix Portal S3 config");
-  mxconfig.gpio = { 42, 41, 40, 38, 39, 37,  45, 36, 48, 35, 21, 47, 14, 2 };
-
-#elif defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)// ESP32-S3 with PSRAM
-
-  #if defined(MOONHUB_S3_PINOUT)
-  DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA - T7 S3 with PSRAM, MOONHUB pinout");
-  // HUB75_I2S_CFG::i2s_pins _pins={R1_PIN, G1_PIN, B1_PIN, R2_PIN, G2_PIN, B2_PIN, A_PIN, B_PIN, C_PIN, D_PIN, E_PIN, LAT_PIN, OE_PIN, CLK_PIN};
-  mxconfig.gpio = { 1, 5, 6, 7, 13, 9, 16, 48, 47, 21, 38, 8, 4, 18 };
-  #else
-  DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA - S3 with PSRAM");
-  // HUB75_I2S_CFG::i2s_pins _pins={R1_PIN, G1_PIN, B1_PIN, R2_PIN, G2_PIN, B2_PIN, A_PIN, B_PIN, C_PIN, D_PIN, E_PIN, LAT_PIN, OE_PIN, CLK_PIN};
-  mxconfig.gpio = { 1, 2, 42, 41, 40, 39, 45, 48, 47, 21, 38, 8, 3, 18 };
-  #endif
-
-#elif defined(ESP32_FORUM_PINOUT) // Common format for boards designed for SmartMatrix
-
-  DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA - ESP32_FORUM_PINOUT");
-  // ESP32 with SmartMatrix's default pinout - ESP32_FORUM_PINOUT
-  // https://github.com/pixelmatix/SmartMatrix/blob/teensylc/src/MatrixHardware_ESP32_V0.h
-  // Can use a board like https://github.com/rorosaurus/esp32-hub75-driver
-  mxconfig.gpio = { 2, 15, 4, 16, 27, 17, 5, 18, 19, 21, 12, 26, 25, 22 };
-
-#else
-
-  DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA - Default pins");
-  // https://github.com/mrfaptastic/ESP32-HUB75-MatrixPanel-DMA?tab=readme-ov-file
-  // Boards
-  // https://esp32trinity.com/
-  // https://www.electrodragon.com/product/rgb-matrix-panel-drive-interface-board-for-esp32-dma/
-  mxconfig.gpio = { 25, 26, 27, 14, 12, 13, 23, 19, 5, 17, 18, 4, 15, 16 };
-
-#endif
+  switch (_type) {
+    case TYPE_HUB75MATRIX_FORUM:
+    case TYPE_HUB75MATRIX_PORTAL:
+    case TYPE_HUB75MATRIX_MOONHUB:
+    case TYPE_HUB75MATRIX_TRINITY:
+    case TYPE_HUB75MATRIX_S3: {
+      const uint8_t * const pins = getHub75Pins(_type);
+      for (size_t i = 0; i < 14; i++) ((uint8_t*)&mxconfig.gpio)[i] = pgm_read_byte_near(&pins[i]);
+      break;
+    }
+    default:
+      DEBUGBUS_PRINTLN(F("Unknown HUB75 matrix type. Aborting!"));
+      return;
+  }
+/*
+  switch (_type) {
+    case TYPE_HUB75MATRIX_FORUM:
+      DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA - ESP32_FORUM_PINOUT"));
+      mxconfig.gpio = {  2, 15,  4, 16, 27, 17,  5, 18, 19, 21, 12, 26, 25, 22 };
+      break;
+    case TYPE_HUB75MATRIX_PORTAL:
+      DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA - Matrix Portal S3 config"));
+      mxconfig.gpio = { 42, 41, 40, 38, 39, 37,  45, 36, 48, 35, 21, 47, 14, 2 };
+      break;
+    case TYPE_HUB75MATRIX_MOONHUB:
+      DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA - T7 S3 with PSRAM, MOONHUB pinout"));
+      mxconfig.gpio = {  1,  5,  6,  7, 13,  9, 16, 48, 47, 21, 38,  8,  4, 18 };
+      break;
+    case TYPE_HUB75MATRIX_TRINITY:
+      DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA - Default pins"));
+      mxconfig.gpio = { 25, 26, 27, 14, 12, 13, 23, 19, 5, 17, 18,  4, 15, 16 };
+      break;
+    case TYPE_HUB75MATRIX_S3:
+      DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA - S3 with PSRAM"));
+      mxconfig.gpio = {  1, 2, 42, 41, 40, 39, 45, 48, 47, 21, 38,  8,  3, 18 };
+      break;
+    default:
+      DEBUGBUS_PRINTLN(F("Unknown HUB75 matrix type. Aborting!"));
+      return;
+  }
+  */
 
   constexpr size_t PIN_COUNT = sizeof(mxconfig.gpio) / sizeof(int8_t);
   PinManagerPinType pins[PIN_COUNT];
@@ -902,8 +929,8 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     return;
   }
   // for quad-scan panels or 2 or more rows we create a virtual panel that maps to the physical one
-  if (_rows > 1 || _type == TYPE_HUB75MATRIX_QS) {
-    PANEL_CHAIN_TYPE chainType = CHAIN_NONE; // default for quarter-scan panels that do not use chaining
+  if (_rows > 1 || isOffRefreshRequired()) {  // quarter-scan panels need virtual panel (hijack off-refresh)
+    PANEL_CHAIN_TYPE chainType = CHAIN_NONE;  // default for quarter-scan panels that do not use chaining
     if (_rows > 1 || _cols > 1) chainType = CHAIN_BOTTOM_LEFT_UP; // CHAIN_TOP_RIGHT_DOWN might be more natural fit
     virtualDisp = new VirtualMatrixPanel((*display), _rows, _cols, dim[0], dim[1], chainType);
     virtualDisp->setRotation(0);
@@ -1087,14 +1114,38 @@ size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
 }
 
 std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
-  constexpr size_t PIN_COUNT = sizeof(mxconfig.gpio) / sizeof(int8_t);
-  LEDType typeHS = {TYPE_HUB75MATRIX_HS, "HHHH", PSTR("HUB75 (Half Scan)")};
-  LEDType typeQS = {TYPE_HUB75MATRIX_QS, "HHHH", PSTR("HUB75 (Quarter Scan)")};
-  for (int i=0; i<PIN_COUNT; i++) {
-    typeHS.requiredPins.push_back(((uint8_t*)&mxconfig.gpio)[i]);
-    typeQS.requiredPins.push_back(((uint8_t*)&mxconfig.gpio)[i]);
+  std::vector<LEDType> types = {
+    {TYPE_HUB75MATRIX_PORTAL,  "H", PSTR("HUB75 (Adafruit Matrix Portal")},
+    {TYPE_HUB75MATRIX_MOONHUB, "H", PSTR("HUB75 (Moonhub T7 S3")},
+    {TYPE_HUB75MATRIX_S3,      "H", PSTR("HUB75 (S3 with PSRAM)")},
+    {TYPE_HUB75MATRIX_TRINITY, "H", PSTR("HUB75 (Trinity/ElectroDragon)")},
+    {TYPE_HUB75MATRIX_FORUM,   "H", PSTR("HUB75 (ESP32 Forum Pinout)")}
+  };
+  for (auto &t : types) {
+    t.requiredPins.resize(14);
+    const uint8_t * const pins = getHub75Pins(t.id);
+    for (size_t i = 0; i < 14; i++) t.requiredPins[i] = pgm_read_byte_near(&pins[i]);
+    /*
+    switch (t.id) {
+      case TYPE_HUB75MATRIX_FORUM:
+        t.requiredPins = { 2, 15,  4, 16, 27, 17,  5, 18, 19, 21, 12, 26, 25, 22 };
+        break;
+      case TYPE_HUB75MATRIX_PORTAL:
+        t.requiredPins = { 42, 41, 40, 38, 39, 37, 45, 36, 48, 35, 21, 47, 14,  2 };
+        break;
+      case TYPE_HUB75MATRIX_MOONHUB:
+        t.requiredPins = {  1,  5,  6,  7, 13,  9, 16, 48, 47, 21, 38,  8,  4, 18 };
+        break;
+      case TYPE_HUB75MATRIX_TRINITY:
+        t.requiredPins = { 25, 26, 27, 14, 12, 13, 23, 19,  5, 17, 18,  4, 15, 16 };
+        break;
+      case TYPE_HUB75MATRIX_S3:
+        t.requiredPins = {  1,  2, 42, 41, 40, 39, 45, 48, 47, 21, 38,  8,  3, 18 };
+        break;
+    }
+    */
   }
-  return {typeHS, typeQS};
+  return types;
 }
 
 #endif
