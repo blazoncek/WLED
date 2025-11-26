@@ -725,28 +725,30 @@ static void setBitArray(uint8_t* byteArray, size_t numBits, bool value) {  // se
   memset(byteArray, value * 0xFF, len);
 }
 
+static constexpr size_t HUB75_PIN_COUNT = sizeof(HUB75_I2S_CFG::gpio) / sizeof(int8_t);
+
 // known controller board pinouts
 static const uint8_t * const getHub75Pins(uint8_t type) {
   switch (type) {
     default:
     case TYPE_HUB75MATRIX_FORUM: {
-      static uint8_t a[] PROGMEM = { 2, 15,  4, 16, 27, 17,  5, 18, 19, 21, 12, 26, 25, 22 };
+      static uint8_t a[HUB75_PIN_COUNT] PROGMEM = { 2, 15,  4, 16, 27, 17,  5, 18, 19, 21, 12, 26, 25, 22 };
       return a;
     }
     case TYPE_HUB75MATRIX_PORTAL: {
-      static uint8_t a[] PROGMEM = { 42, 41, 40, 38, 39, 37, 45, 36, 48, 35, 21, 47, 14,  2 };
+      static uint8_t a[HUB75_PIN_COUNT] PROGMEM = { 42, 41, 40, 38, 39, 37, 45, 36, 48, 35, 21, 47, 14,  2 };
       return a;
     }
     case TYPE_HUB75MATRIX_MOONHUB: {
-      static uint8_t a[] PROGMEM = {  1,  5,  6,  7, 13,  9, 16, 48, 47, 21, 38,  8,  4, 18 };
+      static uint8_t a[HUB75_PIN_COUNT] PROGMEM = {  1,  5,  6,  7, 13,  9, 16, 48, 47, 21, 38,  8,  4, 18 };
       return a;
     }
     case TYPE_HUB75MATRIX_TRINITY: {
-      static uint8_t a[] PROGMEM = { 25, 26, 27, 14, 12, 13, 23, 19,  5, 17, 18,  4, 15, 16 };
+      static uint8_t a[HUB75_PIN_COUNT] PROGMEM = { 25, 26, 27, 14, 12, 13, 23, 19,  5, 17, 18,  4, 15, 16 };
       return a;
     }
     case TYPE_HUB75MATRIX_S3: {
-      static uint8_t a[] PROGMEM = {  1,  2, 42, 41, 40, 39, 45, 48, 47, 21, 38,  8,  3, 18 };
+      static uint8_t a[HUB75_PIN_COUNT] PROGMEM = {  1,  2, 42, 41, 40, 39, 45, 48, 47, 21, 38,  8,  3, 18 };
       return a;
     }
   }
@@ -754,7 +756,7 @@ static const uint8_t * const getHub75Pins(uint8_t type) {
 
 BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 : Bus(bc.type, bc.start, bc.autoWhite, bc.count, false, bc.refreshReq)
-, _panelWidth(0)
+, _matrixWidth(0)
 , _ledBuffer(nullptr)
 , _ledsDirty(nullptr) {
   #ifdef WLED_DEBUG_BUS
@@ -769,16 +771,18 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     return;
   }
 
-  // clamp width and height to 32, 64 or 128
+  // clamp panel width and height to multiples of 16
   uint8_t dim[2];
-  dim[0] = bc.pins[0] & 0b11100000;
-  dim[1] = bc.pins[1] & 0b11100000;
-  if (dim[0] == 0) dim[0] = 32;
-  if (dim[1] == 0) dim[1] = 32;
+  dim[0] = bc.pins[0] & 0b11110000;
+  dim[1] = bc.pins[1] & 0b11110000;
+  if (dim[0] <  32) dim[0] = 32;
+  if (dim[1] <  32) dim[1] = 32;
+  if (dim[0] > 128) dim[0] = 128;
+  if (dim[1] >  64) dim[1] = 64;
   // this may not be needed if sizes allowed include [96, 160, 192 and 224]
   // prefer lower value if size is not 32, 64 or 128
-  for (int j=0; j<2; j++) for (int i=0; i<3; i++)
-    if (dim[j] & (32 << i)) dim[j] &= 32 << i;
+  //for (int j=0; j<2; j++) for (int i=0; i<3; i++)
+  //  if (dim[j] & (32 << i)) dim[j] &= 32 << i;
 
   mxconfig.double_buff = false; // Use our own memory-optimised buffer rather than the driver's own double-buffer
   mxconfig.driver = (HUB75_I2S_CFG::shift_driver)bc.pins[3];
@@ -807,10 +811,10 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   }
 
   // check for too many pixels & reduce panel count if necessary
-  // ESP32: MAX_LEDS (8192) will consume 32k for LED buffer + 32k for (1) segment buffer + 8k for dirty bits = 72k RAM!!!
-  // S3: MAX_LEDS (16384) will consume 64k for LED buffer + 64k for (1) segment buffer + 16k for dirty bits = 144k RAM!!!
-  // S2: MAX_LEDS (2048) will consume 8k for LED buffer + 8k for (1) segment buffer + 1k for dirty bits = 17k RAM!!!
-  // all will also need driver's internal buffers (12-bit, 8-bit, 4-bit or 3-bit depth)
+  // ESP32: MAX_LEDS (8192) will consume 32k for strip LED buffer + 32k for (1) segment buffer + 8k for dirty bits = 72k RAM!!!
+  // S3: MAX_LEDS (16384) will consume 64k for strip LED buffer + 64k for (1) segment buffer + 16k for dirty bits = 144k RAM!!!
+  // S2: MAX_LEDS (2048) will consume 8k for strip LED buffer + 8k for (1) segment buffer + 1k for dirty bits = 17k RAM!!!
+  // all will also need driver's internal buffers (12-bit, 8-bit, 4-bit or 3-bit depth) + sizeof(CRGB)*_len for _ledBuffer
   while (mxconfig.mx_height * mxconfig.mx_width * mxconfig.chain_length > MAX_LEDS) {
     mxconfig.chain_length--;
     if (mxconfig.chain_length == 10 || mxconfig.chain_length == 11) mxconfig.chain_length = 9; // skip non-existing 10 & 11
@@ -829,17 +833,16 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   }
 #endif
 
-//  HUB75_I2S_CFG::i2s_pins _pins={R1_PIN, G1_PIN, B1_PIN, R2_PIN, G2_PIN, B2_PIN, A_PIN, B_PIN, C_PIN, D_PIN, E_PIN, LAT_PIN, OE_PIN, CLK_PIN};
+  //const uint8_t * const pins = getHub75Pins(_type);
   switch (_type) {
     case TYPE_HUB75MATRIX_FORUM:
     case TYPE_HUB75MATRIX_PORTAL:
     case TYPE_HUB75MATRIX_MOONHUB:
     case TYPE_HUB75MATRIX_TRINITY:
-    case TYPE_HUB75MATRIX_S3: {
-      const uint8_t * const pins = getHub75Pins(_type);
-      for (size_t i = 0; i < 14; i++) ((uint8_t*)&mxconfig.gpio)[i] = pgm_read_byte_near(&pins[i]);
+    case TYPE_HUB75MATRIX_S3:
+      //for (size_t i = 0; i < HUB75_PIN_COUNT; i++) ((uint8_t*)&mxconfig.gpio)[i] = pgm_read_byte_near(&pins[i]);
+      memcpy_P((uint8_t*)&mxconfig.gpio, getHub75Pins(_type), HUB75_PIN_COUNT);
       break;
-    }
     default:
       DEBUGBUS_PRINTLN(F("Unknown HUB75 matrix type. Aborting!"));
       return;
@@ -871,40 +874,33 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
       return;
   }
   */
-
-  constexpr size_t PIN_COUNT = sizeof(mxconfig.gpio) / sizeof(int8_t);
-  PinManagerPinType pins[PIN_COUNT];
-  for (size_t i = 0; i < PIN_COUNT; i++) pins[i] = {((int8_t*)&mxconfig.gpio)[i], true};
-  if (!PinManager::allocateMultiplePins(pins, PIN_COUNT, PinOwner::HUB75)) {
+  //PinManagerPinType pins[HUB75_PIN_COUNT];
+  //for (size_t i = 0; i < HUB75_PIN_COUNT; i++) pins[i] = {((int8_t*)&mxconfig.gpio)[i], true};
+  if (!PinManager::allocateMultiplePins((int8_t*)&mxconfig.gpio, HUB75_PIN_COUNT, PinOwner::HUB75, true)) {
     DEBUGBUS_PRINTLN("Failed to allocate pins for HUB75");
     return;
   }
 
   switch (bc.colorOrder) {
     case COL_ORDER_BGR:
-      DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA = color order BGR");
       std::swap(mxconfig.gpio.r1, mxconfig.gpio.b1);
       std::swap(mxconfig.gpio.r2, mxconfig.gpio.b2);
       break;
     case COL_ORDER_GRB:
-      DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA = color order GRB");
       std::swap(mxconfig.gpio.r1, mxconfig.gpio.g1);
       std::swap(mxconfig.gpio.r2, mxconfig.gpio.g2);
       break;
     case COL_ORDER_GBR:
-      DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA = color order GBR");
       std::swap(mxconfig.gpio.r1, mxconfig.gpio.b1);
       std::swap(mxconfig.gpio.r2, mxconfig.gpio.b2);
       std::swap(mxconfig.gpio.r1, mxconfig.gpio.g1);
       std::swap(mxconfig.gpio.r2, mxconfig.gpio.g2);
       break;
     case COL_ORDER_RBG:
-      DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA = color order RBG");
       std::swap(mxconfig.gpio.g1, mxconfig.gpio.b1);
       std::swap(mxconfig.gpio.g2, mxconfig.gpio.b2);
       break;
     case COL_ORDER_BRG:
-      DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA = color order BRG");
       std::swap(mxconfig.gpio.r1, mxconfig.gpio.g1);
       std::swap(mxconfig.gpio.r2, mxconfig.gpio.g2);
       std::swap(mxconfig.gpio.r1, mxconfig.gpio.b1);
@@ -912,20 +908,19 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
       break;
     case COL_ORDER_RGB:
     default:
-      DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA = Default color order (RGB)");
       break;
   }
 
-  DEBUGBUS_PRINTF("MatrixPanel_I2S_DMA config - %ux%u length: %u\n", mxconfig.mx_width, mxconfig.mx_height, mxconfig.chain_length);
-  DEBUGBUS_PRINTF("R1_PIN=%u, G1_PIN=%u, B1_PIN=%u, R2_PIN=%u, G2_PIN=%u, B2_PIN=%u, A_PIN=%u, B_PIN=%u, C_PIN=%u, D_PIN=%u, E_PIN=%u, LAT_PIN=%u, OE_PIN=%u, CLK_PIN=%u\n",
+  DEBUGBUS_PRINTF_P(PSTR("MatrixPanel_I2S_DMA config - %ux%u length: %u\n"), mxconfig.mx_width, mxconfig.mx_height, mxconfig.chain_length);
+  DEBUGBUS_PRINTF_P(PSTR("R1_PIN=%u, G1_PIN=%u, B1_PIN=%u, R2_PIN=%u, G2_PIN=%u, B2_PIN=%u, A_PIN=%u, B_PIN=%u, C_PIN=%u, D_PIN=%u, E_PIN=%u, LAT_PIN=%u, OE_PIN=%u, CLK_PIN=%u\n"),
                 mxconfig.gpio.r1, mxconfig.gpio.g1, mxconfig.gpio.b1, mxconfig.gpio.r2, mxconfig.gpio.g2, mxconfig.gpio.b2,
                 mxconfig.gpio.a, mxconfig.gpio.b, mxconfig.gpio.c, mxconfig.gpio.d, mxconfig.gpio.e, mxconfig.gpio.lat, mxconfig.gpio.oe, mxconfig.gpio.clk);
 
   // OK, now we can create our matrix object
   display = new(std::nothrow) MatrixPanel_I2S_DMA(mxconfig);
   if (display == nullptr) {
-    DEBUGBUS_PRINTLN("****** MatrixPanel_I2S_DMA !KABOOM! driver allocation failed ***********");
-    DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - getFreeHeapSize());
+    DEBUGBUS_PRINTLN(F("*** MatrixPanel_I2S_DMA !KABOOM! driver object allocation failed ***"));
+    DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
     return;
   }
   // for quad-scan panels or 2 or more rows we create a virtual panel that maps to the physical one
@@ -940,7 +935,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
         virtualDisp->setPhysicalPanelScanRate(FOUR_SCAN_16PX_HIGH);
         break;
       default:
-        DEBUGBUS_PRINTLN("Unsupported height");
+        DEBUGBUS_PRINTLN(F("Unsupported height"));
         // fallthrough and use 32px
       case 32:
         virtualDisp->setPhysicalPanelScanRate(FOUR_SCAN_32PX_HIGH);
@@ -951,67 +946,52 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     }
   }
 
-  // calculate total number of LEDs
-  _len = (display->width() * display->height());
-  DEBUGBUS_PRINTF("Length: %u\n", _len);
-  if (_len >= MAX_LEDS) {
-    DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA Too many LEDS - playing safe");
-    return;
-  }
+  DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA created"));
+  DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
+  DEBUGBUS_PRINTF_P(PSTR("Hub75 Length: %u\n"), _len);
 
-  DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA created");
   // let's adjust default brightness (using hardware)
   display->setBrightness(0);    // range is 0-255, 0 - 0%, 255 - 100%
-
   delay(24); // experimental
-  DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - getFreeHeapSize());
+
   // Allocate memory and start DMA display
   if (!display->begin()) {
-      DEBUGBUS_PRINTLN("****** MatrixPanel_I2S_DMA !KABOOM! I2S memory allocation failed ***********");
-      DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - getFreeHeapSize());
-      return;
+    DEBUGBUS_PRINTLN("*** MatrixPanel_I2S_DMA !KABOOM! I2S memory buffer allocation failed ***");
+    DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
+    return;
   } else {
     DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA begin ok");
-    DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - getFreeHeapSize());
+    DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
     delay(18);   // experiment - give the driver a moment (~ one full frame @ 60hz) to settle
-    _valid = true;
     display->clearScreen();   // initially clear the screen buffer
     DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA clear ok");
 
     _ledsDirty = (byte*) allocate_buffer(getBitArrayBytes(_len), BFRALLOC_PREFER_DRAM);  // create LEDs dirty bits
-    DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA allocate memory ok");
-
     if (_ledsDirty == nullptr) {
       cleanup();
       DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA not started - not enough memory for dirty bits!"));
-      DEBUGBUS_PRINT(F("heap usage: ")); DEBUGBUS_PRINTLN(lastHeap - getFreeHeapSize());
-      return;  //  fail is we cannot get memory for the buffer
+      DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
+      return;  //  fail if we cannot get memory for the buffer
     }
     setBitArray(_ledsDirty, _len, false);             // reset dirty bits
+    DEBUGBUS_PRINTLN(F("BusHub75Matrix LEDS dirty bit optimization enabled."));
 
     if (mxconfig.double_buff == false) {
       _ledBuffer = (CRGB*) allocate_buffer(_len * sizeof(CRGB), BFRALLOC_PREFER_DRAM | BFRALLOC_CLEAR);  // create LEDs buffer (initialized to BLACK)
+      if (_ledBuffer != nullptr) DEBUGBUS_PRINTLN(F("BusHub75Matrix LEDS buffer enabled."));
     }
+
+    DEBUGBUS_PRINTF_P(PSTR("BusHub75Matrix LEDS buffers use %u bytes.\n"), (_ledBuffer? _len*sizeof(CRGB) :0) + getBitArrayBytes(_len));
+    _matrixWidth = virtualDisp ? virtualDisp->width() : display->width();  // cache width - it will never change
+    DEBUGBUS_PRINTF_P(PSTR("MatrixPanel_I2S_DMA %sstarted, width=%u, %u pixels.\n"), _valid? "":"not ", _matrixWidth, _len);
+    _valid = true;
   }
 
-  if (_valid) {
-    _panelWidth = virtualDisp ? virtualDisp->width() : display->width();  // cache width - it will never change
-  }
-
-  DEBUGBUS_PRINTF("MatrixPanel_I2S_DMA %sstarted, width=%u, %u pixels.\n", _valid? "":"not ", _panelWidth, _len);
-
-  if (_ledBuffer != nullptr) DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA LEDS buffer enabled."));
-  if (_ledsDirty != nullptr) DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA LEDS dirty bit optimization enabled."));
-  if (_ledBuffer != nullptr || _ledsDirty != nullptr) {
-    DEBUGBUS_PRINT(F("MatrixPanel_I2S_DMA LEDS buffer uses "));
-    DEBUGBUS_PRINT((_ledBuffer? _len*sizeof(CRGB) :0) + (_ledsDirty? getBitArrayBytes(_len) :0));
-    DEBUGBUS_PRINTLN(F(" bytes."));
-  }
 }
 
 void BusHub75Matrix::setPixelColor(unsigned pix, uint32_t c) {
   if (!_valid) return;
-  // if (_cct >= 1900) c = colorBalanceFromKelvin(_cct, c); //color correction from CCT
+  if (_cct >= 1900) c = colorBalanceFromKelvin(_cct, c); //color correction from CCT
 
   if (_ledBuffer) {
     CRGB fastled_col = CRGB(c);
@@ -1026,8 +1006,8 @@ void BusHub75Matrix::setPixelColor(unsigned pix, uint32_t c) {
     uint8_t r = R(c);
     uint8_t g = G(c);
     uint8_t b = B(c);
-    int x = pix % _panelWidth;
-    int y = pix / _panelWidth;
+    int x = pix % _matrixWidth;
+    int y = pix / _matrixWidth;
     if (virtualDisp != nullptr) {
       virtualDisp->drawPixelRGB888(int16_t(x), int16_t(y), r, g, b);
     } else {
@@ -1043,13 +1023,13 @@ void BusHub75Matrix::setBrightness(uint8_t b) {
 
 void BusHub75Matrix::show(void) {
   if (!_valid) return;
-  display->setBrightness(_bri);
+  //display->setBrightness(_bri);
 
   if (_ledBuffer) {
     // write out buffered LEDs
     bool isVirtualDisp = (virtualDisp != nullptr);
     unsigned height = isVirtualDisp ? virtualDisp->height() : display->height();
-    unsigned width = _panelWidth;
+    unsigned width = _matrixWidth;
 
     //while(!previousBufferFree) delay(1);   // experimental - Wait before we allow any writing to the buffer. Stop flicker.
 
@@ -1068,7 +1048,7 @@ void BusHub75Matrix::show(void) {
 void BusHub75Matrix::cleanup() {
   if (display && _valid) display->stopDMAoutput();  // terminate DMA driver (display goes black)
   _valid = false;
-  _panelWidth = 0;
+  _matrixWidth = 0;
   deallocatePins();
   DEBUGBUS_PRINTLN("HUB75 output ended.");
   delay(30); // give some time to settle
@@ -1084,10 +1064,9 @@ void BusHub75Matrix::cleanup() {
 }
 
 void BusHub75Matrix::deallocatePins() {
-  constexpr size_t PIN_COUNT = sizeof(mxconfig.gpio) / sizeof(int8_t);
-  uint8_t pins[PIN_COUNT];
-  memcpy(pins, &mxconfig.gpio, sizeof(mxconfig.gpio));
-  PinManager::deallocateMultiplePins(pins, PIN_COUNT, PinOwner::HUB75);
+  uint8_t pins[HUB75_PIN_COUNT];
+  memcpy_P(pins, getHub75Pins(_type), HUB75_PIN_COUNT);
+  PinManager::deallocateMultiplePins(pins, HUB75_PIN_COUNT, PinOwner::HUB75);
 }
 
 uint16_t BusHub75Matrix::getFrequency() const { 
@@ -1103,12 +1082,12 @@ size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
       if (mxconfig.chain_length <= 4) chainLength += 11;  // 1x2, 1x3, 1x4 arrangements
       if (mxconfig.chain_length == 4 && virtualDisp->width() == virtualDisp->height()) chainLength = 5; // 2x2 arrangement
     }
-    pinArray[0] = mxconfig.mx_width;
-    pinArray[1] = mxconfig.mx_height;
-    pinArray[2] = chainLength;
+    pinArray[0] = mxconfig.mx_width;  // 16-128
+    pinArray[1] = mxconfig.mx_height; // 16-64
+    pinArray[2] = chainLength;        // 1-16 (invalid: 7, 10, 11)
     pinArray[3] = (uint8_t)mxconfig.driver;
-    pinArray[4] = 255; // reserved
-    memcpy(&pinArray[5], &mxconfig.gpio, sizeof(mxconfig.gpio));
+    pinArray[4] = 255;                // reserved
+    memcpy_P(&pinArray[5], getHub75Pins(_type), HUB75_PIN_COUNT);  // ignoreable extension
   }
   return 5 + sizeof(mxconfig.gpio);
 }
@@ -1122,9 +1101,11 @@ std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
     {TYPE_HUB75MATRIX_FORUM,   "H", PSTR("HUB75 (ESP32 Forum Pinout)")}
   };
   for (auto &t : types) {
-    t.requiredPins.resize(14);
+    t.requiredPins.resize(HUB75_PIN_COUNT);
     const uint8_t * const pins = getHub75Pins(t.id);
-    for (size_t i = 0; i < 14; i++) t.requiredPins[i] = pgm_read_byte_near(&pins[i]);
+    for (size_t i = 0; i < HUB75_PIN_COUNT; i++) t.requiredPins[i] = pgm_read_byte_near(&pins[i]);
+    // perhaps this could work also
+    //memcpy_P(&t.requiredPins[0], getHub75Pins(_type), HUB75_PIN_COUNT);
     /*
     switch (t.id) {
       case TYPE_HUB75MATRIX_FORUM:

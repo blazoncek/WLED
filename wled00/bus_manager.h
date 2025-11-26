@@ -395,7 +395,7 @@ class BusHub75Matrix : public Bus {
     static std::vector<LEDType> getLEDTypes(void);
 
   private:
-    unsigned _panelWidth;
+    unsigned _matrixWidth;
     CRGB *_ledBuffer;
     byte *_ledsDirty;
     static MatrixPanel_I2S_DMA *display;

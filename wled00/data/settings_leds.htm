@@ -775,9 +775,8 @@ Swap: <select id="xw${s}" name="XW${s}">
 								}
 							}
 							if (p<3) LK.onchange = ()=>{UI();}; 
-							LK.min = p < 2 ? 32 : 1;
-							LK.max = p == 0 ? 128 : p == 1 ? 64 : 255;
-							LK.step = p < 2 ? 32 : 1;
+							LK.step = LK.min = p < 2 ? 16 : 1;
+							LK.max = p < 2 ? 64*(2-p) : 255;
 							if (LK.value == "") LK.value = LK.min;
 							break;
 						case 'V': // virtual
