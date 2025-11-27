@@ -205,21 +205,6 @@ void sendSysInfoUDP();
 void espNowSentCB(uint8_t* address, uint8_t status);
 void espNowReceiveCB(uint8_t* address, uint8_t* data, uint8_t len, signed int rssi, bool broadcast);
 
-//network.cpp
-bool initEthernet(); // result is informational
-int  getSignalQuality(int rssi);
-IPAddress resolveHostname(const String& hostname, bool useMDNS = true);
-void fillMAC2Str(char *str, const uint8_t *mac);
-void fillStr2MAC(uint8_t *mac, const char *str);
-#ifndef WLED_DISABLE_ESPNOW
-void initESPNow(bool resetAP = false);
-void stopESPNow();
-void sendESPNowHeartBeat();
-#endif
-int  findWiFi(bool doScan = false);
-bool isWiFiConfigured();
-void WiFiEvent(WiFiEvent_t event);
-
 //usermods_list.cpp
 void registerUsermods();
 
