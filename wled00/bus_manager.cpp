@@ -21,17 +21,13 @@
 #include "bus_manager.h"
 #include "bus_wrapper.h"
 #include <bits/unique_ptr.h>
+// must be included *after* bus_wrapper.h (conflicting R(), G(), B() macros)
+#include "colors.h"
+#include "network.h"
 
 extern char hostName[];
 extern bool cctICused;
 extern bool useParallelI2S;
-
-//colors.cpp
-uint32_t color_fade(uint32_t c, uint8_t bri, bool video = false);
-uint32_t colorBalanceFromKelvin(uint16_t kelvin, uint32_t rgb);
-
-//network.cpp
-IPAddress resolveHostname(const String& hostname, bool useMDNS = false);
 
 //udp.cpp
 uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const byte *buffer, uint8_t bri=255, bool isRGBW=false);
@@ -681,11 +677,9 @@ void BusNetwork::cleanup() {
 }
 
 
-// ***************************************************************************
 #ifdef WLED_ENABLE_HUB75MATRIX
   #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
   #include <ESP32-VirtualMatrixPanel-I2S-DMA.h>
-  #include <FastLED.h>
 
   #if !(defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
     #error "Unsupported ESP platform for HUB75 display. Only ESP32, ESP32-S2 and ESP32-S3 are supported."
@@ -693,14 +687,12 @@ void BusNetwork::cleanup() {
     #warning "HUB75 driver enabled (experimental)"
   #endif
 
-constexpr uint32_t IS_BLACK = 0x000000;
-constexpr uint32_t IS_DARKGREY = 0x333333;
-
 // statically allocate as only one HUB75 matrix can be used (also allows reading mxconfig in getLEDTypes())
-MatrixPanel_I2S_DMA *BusHub75Matrix::display = nullptr;
-VirtualMatrixPanel  *BusHub75Matrix::virtualDisp = nullptr;
+//MatrixPanel_I2S_DMA *BusHub75Matrix::display = nullptr;
+//VirtualMatrixPanel  *BusHub75Matrix::virtualDisp = nullptr;
 HUB75_I2S_CFG        BusHub75Matrix::mxconfig = HUB75_I2S_CFG();
 
+/*
 // functions to get/set bits in an array - based on functions created by @Brandon502 for GOL
 static bool getBitFromArray(const uint8_t* byteArray, size_t position) { // get bit value
   size_t byteIndex = position >> 3; // position / 8
@@ -716,14 +708,15 @@ static void setBitInArray(uint8_t* byteArray, size_t position, bool value) {  //
     else       byteArray[byteIndex] &= ~(uint8_t)(1U << bitIndex);
 }
 
-static size_t getBitArrayBytes(size_t num_bits) { // number of bytes needed for an array with num_bits bits
+static inline size_t getBitArrayBytes(size_t num_bits) { // number of bytes needed for an array with num_bits bits
   return (num_bits + 7) >> 3; // (num_bits + 7) / 8
 }
 
-static void setBitArray(uint8_t* byteArray, size_t numBits, bool value) {  // set all bits to same value
+static inline void setBitArray(uint8_t* byteArray, size_t numBits, bool value) {  // set all bits to same value
   size_t len = getBitArrayBytes(numBits);
   memset(byteArray, value * 0xFF, len);
 }
+*/
 
 static constexpr size_t HUB75_PIN_COUNT = sizeof(HUB75_I2S_CFG::gpio) / sizeof(int8_t);
 
@@ -757,34 +750,36 @@ static const uint8_t * const getHub75Pins(uint8_t type) {
 BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 : Bus(bc.type, bc.start, bc.autoWhite, bc.count, false, bc.refreshReq)
 , _matrixWidth(0)
-, _ledBuffer(nullptr)
-, _ledsDirty(nullptr) {
+//, _ledsDirty(nullptr)
+, display(nullptr)
+, virtualDisp(nullptr)
+{
   #ifdef WLED_DEBUG_BUS
   size_t lastHeap = getFreeHeapSize();
   #endif
   _valid = false;
   _hasRgb = true;
   _hasWhite = false;
+  _hasCCT = false;
 
   if (BusHub75Matrix::display != nullptr) {
     DEBUGBUS_PRINTLN("BusHub75Matrix: One bus already created!");
     return;
   }
 
-  // clamp panel width and height to multiples of 16
+  // clamp panel width and height to multiples of 32
   uint8_t dim[2];
-  dim[0] = bc.pins[0] & 0b11110000;
-  dim[1] = bc.pins[1] & 0b11110000;
-  if (dim[0] <  32) dim[0] = 32;
-  if (dim[1] <  32) dim[1] = 32;
-  if (dim[0] > 128) dim[0] = 128;
-  if (dim[1] >  64) dim[1] = 64;
-  // this may not be needed if sizes allowed include [96, 160, 192 and 224]
-  // prefer lower value if size is not 32, 64 or 128
-  //for (int j=0; j<2; j++) for (int i=0; i<3; i++)
-  //  if (dim[j] & (32 << i)) dim[j] &= 32 << i;
+  dim[0] = bc.pins[0] & 0xE0;
+  dim[1] = bc.pins[1] & 0xE0;
+  for (int j=0; j<2; j++) {
+    if (dim[j] <  32) dim[j] =  32;
+    if (dim[j] > 128) dim[j] = 128;
+    // this may not be needed if sizes allowed include [96]
+    if (dim[j] & 0x40) dim[j] &= 0x40;
+  }
 
-  mxconfig.double_buff = false; // Use our own memory-optimised buffer rather than the driver's own double-buffer
+  mxconfig.double_buff = false;   // do no double buffering to save RAM
+  //mxconfig.double_buff = true;  // need to call flipDMABuffer() in each show()
   mxconfig.driver = (HUB75_I2S_CFG::shift_driver)bc.pins[3];
   // mxconfig.latch_blanking = 3;
   mxconfig.i2sspeed = (HUB75_I2S_CFG::clk_speed)(bc.frequency * 1000); // correctly set in set.cpp (8000, 16000, 20000)
@@ -814,7 +809,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   // ESP32: MAX_LEDS (8192) will consume 32k for strip LED buffer + 32k for (1) segment buffer + 8k for dirty bits = 72k RAM!!!
   // S3: MAX_LEDS (16384) will consume 64k for strip LED buffer + 64k for (1) segment buffer + 16k for dirty bits = 144k RAM!!!
   // S2: MAX_LEDS (2048) will consume 8k for strip LED buffer + 8k for (1) segment buffer + 1k for dirty bits = 17k RAM!!!
-  // all will also need driver's internal buffers (12-bit, 8-bit, 4-bit or 3-bit depth) + sizeof(CRGB)*_len for _ledBuffer
+  // all will also need driver's internal buffers (12-bit, 8-bit, 4-bit or 3-bit depth)
   while (mxconfig.mx_height * mxconfig.mx_width * mxconfig.chain_length > MAX_LEDS) {
     mxconfig.chain_length--;
     if (mxconfig.chain_length == 10 || mxconfig.chain_length == 11) mxconfig.chain_length = 9; // skip non-existing 10 & 11
@@ -833,47 +828,18 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   }
 #endif
 
-  //const uint8_t * const pins = getHub75Pins(_type);
   switch (_type) {
     case TYPE_HUB75MATRIX_FORUM:
     case TYPE_HUB75MATRIX_PORTAL:
     case TYPE_HUB75MATRIX_MOONHUB:
     case TYPE_HUB75MATRIX_TRINITY:
     case TYPE_HUB75MATRIX_S3:
-      //for (size_t i = 0; i < HUB75_PIN_COUNT; i++) ((uint8_t*)&mxconfig.gpio)[i] = pgm_read_byte_near(&pins[i]);
       memcpy_P((uint8_t*)&mxconfig.gpio, getHub75Pins(_type), HUB75_PIN_COUNT);
       break;
     default:
       DEBUGBUS_PRINTLN(F("Unknown HUB75 matrix type. Aborting!"));
       return;
   }
-/*
-  switch (_type) {
-    case TYPE_HUB75MATRIX_FORUM:
-      DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA - ESP32_FORUM_PINOUT"));
-      mxconfig.gpio = {  2, 15,  4, 16, 27, 17,  5, 18, 19, 21, 12, 26, 25, 22 };
-      break;
-    case TYPE_HUB75MATRIX_PORTAL:
-      DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA - Matrix Portal S3 config"));
-      mxconfig.gpio = { 42, 41, 40, 38, 39, 37,  45, 36, 48, 35, 21, 47, 14, 2 };
-      break;
-    case TYPE_HUB75MATRIX_MOONHUB:
-      DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA - T7 S3 with PSRAM, MOONHUB pinout"));
-      mxconfig.gpio = {  1,  5,  6,  7, 13,  9, 16, 48, 47, 21, 38,  8,  4, 18 };
-      break;
-    case TYPE_HUB75MATRIX_TRINITY:
-      DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA - Default pins"));
-      mxconfig.gpio = { 25, 26, 27, 14, 12, 13, 23, 19, 5, 17, 18,  4, 15, 16 };
-      break;
-    case TYPE_HUB75MATRIX_S3:
-      DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA - S3 with PSRAM"));
-      mxconfig.gpio = {  1, 2, 42, 41, 40, 39, 45, 48, 47, 21, 38,  8,  3, 18 };
-      break;
-    default:
-      DEBUGBUS_PRINTLN(F("Unknown HUB75 matrix type. Aborting!"));
-      return;
-  }
-  */
   //PinManagerPinType pins[HUB75_PIN_COUNT];
   //for (size_t i = 0; i < HUB75_PIN_COUNT; i++) pins[i] = {((int8_t*)&mxconfig.gpio)[i], true};
   if (!PinManager::allocateMultiplePins((int8_t*)&mxconfig.gpio, HUB75_PIN_COUNT, PinOwner::HUB75, true)) {
@@ -956,32 +922,27 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 
   // Allocate memory and start DMA display
   if (!display->begin()) {
-    DEBUGBUS_PRINTLN("*** MatrixPanel_I2S_DMA !KABOOM! I2S memory buffer allocation failed ***");
+    DEBUGBUS_PRINTLN(F("*** MatrixPanel_I2S_DMA !KABOOM! I2S memory buffer allocation failed ***"));
     DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
     return;
   } else {
-    DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA begin ok");
+    DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA begin ok"));
     DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
     delay(18);   // experiment - give the driver a moment (~ one full frame @ 60hz) to settle
+
+    //_ledsDirty = (byte*) allocate_buffer(getBitArrayBytes(_len), BFRALLOC_ENFORCE_DRAM | BFRALLOC_CLEAR); // create LEDs dirty bits
+    //if (_ledsDirty == nullptr) {
+    //  cleanup();
+    //  DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA not started - not enough memory for dirty bits!"));
+    //  DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
+    //  return;  //  fail if we cannot get memory for the buffer
+    //}
+    //DEBUGBUS_PRINTLN(F("BusHub75Matrix LEDs dirty bit optimization enabled."));
+    //DEBUGBUS_PRINTF_P(PSTR("BusHub75Matrix LED buffers use %u bytes.\n"), getBitArrayBytes(_len));
+
     display->clearScreen();   // initially clear the screen buffer
-    DEBUGBUS_PRINTLN("MatrixPanel_I2S_DMA clear ok");
+    DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA clear ok"));
 
-    _ledsDirty = (byte*) allocate_buffer(getBitArrayBytes(_len), BFRALLOC_PREFER_DRAM);  // create LEDs dirty bits
-    if (_ledsDirty == nullptr) {
-      cleanup();
-      DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA not started - not enough memory for dirty bits!"));
-      DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
-      return;  //  fail if we cannot get memory for the buffer
-    }
-    setBitArray(_ledsDirty, _len, false);             // reset dirty bits
-    DEBUGBUS_PRINTLN(F("BusHub75Matrix LEDS dirty bit optimization enabled."));
-
-    if (mxconfig.double_buff == false) {
-      _ledBuffer = (CRGB*) allocate_buffer(_len * sizeof(CRGB), BFRALLOC_PREFER_DRAM | BFRALLOC_CLEAR);  // create LEDs buffer (initialized to BLACK)
-      if (_ledBuffer != nullptr) DEBUGBUS_PRINTLN(F("BusHub75Matrix LEDS buffer enabled."));
-    }
-
-    DEBUGBUS_PRINTF_P(PSTR("BusHub75Matrix LEDS buffers use %u bytes.\n"), (_ledBuffer? _len*sizeof(CRGB) :0) + getBitArrayBytes(_len));
     _matrixWidth = virtualDisp ? virtualDisp->width() : display->width();  // cache width - it will never change
     DEBUGBUS_PRINTF_P(PSTR("MatrixPanel_I2S_DMA %sstarted, width=%u, %u pixels.\n"), _valid? "":"not ", _matrixWidth, _len);
     _valid = true;
@@ -991,64 +952,38 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 
 void BusHub75Matrix::setPixelColor(unsigned pix, uint32_t c) {
   if (!_valid) return;
-  if (_cct >= 1900) c = colorBalanceFromKelvin(_cct, c); //color correction from CCT
+  if (_cct >= 1900) c = colorBalanceFromKelvin(_cct, c);  //color correction from CCT
 
-  if (_ledBuffer) {
-    CRGB fastled_col = CRGB(c);
-    if (_ledBuffer[pix] != fastled_col) {
-      _ledBuffer[pix] = fastled_col;
-      setBitInArray(_ledsDirty, pix, true);  // flag pixel as "dirty"
-    }
-  } else {
-    if ((c == IS_BLACK) && (getBitFromArray(_ledsDirty, pix) == false)) return; // ignore black if pixel is already black
-    setBitInArray(_ledsDirty, pix, (bool)c);                                    // dirty = true means "color is not BLACK"
+  // dirty bit optimization might not be necessary as each pixel is only update once per frame (see WS2812FX::show())
+  //if (c && !getBitFromArray(_ledsDirty, pix)) return;     // ignore black if pixel is already black
+  //setBitInArray(_ledsDirty, pix, (bool)c);                // dirty = true means "color is not BLACK"
 
-    uint8_t r = R(c);
-    uint8_t g = G(c);
-    uint8_t b = B(c);
-    int x = pix % _matrixWidth;
-    int y = pix / _matrixWidth;
-    if (virtualDisp != nullptr) {
-      virtualDisp->drawPixelRGB888(int16_t(x), int16_t(y), r, g, b);
-    } else {
-      display->drawPixelRGB888(int16_t(x), int16_t(y), r, g, b);
-    }
-  }
+  uint8_t r = R(c);
+  uint8_t g = G(c);
+  uint8_t b = B(c);
+  int16_t x = pix % _matrixWidth;
+  int16_t y = pix / _matrixWidth;
+  if (virtualDisp != nullptr) virtualDisp->drawPixelRGB888(x, y, r, g, b);
+  else display->drawPixelRGB888(x, y, r, g, b);
 }
 
 void BusHub75Matrix::setBrightness(uint8_t b) {
   _bri = b;
-  if (display) display->setBrightness(_bri);
+  if (!_valid) return;
+  display->setBrightness(_bri);
 }
 
 void BusHub75Matrix::show(void) {
   if (!_valid) return;
-  //display->setBrightness(_bri);
-
-  if (_ledBuffer) {
-    // write out buffered LEDs
-    bool isVirtualDisp = (virtualDisp != nullptr);
-    unsigned height = isVirtualDisp ? virtualDisp->height() : display->height();
-    unsigned width = _matrixWidth;
-
-    //while(!previousBufferFree) delay(1);   // experimental - Wait before we allow any writing to the buffer. Stop flicker.
-
-    size_t pix = 0; // running pixel index
-    for (int y=0; y<height; y++) for (int x=0; x<width; x++) {
-      if (getBitFromArray(_ledsDirty, pix) == true) {        // only repaint the "dirty"  pixels
-        if (isVirtualDisp) virtualDisp->drawPixelRGB888(int16_t(x), int16_t(y), _ledBuffer[pix].r, _ledBuffer[pix].g, _ledBuffer[pix].b);
-        else display->drawPixelRGB888(int16_t(x), int16_t(y), _ledBuffer[pix].r, _ledBuffer[pix].g, _ledBuffer[pix].b);
-      }
-      pix++;
-    }
-    setBitArray(_ledsDirty, _len, false);  // buffer shown - reset all dirty bits
+  if (mxconfig.double_buff) { // double buffering enabled
+    display->flipDMABuffer();
+    display->clearScreen();
   }
 }
 
 void BusHub75Matrix::cleanup() {
-  if (display && _valid) display->stopDMAoutput();  // terminate DMA driver (display goes black)
+  if (_valid) display->stopDMAoutput();  // terminate DMA driver (display goes black)
   _valid = false;
-  _matrixWidth = 0;
   deallocatePins();
   DEBUGBUS_PRINTLN("HUB75 output ended.");
   delay(30); // give some time to settle
@@ -1057,10 +992,8 @@ void BusHub75Matrix::cleanup() {
   virtualDisp = nullptr;
   delete display;
   display = nullptr;
-  free(_ledBuffer); // no need to check for nullptr
-  _ledBuffer = nullptr;
-  free(_ledsDirty); // no need to check for nullptr
-  _ledsDirty = nullptr;
+  //free(_ledsDirty); // no need to check for nullptr
+  //_ledsDirty = nullptr;
 }
 
 void BusHub75Matrix::deallocatePins() {
@@ -1106,31 +1039,10 @@ std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
     for (size_t i = 0; i < HUB75_PIN_COUNT; i++) t.requiredPins[i] = pgm_read_byte_near(&pins[i]);
     // perhaps this could work also
     //memcpy_P(&t.requiredPins[0], getHub75Pins(_type), HUB75_PIN_COUNT);
-    /*
-    switch (t.id) {
-      case TYPE_HUB75MATRIX_FORUM:
-        t.requiredPins = { 2, 15,  4, 16, 27, 17,  5, 18, 19, 21, 12, 26, 25, 22 };
-        break;
-      case TYPE_HUB75MATRIX_PORTAL:
-        t.requiredPins = { 42, 41, 40, 38, 39, 37, 45, 36, 48, 35, 21, 47, 14,  2 };
-        break;
-      case TYPE_HUB75MATRIX_MOONHUB:
-        t.requiredPins = {  1,  5,  6,  7, 13,  9, 16, 48, 47, 21, 38,  8,  4, 18 };
-        break;
-      case TYPE_HUB75MATRIX_TRINITY:
-        t.requiredPins = { 25, 26, 27, 14, 12, 13, 23, 19,  5, 17, 18,  4, 15, 16 };
-        break;
-      case TYPE_HUB75MATRIX_S3:
-        t.requiredPins = {  1,  2, 42, 41, 40, 39, 45, 48, 47, 21, 38,  8,  3, 18 };
-        break;
-    }
-    */
   }
   return types;
 }
-
-#endif
-// ***************************************************************************
+#endif // WLED_ENABLE_HUB75MATRIX
 
 
 //utility to get the approx. memory usage of a given BusConfig

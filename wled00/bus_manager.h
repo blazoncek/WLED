@@ -210,7 +210,7 @@ class Bus {
     uint8_t  _bri;
     uint16_t _start;
     uint16_t _len;
-    //struct { //using bitfield struct adds abour 250 bytes to binary size
+    //struct { //using bitfield struct adds about 250 bytes to binary size
       bool _reversed;//     : 1;
       bool _valid;//        : 1;
       bool _needsRefresh;// : 1;
@@ -374,7 +374,6 @@ class BusNetwork : public Bus {
 class MatrixPanel_I2S_DMA;
 class VirtualMatrixPanel;
 class HUB75_I2S_CFG;
-class CRGB;
 
 class BusHub75Matrix : public Bus {
   public:
@@ -396,10 +395,9 @@ class BusHub75Matrix : public Bus {
 
   private:
     unsigned _matrixWidth;
-    CRGB *_ledBuffer;
-    byte *_ledsDirty;
-    static MatrixPanel_I2S_DMA *display;
-    static VirtualMatrixPanel  *virtualDisp;
+    //byte *_ledsDirty;
+    MatrixPanel_I2S_DMA *display;
+    VirtualMatrixPanel  *virtualDisp;
     static HUB75_I2S_CFG mxconfig;
 };
 #endif
