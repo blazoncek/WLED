@@ -724,7 +724,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 						}
 					}
 					// if switching from Hub75, replace pin 4 select with input (remove hack)
-					if (type !== 'H' && [2,3].includes(p) && LK.tagName === "SELECT" && !LK.classList.contains("pin")) {
+					if (type !== 'H' && p<4 && LK.tagName === "SELECT" && !LK.classList.contains("pin")) {
 						// replace select with input
 						let inp = cE('input');
 						inp.type = "number";
@@ -738,9 +738,9 @@ Swap: <select id="xw${s}" name="XW${s}">
 							if (p == 3 && LK.tagName === "INPUT") {
 								// pin 4 is shift register type for Hub75
 								// this is a hack to allow dropdown selection for Hub75 shift register type (stored in pin 4)
-								LK = addDropdown(LK);           // pin 4 is shift register type for Hub75
+								LK = addDropdown(LK);
 								LK.classList.remove("pin");     // not a pin select
-								LK.classList.add("shift");      // shift register
+								LK.classList.add("shift");
 								LK.removeAttribute("onchange"); // not a pin select
 								addOption(LK, "SHIFTREG", 0);
 								addOption(LK, "FM6124", 1);
@@ -751,11 +751,10 @@ Swap: <select id="xw${s}" name="XW${s}">
 								addOption(LK, "DP3246/SM5368", 6);
 							}
 							if (p == 2 && LK.tagName === "INPUT") {
-								// pin 3 is number of panels for Hub75
 								// this is a hack to allow dropdown selection
-								LK = addDropdown(LK);           // pin 4 is shift register type for Hub75
+								LK = addDropdown(LK);           // pin 3 is number of panels for Hub75
 								LK.classList.remove("pin");     // not a pin select
-								LK.classList.add("panel");      // panels
+								LK.classList.add("panel");
 								addOption(LK, "1x1", 1);
 								addOption(LK, "2x1", 2);
 								addOption(LK, "1x2", 13);       // vertical (11 + 2)
@@ -774,10 +773,17 @@ Swap: <select id="xw${s}" name="XW${s}">
 									}
 								}
 							}
-							if (p<3) LK.onchange = ()=>{UI();}; 
-							LK.step = LK.min = p < 2 ? 16 : 1;
-							LK.max = p < 2 ? 64*(2-p) : 255;
-							if (LK.value == "") LK.value = LK.min;
+							if (p < 2 && LK.tagName === "INPUT") {
+								// pin 0 & 1 are panel size
+								// this is a hack to allow dropdown selection
+								LK = addDropdown(LK);
+								LK.classList.remove("pin");     // not a pin select
+								LK.classList.add("dimension");
+								addOption(LK, "32", 32);
+								addOption(LK, "64", 64);
+								if (p < 1) addOption(LK, "128", 128);
+							}
+							if (p<3) LK.onchange = ()=>{UI();};
 							break;
 						case 'V': // virtual
 						case 'N': // network
@@ -807,9 +813,11 @@ Swap: <select id="xw${s}" name="XW${s}">
 			});
 			// now enable/disable type options according to limits in dropdowns
 			if (sel) {
+				let n = sel.name.substring(2,3);
 				LTs = [sel]; // only update the changed one
 				if ("DP".indexOf(gT(sel.value).t.charAt(0)) >= 0) gN("LL"+sel.name.substring(2,3)).selectedIndex = 0; // reset LED mA to default for digital
-				enLA(gN("LL"+sel.name.substring(2,3))); // update LED mA
+				enLA(gN("LL"+n)); // update LED mA
+				gN("LC"+n).value = 1; // reset LED count on change
 			}
 			LTs.forEach((s,i) => {
 				const t = parseInt(s.value);
