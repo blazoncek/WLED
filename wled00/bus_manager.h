@@ -398,7 +398,6 @@ class BusHub75Matrix : public Bus {
     //byte *_ledsDirty;
     MatrixPanel_I2S_DMA *display;
     VirtualMatrixPanel  *virtualDisp;
-    static HUB75_I2S_CFG mxconfig;
 };
 #endif
 
