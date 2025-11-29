@@ -177,8 +177,8 @@ struct CRGBA {
   inline bool operator!=(const uint32_t rhs) { return (color32 & 0x00FFFFFF) != (rhs & 0x00FFFFFF); } // ignore white or alpha
 
   // Addition assignment with scaling of added color
-  inline CRGBA& operator+=(const CRGBA& rhs) { return nadd(rhs, true); }
-  inline CRGBA& operator+=(uint8_t x)        { return nadd(CRGBA(x,x,x), true); }
+  inline CRGBA& operator+=(const CRGBA& rhs) { return nadd(rhs, false); }
+  inline CRGBA& operator+=(uint8_t x)        { return nadd(CRGBA(x,x,x), false); }
 
   inline CRGBA& operator-=(const CRGBA& rhs) {
     auto qsub8 = [](uint8_t a, uint8_t b) { return a > b ? a - b : 0; };
