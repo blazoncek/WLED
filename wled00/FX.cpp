@@ -1927,9 +1927,8 @@ uint16_t mode_fire_2012() {
 
       // Step 4.  Map from heat cells to LED colors
       for (unsigned j = 0; j < SEGLEN; j++) {
-        // prevent use of blend region (241-255) from palette by limiting heat to 240 (not all palettes have a smooth blend region, though)
-        //CRGBA color = ColorFromPaletteWLED(SEGPALETTE, heat[j], 255, LINEARBLEND_NOWRAP);
-        CRGBA color = SEGMENT.color_from_palette(MIN(heat[j],240), false, false, 0);
+        // prevent use of blend region (241-255) from palette by LINEARBLEND_NOWRAP
+        CRGBA color = ColorFromPaletteWLED(SEGPALETTE, heat[j], 255, LINEARBLEND_NOWRAP);
         SEGMENT.setPixelColor(indexToVStrip(j, stripNr), color);
       }
     }
