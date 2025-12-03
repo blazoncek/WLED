@@ -19,7 +19,7 @@ const ranges = RangeTouch.setup('input[type="range"]', {});
 var retry = false;
 var palettesData;
 var fxdata = [];
-var pJson = {}, eJson = {}, lJson = {};
+var pJson = {}; // array of presets
 var plJson = {}; // array of playlists
 var pN = "", pI = 0, pNum = 0;
 var pmt = 1, pmtLS = 0, pmtLast = 0;
@@ -527,8 +527,7 @@ function loadPalettes(callback = null)
 		return res.json();
 	})
 	.then((json)=>{
-		lJson = Object.entries(json);
-		populatePalettes();
+		populatePalettes(Object.entries(json));
 		retry = false;
 	})
 	.catch((e)=>{
@@ -554,8 +553,7 @@ function loadFX(callback = null)
 		return res.json();
 	})
 	.then((json)=>{
-		eJson = Object.entries(json);
-		populateEffects();
+		populateEffects(Object.entries(json));
 		retry = false;
 	})
 	.catch((e)=>{
@@ -636,10 +634,10 @@ function populatePresets(fromls)
 
 		cn += `<div class="pres lstI" id="p${i}o">`;
 		if (cfg.comp.pid) cn += `<div class="pid">${i}</div>`;
-		cn += `<div class="pname lstIname" onclick="setPreset(${i})">${i==lastinfo.leds.bootps?"<i class='icons btn-icon'>&#xe410;</i>":""}${isPlaylist(i)?"<i class='icons btn-icon'>&#xe139;</i>":""}${pName(i)}
+		cn += `<div class="pname name" onclick="setPreset(${i})">${i==lastinfo.leds.bootps?"<i class='icons btn-icon'>&#xe410;</i>":""}${isPlaylist(i)?"<i class='icons btn-icon'>&#xe139;</i>":""}${pName(i)}
 	<i class="icons edit-icon flr" id="p${i}nedit" onclick="tglSegn(${i+100})">&#xe2c6;</i></div>
 	<i class="icons e-icon flr" id="sege${i+100}" onclick="expand(${i+100})">&#xe395;</i>
-	<div class="presin lstIcontent" id="seg${i+100}"></div>
+	<div class="presin content" id="seg${i+100}"></div>
 </div>`;
 		pNum++;
 	}
@@ -938,9 +936,8 @@ function populateSegments(s)
 	tooltip("#Segments");
 }
 
-function populateEffects()
+function populateEffects(effects)
 {
-	var effects = eJson;
 	var html = "";
 
 	effects.shift(); // temporary remove solid
@@ -959,33 +956,33 @@ function populateEffects()
 	for (let ef of effects) {
 		// add slider and color control to setFX (used by requestjson)
 		let id = ef.id;
-		let nm = ef.name+" ";
-		let fd = "";
+		let nm = ef.name;
+		let fd = "", fl = " ";
 		if (ef.name.indexOf("RSVD") < 0) {
 			if (Array.isArray(fxdata) && fxdata.length>id) {
 				if (fxdata[id].length==0) fd = ";;!;1"
 				else fd = fxdata[id];
 				let eP = (fd == '')?[]:fd.split(";"); // effect parameters
 				let p = (eP.length<3 || eP[2]==='')?[]:eP[2].split(","); // palette data
-				if (p.length>0 && (p[0] !== "" && !isNumeric(p[0]))) nm += "&#x1F3A8;";	// effects using palette
+				if (p.length>0 && (p[0] !== "" && !isNumeric(p[0]))) fl += "&#x1F3A8;";	// effects using palette
 				let m = (eP.length<4 || eP[3]==='')?'1':eP[3]; // flags
 				if (id == 0) m = ''; // solid has no flags
 				if (m.length>0) {
-					if (m.includes('0')) nm += "&#8226;"; // 0D effects (PWM & On/Off)
-					if (m.includes('1')) nm += "&#8942;"; // 1D effects
-					if (m.includes('2')) nm += "&#9638;"; // 2D effects
-					if (m.includes('v')) nm += "&#9834;"; // volume effects
-					if (m.includes('f')) nm += "&#9835;"; // frequency effects
+					if (m.includes('0')) fl += "&#8226;"; // 0D effects (PWM & On/Off)
+					if (m.includes('1')) fl += "&#8942;"; // 1D effects
+					if (m.includes('2')) fl += "&#9638;"; // 2D effects
+					if (m.includes('v')) fl += "&#9834;"; // volume effects
+					if (m.includes('f')) fl += "&#9835;"; // frequency effects
 				}
 			}
-			html += generateListItemHtml('fx',id,nm,'setFX','',fd);
+			html += generateListItemHtml('fx',id,`${nm}</span><span class="fltr">${fl}`,'setFX','',fd);
 		}
 	}
 
 	gId('fxlist').innerHTML=html;
 }
 
-function populatePalettes()
+function populatePalettes(lJson)
 {
 	lJson.shift(); // temporary remove default
 	lJson.sort((a,b) => (a[1]).localeCompare(b[1]));
@@ -998,7 +995,7 @@ function populatePalettes()
 			pa[0],
 			pa[1],
 			'setPalette',
-			`<div class="lstIprev" style="${genPalPrevCss(pa[0])}"></div>`
+			`<div class="prev" style="${genPalPrevCss(pa[0])}"></div>`
 		);
 	}
 	gId('pallist').innerHTML=html;
@@ -1013,7 +1010,7 @@ function populatePalettes()
 				255-j,
 				'~ Custom '+j+' ~',
 				'setPalette',
-				`<div class="lstIprev" style="${genPalPrevCss(255-j)}"></div>`
+				`<div class="prev" style="${genPalPrevCss(255-j)}"></div>`
 			);
 		}
 	}
@@ -1024,7 +1021,7 @@ function populatePalettes()
 function redrawPalPrev()
 {
 	d.querySelectorAll('#pallist .lstI').forEach((pal,i) =>{
-		let lP = pal.querySelector('.lstIprev');
+		let lP = pal.querySelector('.prev');
 		if (lP) {
 			lP.style = genPalPrevCss(pal.dataset.id);
 		}
@@ -1082,8 +1079,8 @@ function generateListItemHtml(listName, id, name, clickAction, extraHtml = '', e
 		`<label title="(${id})" class="radio schkl" onclick="event.preventDefault()">`+ // (#1984)
 			`<input type="radio" value="${id}" name="${listName}">`+
 			`<span class="radiomark"></span>`+
-			`<div class="lstIcontent">`+
-				`<span class="lstIname">${name}</span>`+
+			`<div class="content">`+
+				`<span class="name">${name}</span>`+
 			`</div>`+
 		`</label>`+
 		extraHtml +
@@ -1215,9 +1212,9 @@ function updateLen(s)
 			if (stop-start>1 && stopY-startY>1) {
 				// 2D segment
 				if (tPL) tPL.classList.remove('hide'); // unhide transpose checkbox
-				let sE = d.querySelector(`#fxlist .lstI[data-id="${selectedFx}"]`);
+				let sE = d.querySelector(`#fxlist div[data-id="${selectedFx}"]`);
 				if (sE) {
-					let sN = sE.querySelector(".lstIname").innerText;
+					let sN = sE.querySelector(".name").innerText;
 					let seg = gId(`seg${s}map2D`);
 					if (seg) {
 						if (sN.indexOf("\u25A6")<0) seg.classList.remove('hide'); // unhide mapping for 1D effects (| in name)
@@ -1328,11 +1325,11 @@ function updateSelectedPalette(s)
 	var selElement = parent.querySelector('.selected');
 	if (selElement) selElement.classList.remove('selected');
 
-	var selectedPalette = parent.querySelector(`.lstI[data-id="${s}"]`);
-	if (selectedPalette)  parent.querySelector(`.lstI[data-id="${s}"]`).classList.add('selected');
+	var selectedPalette = parent.querySelector(`div[data-id="${s}"]`);
+	if (selectedPalette)  parent.querySelector(`div[data-id="${s}"]`).classList.add('selected');
 
 	// Display selected palette name on button in simplified UI
-	let selectedName = selectedPalette.querySelector(".lstIname").innerText;
+	let selectedName = selectedPalette.querySelector(".name").innerText;
 	if (simplifiedUI) {
 		gId("palwbtn").innerText = "Palette: " + selectedName;
 	}
@@ -1360,7 +1357,7 @@ function updateSelectedFx()
 		selElement.style.bottom = null; // remove element style added in slider handling
 	}
 
-	var selectedEffect = parent.querySelector(`.lstI[data-id="${selectedFx}"]`);
+	var selectedEffect = parent.querySelector(`div[data-id="${selectedFx}"]`);
 	if (selectedEffect) {
 		selectedEffect.classList.add('selected');
 		setEffectParameters(selectedFx);
@@ -1378,7 +1375,7 @@ function updateSelectedFx()
 				}
 			}
 		});
-		var selectedName = selectedEffect.querySelector(".lstIname").innerText;
+		var selectedName = selectedEffect.querySelector(".name").innerText;
 
 		// Display selected effect name on button in simplified UI
 		let selectedNameOnlyAscii = selectedName.replace(/[^\x00-\x7F]/g, "");
@@ -1388,7 +1385,7 @@ function updateSelectedFx()
 
 		// hide 2D mapping and/or sound simulation options
 		d.querySelectorAll(`#segcont div[data-map="map2D"]`).forEach((seg)=>{
-			let not2Dfx = d.querySelector(`#fxlist div[data-id="${seg.dataset.fx}"] .lstIname`).innerText.indexOf("\u25A6") < 0;
+			let not2Dfx = d.querySelector(`#fxlist div[data-id="${seg.dataset.fx}"] .name`).innerText.indexOf("\u25A6") < 0;
 			if (not2Dfx) seg.classList.remove('hide');
 			else seg.classList.add('hide');
 		});
@@ -1752,7 +1749,7 @@ function requestJson(command=null)
 		if (json.info) {
 			let i = json.info;
 			parseInfo(i);
-			populatePalettes(i);
+			//populatePalettes();
 			if (isInfo) populateInfo(i);
 			if (simplifiedUI) simplifyUI();
 		}
@@ -2062,17 +2059,17 @@ ${makePlSel(i, plJson[i].end?plJson[i].end:0)}
 	} else {
 		content =
 `<label class="check revchkl">
-	<span class="lstIname">Include brightness</span>
+	<span class="name">Include brightness</span>
 	<input type="checkbox" id="p${i}ibtgl" checked>
 	<span class="checkmark"></span>
 </label>
 <label class="check revchkl">
-	<span class="lstIname">Save segment bounds</span>
+	<span class="name">Save segment bounds</span>
 	<input type="checkbox" id="p${i}sbtgl" checked>
 	<span class="checkmark"></span>
 </label>
 <label class="check revchkl">
-	<span class="lstIname">Checked segments only</span>
+	<span class="name">Checked segments only</span>
 	<input type="checkbox" id="p${i}sbchk">
 	<span class="checkmark"></span>
 </label>`;
@@ -2088,7 +2085,7 @@ ${makePlSel(i, plJson[i].end?plJson[i].end:0)}
 <div class="h">(leave empty for no Quick load button)</div>
 <div ${pl&&i==0?"style='display:none'":""}>
 <label class="check revchkl">
-	<span class="lstIname">${pl?"Show playlist editor":(i>0)?"Overwrite with state":"Use current state"}</span>
+	<span class="name">${pl?"Show playlist editor":(i>0)?"Overwrite with state":"Use current state"}</span>
 	<input type="checkbox" id="p${i}cstgl" onchange="tglCs(${i})" ${(i==0||pl)?"checked":""}>
 	<span class="checkmark"></span>
 </label>
@@ -2096,7 +2093,7 @@ ${makePlSel(i, plJson[i].end?plJson[i].end:0)}
 <div class="po2" id="p${i}o2">API command<br><textarea class="apitxt" id="p${i}api"></textarea></div>
 <div class="po1" id="p${i}o1">${content}</div>
 <label class="check revchkl">
-	<span class="lstIname">Apply at boot</span>
+	<span class="name">Apply at boot</span>
 	<input type="checkbox" id="p${i}bps" ${i==bps?"checked":""}>
 	<span class="checkmark"></span>
 </label>
@@ -2117,7 +2114,7 @@ function makePUtil()
 	p.innerHTML = `<div class="presin expanded">${makeP(0)}</div>`;
 	let pTx = gId('p0txt');
 	pTx.focus();
-	pTx.value = eJson.find((o)=>{return o.id==selectedFx}).name;
+	pTx.value = d.querySelector(`#fxlist div[data-id="${selectedFx}"] .name`).innerText;
 	pTx.select();
 	p.scrollIntoView({
 		behavior: 'smooth',
@@ -2869,7 +2866,7 @@ function getPalettesData(page, callback)
 function hideModes(txt)
 {
 	for (let e of (d.querySelectorAll('#fxlist .lstI')||[])) {
-		let iT = e.querySelector('.lstIname').innerText;
+		let iT = e.querySelector('.name').innerText;
 		let f = false;
 		if (txt==="2D") f = iT.indexOf("\u25A6") >= 0 && iT.indexOf("\u22EE") < 0; // 2D && !1D
 		else f = iT.indexOf(txt) >= 0;
@@ -2883,17 +2880,6 @@ function search(field, listId = null) {
 
 	const search = field.value !== '';
 
-	// restore default preset sorting if no search term is entered
-	if (!search) {
-		if (listId === 'pcont') { populatePresets(); return; }
-		if (listId === 'pallist') {
-			let id = parseInt(d.querySelector('#pallist input[name="palette"]:checked').value); // preserve selected palette
-			populatePalettes();
-			updateSelectedPalette(id);
-			return;
-		}
-	}
-
 	// clear filter if searching in fxlist
 	if (listId === 'fxlist' && search) {
 		d.querySelectorAll("#filters input[type=checkbox]").forEach((e) => { e.checked = false; });
@@ -2906,14 +2892,18 @@ function search(field, listId = null) {
 	const listItems = gId(listId).querySelectorAll('.lstI');
 	listItems.forEach((listItem, i) => {
 		if (listId !== 'pcont' && i === 0) return;
-		const listItemName = listItem.querySelector('.lstIname').innerText.toUpperCase();
+		const listItemName = listItem.querySelector('.name').innerText.toUpperCase();
 		const searchIndex = listItemName.indexOf(field.value.toUpperCase());
 		if (searchIndex < 0) {
 			listItem.dataset.searchIndex = Number.MAX_SAFE_INTEGER;
 		} else {
 			listItem.dataset.searchIndex = searchIndex;
 		}
-		listItem.style.display = (searchIndex < 0) && !listItem.classList.contains("selected") ? 'none' : '';
+		if ((searchIndex < 0) && !listItem.classList.contains("selected")) {
+			listItem.classList.add('hide');
+		} else {
+			listItem.classList.remove('hide');
+		}
 	});
 
 	// sort list items by search index and name
@@ -2925,8 +2915,8 @@ function search(field, listId = null) {
 			return aSearchIndex - bSearchIndex;
 		}
 
-		const aName = a.querySelector('.lstIname').innerText.toUpperCase();
-		const bName = b.querySelector('.lstIname').innerText.toUpperCase();
+		const aName = a.querySelector('.name').innerText.toUpperCase();
+		const bName = b.querySelector('.name').innerText.toUpperCase();
 
 		return aName.localeCompare(bName);
 	});
@@ -2961,6 +2951,7 @@ function filterFocus(e) {
 		// compute sticky top (with delay for transition)
 		if (!h) setTimeout(() => {
 			sCol('--sti', (sti+f.offsetHeight) + "px"); // has an unpleasant consequence on palette offset
+			//console.log(sti + " -> " + (sti+f.offsetHeight));
 		}, 255);
 		f.classList.remove('fade');	// immediately show (still has transition)
 	}
@@ -2971,6 +2962,7 @@ function filterFocus(e) {
 			if (!c) {
 				// compute sticky top
 				sCol('--sti', (sti-h) + "px"); // has an unpleasant consequence on palette offset
+				//console.log(sti + " -> " + (sti-h));
 				f.classList.add('fade');
 			}
 		}, 255);	// wait with hiding
@@ -2983,7 +2975,7 @@ function filterFx() {
 	inputField.focus();
 	clean(inputField.nextElementSibling);
 	d.querySelectorAll('#fxlist .lstI').forEach((listItem, i) => {
-		const listItemName = listItem.querySelector('.lstIname').innerText;
+		const listItemName = listItem.querySelector('.fltr').innerText;
 		let hide = false;
 		d.querySelectorAll("#filters input[type=checkbox]").forEach((e) => { if (e.checked && !listItemName.includes(e.dataset.flt)) hide = i > 0 /*true*/; });
 		listItem.style.display = hide && !listItem.classList.contains("selected") ? 'none' : '';
