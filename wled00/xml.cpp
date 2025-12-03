@@ -339,7 +339,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       settingsScript.print(F("addLEDs(1);"));
       uint8_t pins[5];
       int nPins = bus->getPins(pins);
-      for (int i = 0; i < nPins; i++) {
+      for (int i = 0; i < std::min(nPins,OUTPUT_MAX_PINS); i++) { // max 5 pins supported (Hub75 will report more)
         lp[1] = '0'+i;
         if (PinManager::isPinOk(pins[i]) || bus->isVirtual() || bus->isUsermod() || bus->isHub75()) printSetFormValue(settingsScript,lp,pins[i]);
       }

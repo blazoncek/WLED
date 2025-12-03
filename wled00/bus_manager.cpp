@@ -1029,8 +1029,8 @@ size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
 
 std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
   std::vector<LEDType> types = {
-    {TYPE_HUB75MATRIX_PORTAL,  "H", PSTR("HUB75 (Adafruit Matrix Portal")},
-    {TYPE_HUB75MATRIX_MOONHUB, "H", PSTR("HUB75 (Moonhub T7 S3")},
+    {TYPE_HUB75MATRIX_PORTAL,  "H", PSTR("HUB75 (Adafruit Matrix Portal)")},
+    {TYPE_HUB75MATRIX_MOONHUB, "H", PSTR("HUB75 (Moonhub T7 S3)")},
     {TYPE_HUB75MATRIX_S3,      "H", PSTR("HUB75 (S3 with PSRAM)")},
     {TYPE_HUB75MATRIX_TRINITY, "H", PSTR("HUB75 (Trinity/ElectroDragon)")},
     {TYPE_HUB75MATRIX_FORUM,   "H", PSTR("HUB75 (ESP32 Forum Pinout)")}
