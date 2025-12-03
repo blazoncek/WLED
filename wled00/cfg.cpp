@@ -176,7 +176,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   JsonObject hw_led = hw["led"];
 
   CJSON(strip.milliAmpsMax, hw_led[F("maxpwr")]); // milliAmps max for strip ABL, 0 means no ABL or PP-ABL
-  Bus::setGlobalAWMode(hw_led[F("rgbwm")] | AW_GLOBAL_DISABLED);
+  Bus::setGlobalAWMode(hw_led[F("rgbwm")] | AW_GLOBAL_DISABLED);  // legacy global AW mode setting (remove at some point)
   CJSON(strip.correctWB, hw_led["cct"]);
   CJSON(strip.cctFromRgb, hw_led[F("cr")]);
   CJSON(cctICused, hw_led[F("ic")]);
@@ -242,7 +242,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       bool reversed = elm["rev"];
       bool refresh = elm["ref"] | false;
       uint16_t freqkHz = elm[F("freq")] | 0;  // will be in kHz for DotStar and Hz for PWM
-      uint8_t AWmode = elm[F("rgbwm")] | RGBW_MODE_MANUAL_ONLY;
+      uint8_t AWmode = elm[F("rgbwm")] | (Bus::getGlobalAWMode() == AW_GLOBAL_DISABLED ? RGBW_MODE_MANUAL_ONLY : Bus::getGlobalAWMode());
       uint8_t maPerLed = elm[F("ledma")] | LED_MILLIAMPS_DEFAULT;
       uint16_t maMax = elm[F("maxpwr")] | 0; // maMax > 0 means per bus PP-ABL is enabled (bus has its own maximum allowable current)
       // To disable brightness limiter we either set output max current to 0 or single LED current to 0
@@ -897,7 +897,7 @@ void serializeConfig() {
   hw_led[F("ic")] = cctICused;
   hw_led[F("cb")] = Bus::getCCTBlend();
   hw_led["fps"] = strip.getTargetFps();
-  hw_led[F("rgbwm")] = Bus::getGlobalAWMode(); // global auto white mode override
+  //hw_led[F("rgbwm")] = Bus::getGlobalAWMode(); // global auto white mode override (deprecated and removed from configuration)
   #if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
   hw_led[F("prl")] = BusManager::hasParallelOutput();
   #endif

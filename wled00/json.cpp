@@ -435,6 +435,9 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     strip.setTransition(tr * 100);
   }
 
+  // global AWM override
+  Bus::setGlobalAWMode(root[F("awm")] | Bus::getGlobalAWMode());  // override AW mode setting
+
   tr = root[F("tb")] | -1;
   if (tr >= 0) strip.timebase = (unsigned long)tr - millis();
 

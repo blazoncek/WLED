@@ -197,7 +197,7 @@
 			// display global white channel overrides
 			gId("wc").style.display = (gRGBW) ? 'inline':'none';
 			if (!gRGBW) {
-				d.Sf.AW.selectedIndex = 0;
+				//d.Sf.AW.selectedIndex = 0;
 				d.Sf.CR.checked = false;
 			}
 			// update start indexes, max values, calculate current, etc
@@ -905,6 +905,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 		<h3>White management</h3>
 		White Balance correction: <input type="checkbox" name="CCT"><br>
 		<div id="wc">
+			<!--
 			Global override for Auto-calculate white:<br>
 			<select name="AW">
 				<option value=255>Disabled</option>
@@ -915,6 +916,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				<option value=4>Max</option>
 			</select>
 			<br>
+			-->
 			Calculate CCT from RGB: <input type="checkbox" name="CR"><br>
 			CCT IC used (Athom 15W): <input type="checkbox" name="IC"><br>
 			CCT additive blending: <input type="number" class="s" min="0" max="100" name="CB" onchange="UI()" required> %<br>

@@ -159,7 +159,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     cctICused = request->hasArg(F("IC"));
     uint8_t cctBlending = request->arg(F("CB")).toInt();
     Bus::setCCTBlend(cctBlending);
-    Bus::setGlobalAWMode(request->arg(F("AW")).toInt());
+    //Bus::setGlobalAWMode(request->arg(F("AW")).toInt());
     strip.setTargetFps(request->arg(F("FR")).toInt());
     #if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
     useParallelI2S = request->hasArg(F("PR"));
@@ -1090,6 +1090,10 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
     if (check2Changed)    seg.check2    = (bool)check2In;
     if (check3Changed)    seg.check3    = (bool)check3In;
   }
+
+  // set global AWM override
+  pos = req.indexOf(F("AW="));
+  if (pos > 0) Bus::setGlobalAWMode(getNumVal(req, pos));
 
   //set advanced overlay
   pos = req.indexOf(F("OL="));
