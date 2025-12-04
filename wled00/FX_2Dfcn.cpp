@@ -698,14 +698,16 @@ void Segment::setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const {
   // calculate the intensities for each affected pixel
   auto WU_WEIGHT = [](uint16_t a, uint16_t b) { return (uint8_t)((a * b + a + b) >> 8); };
   uint8_t wu[4] = {WU_WEIGHT(ix, iy), WU_WEIGHT(xx, iy), WU_WEIGHT(ix, yy), WU_WEIGHT(xx, yy)};
+  x >>= 8; // integer part of x
+  y >>= 8; // integer part of y
+  int step = x+1 < (int)vWidth()  ? 1 : 2; // skip right pixels if out of bounds
+  int maxI = y+1 < (int)vHeight() ? 4 : 2; // skip bottom pixels if out of bounds
   // multiply the intensities by the colour, and saturating-add them to the pixels
-  for (int i = 0; i < 4; i++) {
-    int wu_x = (x >> 8) + (i & 1);        // precalculate x
-    int wu_y = (y >> 8) + ((i >> 1) & 1); // precalculate y
-    if (/*wu_x >= 0 && wu_y >= 0 && */wu_x < (int)vWidth() && wu_y < (int)vHeight()) {
-      c.a = wu[i]; // set alpha to weight
-      addPixelColorXYRaw(wu_x, wu_y, c); // also modifies resulting opacity
-    }
+  for (int i = 0; i < maxI; i += step) {
+    int wu_x = x + (i & 1);        // precalculate x
+    int wu_y = y + ((i >> 1) & 1); // precalculate y
+    c.a = wu[i]; // set alpha to weight
+    addPixelColorXYRaw(wu_x, wu_y, c); // also modifies resulting opacity
   }
 }
 

@@ -524,14 +524,14 @@ class Segment {
 
     inline CRGBA *getPixels() const                                                     { return pixels; }
     inline void  setPixelColorRaw(unsigned i, CRGBA c) const                            { pixels[i] = c; }
-    inline void  addPixelColorRaw(unsigned i, CRGBA c) const                            { pixels[i] = pixels[i].add(c,true); }      // pixels[i].nadd(c); will crash ESP
+    inline void  addPixelColorRaw(unsigned i, CRGBA c) const                            { pixels[i] = pixels[i].add(c); }           // pixels[i].nadd(c); will crash ESP
     inline void  blendPixelColorRaw(unsigned i, CRGBA c, uint8_t b) const               { pixels[i].nblend(c, b); }
     inline void  fadePixelColorRaw(unsigned i, uint8_t b) const                         { pixels[i] = pixels[i].scale8_video(b); }  // pixels[i].nscale8(b); will crash ESP
     inline CRGBA getPixelColorRaw(unsigned i) const                                     { return pixels[i]; };
   #ifndef WLED_DISABLE_2D
     inline static unsigned XY(unsigned x, unsigned y)                                   { return x + y*Segment::vWidth(); }
     inline void  setPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const              { pixels[XY(x,y)] = c; }
-    inline void  addPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const              { pixels[XY(x,y)] = pixels[XY(x,y)].add(c,true); }      // pixels[XY(x,y)].nadd(c); will crash ESP
+    inline void  addPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const              { pixels[XY(x,y)] = pixels[XY(x,y)].add(c); }           // pixels[XY(x,y)].nadd(c); will crash ESP
     inline void  blendPixelColorXYRaw(unsigned x, unsigned y, CRGBA c, uint8_t b) const { pixels[XY(x,y)].nblend(c, b); }
     inline void  fadePixelColorXYRaw(unsigned x, unsigned y, uint8_t b) const           { pixels[XY(x,y)] = pixels[XY(x,y)].scale8_video(b); }  // pixels[XY(x,y)].nscale8(b); will crash ESP
     inline CRGBA getPixelColorXYRaw(unsigned x, unsigned y) const                       { return pixels[XY(x,y)]; };
