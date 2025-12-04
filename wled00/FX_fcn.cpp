@@ -462,8 +462,8 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
     stop = 0;
     return;
   }
-  // allocate FX render buffer
-  if (length() != oldLength) {
+  // allocate FX render buffer only if increased in size (prevent fragmentation)
+  if (length() > oldLength) {
     // allocate render buffer (always entire segment), prefer IRAM/PSRAM. Note: impact on FPS with PSRAM buffer is low (<2% with QSPI PSRAM) on S2/S3
     p_free(pixels);
     pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
@@ -476,7 +476,7 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
     }
 
   }
-  refreshLightCapabilities();
+  refreshLightCapabilities(); // fix for #3403
 }
 
 
@@ -1790,7 +1790,6 @@ void WS2812FX::applySegmentGeometryUpdates() {
     if (upd.id >= _segments.size()) continue; // invalid segment id
     Segment &seg = _segments[upd.id];
     seg.setGeometry(upd.start, upd.stop, upd.grp, upd.spc, upd.off, upd.startY, upd.stopY, upd.m12);
-    seg.refreshLightCapabilities();
     if (seg.reset && seg.stop == 0) {
       if (upd.id == getMainSegmentId()) setMainSegmentId(getFirstSelectedSegId());
     }
