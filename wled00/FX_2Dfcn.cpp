@@ -694,20 +694,20 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
 void Segment::setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const {
   if (!isActive()) return; // not active
   // extract the fractional parts and derive their inverses
-  unsigned xx = x & 0xff, yy = y & 0xff, ix = 255 - xx, iy = 255 - yy;
-  // calculate the intensities for each affected pixel
-  auto WU_WEIGHT = [](uint16_t a, uint16_t b) { return (uint8_t)((a * b + a + b) >> 8); };
-  uint8_t wu[4] = {WU_WEIGHT(ix, iy), WU_WEIGHT(xx, iy), WU_WEIGHT(ix, yy), WU_WEIGHT(xx, yy)};
+  const unsigned xx = x & 0xff, yy = y & 0xff, ix = 255 - xx, iy = 255 - yy;
   x >>= 8; // integer part of x
   y >>= 8; // integer part of y
-  int step = x+1 < (int)vWidth()  ? 1 : 2; // skip right pixels if out of bounds
-  int maxI = y+1 < (int)vHeight() ? 4 : 2; // skip bottom pixels if out of bounds
+  if (x >= vWidth() || y >= vHeight()) return;  // if pixel would fall out of virtual segment just exit
+  // calculate the intensities for each affected pixel
+  auto WU_WEIGHT = [](uint16_t a, uint16_t b) { return (uint8_t)((a * b + a + b) >> 8); };
+  const uint8_t wu[4] = {WU_WEIGHT(ix, iy), WU_WEIGHT(xx, iy), WU_WEIGHT(ix, yy), WU_WEIGHT(xx, yy)};
+  const int step = x+1 < (int)vWidth()  ? 1 : 2; // skip right pixels if out of bounds
+  const int maxI = y+1 < (int)vHeight() ? 4 : 2; // skip bottom pixels if out of bounds
   // multiply the intensities by the colour, and saturating-add them to the pixels
   for (int i = 0; i < maxI; i += step) {
     int wu_x = x + (i & 1);        // precalculate x
     int wu_y = y + ((i >> 1) & 1); // precalculate y
-    c.a = wu[i]; // set alpha to weight
-    addPixelColorXYRaw(wu_x, wu_y, c); // also modifies resulting opacity
+    blendPixelColorXYRaw(wu_x, wu_y, c, wu[i]);
   }
 }
 
