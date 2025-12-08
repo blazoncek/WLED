@@ -2969,7 +2969,7 @@ class AudioReactive : public Usermod {
         disableSoundProcessing = true;
       } else {
         #if defined(WLED_DEBUG_USERMODS) && defined(SR_DEBUG)
-        if ((disableSoundProcessing == true) && (audioSyncEnabled == 0) && audioSource->isInitialized()) {    // we just switched to "enabled"
+        if ((disableSoundProcessing == true) && (audioSyncEnabled == 0) && audioSource && audioSource->isInitialized()) {    // we just switched to "enabled"
           DEBUGSR_PRINTLN(F("[AR userLoop]  realtime mode ended - audio processing resumed."));
           DEBUGSR_PRINTF_P(PSTR("               RealtimeMode = %d; RealtimeOverride = %d\n"), int(realtimeMode), int(realtimeOverride));
         }
@@ -2981,7 +2981,7 @@ class AudioReactive : public Usermod {
       if (audioSyncEnabled & 0x02) disableSoundProcessing = true;   // make sure everything is disabled IF in audio Receive mode
       if (audioSyncEnabled & 0x01) disableSoundProcessing = false;  // keep running audio IF we're in audio Transmit mode
 #ifdef ARDUINO_ARCH_ESP32
-      if (!audioSource->isInitialized()) disableSoundProcessing = true;  // no audio source
+      if (!audioSource || !audioSource->isInitialized()) disableSoundProcessing = true;  // no audio source
 
 
       // Only run the sampling code IF we're not in Receive mode or realtime mode
