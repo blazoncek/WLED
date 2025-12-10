@@ -2244,7 +2244,7 @@ static uint16_t ripple_base() {
       unsigned rippleorigin = ripples[i].pos;
       CRGBA col = SEGMENT.color_from_palette(ripples[i].color, false, PALETTE_FIXED, 255);
       unsigned propagation = ((ripplestate/rippledecay - 1) * (SEGMENT.speed + 1));
-      int propI = propagation >> 5;
+      int propI = propagation >> 2;
       unsigned propF = propagation & 0xFF;
       unsigned amp = (ripplestate < 17) ? triwave8((ripplestate-1)*8) : map(ripplestate,17,255,255,2);
 
@@ -2253,11 +2253,11 @@ static uint16_t ripple_base() {
         unsigned cx = rippleorigin >> 8;
         unsigned cy = rippleorigin & 0xFF;
         unsigned mag = scale8(sin8_t((propF>>2)), amp);
-        if (propI > 0) SEGMENT.drawCircle(cx, cy, propI, SEGMENT.getPixelColorXY(cx + propI, cy).nblend(col, (uint8_t)mag), false, true);
+        CRGBA c = col.setOpacity(mag);
+        if (propI > 0) SEGMENT.drawCircle(cx<<6, cy<<6, propI, c, true, true, true);
       } else
       #endif
       {
-        propI >>= 3; // restore 1D scale
         int left = rippleorigin - propI -1;
         int right = rippleorigin + propI +2;
         for (int v = 0; v < 4; v++) {
@@ -5780,18 +5780,16 @@ uint16_t mode_2Dfloatingblobs(void) {
 
   const int cols = SEG_W;
   const int rows = SEG_H;
-  const int maxC = (cols-1)<<4;
-  const int maxR = (rows-1)<<4;
-  const int rMax = cols>8 ? (cols<<2) : (2<<4); // colos/4 or 2
+  const int maxC = (cols-1)<<6;
+  const int maxR = (rows-1)<<6;
+  const int rMax = cols>8 ? (cols<<3) : (2<<6); // colos/4 or 2
   //auto abs = [](int16_t x) { return x<0 ? -x : x; };
-  auto int124 = [](int16_t a) { return (a > 0 ? 0 : 0xF000) | (a >> 4); }; // convert 12.4 fixed point to integer
-  //auto mul124 = [](int16_t a, int16_t b) { int32_t r = ((int32_t)a * b); return (r<0 ? 0xF000 : 0) | (r >> 4); }; // 12.4 fixed point multiplication
+  auto int106 = [](int16_t a) { return (int16_t)((int32_t)a >> 6); }; // convert 12.4 fixed point to integer
 
   typedef struct Blob {
-
     int16_t x[MAX_BLOBS], y[MAX_BLOBS];   // coordinates are in 12.4 fixed point format
-    int16_t sX[MAX_BLOBS], sY[MAX_BLOBS]; // speed is in 12.4 fixed point format
-    uint16_t r[MAX_BLOBS];                // radius is in 12.4 fixed point format
+    int16_t sX[MAX_BLOBS], sY[MAX_BLOBS]; // speed is in 10.6 fixed point format
+    uint16_t r[MAX_BLOBS];                // radius is in 10.6 fixed point format
     byte color[MAX_BLOBS];
     bool grow[MAX_BLOBS];
   } blob_t;
@@ -5806,15 +5804,15 @@ uint16_t mode_2Dfloatingblobs(void) {
     SEGENV.aux1 = rows;
     //SEGMENT.fill(BLACK);
     for (size_t i = 0; i < MAX_BLOBS; i++) {
-      blob->r[i]  = hw_random16(1<<4, rMax);
-      blob->sX[i] = hw_random16(32, cols<<4) / (256 - SEGMENT.speed);
-      blob->sY[i] = hw_random16(32, rows<<4) / (256 - SEGMENT.speed);
+      blob->r[i]  = hw_random16(1<<6, rMax);
+      blob->sX[i] = hw_random16(2<<6, cols<<6) / (256 - SEGMENT.speed);
+      blob->sY[i] = hw_random16(2<<6, rows<<6) / (256 - SEGMENT.speed);
       blob->x[i]  = hw_random16(0, maxC);
       blob->y[i]  = hw_random16(0, maxR);
       blob->color[i] = hw_random8();
-      blob->grow[i]  = (blob->r[i] <= (1<<4)); // start growing if radius <= 1
-      if (blob->sX[i] == 0) blob->sX[i] = 1;
-      if (blob->sY[i] == 0) blob->sY[i] = 1;
+      blob->grow[i]  = (blob->r[i] <= (1<<6)); // start growing if radius <= 1
+      if (blob->sX[i] == 0) blob->sX[i] = 2<<6;
+      if (blob->sY[i] == 0) blob->sY[i] = 2<<6;
     }
   }
 
@@ -5823,12 +5821,10 @@ uint16_t mode_2Dfloatingblobs(void) {
   int dT = strip.now - SEGENV.step;
   // Bounce balls around
   for (size_t i = 0; i < Amount; i++) {
-    int x = int124(blob->x[i]);
-    int y = int124(blob->y[i]);
     CRGBA c = SEGMENT.color_from_palette(blob->color[i], false, PALETTE_FIXED, 0);
-    if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(int124(blob->x[i-1]), int124(blob->y[i-1]), x, y, SEGCOLOR(2), SEGMENT.check1);
-    if (blob->r[i] > (1<<4))     SEGMENT.drawCircle(x, y, blob->r[i], c, true, SEGMENT.check1);
-    else                         SEGMENT.setPixelColorXY(x, y, c);
+    if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(int106(blob->x[i-1]), int106(blob->y[i-1]), int106(blob->x[i]), int106(blob->y[i]), SEGCOLOR(2), SEGMENT.check1);
+    if (blob->r[i] > (1<<6))     SEGMENT.fillEllipse(blob->x[i], blob->y[i], blob->r[i]+(1<<5), blob->r[i]+(1<<5), c);
+    else                         SEGMENT.setWuPixelColor(blob->x[i]<<2, blob->y[i]<<2, c);
 
     if (dT > 1000) blob->color[i] += 4; // slowly change color
     // change radius if needed
@@ -5841,7 +5837,7 @@ uint16_t mode_2Dfloatingblobs(void) {
     } else {
       // reduce radius until it is < 1
       blob->r[i] -= !hw_random8(10); // 10% chance to shrink
-      if (blob->r[i] < (1<<4)) {
+      if (blob->r[i] < (1<<6)) {
         blob->grow[i] = true;
       }
     }
@@ -5851,20 +5847,20 @@ uint16_t mode_2Dfloatingblobs(void) {
       // move y
       blob->y[i] += blob->sY[i];
       // bounce x
-      if (blob->x[i] < 0) {
-        blob->sX[i] =   hw_random16(32, cols<<4) / (256 - SEGMENT.speed) + 1;
-        blob->x[i]  = 0;
-      } else if (blob->x[i] > maxC) {
-        blob->sX[i] = -(hw_random16(32, cols<<4) / (256 - SEGMENT.speed) + 1);
-        blob->x[i]  = maxC - 1;
+      if (blob->x[i]-blob->r[i] < 0) {
+        blob->sX[i] =   hw_random16(64, cols<<6) / (256 - SEGMENT.speed) + 1;
+        blob->x[i]  = blob->r[i];
+      } else if (blob->x[i]+blob->r[i] > maxC) {
+        blob->sX[i] = -(hw_random16(64, cols<<6) / (256 - SEGMENT.speed) + 1);
+        blob->x[i]  = maxC - 1 - blob->r[i];
       }
       // bounce y
-      if (blob->y[i] < 0) {
-        blob->sY[i] =   hw_random16(32, rows<<4) / (256 - SEGMENT.speed) + 1;
-        blob->y[i]  = 0;
-      } else if (blob->y[i] > maxR) {
-        blob->sY[i] = -(hw_random16(32, rows<<4) / (256 - SEGMENT.speed) + 1);
-        blob->y[i]  = maxR - 1 ;
+      if (blob->y[i]-blob->r[i] < 0) {
+        blob->sY[i] =   hw_random16(64, rows<<6) / (256 - SEGMENT.speed) + 1;
+        blob->y[i]  = blob->r[i];
+      } else if (blob->y[i]+blob->r[i] > maxR) {
+        blob->sY[i] = -(hw_random16(64, rows<<6) / (256 - SEGMENT.speed) + 1);
+        blob->y[i]  = maxR - 1 - blob->r[i];
       }
     }
   }
@@ -5874,7 +5870,7 @@ uint16_t mode_2Dfloatingblobs(void) {
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DBLOBS[] PROGMEM = "Blobs@!,# blobs,Blur,Trail,,Smooth,,Lines;!,,!;!;2;c1=0,o1=0,o3=0,pal=1";
+static const char _data_FX_MODE_2DBLOBS[] PROGMEM = "Blobs@!,# blobs,Blur,Trail,,,,Lines;!,,!;!;2;c1=0,o1=0,o3=0,pal=1";
 #undef MAX_BLOBS
 #endif
 
