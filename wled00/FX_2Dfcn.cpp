@@ -442,7 +442,7 @@ void Segment::fillEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
     for (int x = pxMin; x < pxMax; x++) {
       const int32_t dx = (x << 6) - cx;
       const int32_t dist = (mul106(dx,dx)*256/rxSq) + (mul106(dy,dy)*256/rySq);
-      if (dist > 256) continue; // outside ellipse
+      if (dist > 384) continue; // outside ellipse (actually it should be 256 but that will render a smaller ellipse)
       int32_t px = x;
       int32_t py = y;
       if (wrapX) {
@@ -456,7 +456,7 @@ void Segment::fillEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
       if ((unsigned)px < vW && (unsigned)py < vH) {
         if (dist > 192) { // may need tweaking!
           CRGBA c = color;
-          uint8_t alpha = ((256 - dist) << 2) + 3; // may need tweaking!
+          uint8_t alpha = 448 - dist; // may need tweaking!
           SEGMENT.blendPixelColorXYRaw(px, py, c/*.setOpacity(alpha)*/, alpha); // may need tweaking!
         } else SEGMENT.setPixelColorXYRaw(px, py, color);
       }
