@@ -6289,45 +6289,27 @@ uint16_t mode_2Doctopus() {
 
   const int cols = SEG_W;
   const int rows = SEG_H;
-  const auto XY = [&](int x, int y) { return x + y * cols; };
-  const uint8_t mapp = 180 / MAX(cols,rows);
+  const unsigned mapp = 180 / MAX(cols,rows);
+  int C_X;
+  int C_Y;
 
-  typedef struct {
-    uint8_t angle;
-    uint8_t radius;
-  } map_t;
+  if (SEGMENT.check1)
+    C_X = map(inoise16((strip.now>>4) * (SEGMENT.custom1+1), 25355, SEGMENT.custom2+685), 4096, 61440, 0, cols-1);
+  else
+    C_X = (cols / 2) + ((SEGMENT.custom1 - 128)*cols)/255;
 
-  const size_t dataSize = SEGMENT.width() * SEGMENT.height() * sizeof(map_t); // prevent reallocation if mirrored or grouped
-  if (!SEGENV.allocateData(dataSize + 2)) return mode_static(); //allocation failed
-
-  map_t *rMap = reinterpret_cast<map_t*>(SEGENV.data);
-  uint8_t *offsX = reinterpret_cast<uint8_t*>(SEGENV.data + dataSize);
-  uint8_t *offsY = reinterpret_cast<uint8_t*>(SEGENV.data + dataSize + 1);
-
-  // re-init if SEGMENT dimensions or offset changed
-  if (SEGENV.call == 0 || SEGENV.aux0 != cols || SEGENV.aux1 != rows || SEGMENT.custom1 != *offsX || SEGMENT.custom2 != *offsY) {
-    SEGENV.step = 0; // t
-    SEGENV.aux0 = cols;
-    SEGENV.aux1 = rows;
-    *offsX = SEGMENT.custom1;
-    *offsY = SEGMENT.custom2;
-    const int C_X = (cols / 2) + ((SEGMENT.custom1 - 128)*cols)/255;
-    const int C_Y = (rows / 2) + ((SEGMENT.custom2 - 128)*rows)/255;
-    for (int x = 0; x < cols; x++) {
-      for (int y = 0; y < rows; y++) {
-        int dx = (x - C_X);
-        int dy = (y - C_Y);
-        rMap[XY(x, y)].angle  = int(40.7436f * atan2_t(dy, dx)); // avoid 128*atan2()/PI
-        rMap[XY(x, y)].radius = sqrtf(dx * dx + dy * dy) * mapp; //thanks Sutaburosu
-      }
-    }
-  }
+  if (SEGMENT.check2)
+    C_Y = map(inoise16((strip.now>>4) * (SEGMENT.custom2+1), SEGMENT.custom2+355, 11685), 4096, 61440, 0, rows-1);
+  else
+    C_Y = (rows / 2) + ((SEGMENT.custom2 - 128)*rows)/255;
 
   SEGENV.step += SEGMENT.speed / 32 + 1;  // 1-4 range
   for (int x = 0; x < cols; x++) {
     for (int y = 0; y < rows; y++) {
-      byte angle = rMap[XY(x,y)].angle;
-      byte radius = rMap[XY(x,y)].radius;
+      const int dx = (x - C_X);
+      const int dy = (y - C_Y);
+      uint8_t angle  = int(40.7436f * atan2_t(dy, dx)); // avoid 128*atan2()/PI
+      uint8_t radius = sqrtf(dx * dx + dy * dy) * mapp; // thanks Sutaburosu
       unsigned intensity = sin8_t(sin8_t((angle * 4 - radius) / 4 + SEGENV.step/2) + radius - SEGENV.step + angle * (SEGMENT.custom3/4+1));
       intensity = map((intensity*intensity) & 0xFFFF, 0, 65535, 0, 255); // add a bit of non-linearity for cleaner display
       SEGMENT.setPixelColorXY(x, y, SEGMENT.color_from_palette(SEGENV.step / 2 - radius, false, true, 255, intensity));
@@ -6335,7 +6317,7 @@ uint16_t mode_2Doctopus() {
   }
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DOCTOPUS[] PROGMEM = "Octopus@!,,Offset X,Offset Y,Legs;;!;2;";
+static const char _data_FX_MODE_2DOCTOPUS[] PROGMEM = "Octopus@!,,Offset X,Offset Y,Legs,Move X,Move Y;;!;2;pal=1";
 
 
 //Waving Cell
