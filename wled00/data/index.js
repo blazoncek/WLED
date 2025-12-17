@@ -527,7 +527,7 @@ function loadPalettes(callback = null)
 		return res.json();
 	})
 	.then((json)=>{
-		populatePalettes(Object.entries(json));
+		populatePalettes(Object.entries(json)); // does not inlcude custom palettes
 		retry = false;
 	})
 	.catch((e)=>{
@@ -999,23 +999,6 @@ function populatePalettes(lJson)
 		);
 	}
 	gId('pallist').innerHTML=html;
-	// append custom palettes (when loading for the 1st time)
-	let li = lastinfo;
-	if (!isEmpty(li) && li.cpalcount) {
-		for (let j = 0; j<li.cpalcount; j++) {
-			let div = d.createElement("div");
-			gId('pallist').appendChild(div);
-			div.outerHTML = generateListItemHtml(
-				'palette',
-				255-j,
-				'~ Custom '+j+' ~',
-				'setPalette',
-				`<div class="prev" style="${genPalPrevCss(255-j)}"></div>`
-			);
-		}
-	}
-	if (li.cpalcount>0) gId("rmPal").classList.remove("hide");
-	else                gId("rmPal").classList.add("hide");
 }
 
 function redrawPalPrev()
@@ -1405,6 +1388,8 @@ function displayRover(i,s)
 
 function cmpP(a, b)
 {
+	// a[0], b[0] = preset/playlist ID/index
+	// a[1], b[1] = preset/playlist object with 'n' (name) and 'playlist' (bool) properties
 	if (cfg.comp.idsort || !a[1].n) return (parseInt(a[0]) > parseInt(b[0]));
 	// sort playlists first, followed by presets with characters and last presets with special 1st character
 	const c = a[1].n.charCodeAt(0);
@@ -1748,8 +1733,26 @@ function requestJson(command=null)
 		if (json.success) return;
 		if (json.info) {
 			let i = json.info;
+			let loadCustomPalettes = isEmpty(lastinfo);
 			parseInfo(i);
-			//populatePalettes();
+			if (loadCustomPalettes) {
+				// append custom palettes (when loading for the 1st time, previews are already loaded)
+				if (!isEmpty(i) && i.cpalcount) {
+					for (let j = 0; j<i.cpalcount; j++) {
+						let div = d.createElement("div");
+						gId('pallist').appendChild(div);
+						div.outerHTML = generateListItemHtml(
+							'palette',
+							255-j,
+							'~ Custom '+j+' ~',
+							'setPalette',
+							`<div class="prev" style="${genPalPrevCss(255-j)}"></div>`
+						);
+					}
+				}
+				if (i.cpalcount>0) gId("rmPal").classList.remove("hide");
+				else                gId("rmPal").classList.add("hide");
+			}
 			if (isInfo) populateInfo(i);
 			if (simplifiedUI) simplifyUI();
 		}
@@ -2894,11 +2897,7 @@ function search(field, listId = null) {
 		if (listId !== 'pcont' && i === 0) return;
 		const listItemName = listItem.querySelector('.name').innerText.toUpperCase();
 		const searchIndex = listItemName.indexOf(field.value.toUpperCase());
-		if (searchIndex < 0) {
-			listItem.dataset.searchIndex = Number.MAX_SAFE_INTEGER;
-		} else {
-			listItem.dataset.searchIndex = searchIndex;
-		}
+		listItem.dataset.searchIndex = searchIndex < 0 ? Number.MAX_SAFE_INTEGER : searchIndex;
 		if ((searchIndex < 0) && !listItem.classList.contains("selected")) {
 			listItem.classList.add('hide');
 		} else {
@@ -2908,16 +2907,22 @@ function search(field, listId = null) {
 
 	// sort list items by search index and name
 	const sortedListItems = Array.from(listItems).sort((a, b) => {
+		const aName = a.querySelector('.name').innerText.toUpperCase();
+		const bName = b.querySelector('.name').innerText.toUpperCase();
+		if (listId==='pcont') {
+			// reconstruct pJson entry for proper comparison
+			const al = aName.charCodeAt(0) == 0xe139;
+			const bl = bName.charCodeAt(0) == 0xe139;
+			const aa = [parseInt(a.querySelector('.pid').innerText), {"n": aName.substr(al), "playlist": al}];
+			const bb = [parseInt(b.querySelector('.pid').innerText), {"n": bName.substr(bl), "playlist": bl}];
+			return cmpP(aa, bb);
+		}
 		const aSearchIndex = parseInt(a.dataset.searchIndex);
 		const bSearchIndex = parseInt(b.dataset.searchIndex);
 
 		if (aSearchIndex !== bSearchIndex) {
 			return aSearchIndex - bSearchIndex;
 		}
-
-		const aName = a.querySelector('.name').innerText.toUpperCase();
-		const bName = b.querySelector('.name').innerText.toUpperCase();
-
 		return aName.localeCompare(bName);
 	});
 	sortedListItems.forEach(item => {
