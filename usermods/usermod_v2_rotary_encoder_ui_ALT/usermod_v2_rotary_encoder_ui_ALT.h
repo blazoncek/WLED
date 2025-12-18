@@ -402,6 +402,7 @@ void RotaryEncoderUIUsermod::sortModesAndPalettes() {
   palettes_qstrings = re_findModeStrings(JSON_palette_names, getPaletteCount()); // need to include custom palettes (as it does malloc())
   palettes_alpha_indexes = re_initIndexArray(getPaletteCount()); // need to include custom palettes (as it does malloc())
   if (customPalettes.size()) {
+    // append custom palettes at the end
     for (int i=0; i<customPalettes.size(); i++) {
       palettes_alpha_indexes[FIXED_PALETTE_COUNT+i] = 255-i;
       palettes_qstrings[FIXED_PALETTE_COUNT+i] = PSTR("~Custom~");
@@ -411,7 +412,7 @@ void RotaryEncoderUIUsermod::sortModesAndPalettes() {
   // (Also skipping the first one, 'Default').
   int skipPaletteCount = 1;
   while (pgm_read_byte_near(palettes_qstrings[skipPaletteCount]) == '*') skipPaletteCount++;
-  re_sortModes(palettes_qstrings, palettes_alpha_indexes, getPaletteCount(), skipPaletteCount);
+  re_sortModes(palettes_qstrings, palettes_alpha_indexes, FIXED_PALETTE_COUNT, skipPaletteCount); // only sort the fixed palettes, avoid dynamic and custom palettes
 }
 
 byte *RotaryEncoderUIUsermod::re_initIndexArray(int numModes) {

@@ -1140,6 +1140,7 @@ bool FourLineDisplayUsermod::handleButton(uint8_t b) {
   #endif
 #endif
 void FourLineDisplayUsermod::onUpdateBegin(bool init) {
+  if (init) overlay("Updating", "firmware", 10000);
 #if defined(ARDUINO_ARCH_ESP32) && defined(FLD_ESP32_USE_THREADS)
   if (init && Display_Task) {
     vTaskSuspend(Display_Task);   // update is about to begin, disable task to prevent crash
