@@ -402,7 +402,7 @@ typedef enum mapping1D2D {
 
 class WS2812FX;
 
-// segment, 72 bytes
+// segment, 80 bytes
 class Segment {
   public:
     CRGBA    colors[NUM_COLORS];  // primary, secondary, tertiary colors (are considered opaque (0xffRRGGBB) if segment has no white channel)
@@ -441,9 +441,12 @@ class Segment {
       bool    check1  : 1;        // checkmark 1
       bool    check2  : 1;        // checkmark 2
       bool    check3  : 1;        // checkmark 3
-      //uint8_t blendMode : 4;      // segment blending modes: top, bottom, add, subtract, difference, multiply, divide, lighten, darken, screen, overlay, hardlight, softlight, dodge, burn
     };
     uint8_t   blendMode;          // segment blending modes: top, bottom, add, subtract, difference, multiply, divide, lighten, darken, screen, overlay, hardlight, softlight, dodge, burn
+    struct {
+      uint8_t zoomAmount    : 4;  // zoom amount (0-15)
+      uint8_t rotateSpeed   : 4;  // rotation speed (0-15)
+    };
     char     *name;               // segment name
 
     // runtime data
@@ -469,6 +472,7 @@ class Segment {
         bool    _manualW  : 1;
       };
     };
+    mutable uint16_t rotatedAngle;    // current rotation angle (2D)
 
     // static variables are use to speed up effect calculations by stashing common pre-calculated values
     static unsigned      _usedSegmentData;    // amount of data used by all segments
@@ -580,6 +584,8 @@ class Segment {
     , check2(false)
     , check3(false)
     , blendMode(0)
+    , zoomAmount(8)
+    , rotateSpeed(0)
     , name(nullptr)
     , next_time(0)
     , step(0)
