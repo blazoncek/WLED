@@ -5,9 +5,9 @@
  * Readability defines and their associated numerical values + compile-time constants
  */
 
-constexpr size_t FASTLED_PALETTE_COUNT = 7;   // = sizeof(fastledPalettes) / sizeof(fastledPalettes[0]);
-constexpr size_t GRADIENT_PALETTE_COUNT = 59; // = sizeof(gGradientPalettes) / sizeof(gGradientPalettes[0]);
-constexpr size_t DYNAMIC_PALETTE_COUNT = 6;   // 0-5 are dynamic palettes (0=default,1=random,2=primary,3=primary+secondary,4=primary+secondary+tertiary,5=primary+secondary(+tertiary if not black)
+constexpr size_t FASTLED_PALETTE_COUNT = 7;   // 6-12 = sizeof(fastledPalettes) / sizeof(fastledPalettes[0]);
+constexpr size_t GRADIENT_PALETTE_COUNT = 59; // 13-72 = sizeof(gGradientPalettes) / sizeof(gGradientPalettes[0]);
+constexpr size_t DYNAMIC_PALETTE_COUNT = 6;   // 0-5 dynamic palettes (0=default(virtual),1=random,2=primary,3=primary+secondary,4=primary+secondary+tertiary,5=primary+secondary(+tertiary if not black)
 constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_COUNT + GRADIENT_PALETTE_COUNT; // total number of fixed palettes
 #ifndef WLED_MAX_CUSTOM_PALETTES
   #define WLED_MAX_CUSTOM_PALETTES (255-FIXED_PALETTE_COUNT) // number of custom palettes
