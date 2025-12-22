@@ -1497,8 +1497,8 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     };
 
     // zooming and rotation
-    auto RotateAndZoom = [](const Segment &seg, CRGBA *locPixels, int midX, int midY, int cols, int rows, int shearAngle, int zoomOffset) {
-      for (int i = 0; i < cols * rows; i++) locPixels[i] = CRGBA(0,0,0); // fill black
+    auto RotateAndZoom = [](const CRGBA *srcPixels, CRGBA *destPixels, int midX, int midY, int cols, int rows, int shearAngle, int zoomOffset) {
+      for (int i = 0; i < cols * rows; i++) destPixels[i] = CRGBA(0,0,0); // fill black
     
       constexpr uint8_t Scale_Shift = 10;
       constexpr int Fixed_Scale = (1 << Scale_Shift);
@@ -1508,12 +1508,12 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       if (zoomScale <= 0) zoomScale = 1; // avoid divide-by-zero and negative zoom
 
       const bool flip = (shearAngle > 90 && shearAngle < 270); // Flip to avoid instability near 180°
-      if (flip) shearAngle = (shearAngle + 180) % 360;
+      if (flip) { shearAngle = (shearAngle + 180); while (shearAngle >= 360) shearAngle -= 360; }
 
       // Calculate shearX and shearY
-      float angleRadians = radians(shearAngle);
-      int shearX = -tan_t(angleRadians / 2) * Fixed_Scale;
-      int shearY =  sin_t(angleRadians)     * Fixed_Scale;
+      const float angleRadians = radians(shearAngle);
+      const int shearX = -tan_t(angleRadians / 2) * Fixed_Scale;
+      const int shearY =  sin_t(angleRadians)     * Fixed_Scale;
 
       const int WRAP_PAD_X = cols << 5; // ×32
       const int WRAP_PAD_Y = rows << 5; // Ensures wrap works with large negative coordinates when zoomed out
@@ -1540,16 +1540,16 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     
           // Bounds check or wrap
           //if (SEGMENT.check1) { // Always Wrap around
-            srcX = (srcX + WRAP_PAD_X) % cols;
-            srcY = (srcY + WRAP_PAD_Y) % rows;
+            srcX = (srcX + WRAP_PAD_X); while (srcX >= cols) srcX -= cols;
+            srcY = (srcY + WRAP_PAD_Y); while (srcY >= rows) srcY -= rows;
           //}
           //else if (SEGMENT.check2) { // Wrap plus mirror
           //  int tileX = (srcX + WRAP_PAD_X) / cols;
           //  int tileY = (srcY + WRAP_PAD_Y) / rows;
     
           //  // Wrap src
-          //  srcX = (srcX + WRAP_PAD_X) % cols;
-          //  srcY = (srcY + WRAP_PAD_Y) % rows;
+          //  srcX = (srcX + WRAP_PAD_X); while (srcX >= cols) srcX -= cols;
+          //  srcY = (srcY + WRAP_PAD_Y); while (srcY >= rows) srcY -= rows;
     
           //  // Flip on odd tiles
           //  if (tileX & 1) srcX = cols - 1 - srcX;
@@ -1559,7 +1559,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
           if ((unsigned)srcX >= (unsigned)cols || (unsigned)srcY >= (unsigned)rows) continue;
           
           // Sample from source & write to destination
-          locPixels[destX + destY * cols] = seg.pixels[srcX + srcY * cols];
+          destPixels[destX + destY * cols] = srcPixels[srcX + srcY * cols];
         }
       }
     };
@@ -1575,7 +1575,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       } else {
         topSegment.rotatedAngle = 0;
       }
-      RotateAndZoom(topSegment, _pixelsN, midX, midY, nCols, nRows, topSegment.rotatedAngle/10, topSegment.zoomAmount - 8);
+      RotateAndZoom(topSegment.getPixels(), _pixelsN, midX, midY, nCols, nRows, topSegment.rotatedAngle/10, topSegment.zoomAmount - 8);
     }
     CRGBA *_pixelsO = topSegment.getPixels();
     if (segO) {
@@ -1590,7 +1590,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
         } else {
           segO->rotatedAngle = 0;
         }
-        RotateAndZoom(*segO, _pixelsO, midXo, midYo, oCols, oRows, segO->rotatedAngle/10, segO->zoomAmount - 8);
+        RotateAndZoom(segO->getPixels(), _pixelsO, midXo, midYo, oCols, oRows, segO->rotatedAngle/10, segO->zoomAmount - 8);
       }
     }
 
@@ -1611,8 +1611,8 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       int x = c;
       int y = r;
       // if we blend using "push" style we need to "shift" canvas to left/right/up/down
-      if (offsetX != 0) x = (x + offsetX) % nCols;
-      if (offsetY != 0) y = (y + offsetY) % nRows;
+      if (offsetX != 0) { x = (x + offsetX); while (x >= nCols) x -= nCols; }
+      if (offsetY != 0) { y = (y + offsetY); while (y >= nRows) y -= nRows; }
       CRGBA c_a = BLACK;
       if (x < vCols && y < vRows) c_a = _pixelsR[x + y*vCols]; // will get clipped pixel from old segment or unclipped pixel from new segment
       if (segO && blendingStyle == BLEND_STYLE_FADE
@@ -1689,9 +1689,10 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       int i = k;
       // if we blend using "push" style we need to "shift" canvas to left or right
       switch (blendingStyle) {
-        case BLEND_STYLE_PUSH_RIGHT: i = (i + offsetI) % nLen;        break;
-        case BLEND_STYLE_PUSH_LEFT:  i = (i - offsetI + nLen) % nLen; break;
+        case BLEND_STYLE_PUSH_RIGHT: i = (i + offsetI);        break;
+        case BLEND_STYLE_PUSH_LEFT:  i = (i - offsetI + nLen); break;
       }
+      while (i >= nLen) i -= nLen;
       CRGBA c_a = BLACK;
       if (i < vLen) c_a = seg->getPixelColorRaw(i); // will get clipped pixel from old segment or unclipped pixel from new segment
       if (segO && blendingStyle == BLEND_STYLE_FADE && topSegment.mode != segO->mode && i < oLen) {
