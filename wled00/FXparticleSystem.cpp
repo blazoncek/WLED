@@ -11,292 +11,155 @@
 #include "wled.h"
 #include "FXparticleSystem.h"
 
-#if !defined(WLED_DISABLE_PARTICLESYSTEM2D) || !defined(WLED_DISABLE_PARTICLESYSTEM1D)
+#if !defined(WLED_DISABLE_PARTICLESYSTEM2D)
 //////////////////////////////
 // Shared Utility Functions //
 //////////////////////////////
 
+// limit speed of particles (used in 1D and 2D)
+static inline constexpr int32_t limitSpeed(const int32_t speed) {
+  return constrain(speed, -PS_P_MAXSPEED, PS_P_MAXSPEED); // note: this is slightly faster than using min/max at the cost of 50bytes of flash
+}
+
 // calculate the delta speed (dV) value and update the counter for force calculation (is used several times, function saves on codesize)
 // force is in 3.4 fixedpoint notation, +/-127
 [[gnu::pure]] static int32_t calcForce_dv(const int8_t force, uint8_t &counter) {
-  if (force == 0)
-    return 0;
-  // for small forces, need to use a delay counter
-  int32_t force_abs = abs(force); // absolute value (faster than lots of if's only 7 instructions)
   int32_t dv = 0;
-  // for small forces, need to use a delay counter, apply force only if it overflows
-  if (force_abs < 16) {
-    counter += force_abs;
+  if (force != 0) {
+    // for small forces, need to use a delay counter
+    int32_t force_abs = force < 0 ? -force : force; // absolute value (faster than lots of if's only 7 instructions)
+    uint8_t fraction = force_abs & 0x0F; // fractional part (4 LSBs)
+    /*if (force_abs > 15)*/ dv = force / 16; // MSBs
+    // for fraction, need to use a delay counter, apply force only if it overflows
+    counter += fraction;
     if (counter > 15) {
       counter -= 16;
-      dv = force < 0 ? -1 : 1; // force is either 1 or -1 if it is small (zero force is handled above)
+      dv += force < 0 ? -1 : 1; // force is either 1 or -1 if it is small (zero force is handled above)
     }
   }
-  else
-    dv = force / 16; // MSBs, note: cannot use bitshift as dv can be negative
-
   return dv;
 }
 
 // check if particle is out of bounds and wrap it around if required, returns false if out of bounds
-[[gnu::pure]] static bool checkBoundsAndWrap(int32_t &position, const int32_t max, const int32_t particleradius, const bool wrap) {
-  if ((uint32_t)position > (uint32_t)max) { // check if particle reached an edge, cast to uint32_t to save negative checking (max is always positive)
+[[gnu::pure]] static bool checkBoundsAndWrap(int32_t &position, int32_t max, const int32_t particleRadius, const bool wrap) {
+  if ((uint32_t)position > (uint32_t)max) { // check if particle reached an edge
     if (wrap) {
-      position = position % (max + 1); // note: cannot optimize modulo, particles can be far out of bounds when wrap is enabled
-      if (position < 0)
-        position += max + 1;
-    }
-    else if (((position < -particleradius) || (position > max + particleradius))) // particle is leaving boundaries, out of bounds if it has fully left
+      max++; // max is either maxX or maxY, need to increase by one for wrapping calculation
+      while (position >= max) position -= max;
+      while (position < 0)    position += max;
+    } else if (position + particleRadius < 0 || position - particleRadius > max) // particle is leaving boundaries, out of bounds if it has fully left
       return false; // out of bounds
   }
   return true; // particle is in bounds
 }
 
-// blur a 1D/2D buffer, sub-size blurring can be done using start and size
-// to blur a subset of the buffer, change the size and set start to the desired starting coordinates
-// interleave is used for bluring 2D buffer (vertically)
-[[gnu::hot]] static void blur(CRGBA *colorbuffer, uint32_t size, uint32_t blur, uint32_t start = 0, uint32_t interleave = 1) {
-  CRGBA seeppart, carryover(BLACK);
-  uint32_t seep = blur >> 1;
-  uint32_t stop = start + size;
-  for (uint32_t x = start, index = 0; x < stop; x++, index += interleave) {
-    seeppart = colorbuffer[index].scale8(seep); // scale it and seep to neighbours
-    if (index > 0) {
-      colorbuffer[index-interleave] += seeppart;
-      colorbuffer[index] += carryover; // is black on first pass
-    } else {
-      colorbuffer[index].nscale8(255-seep);
-    }
-    carryover = seeppart;
-  }
-}
-
-#ifndef WLED_DISABLE_PARTICLESYSTEM2D
-// blur a 10x10 colorbuffer (CRGBA colorbuffer[100]) in x and y direction, blur can be asymmetric in x and y
-// to blur a subset of the buffer, change the xsize/ysize and set xstart/ystart to the desired starting coordinates (default start is 0/0)
-static inline void blur2D(CRGBA *colorbuffer, uint32_t xsize, uint32_t ysize, uint32_t xblur, uint32_t yblur, uint32_t xstart = 0, uint32_t ystart = 0) {
-  // first and last row are always black in first pass of particle rendering
-  for (uint32_t y = ystart + 1; y < ystart + ysize - 2; y++) {
-    blur(&colorbuffer[xstart + y * 10], xsize, xblur, xstart, 1);
-  }
-  // first and last row are now smeared
-  for (uint32_t x = xstart; x < xstart + xsize; x++) {
-    blur(&colorbuffer[x + ystart * 10], ysize, yblur, ystart, 10);
-  }
-}
-
-/*
-// Draws filled ellipse into a 10x10 CRGBA buffer.
-// see https://www.geeksforgeeks.org/dsa/midpoint-ellipse-drawing-algorithm/
-static void drawEllipse(CRGBA *buffer, uint32_t cx, uint32_t cy, uint32_t rx, uint32_t ry, CRGBA color) {
-  // all coodinates and radii are in 16.8 fixed point notation
-  auto mul168 = [](int32_t a, int32_t b) { return ((int64_t)a * b) >> 8; };  // 16.8 fixed point multiplication
-  auto sqr168 = [&](int32_t a) { return mul168(a, a); };                        // 16.8 fixed point squaring
-  auto int168 = [](int32_t a)  { return a >> 8; };                           // convert 16.8 fixed point to integer
-  auto drawLine = [&](int32_t x1, int32_t x2, int32_t y) {
-    uint8_t k1 = 255 - (x1 && 0xFF);
-    uint8_t k2 =        x2 && 0xFF;
-    x1 = int168(x1);
-    x2 = int168(x2);
-    y  = int168(y);
-    for (uint32_t lx = x1; lx <= x2; lx++)
-      buffer[y * 10 + lx] = color;
-    buffer[y * 10 + x1].setOpacity(k1); // soften edges
-    buffer[y * 10 + x2].setOpacity(k2);
-  };
-
-  int32_t rxSq = sqr168(rx);
-  int32_t rySq = sqr168(ry);
-  int32_t x = 0, y = ry;
-
-  int32_t dx = 0; //2 * rySq * x;
-  int32_t dy = mul168(2 * rxSq, y);
-
-  // Region 1
-  int32_t d1 = (rySq - mul168(rxSq, ry)) + (rxSq >> 2); // initial decision parameter
-  while (dx < dy) {
-    drawLine((cx - x), (cx + x), (cy + y));
-    drawLine((cx - x), (cx + x), (cy - y));
-    if (d1 < 0) {
-      x  += 256; // increment x by 1 in 16.8 pixel notation
-      dx += (2 * rySq);
-      d1 += dx + rySq;
-    } else {
-      x  += 256;
-      y  -= 256;
-      dx += (2 * rySq);
-      dy -= (2 * rxSq);
-      d1 += dx - dy + rySq;
-    }
-  }
-
-  // Region 2
-  const int32_t x_plus_half = x + 128;
-  const int32_t y_minus_1 = y - 256;
-  int32_t d2 = mul168(rySq, sqr168(x_plus_half)) + mul168(rxSq, sqr168(y_minus_1)) - mul168(rxSq, rySq);
-  while (y >= 0) {
-    drawLine((cx - x), (cx + x), (cy + y));
-    drawLine((cx - x), (cx + x), (cy - y));
-    if (d2 > 0) {
-      y  -= 256;
-      dy -= (2 * rxSq);
-      d2 += rxSq - dy;
-    } else {
-      y  -= 256;
-      x  += 256;
-      dx += (2 * rySq);
-      dy -= (2 * rxSq);
-      d2 += dx - dy + rxSq;
-    }
-  }
-}
-*/
-#endif // WLED_DISABLE_PARTICLESYSTEM2D
-#endif
-
-#ifndef WLED_DISABLE_PARTICLESYSTEM2D
-ParticleSystem2D::ParticleSystem2D(uint32_t numberofparticles, uint32_t numberofsources, bool isadvanced, bool sizecontrol) {
-  PSPRINTLN("\n ParticleSystem2D constructor");
+// ParticleSystem2D class functions
+// constructor
+ParticleSystem2D::ParticleSystem2D(uint32_t numberofparticles, uint32_t numberofsources, bool sizecontrol) {
+  PSPRINTLN("ParticleSystem2D constructor");
   numSources = numberofsources; // number of sources allocated in init
   numParticles = numberofparticles; // number of particles allocated in init
   usedParticles = numParticles; // use all particles by default
-  advPartProps = nullptr; //make sure we start out with null pointers (just in case memory was not cleared)
-  advPartSize = nullptr;
-  isAdvanced = isadvanced;
-  sizeControl = sizecontrol && isadvanced; // size control only makes sense if advanced properties are used
-  updatePSpointers();
+  advPartSize = nullptr; // will be set in updatePSpointers if sizecontrol is true
+  sizeControl = sizecontrol; // size control only makes sense if advanced properties are used
+  updatePSpointers(); // initialize pointers to particle data
   setWallHardness(255); // set default wall hardness to max
   setWallRoughness(0); // smooth walls by default
   setGravity(0); //gravity disabled by default
-  setParticleSize(1); // 2x2 rendering size by default
-  motionBlur = 0; //no fading by default
-  smearBlur = 0; //no smearing by default
+  setMotionBlur(0); //no fading by default
+  setSmearBlur(0); //no smearing by default
   emitIndex = 0;
   collisionStartIdx = 0;
 
   //initialize some default non-zero values most FX use
   for (uint32_t i = 0; i < numParticles; i++) {
-     particles[i].sat = 255; // full saturation
+    particles[i].sat = 255; // full saturation
+    particles[i].size = 1; // default size is antialiased pixel
   }
   for (uint32_t i = 0; i < numSources; i++) {
     sources[i].source.sat = 255; //set saturation to max by default
     sources[i].source.ttl = 1; //set source alive
-    sources[i].sourceFlags.asByte = 0; // all flags disabled
+    sources[i].source.flagsAsByte = 0; // all flags disabled
   }
 }
 
 // update function applies gravity, moves the particles, handles collisions and renders the particles
 void ParticleSystem2D::update(void) {
   //apply gravity globally if enabled
-  if (particlesettings.useGravity)
-    applyGravity();
+  if (particlesettings.useGravity) applyGravity();
 
   //update size settings before handling collisions
   if (sizeControl) {
     for (uint32_t i = 0; i < usedParticles; i++) {
-      if (updateSize(&advPartProps[i], &advPartSize[i]) == false) { // if particle shrinks to 0 size
+      if (updateSize(particles[i], &advPartSize[i]) == false) { // if particle shrinks to 0 size
         particles[i].ttl = 0; // kill particle
       }
     }
   }
 
-  // handle collisions (can push particles, must be done before updating particles or they can render out of bounds, causing a crash if using local buffer for speed)
-  if (particlesettings.useCollisions)
-    handleCollisions();
+  // handle collisions (can push particles, must be done before updating particles or they can render out of bounds)
+  if (particlesettings.useCollisions) handleCollisions();
 
   //move all particles
   for (uint32_t i = 0; i < usedParticles; i++) {
-    particleMoveUpdate(particles[i], particleFlags[i], nullptr, isAdvanced ? &advPartProps[i] : nullptr); // note: splitting this into two loops is slower and uses more flash
+    particleMoveUpdate(particles[i], particlesettings); // note: splitting this into two loops is slower and uses more flash
   }
 
-  render();
-}
-
-// update function for fire animation
-void ParticleSystem2D::updateFire(const uint8_t intensity,const bool renderonly) {
-  if (!renderonly)
-    fireParticleupdate();
-  fireIntesity = intensity > 0 ? intensity : 1; // minimum of 1, zero checking is used in render function
   render();
 }
 
 // set percentage of used particles as uint8_t i.e 127 means 50% for example
 void ParticleSystem2D::setUsedParticles(uint8_t percentage) {
   usedParticles = (numParticles * ((int)percentage+1)) >> 8; // number of particles to use (percentage is 0-255, 255 = 100%)
-  PSPRINT(" SetUsedpaticles: allocated particles: ");
-  PSPRINT(numParticles);
-  PSPRINT(" ,used particles: ");
-  PSPRINTLN(usedParticles);
+  //PSPRINTF(PSTR("SetUsedpaticles: allocated particles: %d, used particles: %d\n"), numParticles, usedParticles);
 }
 
 void ParticleSystem2D::setMatrixSize(uint32_t x, uint32_t y) {
   maxXpixel = x - 1; // last physical pixel that can be drawn to
   maxYpixel = y - 1;
-  maxX = x * PS_P_RADIUS - 1;  // particle system boundary for movements
-  maxY = y * PS_P_RADIUS - 1;  // this value is often needed (also by FX) to calculate positions
-}
-
-// render size using smearing (see blur function)
-void ParticleSystem2D::setParticleSize(uint8_t size) {
-  particlesize = size;
-  particleHardRadius = PS_P_MINHARDRADIUS; // ~1 pixel
-  if (particlesize > 1) {
-    particleHardRadius = max(particleHardRadius, (uint32_t)particlesize); // radius used for wall collisions & particle collisions
-    motionBlur = 0; // disable motion blur if particle size is set
-  }
-  else if (particlesize == 0)
-    particleHardRadius = particleHardRadius >> 1; // single pixel particles have half the radius (i.e. 1/2 pixel)
+  maxX = (x << PS_P_SHIFT) - 1;  // particle system boundary for movements
+  maxY = (y << PS_P_SHIFT) - 1;  // this value is often needed (also by FX) to calculate positions
 }
 
 // enable/disable gravity, optionally, set the force (force=8 is default) can be -127 to +127, 0 is disable
 // if enabled, gravity is applied to all particles in ParticleSystemUpdate()
 // force is in 3.4 fixed point notation so force=16 means apply v+1 each frame default of 8 is every other frame (gives good results)
 void ParticleSystem2D::setGravity(int8_t force) {
-  if (force) {
-    gforce = force;
-    particlesettings.useGravity = true;
-  } else {
-    particlesettings.useGravity = false;
-  }
+  particlesettings.useGravity = (force != 0);
+  gforce = force;
 }
 
 void ParticleSystem2D::enableParticleCollisions(bool enable, uint8_t hardness) { // enable/disable gravity, optionally, set the force (force=8 is default) can be 1-255, 0 is also disable
   particlesettings.useCollisions = enable;
-  collisionHardness = (int)hardness + 1;
+  collisionHardness = hardness;
 }
 
 // emit one particle with variation, returns index of emitted particle (or -1 if no particle emitted)
 int32_t ParticleSystem2D::sprayEmit(const PSsource &emitter) {
-  bool success = false;
   for (uint32_t i = 0; i < usedParticles; i++) {
-    emitIndex++;
-    if (emitIndex >= usedParticles)
-      emitIndex = 0;
+    if (++emitIndex >= usedParticles) emitIndex = 0;
     if (particles[emitIndex].ttl == 0) { // find a dead particle
-      success = true;
-      particles[emitIndex].vx = emitter.vx + hw_random16(emitter.var << 1) - emitter.var; // random(-var, var)
-      particles[emitIndex].vy = emitter.vy + hw_random16(emitter.var << 1) - emitter.var; // random(-var, var)
+      int32_t dx;
+      int32_t dy;
+      do { // use circular random distribution for large variance to generate nicer "explosions"
+        dx = hw_random16(emitter.var << 1) - emitter.var;
+        dy = hw_random16(emitter.var << 1) - emitter.var;
+      } while (emitter.var > 5 && dx*dx + dy*dy > emitter.var*emitter.var); // reject points outside circle
+      particles[emitIndex].vx = emitter.vx + dx;
+      particles[emitIndex].vy = emitter.vy + dy;
+      // transfer other properties from emitter source particle
       particles[emitIndex].x = emitter.source.x;
       particles[emitIndex].y = emitter.source.y;
       particles[emitIndex].hue = emitter.source.hue;
       particles[emitIndex].sat = emitter.source.sat;
-      particleFlags[emitIndex].collide = emitter.sourceFlags.collide;
-      particles[emitIndex].ttl = hw_random16(emitter.minLife, emitter.maxLife);
-      if (isAdvanced)
-        advPartProps[emitIndex].size = emitter.size;
-      break;
+      particles[emitIndex].flagsAsByte = emitter.source.flagsAsByte;
+      particles[emitIndex].ttl = hw_random16(emitter.minLife, emitter.maxLife) + emitter.source.ttl;
+      particles[emitIndex].size = emitter.source.size;
+      particles[emitIndex].mass = emitter.source.mass;
+      return emitIndex;
     }
   }
-  if (success)
-    return emitIndex;
-  else
-    return -1;
-}
-
-// Spray emitter for particles used for flames (particle TTL depends on source TTL)
-void ParticleSystem2D::flameEmit(const PSsource &emitter) {
-  int emitIndex = sprayEmit(emitter);
-  if (emitIndex >= 0) particles[emitIndex].ttl += emitter.source.ttl;
+  return -1;
 }
 
 // Emits a particle at given angle and speed, angle is from 0-65535 (=0-360deg), speed is also affected by emitter->var
@@ -309,53 +172,54 @@ int32_t ParticleSystem2D::angleEmit(PSsource &emitter, const uint16_t angle, con
 
 // particle moves, decays and dies, if killoutofbounds is set, out of bounds particles are set to ttl=0
 // uses passed settings to set bounce or wrap, if useGravity is enabled, it will never bounce at the top and killoutofbounds is not applied over the top
-void ParticleSystem2D::particleMoveUpdate(PSparticle &part, PSparticleFlags &partFlags, PSsettings2D *options, PSadvancedParticle *advancedproperties) {
-  if (options == nullptr)
-    options = &particlesettings; //use PS system settings by default
-
+void ParticleSystem2D::particleMoveUpdate(PSparticle &part, PSsettings2D &options) {
   if (part.ttl > 0) {
-    if (!partFlags.perpetual)
-      part.ttl--; // age
-    if (options->colorByAge)
-      part.hue = min(part.ttl, (uint16_t)255); //set color to ttl
+    if (!part.perpetual) part.ttl--; // age
+    if (options.colorByAge) part.hue = min(part.ttl, (uint16_t)255); //set color to ttl
 
-    int32_t renderradius = PS_P_HALFRADIUS; // used to check out of bounds
     int32_t newX = part.x + (int32_t)part.vx;
     int32_t newY = part.y + (int32_t)part.vy;
-    partFlags.outofbounds = false; // reset out of bounds (in case particle was created outside the matrix and is now moving into view) note: moving this to checks below adds code and is not faster
+    part.outofbounds = false; // reset out of bounds (in case particle was created outside the matrix and is now moving into view) note: moving this to checks below adds code and is not faster
 
-    if (advancedproperties) { //using individual particle size?
-      setParticleSize(particlesize); // updates default particleHardRadius
-      if (advancedproperties->size > PS_P_MINHARDRADIUS) {
-        particleHardRadius += (advancedproperties->size - PS_P_MINHARDRADIUS); // update radius
-        renderradius = particleHardRadius;
-      }
-    }
+    // note on particle radius and rendering/bouncing/collisions: original code used particleHardRadius for bouncing and collisions
+    // and renderradius for rendering bounds check. The code set particleHardRadius to min(PS_P_PARTICLEHARDRADIUS, particle.size) which
+    // was a bit inconsistent (as there was no real definition what particle.size means apart form vague 0=single pixel, 1=2x2 pixels
+    // and >1 meant size should be interpreted as 1.015 pixel radius (2) up to 4.5 pixels radius (255))
+    // it also set renderradius to be PS_P_HALFRADIUS or particleHardRadius depending on advanced properties being used or not.
+    // again very inconsistent or at least not very well defined.
+    // this was (probably) meant as a diferentiation between "soft" and "hard" particles (soft boundary), however there was no description
+    // what hard radius really meant for rendering or collisions.
+    //
+    // Simplifying the use of particle's radius for rendering size and collisions/bouncing has disadvantge that there may not be
+    // any overlapping of colliding particles (i.e. if they have soft boundary). What is "soft boundary is yet to be defined.
+    // particleRadius (as used here, 32..288 in subpixels; 64 subpixels == 1 pixel) is used for both bouncing and collision detection.
+    int32_t particleRadius = part.size + (PS_P_RADIUS-1) + (part.size==0); // update radius
+
     // note: if wall collisions are enabled, bounce them before they reach the edge, it looks much nicer if the particle does not go half out of view
-    if (options->bounceY) {
-      if ((newY < (int32_t)particleHardRadius) || ((newY > (int32_t)(maxY - particleHardRadius)) && !options->useGravity)) { // reached floor / ceiling
-         bounce(part.vy, part.vx, newY, maxY);
+    if (options.bounceY) {
+      if ((newY < particleRadius) || ((newY > (maxY - particleRadius)) && !options.useGravity)) { // reached floor / ceiling
+         bounce(part.vy, part.vx, newY, maxY, particleRadius);
       }
-    }
-
-    if (!checkBoundsAndWrap(newY, maxY, renderradius, options->wrapY)) { // check out of bounds  note: this must not be skipped. if gravity is enabled, particles will never bounce at the top
-      partFlags.outofbounds = true;
-      if (options->killoutofbounds) {
+    } // no else here!
+    if (!checkBoundsAndWrap(newY, maxY, particleRadius, options.wrapY)) { // check out of bounds  note: this must not be skipped. if gravity is enabled, particles will never bounce at the top
+      part.outofbounds = true;
+      if (options.killoutofbounds) {
         if (newY < 0) // if gravity is enabled, only kill particles below ground
           part.ttl = 0;
-        else if (!options->useGravity)
+        else if (!options.useGravity)
           part.ttl = 0;
       }
     }
 
     if (part.ttl) { //check x direction only if still alive
-      if (options->bounceX) {
-        if ((newX < (int32_t)particleHardRadius) || (newX > (int32_t)(maxX - particleHardRadius))) // reached a wall
-          bounce(part.vx, part.vy, newX, maxX);
+      if (options.bounceX) {
+        if ((newX < particleRadius) || (newX > (maxX - particleRadius))) {// reached a wall
+          bounce(part.vx, part.vy, newX, maxX, particleRadius);
+        }
       }
-      else if (!checkBoundsAndWrap(newX, maxX, renderradius, options->wrapX)) { // check out of bounds
-        partFlags.outofbounds = true;
-        if (options->killoutofbounds)
+      else if (!checkBoundsAndWrap(newX, maxX, particleRadius, options.wrapX)) { // check out of bounds
+        part.outofbounds = true;
+        if (options.killoutofbounds)
           part.ttl = 0;
       }
     }
@@ -365,45 +229,11 @@ void ParticleSystem2D::particleMoveUpdate(PSparticle &part, PSparticleFlags &par
   }
 }
 
-// move function for fire particles
-void ParticleSystem2D::fireParticleupdate() {
-  for (uint32_t i = 0; i < usedParticles; i++) {
-    if (particles[i].ttl > 0)
-    {
-      particles[i].ttl--; // age
-      int32_t newY = particles[i].y + (int32_t)particles[i].vy + (particles[i].ttl >> 2); // younger particles move faster upward as they are hotter
-      int32_t newX = particles[i].x + (int32_t)particles[i].vx;
-      particleFlags[i].outofbounds = 0; // reset out of bounds flag  note: moving this to checks below is not faster but adds code
-      // check if particle is out of bounds, wrap x around to other side if wrapping is enabled
-      // as fire particles start below the frame, lots of particles are out of bounds in y direction. to improve speed, only check x direction if y is not out of bounds
-      if (newY < -PS_P_HALFRADIUS)
-        particleFlags[i].outofbounds = 1;
-      else if (newY > int32_t(maxY + PS_P_HALFRADIUS)) // particle moved out at the top
-        particles[i].ttl = 0;
-      else // particle is in frame in y direction, also check x direction now Note: using checkBoundsAndWrap() is slower, only saves a few bytes
-      {
-        if ((newX < 0) || (newX > (int32_t)maxX)) { // handle out of bounds & wrap
-          if (particlesettings.wrapX) {
-            newX = newX % (maxX + 1);
-            if (newX < 0) // handle negative modulo
-              newX += maxX + 1;
-          }
-          else if ((newX < -PS_P_HALFRADIUS) || (newX > int32_t(maxX + PS_P_HALFRADIUS))) { //if fully out of view
-            particles[i].ttl = 0;
-          }
-        }
-        particles[i].x = newX;
-      }
-      particles[i].y = newY;
-    }
-  }
-}
-
 // update advanced particle size control, returns false if particle shrinks to 0 size
-bool ParticleSystem2D::updateSize(PSadvancedParticle *advprops, PSsizeControl *advsize) {
+bool ParticleSystem2D::updateSize(PSparticle &particle, PSsizeControl *advsize) {
   // no need for pointer check, done in update()/updatePSpointers()
   // grow/shrink particle
-  int32_t newsize = advprops->size;
+  int32_t newsize = particle.size;
   uint32_t counter = advsize->sizecounter;
   uint32_t increment = 0;
   // calculate grow speed using 0-8 for low speeds and 9-15 for higher speeds
@@ -434,15 +264,14 @@ bool ParticleSystem2D::updateSize(PSadvancedParticle *advprops, PSsizeControl *a
     if (newsize > advsize->minsize) {
       newsize -= increment;
       if (newsize <= advsize->minsize) {
-        if (advsize->minsize == 0) 
-          return false; // particle shrunk to zero
+        if (advsize->minsize == 0) return false; // particle shrunk to zero
         advsize->shrink = false; // disable shrinking
         newsize = advsize->minsize; // limit
         if (advsize->pulsate) advsize->grow = true;
       }
     }
   }
-  advprops->size = newsize;
+  particle.size = newsize;
   // handle wobbling
   if (advsize->wobble) {
     advsize->asymdir += advsize->wobblespeed; // note: if need better wobblespeed control a counter is already in the struct
@@ -451,18 +280,15 @@ bool ParticleSystem2D::updateSize(PSadvancedParticle *advprops, PSsizeControl *a
 }
 
 // calculate x and y size for asymmetrical particles (advanced size control)
-void ParticleSystem2D::getParticleXYsize(PSadvancedParticle *advprops, PSsizeControl *advsize, uint32_t &xsize, uint32_t &ysize) {
-  // no need for pointer check, done in renderParticle()/updatePSpointers()
-  int32_t size = advprops->size;
-  int32_t asymdir = advsize->asymdir;
-  int32_t deviation = ((uint32_t)size * (uint32_t)advsize->asymmetry + 255) >> 8; // deviation from symmetrical size
+void ParticleSystem2D::getParticleXYsize(int32_t size, uint32_t asymmetry, int32_t asymdir, uint32_t &xsize, uint32_t &ysize) {
+  int32_t deviation = (size * asymmetry) >> 8; // deviation from symmetrical size (disallow full "size" as otherwise one size would be zero)
   // Calculate x and y size based on deviation and direction (0 is symmetrical, 64 is x, 128 is symmetrical, 192 is y)
   if (asymdir < 64) {
     deviation = (asymdir * deviation) >> 6;
   } else if (asymdir < 192) {
-    deviation = ((128 - asymdir) * deviation) >> 6;
+    deviation = ((128 - asymdir) * deviation) >> 6; // produces both positive and negative deviation
   } else {
-    deviation = ((asymdir - 255) * deviation) >> 6;
+    deviation = ((asymdir - 255) * deviation) >> 6; // produces negative deviation
   }
   // Calculate x and y size based on deviation, limit to 255 (rendering function cannot handle larger sizes)
   xsize = min((size - deviation), (int32_t)255);
@@ -470,78 +296,56 @@ void ParticleSystem2D::getParticleXYsize(PSadvancedParticle *advprops, PSsizeCon
 }
 
 // function to bounce a particle from a wall using set parameters (wallHardness and wallRoughness)
-void ParticleSystem2D::bounce(int8_t &incomingspeed, int8_t &parallelspeed, int32_t &position, const uint32_t maxposition) {
-  incomingspeed = -incomingspeed;
-  incomingspeed = (incomingspeed * wallHardness + 128) >> 8; // reduce speed as energy is lost on non-hard surface
-  if (position < (int32_t)particleHardRadius)
-    position = particleHardRadius; // fast particles will never reach the edge if position is inverted, this looks better
+void ParticleSystem2D::bounce(int8_t &incomingSpeed, int8_t &perpendicularSpeed, int32_t &position, const uint32_t maxPosition, const uint32_t particleRadius) {
+  incomingSpeed = -incomingSpeed;
+  incomingSpeed = (int8_t)(((int32_t)incomingSpeed * (int32_t)wallHardness + 128) >> 8); // reduce speed as energy is lost on non-hard surface
+  if (position < (int32_t)particleRadius)
+    position = particleRadius; // fast particles will never reach the edge if position is inverted, this looks better
   else
-    position = maxposition - particleHardRadius;
+    position = maxPosition - particleRadius;
   if (wallRoughness) {
-    int32_t incomingspeed_abs = abs((int32_t)incomingspeed);
-    int32_t totalspeed = incomingspeed_abs + abs((int32_t)parallelspeed);
-    // transfer an amount of incomingspeed speed to parallel speed
-    int32_t donatespeed = ((hw_random16(incomingspeed_abs << 1) - incomingspeed_abs) * (int32_t)wallRoughness) / (int32_t)255; // take random portion of + or - perpendicular speed, scaled by roughness
-    parallelspeed = limitSpeed((int32_t)parallelspeed + donatespeed);
-    // give the remainder of the speed to perpendicular speed
-    donatespeed = int8_t(totalspeed - abs(parallelspeed)); // keep total speed the same
-    incomingspeed = incomingspeed > 0 ? donatespeed : -donatespeed;
+    int32_t incomingSpeed_abs = abs((int32_t)incomingSpeed);
+    int32_t totalspeed = incomingSpeed_abs + abs((int32_t)perpendicularSpeed);
+    // transfer the amount of incomingSpeed speed to perpendicular speed
+    int32_t donatespeed = ((hw_random16(incomingSpeed_abs << 1) - incomingSpeed_abs) * (int32_t)wallRoughness) / 255; // take random portion of + or - perpendicularSpeed speed, scaled by roughness
+    perpendicularSpeed = limitSpeed((int32_t)perpendicularSpeed + donatespeed);
+    // give the remainder of the speed to perpendicularSpeed speed
+    donatespeed = int8_t(totalspeed - abs(perpendicularSpeed)); // keep total speed the same
+    incomingSpeed = incomingSpeed > 0 ? donatespeed : -donatespeed;
   }
 }
 
 // apply a force in x,y direction to individual particle
 // caller needs to provide a 8bit counter (for each particle) that holds its value between calls
 // force is in 3.4 fixed point notation so force=16 means apply v+1 each frame default of 8 is every other frame (gives good results)
-void ParticleSystem2D::applyForce(PSparticle &part, const int8_t xforce, const int8_t yforce, uint8_t &counter) {
+void ParticleSystem2D::applyForce(PSparticle &part, const int8_t xforce, const int8_t yforce) {
   // for small forces, need to use a delay counter
-  uint8_t xcounter = counter & 0x0F; // lower four bits
-  uint8_t ycounter = counter >> 4;   // upper four bits
+  uint8_t xcounter = part.xcounter; // lower four bits
+  uint8_t ycounter = part.ycounter; // upper four bits
 
+  //if (SEGENV.call % 42 == 0) PSPRINTF(PSTR("Applying fx:%d fy:%d to particle @(%d,%d) with vx:%d vy:%d\n"), (int)xforce, (int)yforce, (int)part.x, (int)part.y, (int)part.vx, (int)part.vy);
   // velocity increase
   int32_t dvx = calcForce_dv(xforce, xcounter);
   int32_t dvy = calcForce_dv(yforce, ycounter);
 
   // save counter values back
-  counter = xcounter & 0x0F; // write lower four bits, make sure not to write more than 4 bits
-  counter |= (ycounter << 4) & 0xF0; // write upper four bits
+  part.xcounter = xcounter & 0x0F; // write lower four bits, make sure not to write more than 4 bits
+  part.ycounter = ycounter & 0x0F; // write upper four bits
 
   // apply the force to particle
   part.vx = limitSpeed((int32_t)part.vx + dvx);
   part.vy = limitSpeed((int32_t)part.vy + dvy);
-}
-
-// apply a force in x,y direction to individual particle using advanced particle properties
-void ParticleSystem2D::applyForce(const uint32_t particleindex, const int8_t xforce, const int8_t yforce) {
-  if (!isAdvanced) return; // no advanced properties available
-  applyForce(particles[particleindex], xforce, yforce, advPartProps[particleindex].forcecounter);
-}
-
-// apply a force in x,y direction to all particles
-// force is in 3.4 fixed point notation (see above)
-void ParticleSystem2D::applyForce(const int8_t xforce, const int8_t yforce) {
-  // for small forces, need to use a delay counter
-  uint8_t tempcounter;
-  // note: this is not the most computationally efficient way to do this, but it saves on duplicate code and is fast enough
-  for (uint32_t i = 0; i < usedParticles; i++) {
-    tempcounter = forcecounter;
-    applyForce(particles[i], xforce, yforce, tempcounter);
-  }
-  forcecounter = tempcounter; // save value back
+  //if (SEGENV.call % 42 == 0) PSPRINTF(PSTR(" New velocity vx:%d vy:%d and counters x:%d y:%d\n"), (int)part.vx, (int)part.vy, (int)part.xcounter, (int)part.ycounter);
 }
 
 // apply a force in angular direction to single particle
 // caller needs to provide a 8bit counter that holds its value between calls (if using single particles, a counter for each particle is needed)
 // angle is from 0-65535 (=0-360deg) angle = 0 means in positive x-direction (i.e. to the right)
 // force is in 3.4 fixed point notation so force=16 means apply v+1 each frame (useful force range is +/- 127)
-void ParticleSystem2D::applyAngleForce(PSparticle &part, const int8_t force, const uint16_t angle, uint8_t &counter) {
+void ParticleSystem2D::applyAngleForce(PSparticle &part, const int8_t force, const uint16_t angle) {
   int8_t xforce = ((int32_t)force * cos16_t(angle)) / 32767; // force is +/- 127
   int8_t yforce = ((int32_t)force * sin16_t(angle)) / 32767; // note: cannot use bit shifts as bit shifting is asymmetrical for positive and negative numbers and this needs to be accurate!
-  applyForce(part, xforce, yforce, counter);
-}
-
-void ParticleSystem2D::applyAngleForce(const uint32_t particleindex, const int8_t force, const uint16_t angle) {
-  if (!isAdvanced) return; // no advanced properties available
-  applyAngleForce(particles[particleindex], force, angle, advPartProps[particleindex].forcecounter);
+  applyForce(part, xforce, yforce);
 }
 
 // apply a force in angular direction to all particles
@@ -556,20 +360,32 @@ void ParticleSystem2D::applyAngleForce(const int8_t force, const uint16_t angle)
 // force is in 3.4 fixed point notation, see note above
 // note: faster than apply force since direction is always down and counter is fixed for all particles
 void ParticleSystem2D::applyGravity() {
-  int32_t dv = calcForce_dv(gforce, gforcecounter);
-  if (dv == 0) return;
+  uint8_t tempcounter = gforcecounter;
+  int32_t dv = calcForce_dv(gforce, tempcounter);
   for (uint32_t i = 0; i < usedParticles; i++) {
+    if (particles[i].mass > 0) {
+      int8_t adjustedforce = gforce * (particles[i].mass + 31) / 255; // adjust force by mass (32-286 will prevent gforce of 0)
+      tempcounter = gforcecounter;
+      dv = calcForce_dv(adjustedforce, tempcounter);
+    }
+    if (dv == 0) continue;
     // Note: not checking if particle is dead is faster as most are usually alive and if few are alive, rendering is fast anyways
     particles[i].vy = limitSpeed((int32_t)particles[i].vy - dv);
+    // now let's apply some air resistance based on mass (heavier=less resistance) and particle size (larger=more resistance)
+    if (particles[i].mass > 0) {
+      int32_t friction = 128 + ((particles[i].mass * 128) >> 8); // mass 0-255 gives friction 128-255 (friction==255 means no speed change)
+      friction -= (particles[i].size * 64) >> 8; // size 0-255 gives friction reduction of 0-63
+      particles[i].vy = ((int32_t)particles[i].vy * friction) / 255;
+    }
   }
+  gforcecounter = tempcounter; // save value back
 }
 
 // apply gravity to single particle using system settings (use this for sources)
 // function does not increment gravity counter, if gravity setting is disabled, this cannot be used
-void ParticleSystem2D::applyGravity(PSparticle &part) {
-  uint32_t counterbkp = gforcecounter; // backup PS gravity counter
-  int32_t dv = calcForce_dv(gforce, gforcecounter);
-  gforcecounter = counterbkp; //save it back
+// sources also don't have mass so skip air resistance
+void ParticleSystem2D::applyGravity(PSparticle &part, uint8_t tempcounter) {
+  int32_t dv = calcForce_dv(gforce, tempcounter);
   part.vy = limitSpeed((int32_t)part.vy - dv);
 }
 
@@ -608,8 +424,6 @@ void ParticleSystem2D::applyFriction(const int32_t coefficient) {
 
 // attracts a particle to an attractor particle using the inverse square-law
 void ParticleSystem2D::pointAttractor(const uint32_t particleindex, PSparticle &attractor, const uint8_t strength, const bool swallow) {
-  if (!isAdvanced) return; // no advanced properties available
-
   // Calculate the distance between the particle and the attractor
   int32_t dx = attractor.x - particles[particleindex].x;
   int32_t dy = attractor.y - particles[particleindex].y;
@@ -625,13 +439,20 @@ void ParticleSystem2D::pointAttractor(const uint32_t particleindex, PSparticle &
         return;
       }
     }
-    distanceSquared = 2 * PS_P_RADIUS * PS_P_RADIUS; // limit the distance to avoid very high forces
+    distanceSquared = 2 * PS_P_DIAMETER * PS_P_DIAMETER; // limit the distance to avoid very high forces
   }
 
   int32_t force = ((int32_t)strength << 16) / distanceSquared;
   int8_t xforce = (force * dx) / 1024; // scale to a lower value, found by experimenting
-  int8_t yforce = (force * dy) / 1024; // note: cannot use bit shifts as bit shifting is asymmetrical for positive and negative numbers and this needs to be accurate!
-  applyForce(particleindex, xforce, yforce);
+  int8_t yforce = (force * dy) / 1024; // note: if we want to use bitshifts, we'd need to add 1 if (force*dx) is negative, but that is one additional instruction
+  applyForce(particles[particleindex], xforce, yforce);
+}
+
+// attracts all particles to an attractor particle using the inverse square-law
+void ParticleSystem2D::pointAttractor(PSparticle &attractor, const uint8_t strength, const bool swallow) {
+  for (uint32_t particleindex = 0; particleindex < usedParticles; particleindex++) {
+    pointAttractor(particleindex, attractor, strength, swallow);
+  }
 }
 
 // render particles to the LED buffer (uses palette to render the 8bit particle color value)
@@ -643,31 +464,28 @@ void ParticleSystem2D::render() {
   uint32_t brightness; // particle brightness, fades if dying
   TBlendType blend = particlesettings.colorByAge ? LINEARBLEND_NOWRAP : LINEARBLEND; // default color rendering: wrap palette
 
-  if (motionBlur) { // motion-blurring active
+  if (motionBlur) { // motion-blurring active (fade existing pixels before overlaying new frame)
     SEGMENT.fadeToBlackBy(motionBlur);
-  } else { // no blurring: clear buffer
+  } else { // no motion blurring: clear buffer
     SEGMENT.clear();
   }
 
   // go over particles and render them to the buffer
   for (uint32_t i = 0; i < usedParticles; i++) {
-    if (particles[i].ttl == 0 || particleFlags[i].outofbounds)
+    if (particles[i].ttl == 0 || particles[i].outofbounds)
       continue;
     // generate RGB values for particle
-    if (fireIntesity) { // fire mode
-      brightness = min((uint32_t)particles[i].ttl * (3 + (fireIntesity >> 5)) + 5, (uint32_t)255);
-      baseRGB = ColorFromPaletteWLED(SEGPALETTE, brightness, 255, LINEARBLEND_NOWRAP);
-    } else {
-      brightness = min(particles[i].ttl << 1, 255);
-      baseRGB = ColorFromPaletteWLED(SEGPALETTE, particles[i].hue, 255, blend);
-      if (particles[i].sat < 255) {
-        CHSV32 baseHSV(baseRGB);
-        baseHSV.s = min(baseHSV.s, particles[i].sat); // set the saturation but don't increase it
-        baseRGB = baseHSV;  // convert HSV back to RGB (preserves opacity)
-      }
+    brightness = min(particles[i].ttl << 1, 255);
+    baseRGB = ColorFromPaletteWLED(SEGPALETTE, particles[i].hue, 255, blend);
+    if (particles[i].sat < 255) {
+      CHSV32 baseHSV(baseRGB);
+      baseHSV.s = min(baseHSV.s, particles[i].sat); // set the saturation but don't increase it
+      baseRGB = baseHSV;  // convert HSV back to RGB (preserves opacity)
     }
-    if (gammaCorrectCol) brightness = gamma8(brightness); // apply gamma correction, used for gamma-inverted brightness distribution
-    renderParticle(i, baseRGB, brightness, particlesettings.wrapX, particlesettings.wrapY);
+    //if (gammaCorrectCol) brightness = gamma8(brightness); // apply gamma correction, used for gamma-inverted brightness distribution
+    baseRGB.nscale8_video(brightness);
+    if (!particles[i].hollow) baseRGB.setOpacity((particles[i].mass>>1) + 128); // use mass as opacity (128-255) for advanced particles
+    renderParticle(i, baseRGB, particlesettings.wrapX, particlesettings.wrapY);
   }
 
   // apply 2D blur to rendered frame
@@ -677,193 +495,89 @@ void ParticleSystem2D::render() {
 }
 
 // calculate pixel positions and brightness distribution and render the particle to local buffer or global buffer
-void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color, uint8_t brightness, const bool wrapX, const bool wrapY) {
-  uint32_t size = particlesize;
-  if (isAdvanced && advPartProps[particleindex].size > 0) // use advanced size properties (0 means use global size including single pixel rendering)
-    size = advPartProps[particleindex].size;
+void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color, const bool wrapX, const bool wrapY) {
+  uint32_t particleRadius = particles[particleindex].size;
 
-  if (size == 0) { // single pixel rendering
-    uint32_t x = particles[particleindex].x >> PS_P_RADIUS_SHIFT;
-    uint32_t y = particles[particleindex].y >> PS_P_RADIUS_SHIFT;
-    if (x <= (uint32_t)maxXpixel && y <= (uint32_t)maxYpixel) {
-      unsigned i = Segment::XY(x, maxYpixel - y); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-      SEGMENT.addPixelColorRaw(i, color);
-    }
+  // single pixel non-antialiased rendering
+  if (particleRadius == 0) {
+    const int32_t pxC = (particles[particleindex].x >> PS_P_SHIFT);
+    const int32_t pyC = maxYpixel - (particles[particleindex].y >> PS_P_SHIFT);  // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+    if ((uint32_t)pxC <= (uint32_t)maxXpixel && (uint32_t)pyC <= (uint32_t)maxYpixel) SEGMENT.addPixelColorXYRaw(pxC, pyC, color);
     return;
   }
 
-  uint8_t pxlbrightness[4]; // brightness values for the four pixels representing a particle
-
-  // add half a radius as the rendering algorithm always starts at the bottom left, this leaves things positive, so shifts can be used, then shift coordinate by a full pixel (x--/y-- below)
-  int32_t xoffset = particles[particleindex].x + PS_P_HALFRADIUS;
-  int32_t yoffset = particles[particleindex].y + PS_P_HALFRADIUS;
-  int32_t dx = xoffset & (PS_P_RADIUS - 1); // relativ particle position in subpixel space
-  int32_t dy = yoffset & (PS_P_RADIUS - 1); // modulo replaced with bitwise AND, as radius is always a power of 2
-  int32_t x = (xoffset >> PS_P_RADIUS_SHIFT); // divide by PS_P_RADIUS which is 64, so can bitshift (compiler can not optimize integer)
-  int32_t y = (yoffset >> PS_P_RADIUS_SHIFT);
-
-  // calculate brightness values for all four pixels representing a particle using linear interpolation
-  // could check for out of frame pixels here but calculating them is faster (very few are out)
-  // precalculate values for speed optimization
-  int32_t precal1 = (int32_t)PS_P_RADIUS - dx;
-  int32_t precal2 = ((int32_t)PS_P_RADIUS - dy) * brightness;
-  int32_t precal3 = dy * brightness;
-  pxlbrightness[0] = (precal1 * precal2) >> PS_P_SURFACE; // bottom left value equal to ((PS_P_RADIUS - dx) * (PS_P_RADIUS-dy) * brightness) >> PS_P_SURFACE
-  pxlbrightness[1] = (dx * precal2) >> PS_P_SURFACE; // bottom right value equal to (dx * (PS_P_RADIUS-dy) * brightness) >> PS_P_SURFACE
-  pxlbrightness[2] = (dx * precal3) >> PS_P_SURFACE; // top right value equal to (dx * dy * brightness) >> PS_P_SURFACE
-  pxlbrightness[3] = (precal1 * precal3) >> PS_P_SURFACE; // top left value equal to ((PS_P_RADIUS-dx) * dy * brightness) >> PS_P_SURFACE
-  // adjust brightness such that distribution is linear after gamma correction:
-  // - scale brigthness with gamma correction (done in render())
-  // - apply inverse gamma correction to brightness values
-  // - gamma is applied again in show() -> the resulting brightness distribution is linear but gamma corrected in total
-  if (gammaCorrectCol) {
-    pxlbrightness[0] = gamma8inv(pxlbrightness[0]); // use look-up-table for inverse gamma
-    pxlbrightness[1] = gamma8inv(pxlbrightness[1]);
-    pxlbrightness[2] = gamma8inv(pxlbrightness[2]);
-    pxlbrightness[3] = gamma8inv(pxlbrightness[3]);
+  // this is faster than drawing ellipses for radius 1
+  if (particleRadius == 1) {
+    const int32_t pxC = particles[particleindex].x << (8 - PS_P_SHIFT);
+    const int32_t pyC = (maxY - particles[particleindex].y) << (8 - PS_P_SHIFT);  // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+    if ((uint32_t)(pxC>>8) <= (uint32_t)maxXpixel && (uint32_t)(pyC>>8) <= (uint32_t)maxYpixel) SEGMENT.setWuPixelColor(pxC, pyC, color);
+    return;
   }
 
-  if (size > 1) { // render particle to a bigger size
-    CRGBA renderbuffer[100]; // 10x10 pixel buffer
-    memset(renderbuffer, 0, sizeof(renderbuffer)); // will also clear alpha channel/makes buffer transparent
-/*
-    // might consider using ellipse drawing for advanced size control in the future
-    uint32_t rx, ry;
-    if (sizeControl && advPartSize[particleindex].asymmetry > 0) {
-      getParticleXYsize(&advPartProps[particleindex], &advPartSize[particleindex], rx, ry);
-      rx <<= 1; // multiply by 2 to get radius in subpixel space
-      ry <<= 1;
-    } else {
-      rx = ry = size << 1; // multiply by 2 to get radius in subpixel space
-    }
-    if (rx > 1152) rx = 1152; // limit to max radius of 4.5 pixels
-    if (ry > 1152) ry = 1152;
-    drawEllipse(renderbuffer, 1280, 1280, rx, ry, color); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-    blur2D(renderbuffer, 10, 10, 64, 64, 0, 0); // apply initial blur to make edges smoother
-*/
-    //particle size to pixels: < 64 is 4x4, < 128 is 6x6, < 192 is 8x8, bigger is 10x10
-    //first, render the pixel to the center of the renderbuffer, then apply 2D blurring to expand it (requires different amount of blurring to achieve good visual results)
-    renderbuffer[4 + (4 * 10)] += color.scale8(pxlbrightness[0]); // order is: bottom left, bottom right, top right, top left
-    renderbuffer[5 + (4 * 10)] += color.scale8(pxlbrightness[1]);
-    renderbuffer[5 + (5 * 10)] += color.scale8(pxlbrightness[2]);
-    renderbuffer[4 + (5 * 10)] += color.scale8(pxlbrightness[3]);
-    uint32_t rendersize = 2; // initialize render size, minimum is 4x4 pixels, it is incremented in the loop below to start with 4
-    uint32_t offset = 4; // offset to zero coordinate to write/read data in renderbuffer (actually needs to be 3, is decremented in the loop below)
-    uint32_t xsize = size;
-    uint32_t ysize = size;
-    // use advanced size control
-    if (sizeControl && advPartSize[particleindex].asymmetry > 0) {
-      getParticleXYsize(&advPartProps[particleindex], &advPartSize[particleindex], xsize, ysize);
-      size = (xsize > ysize) ? xsize : ysize; // choose the bigger of the two
-    }
-    size = size/64 + 1; // number of blur passes depends on size, four passes max
-    uint32_t bitshift = 0;
-    for (uint32_t i = 0; i < size; i++) {
-      if (i == 2) //for the last two passes, use higher amount of blur (results in a nicer brightness gradient with soft edges)
-        bitshift = 1;
-      rendersize += 2;
-      offset--;
-      blur2D(renderbuffer, rendersize, rendersize, xsize << bitshift, ysize << bitshift, offset, offset);
-      xsize = xsize > 64 ? xsize - 64 : 0;
-      ysize = ysize > 64 ? ysize - 64 : 0;
-    }
+  particleRadius += 31; // adjust for actual subpixel size (radius 1 means 32 in 10.6 fixed point notation, i.e. 0.5 pixel)
 
-    // calculate origin coordinates to render the particle into framebuffer
-    uint32_t xfb_orig = x - (rendersize>>1) + 1 - offset;
-    uint32_t yfb_orig = y - (rendersize>>1) + 1 - offset;
-    uint32_t xfb, yfb; // coordinates in frame buffer to write to note: by making this uint, only overflow has to be checked (spits a warning though)
+  // Draws filled ellipse or circle
+  // Note: all coordinates and radii are in 10.6 fixed point notation
+  auto drawEllipse = [&](uint16_t cx, uint16_t cy, uint16_t rx, uint16_t ry, bool hollow = false) {
+    auto mul106 = [](int16_t a, int16_t b) { return ((int32_t)a * b) >> PS_P_SHIFT; };      // 10.6 fixed point multiplication
+    auto int106 = [](int16_t a)            { int32_t s=(a<0?-1:1); return (int16_t)(s * ((s*a) >> PS_P_SHIFT)); }; // convert 10.6 fixed point to integer
+    //auto int106 = [](int16_t a)            { return (int16_t)(a / (1<<PS_P_SHIFT)); }; // convert 10.6 fixed point to integer
 
-    //note on y-axis flip: WLED has the y-axis defined from top to bottom, so y coordinates must be flipped. doing this in the buffer xfer clashes with 1D/2D combined rendering, which does not invert y
-    //                     transferring the 1D buffer in inverted fashion will flip the x-axis of overlaid 2D FX, so the y-axis flip is done here so the buffer is flipped in y, giving correct results
+    // if we want to optimize
+    //if (rx + ry == 0) return; // nothing to draw
+    //if (rx == 0) rx = ry; // make it a circle
+    //if (ry == 0) ry = rx; // make it a circle
 
-    // transfer particle renderbuffer to framebuffer
-    for (uint32_t xrb = offset; xrb < rendersize + offset; xrb++) {
-      xfb = xfb_orig + xrb;
-      if (xfb > (uint32_t)maxXpixel) {
-      if (wrapX) { // wrap x to the other side if required
-        if (xfb > (uint32_t)maxXpixel << 1) // xfb is "negative", handle it
-          xfb = (maxXpixel + 1) + (int32_t)xfb; // this always overflows to within bounds
-        else
-          xfb = xfb % (maxXpixel + 1); // note: without the above "negative" check, this works only for powers of 2
-      }
-      else
-        continue;
-      }
+    // pre-calculate drawing bounds
+    const int32_t pxMin = int106(cx - rx);                        // minimum pixel coordinate for drawing; rounded down
+    const int32_t pxMax = int106(cx + rx + (1<<PS_P_SHIFT) - 1);  // maximum pixel coordinate for drawing; rounded up
+    const int32_t pyMin = int106(cy - ry);                        // minimum pixel coordinate for drawing; rounded down
+    const int32_t pyMax = int106(cy + ry + (1<<PS_P_SHIFT) - 1);  // maximum pixel coordinate for drawing; rounded up
+    const int32_t rxSq  = mul106(rx, rx);                         // x radius squared
+    const int32_t rySq  = mul106(ry, ry);                         // y radius squared
 
-      for (uint32_t yrb = offset; yrb < rendersize + offset; yrb++) {
-        yfb = yfb_orig + yrb;
-        if (yfb > (uint32_t)maxYpixel) {
-          if (wrapY) {// wrap y to the other side if required
-            if (yfb > (uint32_t)maxYpixel << 1) // yfb is "negative", handle it
-              yfb = (maxYpixel + 1) + (int32_t)yfb; // this always overflows to within bounds
-            else
-              yfb = yfb % (maxYpixel + 1); // note: without the above "negative" check, this works only for powers of 2
-          }
-          else
-            continue;
+    // traverse all pixels within bounding box and check if they are within ellipse
+    for (int y = pyMin; y < pyMax; y++) {
+      const int32_t dy = (y << PS_P_SHIFT) - cy;
+      for (int x = pxMin; x < pxMax; x++) {
+        const int32_t dx = (x << PS_P_SHIFT) - cx;
+        const int32_t dist = ((mul106(dx,dx)<<8)/rxSq) + ((mul106(dy,dy)<<8)/rySq); // dx2/rx2 + dy2/ry2 in fixed point (multiplied by 256 for better precision)
+        if (dist > 384 || (hollow && dist < 64)) continue;        // outside ellipse (actually it should be 256 but that will render a smaller ellipse)
+        int32_t px = x;
+        int32_t py = y;
+        if (wrapX) {
+          while (px < 0)         px += (maxXpixel + 1);
+          while (px > maxXpixel) px -= (maxXpixel + 1);
         }
-        unsigned i = Segment::XY(xfb, maxYpixel - yfb); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-        SEGMENT.addPixelColorRaw(i, renderbuffer[xrb + yrb * 10]); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+        if (wrapY) {
+          while (py < 0)         py += (maxYpixel + 1);
+          while (py > maxYpixel) py -= (maxYpixel + 1);
+        }
+        if ((unsigned)px <= (unsigned)maxXpixel && (unsigned)py <= (unsigned)maxYpixel) {
+          // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
+          py = maxYpixel - py;
+          if (dist > 192 || (hollow && dist < 128)) { // may need tuning!
+            CRGBA c = color;
+            // apply antialiasing: 384>dist>192 -> 64 to 255; 64<dist<128 -> 64 to 252
+            uint8_t alpha = dist > 192 ? 448 - dist : (dist*dist) >> 6; // may need tuning! (including inverse gamma according to @DedeHai)
+            SEGMENT.blendPixelColorXYRaw(px, py, c/*.setOpacity(alpha)*/, alpha); // may need tuning!
+          } else SEGMENT.setPixelColorXYRaw(px, py, color);
+        }
       }
     }
-  } else { // standard rendering (2x2 pixels)
-    struct {
-      int32_t x,y;
-    } pixco[4]; // particle pixel coordinates, the order is bottom left [0], bottom right[1], top right [2], top left [3] (thx @blazoncek for improved readability struct)
-    bool pixelvalid[4] = {true, true, true, true}; // is set to false if pixel is out of bounds
-  
-    // set the four raw pixel coordinates
-    pixco[1].x = pixco[2].x = x;  // bottom right & top right
-    pixco[2].y = pixco[3].y = y;  // top right & top left
-    x--; // shift by a full pixel here, this is skipped above to not do -1 and then +1
-    y--;
-    pixco[0].x = pixco[3].x = x;      // bottom left & top left
-    pixco[0].y = pixco[1].y = y;      // bottom left & bottom right
-  
-    // check for out of frame pixels and wrap them if required: x,y is bottom left pixel coordinate of the particle
-    if (x < 0) { // left pixels out of frame
-      if (wrapX) { // wrap x to the other side if required
-        pixco[0].x = pixco[3].x = maxXpixel;
-      } else {
-        pixelvalid[0] = pixelvalid[3] = false; // out of bounds
-      }
-    }
-    else if (pixco[1].x > (int32_t)maxXpixel) { // right pixels, only has to be checked if left pixel is in frame
-      if (wrapX) { // wrap y to the other side if required
-        pixco[1].x = pixco[2].x = 0;
-      } else {
-        pixelvalid[1] = pixelvalid[2] = false; // out of bounds
-      }
-    }
+  };
 
-    if (y < 0) { // bottom pixels out of frame
-      if (wrapY) { // wrap y to the other side if required
-        pixco[0].y = pixco[1].y = maxYpixel;
-      } else {
-        pixelvalid[0] = pixelvalid[1] = false; // out of bounds
-      }
-    }
-    else if (pixco[2].y > maxYpixel) { // top pixels
-      if (wrapY) { // wrap y to the other side if required
-        pixco[2].y = pixco[3].y = 0;
-      } else {
-        pixelvalid[2] = pixelvalid[3] = false; // out of bounds
-      }
-    }
-    for (uint32_t i = 0; i < 4; i++) {
-      if (pixelvalid[i]) {
-        unsigned j = Segment::XY(pixco[i].x, maxYpixel - pixco[i].y); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-        SEGMENT.addPixelColorRaw(j, color.scale8(pxlbrightness[i]));
-      }
-    }
-/*
-    // this works as well but produces less visually pleasing results (Wu pixel may need refining for PS use)
-    // the result is more "precise" but the brightness distribution looks worse
-    uint32_t x = particles[particleindex].x << (8 - PS_P_RADIUS_SHIFT);
-    uint32_t y = ((maxYpixel+1) << 8) - (particles[particleindex].y << (8 - PS_P_RADIUS_SHIFT)); // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-    SEGMENT.setWuPixelColor(x, y, color); // render Wu pixel for anti-aliasing
-*/
+  // using ellipse drawing for advanced size control
+  uint32_t rx, ry;
+  if (sizeControl && advPartSize[particleindex].asymmetry > 0) {
+    getParticleXYsize(particleRadius, advPartSize[particleindex].asymmetry, advPartSize[particleindex].asymdir, rx, ry);
+  } else {
+    rx = ry = particleRadius;
   }
+  // limit to radius from 0.5 to 5 pixels
+  rx = constrain(rx, 32, 320);
+  ry = constrain(ry, 32, 320);
+  drawEllipse(particles[particleindex].x, particles[particleindex].y, rx, ry, particles[particleindex].hollow);
 }
 
 // detect collisions in an array of particles and handle them
@@ -871,20 +585,17 @@ void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color,
 // for code simplicity, no y slicing is done, making very tall matrix configurations less efficient
 // note: also tested adding y slicing, it gives diminishing returns, some FX even get slower. FX not using gravity would benefit with a 10% FPS improvement
 void ParticleSystem2D::handleCollisions() {
-  uint32_t collDistSq = particleHardRadius << 1; // distance is double the radius note: particleHardRadius is updated when setting global particle size
-  collDistSq = collDistSq * collDistSq; // square it for faster comparison (square is one operation)
   // note: partices are binned in x-axis, assumption is that no more than half of the particles are in the same bin
   // if they are, collisionStartIdx is increased so each particle collides at least every second frame (which still gives decent collisions)
   constexpr int BIN_WIDTH = 6 * PS_P_RADIUS; // width of a bin in sub-pixels
-  int32_t overlap = particleHardRadius << 1; // overlap bins to include edge particles to neighbouring bins
-  if (isAdvanced) //may be using individual particle size
-    overlap += 512; // add 2 * max radius (approximately)
-  uint32_t maxBinParticles = max((uint32_t)50, (usedParticles + 1) / 2); // assume no more than half of the particles are in the same bin, do not bin small amounts of particles
-  uint32_t numBins = (maxX + (BIN_WIDTH - 1)) / BIN_WIDTH; // number of bins in x direction
+  const uint32_t maxBinParticles = max((uint32_t)50, (usedParticles + 1) / 2); // assume no more than half of the particles are in the same bin, do not bin small amounts of particles
+  const uint32_t numBins = (maxX + (BIN_WIDTH - 1)) / BIN_WIDTH; // number of bins in x direction
   uint16_t binIndices[maxBinParticles]; // creat array on stack for indices, 2kB max for 1024 particles (ESP32_MAXPARTICLES/2)
   uint32_t binParticleCount; // number of particles in the current bin
   uint16_t nextFrameStartIdx = hw_random16(usedParticles); // index of the first particle in the next frame (set to fixed value if bin overflow)
   uint32_t pidx = collisionStartIdx; //start index in case a bin is full, process remaining particles next frame
+  //uint32_t particleRadius = particles[pidx].size + (PS_P_RADIUS-1) + (particles[pidx].size==0); // treat size=0 as size=1 for calculations (1 pixel diameter)
+  constexpr int32_t overlap = (PS_P_DIAMETER+512)<<1; //particleRadius << 1; // overlap bins to include edge particles to neighbouring bins
 
   // fill the binIndices array for this bin
   for (uint32_t bin = 0; bin < numBins; bin++) {
@@ -896,7 +607,7 @@ void ParticleSystem2D::handleCollisions() {
     for (uint32_t i = 0; i < usedParticles; i++) {
       if (particles[pidx].ttl > 0) { // is alive
         if (particles[pidx].x >= binStart && particles[pidx].x <= binEnd) { // >= and <= to include particles on the edge of the bin (overlap to ensure boarder particles collide with adjacent bins)
-          if (particleFlags[pidx].outofbounds == 0 && particleFlags[pidx].collide) { // particle is in frame and does collide note: checking flags is quite slow and usually these are set, so faster to check here
+          if (!particles[pidx].outofbounds && particles[pidx].collide) { // particle is in frame and does collide note: checking flags is quite slow and usually these are set, so faster to check here
             if (binParticleCount >= maxBinParticles) { // bin is full, more particles in this bin so do the rest next frame
               nextFrameStartIdx = pidx; // bin overflow can only happen once as bin size is at least half of the particles (or half +1)
               break;
@@ -913,16 +624,20 @@ void ParticleSystem2D::handleCollisions() {
       uint32_t idx_i = binIndices[i];
       for (uint32_t j = i + 1; j < binParticleCount; j++) { // check against higher number particles
         uint32_t idx_j = binIndices[j];
-        if (isAdvanced) { //may be using individual particle size
-          setParticleSize(particlesize); // updates base particleHardRadius
-          collDistSq = (particleHardRadius << 1) + (((uint32_t)advPartProps[idx_i].size + (uint32_t)advPartProps[idx_j].size) >> 1); // collision distance note: not 100% clear why the >> 1 is needed, but it is.
-          collDistSq = collDistSq * collDistSq; // square it for faster comparison
-        }
+        uint32_t particleRadius = ((particles[idx_i].size + particles[idx_j].size) >> 1) + PS_P_RADIUS; // use average radius for collision distance
+        uint32_t collDistSq = (particleRadius << 1); // collision distance is twice the average radius
+        collDistSq = collDistSq * collDistSq; // square it for faster comparison
+        const int32_t m1 = particles[idx_i].mass;
+        const int32_t m2 = particles[idx_j].mass;
+        const int32_t totalMass = m1 + m2;
+        const int32_t massratio1 = totalMass ? (m2 << 8) / totalMass : 0; // massratio 1 depends on mass of particle 2, i.e. if 2 is heavier -> higher velocity impact on 1
+        const int32_t massratio2 = totalMass ? (m1 << 8) / totalMass : 0; // mass ratio in 8bit fixed point
+        // note: using the same logic as in 1D is much slower though it would be more accurate but it is not really needed in 2D
         int32_t dx = (particles[idx_j].x + particles[idx_j].vx) - (particles[idx_i].x + particles[idx_i].vx); // distance with lookahead
         if (dx * dx < collDistSq) { // check x direction, if close, check y direction (squaring is faster than abs() or dual compare)
           int32_t dy = (particles[idx_j].y + particles[idx_j].vy)  - (particles[idx_i].y + particles[idx_i].vy); // distance with lookahead
           if (dy * dy < collDistSq) // particles are close
-            collideParticles(particles[idx_i], particles[idx_j], dx, dy, collDistSq);
+            collideParticles(particles[idx_i], particles[idx_j], dx, dy, collDistSq, massratio1, massratio2);
         }
       }
     }
@@ -930,54 +645,129 @@ void ParticleSystem2D::handleCollisions() {
   collisionStartIdx = nextFrameStartIdx; // set the start index for the next frame
 }
 
-// handle a collision if close proximity is detected, i.e. dx and/or dy smaller than 2*PS_P_RADIUS
+// handle a collision if close proximity is detected, i.e. dx and/or dy smaller than 2*PS_P_DIAMETER
 // takes two pointers to the particles to collide and the particle hardness (softer means more energy lost in collision, 255 means full hard)
-void ParticleSystem2D::collideParticles(PSparticle &particle1, PSparticle &particle2, int32_t dx, int32_t dy, const uint32_t collDistSq) {
+void ParticleSystem2D::collideParticles(PSparticle &particle1, PSparticle &particle2, int32_t dx, int32_t dy, const uint32_t collDistSq, const int32_t massratio1, const int32_t massratio2) {
   unsigned distanceSquared = dx * dx + dy * dy;
-  // Calculate relative velocity note: could zero check but that does not improve overall speed but deminish it as that is rarely the case and pushing is still required
-  int32_t relativeVx = (int32_t)particle2.vx - (int32_t)particle1.vx;
-  int32_t relativeVy = (int32_t)particle2.vy - (int32_t)particle1.vy;
+
+  // Calculate relative velocity
+  // note: could zero check but that does not improve overall speed but diminishes it as that is rarely the case and pushing is still required
+  const int32_t v1x = (int32_t)particle1.vx;
+  const int32_t v2x = (int32_t)particle2.vx;
+  const int32_t v1y = (int32_t)particle1.vy;
+  const int32_t v2y = (int32_t)particle2.vy;
+  int32_t dVx = v2x - v1x;
+  int32_t dVy = v2y - v1y;
 
   // if dx and dy are zero (i.e. same position) give them an offset, if speeds are also zero, also offset them (pushes particles apart if they are clumped before enabling collisions)
   if (distanceSquared == 0) {
     // Adjust positions based on relative velocity direction
     dx = -1;
-    if (relativeVx < 0) // if true, particle2 is on the right side
+    if (dVx < 0) // if true, particle2 is on the right side
       dx = 1;
-    else if (relativeVx == 0)
-      relativeVx = 1;
+    else if (dVx == 0)
+      dVx = 1;
 
     dy = -1;
-    if (relativeVy < 0)
+    if (dVy < 0)
       dy = 1;
-    else if (relativeVy == 0)
-      relativeVy = 1;
+    else if (dVy == 0)
+      dVy = 1;
 
     distanceSquared = 2; // 1 + 1
   }
 
   // Calculate dot product of relative velocity and relative distance
-  int32_t dotProduct = (dx * relativeVx + dy * relativeVy); // is always negative if moving towards each other
+  int32_t dotProduct = (dx * dVx + dy * dVy); // is always negative if moving towards each other
 
   if (dotProduct < 0) {// particles are moving towards each other
-    // integer math used to avoid floats.
+    /*
+    // use conservation of meomentum for calculating new velocities after collision
+    const int32_t m1 = particles[particle1idx].mass;
+    const int32_t m2 = particles[particle2idx].mass;
+    const int32_t totalMass = m1 + m2;
+    const int32_t dm  = m2 - m1;
+    if (totalMass > 0) {
+      if (collisionHardness < 255) {
+        // velocity formula (semi elastic):
+        //  v1' = (m1*v1 + m2*v2 - e*m2*(v1 - v2)) / (m1 + m2); e = 0..1 (0=perfectly inelastic, 1=elastic)
+        //  v2' = (m1*v1 + m2*v2 - e*m1*(v2 - v1)) / (m1 + m2)
+        const int32_t momentumX = m1 * v1x + m2 * v2x;
+        const int32_t momentumY = m1 * v1y + m2 * v2y;
+        const int32_t eX255 = collisionHardness * dVx; // postpone /255 to increase precision
+        const int32_t eY255 = collisionHardness * dVy; // postpone /255 to increase precision
+        particle1.vx = (momentumX + ((m2 * ( eX255)) / 255)) / totalMass;
+        particle1.vy = (momentumY + ((m2 * ( eY255)) / 255)) / totalMass;
+        particle2.vx = (momentumX + ((m1 * (-eX255)) / 255)) / totalMass;
+        particle2.vy = (momentumY + ((m1 * (-eY255)) / 255)) / totalMass;
+      } else {
+        // velocity formula (elastic): v1' = (m1 - m2)*v1/(m1 + m2) + 2*m2*v2/(m1 + m2); v2' = (m2 - m1)*v2/(m1 + m2) + 2*m1*v1/(m1 + m2);
+        particle1.vx = (((-dm) * v1x) + (2 * m2 * v2x)) / totalMass;
+        particle2.vx = ((( dm) * v2x) + (2 * m1 * v1x)) / totalMass;
+        particle1.vy = (((-dm) * v1y) + (2 * m2 * v2y)) / totalMass;
+        particle2.vy = ((( dm) * v2y) + (2 * m1 * v1y)) / totalMass;
+      }
+    } else { // both masses are zero, treat as equal mass
+      if (collisionHardness < 255) {
+        // velocity formula (semi elastic): v1' = (v1 + v2 - e*(v1 - v2)) / 2; v2' = (v1 + v2 + e*(v1 - v2)) / 2; e = 0..1 (0=perfectly inelastic, 1=elastic)
+        const int32_t vX = v1x + v2x;
+        const int32_t vY = v1y + v2y;
+        const int32_t eX = collisionHardness * dVx / 255;
+        const int32_t eY = collisionHardness * dVy / 255;
+        particle1.vx = (vX + eX) / 2;
+        particle2.vx = (vX - eX) / 2;
+        particle1.vy = (vY + eY) / 2;
+        particle2.vy = (vY - eY) / 2;
+      } else {
+        // velocity formula (elastic): v1' = v2; v2' = v1;
+        std::swap(particle1.vx, particle2.vx);
+        std::swap(particle1.vy, particle2.vy);
+      }
+    }
+    */
+    // integer math is much faster than using floats (float divisions are slow on all ESPs)
     // overflow check: dx/dy are 7bit, relativV are 8bit -> dotproduct is 15bit, dotproduct/distsquared ist 8b, multiplied by collisionhardness of 8bit. so a 16bit shift is ok, make it 15 to be sure no overflows happen
-    // note: cannot use right shifts as bit shifting in right direction is asymmetrical for positive and negative numbers and this needs to be accurate! the trick is: only shift positive numers
+    // note: cannot use right shifts as bit shifting in right direction is asymmetrical (1>>1=0 / -1>>1=-1) and this needs to be accurate! the trick is: only shift positive numers
     // Calculate new velocities after collision
-    int32_t surfacehardness = 1 + max(collisionHardness, (int32_t)PS_P_MINSURFACEHARDNESS); // if particles are soft, the impulse must stay above a limit or collisions slip through at higher speeds, 170 seems to be a good value
+    int32_t surfacehardness = max(collisionHardness, (int32_t)PS_P_MINSURFACEHARDNESS >> 1); // if particles are soft, the impulse must stay above a limit or collisions slip through at higher speeds, 170 seems to be a good value
     int32_t impulse = (((((-dotProduct) << 15) / distanceSquared) * surfacehardness) >> 8); // note: inverting before bitshift corrects for asymmetry in right-shifts (is slightly faster)
 
     #if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(ESP8266) // use bitshifts with rounding instead of division (2x faster)
-    int32_t ximpulse = (impulse * dx + ((dx >> 31) & 32767)) >> 15; // note: extracting sign bit and adding rounding value to correct for asymmetry in right shifts
-    int32_t yimpulse = (impulse * dy + ((dy >> 31) & 32767)) >> 15;
+    int32_t ximpulse = (impulse * dx + ((dx >> 31) & 0x7FFF)) >> 15; // note: extracting sign bit and adding rounding value to correct for asymmetry in right shifts
+    int32_t yimpulse = (impulse * dy + ((dy >> 31) & 0x7FFF)) >> 15;
     #else
     int32_t ximpulse = (impulse * dx) / 32767;
     int32_t yimpulse = (impulse * dy) / 32767;
     #endif
-    particle1.vx -= ximpulse; // note: impulse is inverted, so subtracting it
-    particle1.vy -= yimpulse;
-    particle2.vx += ximpulse;
-    particle2.vy += yimpulse;
+    // if particles have mass use a mass ratio
+    if (massratio1 && massratio2) {
+      int32_t vx1 = (int32_t)particle1.vx - ((ximpulse * massratio1) >> 7); // mass ratio is in fixed point 8bit, multiply by two to account for the fact that we distribute the impulse to both particles
+      int32_t vy1 = (int32_t)particle1.vy - ((yimpulse * massratio1) >> 7);
+      int32_t vx2 = (int32_t)particle2.vx + ((ximpulse * massratio2) >> 7);
+      int32_t vy2 = (int32_t)particle2.vy + ((yimpulse * massratio2) >> 7);
+      // limit speeds to max speed (required if a lot of impulse is transferred from a large to a small particle)
+      particle1.vx = limitSpeed(vx1);
+      particle1.vy = limitSpeed(vy1);
+      particle2.vx = limitSpeed(vx2);
+      particle2.vy = limitSpeed(vy2);
+    } else {
+      particle1.vx -= ximpulse; // note: impulse is inverted, so subtracting it
+      particle1.vy -= yimpulse;
+      particle2.vx += ximpulse;
+      particle2.vy += yimpulse;
+    }
+
+    // now use particle roughness to add some randomness to the velocities after collision
+    if (particle1.roughness > 0 && particle2.roughness > 0) {
+      const int roughness1Factor = particle1.roughness;
+      const int halfRoughness1 = particle1.roughness >> 1;
+      const int roughness2Factor = particle2.roughness;
+      const int halfRoughness2 = particle2.roughness >> 1;
+      particle1.vx = limitSpeed((int)particle1.vx + (int)hw_random8(roughness1Factor) - halfRoughness1); // -8..+7
+      particle1.vy = limitSpeed((int)particle1.vy + (int)hw_random8(roughness1Factor) - halfRoughness1);
+      particle2.vx = limitSpeed((int)particle2.vx + (int)hw_random8(roughness2Factor) - halfRoughness2);
+      particle2.vy = limitSpeed((int)particle2.vy + (int)hw_random8(roughness2Factor) - halfRoughness2);
+    }
 
     // if particles are soft, they become 'sticky' i.e. apply some friction (they do pile more nicely and stop sloshing around)
     if (collisionHardness < PS_P_MINSURFACEHARDNESS && (SEGMENT.call & 0x07) == 0) {  // NOTE: using SEGMENT.call here is very unorthodox and not recommended
@@ -995,48 +785,43 @@ void ParticleSystem2D::collideParticles(PSparticle &particle1, PSparticle &parti
       particle2.vy = ((int32_t)particle2.vy * coeff) / 255;
       #endif
     }
+  }
 
-    // particles have volume, push particles apart if they are too close
-    // tried lots of configurations, it works best if not moved but given a little velocity, it tends to oscillate less this way
-    // when hard pushing by offsetting position, they sink into each other under gravity
-    // a problem with giving velocity is, that on harder collisions, this adds up as it is not dampened enough, so add friction in the FX if required
-    if (distanceSquared < collDistSq && dotProduct > -250) { // too close and also slow, push them apart
-      int32_t notsorandom = dotProduct & 0x01; //dotprouct LSB should be somewhat random, so no need to calculate a random number
-      int32_t pushamount = 1 + ((250 + dotProduct) >> 6); // the closer dotproduct is to zero, the closer the particles are
-      int32_t push = 0;
-      if (dx < 0)  // particle 1 is on the right
-        push = pushamount;
-      else if (dx > 0)
-        push = -pushamount;
-      else { // on the same x coordinate, shift it a little so they do not stack
-        if (notsorandom)
-          particle1.x++; // move it so pile collapses
-        else
-          particle1.x--;
-      }
-      particle1.vx += push;
-      push = 0;
-      if (dy < 0)
-        push = pushamount;
-      else if (dy > 0)
-        push = -pushamount;
-      else { // dy==0
-        if (notsorandom)
-          particle1.y++; // move it so pile collapses
-        else
-          particle1.y--;
-      }
-      particle1.vy += push;
+  // particles have volume, push particles apart if they are too close (min collDistSq is PS_P_DIAMETER^2 == 4096)
+  // tried lots of configurations, what works best is to give one particle a little velocity. When adding hard pushing things tend to oscillate.
+  // when hard pushing by offsetting position without velocity, they tend to sink into each other under gravity.
+  // when using hard-pushing and velocity, there are some oscillations and softer particles do not pile nicely.
+  // oscillation get worse if pushing both particles so one is chosen somewhat randomly.
+  // softer collisions are not perfect on purpose: soft particles should pile up and overlap slightly, if separation is made perfect, it does not have the intended look
 
-      // note: pushing may push particles out of frame, if bounce is active, it will move it back as position will be limited to within frame, if bounce is disabled: bye bye
-      if (collisionHardness < 5) { // if they are very soft, stop slow particles completely to make them stick to each other
+  if (distanceSquared < collDistSq /*&& (dVx*dVx + dVy*dVy < 50)*/) { // too close and also slow, push them apart
+    bool fairlyrandom = dotProduct & 0x01; //dotprouct LSB should be somewhat random, so no need to calculate a random number
+    int32_t pushamount = 1 + ((collDistSq - distanceSquared) >> 10); // found this by experimentation: it means push by 1, push more if overlapping more than 1.4 physical pixels (i.e. larger particles only)
+    int8_t pushx = dx > 0 ? -pushamount : pushamount; // particle 1 is on the left
+    int8_t pushy = dy > 0 ? -pushamount : pushamount; // particle 1 is below particle 2
+
+    // if they are very soft, stop slow particles completely to make them stick to each other
+    if (collisionHardness < 5) {
+      if (fairlyrandom) { // do not stop them every frame to avoid groups of particles hanging mid-air
         particle1.vx = 0;
         particle1.vy = 0;
         particle2.vx = 0;
         particle2.vy = 0;
-        //push them apart
-        particle1.x += push;
-        particle1.y += push;
+        // hard-push particle 1 only: if both are pushed, this oscillates ever so slightly
+        particle1.x += pushx;
+        particle1.y += pushy;
+      }
+    } else {
+      if (fairlyrandom) {
+        particle1.vx += pushx;
+        //particle1.x += pushx;
+        particle1.vy += pushy;
+        //particle1.y += pushy;
+      } else {
+        particle2.vx -= pushx;
+        //particle2.x -= pushx;
+        particle2.vy -= pushy;
+        //particle2.y -= pushy;
       }
     }
   }
@@ -1045,12 +830,23 @@ void ParticleSystem2D::collideParticles(PSparticle &particle1, PSparticle &parti
 // update "matrix" size and pointers (memory location and size can change dynamically)
 // note: do not access the PS class in FX before running this function (or it messes up SEGENV.data)
 void ParticleSystem2D::updateSystem(uint32_t w, uint32_t h) {
-  //PSPRINTLN("updateSystem2D");
   setMatrixSize(w, h);
   updatePSpointers(); // needed if memory location of SEGMENT.data changed
-  //PSPRINTLN("\n END update System2D, running FX...");
 }
 
+// PS relies on SEGMENT.data to point to memory block containing the PSParticleSystem2D class plus particles, sprays and additional PS+FX data
+// since segment (and also SEGMENT.data) can move in memory (e.g. after changing segment settings), all pointers need to be updated
+// this is done in the following way:
+// 1. the ParticleSystem2D class is located at SEGMENT.data (this -> SEGMENT.data) and is always copied/moved with segment
+// 2. directly after the class in memory are the particles (this + 1) [1 implicitly means sizeof(ParticleSystem2D)]
+// 3. directly after the particles are the sources (particles + numParticles)
+// 4. directly after the sources are advanced properties (if used)
+// 5. directly after the advanced properties are advanced size control (if used)
+// 6. directly after that is the first available byte for FX additional data (PSdataEnd)
+// when memory (segment or SEGMENT.data) moves (i.e. during reallocation or creating segment copy) the pointers are copied but may/do not point to the correct location anymore
+// for particles and sources this is easy to fix as their location is always relative to the class start (this)
+// but since advanced properties and advanced size control may not be used, isAdvanced and sizeControl flags are used to determine if they were used
+// this is due to the fact that updatePSpointers() is called during object creation when pointers are not yet initialized
 void ParticleSystem2D::updatePSpointers() {
   //PSPRINTLN("updatePSpointers");
   // Note on memory alignment:
@@ -1058,39 +854,22 @@ void ParticleSystem2D::updatePSpointers() {
   // The PS is aligned to 4 bytes, a PSparticle is aligned to 2 and a struct containing only byte sized variables is not aligned at all and may need to be padded when dividing the memoryblock.
   // by making sure that the number of sources and particles is a multiple of 4, padding can be skipped here as alignent is ensured, independent of struct sizes.
   particles = reinterpret_cast<PSparticle *>(this + 1); // pointer to particles
-  particleFlags = reinterpret_cast<PSparticleFlags *>(particles + numParticles); // pointer to particle flags
-  sources = reinterpret_cast<PSsource *>(particleFlags + numParticles); // pointer to source(s) at data+sizeof(ParticleSystem2D)
+  sources = reinterpret_cast<PSsource *>(particles + numParticles); // pointer to source(s) at data+sizeof(ParticleSystem2D)
   PSdataEnd = reinterpret_cast<uint8_t *>(sources + numSources); // pointer to first available byte after the PS for FX additional data (already aligned to 4 byte boundary)
-  if (isAdvanced) {
-    advPartProps = reinterpret_cast<PSadvancedParticle *>(PSdataEnd);
-    PSdataEnd = reinterpret_cast<uint8_t *>(advPartProps + numParticles);
-    if (sizeControl) {
-      advPartSize = reinterpret_cast<PSsizeControl *>(PSdataEnd);
-      PSdataEnd = reinterpret_cast<uint8_t *>(advPartSize + numParticles);
-    }
+  if (sizeControl) {
+    advPartSize = reinterpret_cast<PSsizeControl *>(PSdataEnd);
+    PSdataEnd = reinterpret_cast<uint8_t *>(advPartSize + numParticles);
   }
-  #ifdef WLED_DEBUG_PS
-  Serial.printf_P(PSTR(" particles %p "), particles);
-  Serial.printf_P(PSTR(" sources %p "), sources);
-  Serial.printf_P(PSTR(" adv. props %p "), advPartProps);
-  Serial.printf_P(PSTR(" adv. ctrl %p "), advPartSize);
-  Serial.printf_P(PSTR("end %p\n"), PSdataEnd);
-  #endif
-
+  //PSPRINTF(PSTR(" particles %p\n sources %p\n size ctrl %p\n end %p\n"), particles, sources, advPartSize, PSdataEnd);
 }
 
 //non class functions to use for initialization
-static uint32_t calculateNumberOfParticles2D(const uint32_t pixels, const bool isadvanced, const bool sizecontrol) {
-  uint32_t numberofParticles = pixels;  // 1 particle per pixel (for example 512 particles on 32x16)
-  uint32_t particlelimit = MAXPARTICLES_2D; // maximum number of paticles allowed
-  numberofParticles = max((uint32_t)4, min(numberofParticles, particlelimit)); // limit to 4 - particlelimit
-  if (isadvanced) {// advanced property array needs ram, reduce number of particles to use the same amount
-    numberofParticles = (numberofParticles * sizeof(PSparticle)) / (sizeof(PSparticle) + sizeof(PSadvancedParticle));
-    if (sizecontrol) // advanced property array needs ram, reduce number of particles
-      numberofParticles /= 8; // if advanced size control is used, much fewer particles are needed note: if changing this number, adjust FX using this accordingly
-  }
-
-  //make sure it is a multiple of 4 for proper memory alignment (easier than using padding bytes)
+static uint32_t calculateNumberOfParticles2D(const uint32_t pixels, const bool sizecontrol) {
+  int numberofParticles = pixels;  // 1 particle per pixel (for example 512 particles on 32x16)
+  numberofParticles = max(4, min(numberofParticles, MAXPARTICLES_2D)); // limit to 4 - MAXPARTICLES_2D
+  // when using size control, reduce number of particles to use the same amount of RAM
+  if (sizecontrol) numberofParticles = (numberofParticles * sizeof(PSparticle)) / (sizeof(PSparticle) + sizeof(PSsizeControl));
+  // make sure it is a multiple of 4 for proper memory alignment (easier than using padding bytes)
   numberofParticles = (numberofParticles+3) & ~0x03;
   return numberofParticles;
 }
@@ -1104,51 +883,40 @@ static uint32_t calculateNumberOfSources2D(uint32_t pixels, uint32_t requestedso
 }
 
 //allocate memory for particle system class, particles, sprays plus additional memory requested by FX //TODO: add percentofparticles like in 1D to reduce memory footprint of some FX?
-static bool allocateParticleSystemMemory2D(uint32_t numparticles, uint32_t numsources, bool isadvanced, bool sizecontrol, uint32_t additionalbytes) {
+static bool allocateParticleSystemMemory2D(uint32_t numparticles, uint32_t numsources, bool sizecontrol = false, uint32_t additionalbytes = 0) {
   PSPRINTLN("PS 2D alloc");
-  PSPRINTLN("numparticles:" + String(numparticles) + " numsources:" + String(numsources) + " additionalbytes:" + String(additionalbytes));
+  PSPRINTF(PSTR(" numparticles: %d numsources: %d additionalbytes: %d\n"), numparticles, numsources, additionalbytes);
   uint32_t requiredmemory = sizeof(ParticleSystem2D);
   // functions above make sure numparticles is a multiple of 4 bytes (to avoid alignment issues)
-  requiredmemory += sizeof(PSparticleFlags) * numparticles;
   requiredmemory += sizeof(PSparticle) * numparticles;
-  if (isadvanced) {
-    requiredmemory += sizeof(PSadvancedParticle) * numparticles;
-    if (sizecontrol)
-      requiredmemory += sizeof(PSsizeControl) * numparticles;
-  }
+  if (sizecontrol) requiredmemory += sizeof(PSsizeControl) * numparticles;
   requiredmemory += sizeof(PSsource) * numsources;
   requiredmemory += additionalbytes;
-  return(SEGMENT.allocateData(requiredmemory));
+  return SEGMENT.allocateData(requiredmemory);
 }
 
 // initialize Particle System, allocate additional bytes if needed (pointer to those bytes can be read from particle system class: PSdataEnd)
-bool initParticleSystem2D(ParticleSystem2D *&PartSys, uint32_t requestedsources, uint32_t additionalbytes, bool advanced, bool sizecontrol) {
-  PSPRINT("PS 2D init ");
+bool initParticleSystem2D(ParticleSystem2D *&PartSys, uint32_t requestedsources, uint32_t additionalbytes, bool sizecontrol) {
+  PSPRINTLN("PS 2D init");
   if (!strip.isMatrix) return false; // only for 2D
   uint32_t cols = SEGMENT.vWidth();
   uint32_t rows = SEGMENT.vHeight();
   uint32_t pixels = cols * rows;
 
-  uint32_t numparticles = calculateNumberOfParticles2D(pixels, advanced, sizecontrol);
-  PSPRINT(" segmentsize:" + String(cols) + " x " + String(rows));
-  PSPRINTLN(" request numparticles:" + String(numparticles));
+  uint32_t numparticles = calculateNumberOfParticles2D(pixels, sizecontrol);
+  PSPRINTF(PSTR(" segmentsize: %dx%d particles: %d\n"), cols, rows, numparticles);
   uint32_t numsources = calculateNumberOfSources2D(pixels, requestedsources);
-  bool allocsuccess = false;
-  while (numparticles >= 4) { // make sure we have at least 4 particles or quit
-    if (allocateParticleSystemMemory2D(numparticles, numsources, advanced, sizecontrol, additionalbytes)) {
-      PSPRINTLN(F("PS 2D alloc succeeded"));
-      allocsuccess = true;
-      break; // allocation succeeded
-    }
-    numparticles = ((numparticles / 2) + 3) & ~0x03; // cut number of particles in half and try again, must be 4 byte aligned
+  while (!allocateParticleSystemMemory2D(numparticles, numsources, sizecontrol, additionalbytes) && numparticles >= 4) { // make sure we have at least 4 particles or quit
+    numparticles = (numparticles>>1) & ~0x03; // try with less particles
     PSPRINTLN(F("PS 2D alloc failed, trying with less particles..."));
   }
-  if (!allocsuccess) {
+  if (numparticles < 4) {
     PSPRINTLN(F("PS 2D alloc failed, not enough memory!"));
+    SEGMENT.deallocateData(); // free any previously allocated memory
     return false; // allocation failed
   }
 
-  PartSys = new (SEGENV.data) ParticleSystem2D(numparticles, numsources, advanced, sizecontrol); // particle system constructor
+  PartSys = new (SEGENV.data) ParticleSystem2D(numparticles, numsources, sizecontrol); // particle system constructor
   PartSys->setMatrixSize(cols, rows);
 
   PSPRINTLN(F("2D PS init done"));
@@ -1157,7 +925,7 @@ bool initParticleSystem2D(ParticleSystem2D *&PartSys, uint32_t requestedsources,
 
 #endif // WLED_DISABLE_PARTICLESYSTEM2D
 
-
+/*
 ////////////////////////
 // 1D Particle System //
 ////////////////////////
@@ -1203,14 +971,7 @@ void ParticleSystem1D::update(void) {
 
   //move all particles
   for (uint32_t i = 0; i < usedParticles; i++) {
-    particleMoveUpdate(particles[i], particleFlags[i], nullptr, isAdvanced ? &advPartProps[i] : nullptr);
-  }
-
-  if (particlesettings.colorByPosition) {
-    uint32_t scale = (255 << 16) / maxX;  // speed improvement: multiplication is faster than division
-    for (uint32_t i = 0; i < usedParticles; i++) {
-      particles[i].hue = (scale * particles[i].x) >> 16; // note: x is > 0 if not out of bounds
-    }
+    particleMoveUpdate(particles[i], particleFlags[i], particlesettings, isAdvanced ? &advPartProps[i] : nullptr);
   }
 
   render();
@@ -1227,13 +988,13 @@ void ParticleSystem1D::setUsedParticles(const uint8_t percentage) {
 
 void ParticleSystem1D::setSize(const uint32_t x) {
   maxXpixel = x - 1; // last physical pixel that can be drawn to
-  maxX = x * PS_P_RADIUS_1D - 1;  // particle system boundary for movements
+  maxX = (x << PS_P_SHIFT_1D) - 1;  // particle system boundary for movements
 }
 
 // render size, 0 = 1 pixel, 1 = 2 pixel (interpolated), bigger sizes require adanced properties
 void ParticleSystem1D::setParticleSize(const uint8_t size) {
   particlesize = size > 0 ? 1 : 0; // TODO: add support for global sizes? see note above (motion blur)
-  particleHardRadius = PS_P_MINHARDRADIUS_1D >> (!particlesize); // 2 pixel sized particles or single pixel sized particles
+  particleHardRadius = PS_P_RADIUS_1D >> (!particlesize); // 2 pixel sized particles or single pixel sized particles
 }
 
 // enable/disable gravity, optionally, set the force (force=8 is default) can be -127 to +127, 0 is disable
@@ -1279,33 +1040,30 @@ int32_t ParticleSystem1D::sprayEmit(const PSsource1D &emitter) {
 
 // particle moves, decays and dies, if killoutofbounds is set, out of bounds particles are set to ttl=0
 // uses passed settings to set bounce or wrap, if useGravity is set, it will never bounce at the top and killoutofbounds is not applied over the top
-void ParticleSystem1D::particleMoveUpdate(PSparticle1D &part, PSparticleFlags1D &partFlags, PSsettings1D *options, PSadvancedParticle1D *advancedproperties) {
-  if (options == nullptr)
-    options = &particlesettings; // use PS system settings by default
-
+void ParticleSystem1D::particleMoveUpdate(PSparticle1D &part, PSparticleFlags1D &partFlags, PSsettings1D &options, PSadvancedParticle1D *advancedproperties) {
   if (part.ttl > 0) {
     if (!partFlags.perpetual)
       part.ttl--; // age
-    if (options->colorByAge)
+    if (options.colorByAge)
       part.hue = min(part.ttl, (uint16_t)255); // set color to ttl
 
-    int32_t renderradius = PS_P_HALFRADIUS_1D; // used to check out of bounds, default for 2 pixel rendering
+    int32_t renderradius = PS_P_RADIUS_1D; // used to check out of bounds, default for 2 pixel rendering
     int32_t newX = part.x + (int32_t)part.vx;
     partFlags.outofbounds = false; // reset out of bounds (in case particle was created outside the matrix and is now moving into view)
 
     if (advancedproperties) { // using individual particle size?
       if (advancedproperties->size > 1)
-        particleHardRadius = PS_P_MINHARDRADIUS_1D + (advancedproperties->size >> 1);
+        particleHardRadius = PS_P_RADIUS_1D + (advancedproperties->size >> 1);
       else // single pixel particles use half the collision distance for walls
-        particleHardRadius = PS_P_MINHARDRADIUS_1D >> 1;
+        particleHardRadius = PS_P_RADIUS_1D >> 1;
       renderradius = particleHardRadius; // note: for single pixel particles, it should be zero, but it does not matter as out of bounds checking is done in rendering function
     }
 
     // if wall collisions are enabled, bounce them before they reach the edge, it looks much nicer if the particle is not half out of view
-    if (options->bounce) {
+    if (options.bounce) {
       if ((newX < (int32_t)particleHardRadius) || ((newX > (int32_t)(maxX - particleHardRadius)))) { // reached a wall
         bool bouncethis = true;
-        if (options->useGravity) {
+        if (options.useGravity) {
           if (partFlags.reversegrav) { // skip bouncing at x = 0
             if (newX < (int32_t)particleHardRadius)
               bouncethis = false;
@@ -1324,11 +1082,11 @@ void ParticleSystem1D::particleMoveUpdate(PSparticle1D &part, PSparticleFlags1D 
       }
     }
 
-    if (!checkBoundsAndWrap(newX, maxX, renderradius, options->wrap)) { // check out of bounds note: this must not be skipped or it can lead to crashes
+    if (!checkBoundsAndWrap(newX, maxX, renderradius, options.wrap)) { // check out of bounds note: this must not be skipped or it can lead to crashes
       partFlags.outofbounds = true;
-      if (options->killoutofbounds) {
+      if (options.killoutofbounds) {
         bool killthis = true;
-        if (options->useGravity) { // if gravity is used, only kill below 'floor level'
+        if (options.useGravity) { // if gravity is used, only kill below 'floor level'
           if (partFlags.reversegrav) { // skip at x = 0, do not skip far out of bounds
             if (newX < 0 || newX > maxX << 2)
               killthis = false;
@@ -1346,6 +1104,9 @@ void ParticleSystem1D::particleMoveUpdate(PSparticle1D &part, PSparticleFlags1D 
       part.x = newX; // set new position
     else
       part.vx = 0; // set speed to zero. note: particle can get speed in collisions, if unfixed, it should not speed away
+
+    if (particlesettings.colorByPosition)
+      part.hue = (255 * part.x) / maxX; // note: x is > 0 if not out of bounds
   }
 }
 
@@ -1461,7 +1222,7 @@ void ParticleSystem1D::renderParticle(const uint32_t particleindex, CRGBA color,
     size = advPartProps[particleindex].size;
 
   if (size == 0) { //single pixel particle, can be out of bounds as oob checking is made for 2-pixel particles (and updating it uses more code)
-    uint32_t x =  particles[particleindex].x >> PS_P_RADIUS_SHIFT_1D;
+    uint32_t x =  particles[particleindex].x >> PS_P_SHIFT_1D;
     if (x <= (uint32_t)maxXpixel) { //by making x unsigned there is no need to check < 0 as it will overflow
       SEGMENT.addPixelColorRaw(x, color);
     }
@@ -1470,9 +1231,9 @@ void ParticleSystem1D::renderParticle(const uint32_t particleindex, CRGBA color,
   //render larger particles
 
   // add half a radius as the rendering algorithm always starts at the bottom left, this leaves things positive, so shifts can be used, then shift coordinate by a full pixel (x-- below)
-  int32_t xoffset = particles[particleindex].x + PS_P_HALFRADIUS_1D;
+  int32_t xoffset = particles[particleindex].x + PS_P_RADIUS_1D;
   int32_t dx = xoffset & (PS_P_RADIUS_1D - 1); //relativ particle position in subpixel space,  modulo replaced with bitwise AND
-  int32_t x = xoffset >> PS_P_RADIUS_SHIFT_1D; // divide by PS_P_RADIUS, bitshift of negative number stays negative -> checking below for x < 0 works (but does not when using division)
+  int32_t x = xoffset >> PS_P_SHIFT_1D; // divide by PS_P_RADIUS, bitshift of negative number stays negative -> checking below for x < 0 works (but does not when using division)
   int32_t pxlbrightness[2];
   //calculate the brightness values for both pixels using linear interpolation (note: in standard rendering out of frame pixels could be skipped but if checks add more clock cycles over all)
   pxlbrightness[0] = (((int32_t)PS_P_RADIUS_1D - dx) * brightness) >> PS_P_SURFACE_1D;
@@ -1534,7 +1295,7 @@ void ParticleSystem1D::renderParticle(const uint32_t particleindex, CRGBA color,
     pixco[1] = x;  // right pixel
     x--; // shift by a full pixel here, this is skipped above to not do -1 and then +1
     pixco[0] = x;  // left pixel
-  
+
     // check if any pixels are out of frame
     if (x < 0) { // left pixels out of frame
       if (wrap) // wrap x to the other side if required
@@ -1597,12 +1358,12 @@ void ParticleSystem1D::handleCollisions() {
       for (uint32_t j = i + 1; j < binParticleCount; j++) { // check against higher number particles
         uint32_t idx_j = binIndices[j];
         if (isAdvanced) { // use advanced size properties
-          collisiondistance = (PS_P_MINHARDRADIUS_1D << particlesize) + ((advPartProps[idx_i].size + advPartProps[idx_j].size) >> 1);
+          collisiondistance = (PS_P_RADIUS_1D << particlesize) + ((advPartProps[idx_i].size + advPartProps[idx_j].size) >> 1);
         }
         int32_t dx = (particles[idx_j].x + particles[idx_j].vx) - (particles[idx_i].x + particles[idx_i].vx); // distance between particles with lookahead
         uint32_t dx_abs = abs(dx);
         if (dx_abs <= collisiondistance) { // collide if close
-          collideParticles(particles[idx_i], particleFlags[idx_i], particles[idx_j], particleFlags[idx_j], dx, dx_abs, collisiondistance);
+          collideParticles(idx_i, idx_j, dx, dx_abs, collisiondistance);
         }
       }
     }
@@ -1611,20 +1372,60 @@ void ParticleSystem1D::handleCollisions() {
 }
 // handle a collision if close proximity is detected, i.e. dx and/or dy smaller than 2*PS_P_RADIUS
 // takes two pointers to the particles to collide and the particle hardness (softer means more energy lost in collision, 255 means full hard)
-void ParticleSystem1D::collideParticles(PSparticle1D &particle1, const PSparticleFlags1D &particle1flags, PSparticle1D &particle2, const PSparticleFlags1D &particle2flags, const int32_t dx, const uint32_t dx_abs, const uint32_t collisiondistance) {
-  int32_t dv = particle2.vx - particle1.vx;
-  int32_t dotProduct = (dx * dv); // is always negative if moving towards each other
+void ParticleSystem1D::collideParticles(uint32_t particle1idx, uint32_t particle2idx, const int32_t dx, const uint32_t dx_abs, const uint32_t collisiondistance) {
+  PSparticle1D &particle1 = particles[particle1idx];
+  const PSparticleFlags1D &particle1flags = particleFlags[particle1idx];
+  PSparticle1D &particle2 = particles[particle2idx];
+  const PSparticleFlags1D &particle2flags = particleFlags[particle2idx];
+
+  const int32_t v1 = (int32_t)particle1.vx;
+  const int32_t v2 = (int32_t)particle2.vx;
+  const int32_t dv = v2 - v1;
+  const int32_t dotProduct = (dx * dv); // is always negative if moving towards each other
 
   if (dotProduct < 0) { // particles are moving towards each other
-    uint32_t surfacehardness = max(collisionHardness, (int32_t)PS_P_MINSURFACEHARDNESS_1D); // if particles are soft, the impulse must stay above a limit or collisions slip through
-    // Calculate new velocities after collision  note: not using dot product like in 2D as impulse is purely speed depnedent
-    #if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(ESP8266) // use bitshifts with rounding instead of division (2x faster)
-    int32_t impulse = ((dv * surfacehardness) + ((dv >> 31) & 0xFF)) >> 8; // note: (v>>31) & 0xFF)) extracts the sign and adds 255 if negative for correct rounding using shifts
-    #else // division is faster on ESP32, S2 and S3
-    int32_t impulse = (dv * surfacehardness) / 255;
-    #endif
-    particle1.vx += impulse;
-    particle2.vx -= impulse;
+    // use conservation of meomentum for calculating new velocities after collision
+    if (isAdvanced) {
+      const int32_t m1 = advPartProps[particle1idx].mass;
+      const int32_t m2 = advPartProps[particle2idx].mass;
+      const int32_t totalMass = m1 + m2;
+      const int32_t dm  = m2 - m1;
+      if (totalMass > 0) {
+        if (collisionHardness < 255) {
+          // velocity formula (semi elastic):
+          //  v1' = (m1*v1 + m2*v2 - e*m2*(v1 - v2)) / (m1 + m2); e = 0..1 (0=perfectly inelastic, 1=elastic)
+          //  v2' = (m1*v1 + m2*v2 - e*m1*(v2 - v1)) / (m1 + m2)
+          const int32_t momentum = m1 * v1 + m2 * v2;
+          const int32_t e255 = collisionHardness * dv; // postpone /255 to increase precision
+          particle1.vx = (momentum + ((m2 * ( e255)) / 255)) / totalMass;
+          particle2.vx = (momentum + ((m1 * (-e255)) / 255)) / totalMass;
+        } else {
+          // velocity formula (elastic): v1' = (m1 - m2)*v1/(m1 + m2) + 2*m2*v2/(m1 + m2); v2' = (m2 - m1)*v2/(m1 + m2) + 2*m1*v1/(m1 + m2);
+          particle1.vx = (((-dm) * v1) + (2 * m2 * v2)) / totalMass;
+          particle2.vx = ((( dm) * v2) + (2 * m1 * v1)) / totalMass;
+        }
+      } else { // both masses are zero, treat as equal mass
+        // velocity formula (elastic): v1' = v2; v2' = v1;
+        // velocity formula (semi elastic): v1' = (v1 + v2 - e*(v1 - v2)) / 2; v2' = (v1 + v2 + e*(v1 - v2)) / 2; e = 0..1 (0=perfectly inelastic, 1=elastic)
+        if (collisionHardness < 255) {
+          const int32_t v = v1 + v2;
+          const int32_t ev = collisionHardness * dv / 255;
+          particle1.vx = (v + ev) / 2;
+          particle2.vx = (v - ev) / 2;
+        } else
+          std::swap(particle1.vx, particle2.vx);
+      }
+    } else {
+      // velocity formula (elastic): v1' = v2; v2' = v1;
+      // velocity formula (semi elastic): v1' = (v1 + v2 - e*(v1 - v2)) / 2; v2' = (v1 + v2 + e*(v1 - v2)) / 2; e = 0..1 (0=perfectly inelastic, 1=elastic)
+      if (collisionHardness < 255) {
+        const int32_t v = v1 + v2;
+        const int32_t ev = collisionHardness * dv / 255;
+        particle1.vx = (v + ev) / 2;
+        particle2.vx = (v - ev) / 2;
+      } else
+        std::swap(particle1.vx, particle2.vx);
+    }
 
     // if one of the particles is fixed, transfer the impulse back so it bounces
     if (particle1flags.fixed)
@@ -1689,6 +1490,7 @@ void ParticleSystem1D::updateSystem(uint32_t len) {
 }
 
 void ParticleSystem1D::updatePSpointers() {
+  PSPRINTLN("updatePSpointers");
   // Note on memory alignment:
   // a pointer MUST be 4 byte aligned. sizeof() in a struct/class is always aligned to the largest element. if it contains a 32bit, it will be padded to 4 bytes, 16bit is padded to 2byte alignment.
   // The PS is aligned to 4 bytes, a PSparticle is aligned to 2 and a struct containing only byte sized variables is not aligned at all and may need to be padded when dividing the memoryblock.
@@ -1701,17 +1503,7 @@ void ParticleSystem1D::updatePSpointers() {
     advPartProps = reinterpret_cast<PSadvancedParticle1D *>(PSdataEnd);
     PSdataEnd = reinterpret_cast<uint8_t *>(advPartProps + numParticles); // since numParticles is a multiple of 4, this is always aligned to 4 bytes. No need to add padding bytes here
   }
-  #ifdef WLED_DEBUG_PS
-  PSPRINTLN(" PS Pointers: ");
-  PSPRINT(" PS : 0x");
-  Serial.println((uintptr_t)this, HEX);
-  PSPRINT(" Particleflags : 0x");
-  Serial.println((uintptr_t)particleFlags, HEX);
-  PSPRINT(" Particles : 0x");
-  Serial.println((uintptr_t)particles, HEX);
-  PSPRINT(" Sources : 0x");
-  Serial.println((uintptr_t)sources, HEX);
-  #endif
+  PSPRINTF(PSTR(" particles %p\n sources %p\n adv. props %p\nend %p\n"), particles, sources, advPartProps, PSdataEnd);
 }
 
 //non class functions to use for initialization, fraction is uint8_t: 255 means 100%
@@ -1755,18 +1547,13 @@ bool initParticleSystem1D(ParticleSystem1D *&PartSys, const uint32_t requestedso
   if (SEGLEN == 1) return false; // single pixel not supported
   uint32_t numparticles = calculateNumberOfParticles1D(fractionofparticles, advanced);
   uint32_t numsources = calculateNumberOfSources1D(requestedsources);
-  bool allocsuccess = false;
-  while (numparticles >= 10) { // make sure we have at least 10 particles or quit
-    if (allocateParticleSystemMemory1D(numparticles, numsources, advanced, additionalbytes)) {
-      PSPRINT(F("PS 1D alloc succeeded"));
-      allocsuccess = true;
-      break; // allocation succeeded
-    }
-    numparticles = ((numparticles / 2) + 3) & ~0x03; // cut number of particles in half and try again, must be 4 byte aligned
+  while (!allocateParticleSystemMemory1D(numparticles, numsources, advanced, additionalbytes) && numparticles >= 10) {
+    numparticles = (numparticles>>1) & ~0x03; // cut number of particles in half and try again, must be 4 byte aligned
     PSPRINTLN(F("PS 1D alloc failed, trying with less particles..."));
   }
-  if (!allocsuccess) {
+  if (numparticles < 10) {
     PSPRINTLN(F("PS init failed: memory depleted"));
+    SEGMENT.deallocateData(); // free memory
     return false; // allocation failed
   }
   PartSys = new (SEGENV.data) ParticleSystem1D(numparticles, numsources, advanced); // particle system constructor
@@ -1775,3 +1562,4 @@ bool initParticleSystem1D(ParticleSystem1D *&PartSys, const uint32_t requestedso
   return true;
 }
 #endif // WLED_DISABLE_PARTICLESYSTEM1D
+*/

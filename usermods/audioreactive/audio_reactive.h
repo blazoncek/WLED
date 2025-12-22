@@ -598,10 +598,12 @@ static void autoResetPeak(void) {
 #define FX_MODE_FLOWSTRIPE             179
 #define FX_MODE_ROCKTAVES              185
 #define FX_MODE_2DAKEMI                186
+/*
 // particle 1D - sound reactive
 #define FX_MODE_PS1DGEQ                169
 #define FX_MODE_PS1DSONICSTREAM        170
 #define FX_MODE_PS1DSONICBOOM          171
+*/
 // particle 2D - sound reactive
 #define FX_MODE_PARTICLESGEQ           142
 #define FX_MODE_PARTICLECENTERGEQ      151
@@ -1892,6 +1894,7 @@ static const char _data_FX_MODE_PARTICLECIRCULARGEQ[] PROGMEM = "PS GEQ Nova@Spe
   Uses palette for particle color
   by DedeHai (Damian Schneider)
 */
+/*
 uint16_t mode_particle1DGEQ(void) {
   ParticleSystem1D *PartSys = nullptr;
   uint32_t numSources;
@@ -1959,11 +1962,12 @@ uint16_t mode_particle1DGEQ(void) {
   return FRAMETIME;
 }
 static const char _data_FX_MODE_PS1DGEQ[] PROGMEM = "PS GEQ 1D@Speed,!,Size,Blur,,,,;,!;!;1f;pal=0,sx=50,ix=200,c1=0,c2=0,c3=0,o1=1,o2=1";
-
+*/
 /*
   Particle based AR effect, swoop particles along the strip with selected frequency loudness
   by DedeHai (Damian Schneider)
 */
+/*
 uint16_t mode_particle1DsonicStream(void) {
   ParticleSystem1D *PartSys = nullptr;
 
@@ -2054,19 +2058,19 @@ uint16_t mode_particle1DsonicStream(void) {
     for (uint32_t i = 0; i < PartSys->usedParticles; i++) {
       if (PartSys->particles[i].vx == 0)
         PartSys->particles[i].vx = PartSys->sources[0].v; // move static particles (after disabling push mode)
-      PartSys->particleMoveUpdate(PartSys->particles[i], PartSys->particleFlags[i], nullptr, &PartSys->advPartProps[i]);
+      PartSys->particleMoveUpdate(PartSys->particles[i], PartSys->particleFlags[i], &PartSys->advPartProps[i]);
     }
   }
 
   return FRAMETIME;
 }
 static const char _data_FX_MODE_PS1DSONICSTREAM[] PROGMEM = "PS Sonic Stream@!,!,Color,Blur,Bin,Mod,Filter,Push;,!;!;1f;c3=0,o2=1";
-
-
+*/
 /*
   Particle based AR effect, creates exploding particles on beats
   by DedeHai (Damian Schneider)
 */
+/*
 uint16_t mode_particle1DsonicBoom(void) {
   ParticleSystem1D *PartSys = nullptr;
   if (SEGMENT.call == 0) { // initialization
@@ -2151,6 +2155,7 @@ uint16_t mode_particle1DsonicBoom(void) {
   return FRAMETIME;
 }
 static const char _data_FX_MODE_PS1DSONICBOOM[] PROGMEM = "PS Sonic Boom@!,!,Color,Position,Bin,Mod,Filter,Blur;,!;!;1f;c2=63,c3=0,o2=1";
+*/
 #endif // WLED_DISABLE_PARTICLESYSTEM1D
 
 
@@ -2793,11 +2798,13 @@ class AudioReactive : public Usermod {
         strip.addEffect(FX_MODE_DJLIGHT, &mode_DJLight, _data_FX_MODE_DJLIGHT);
         strip.addEffect(FX_MODE_BLURZ, &mode_blurz, _data_FX_MODE_BLURZ);
         strip.addEffect(FX_MODE_ROCKTAVES, &mode_rocktaves, _data_FX_MODE_ROCKTAVES);
+        /*
         #ifndef WLED_DISABLE_PARTICLESYSTEM1D
         strip.addEffect(FX_MODE_PS1DGEQ, &mode_particle1DGEQ, _data_FX_MODE_PS1DGEQ);
         strip.addEffect(FX_MODE_PS1DSONICSTREAM, &mode_particle1DsonicStream, _data_FX_MODE_PS1DSONICSTREAM);
         strip.addEffect(FX_MODE_PS1DSONICBOOM, &mode_particle1DsonicBoom, _data_FX_MODE_PS1DSONICBOOM);
         #endif // WLED_DISABLE_PARTICLESYSTEM1D
+        */
         // --- 2D  effects ---
         #ifndef WLED_DISABLE_2D
         strip.addEffect(FX_MODE_2DGEQ, &mode_2DGEQ, _data_FX_MODE_2DGEQ); // audio
