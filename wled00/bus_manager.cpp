@@ -832,7 +832,17 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     case TYPE_HUB75MATRIX_MOONHUB:
     case TYPE_HUB75MATRIX_TRINITY:
     case TYPE_HUB75MATRIX_S3:
-      getHub75Pins(_type, (uint8_t*)&mxconfig.gpio);
+      {
+      uint8_t tempPins[HUB75_PIN_COUNT];
+      getHub75Pins(_type, tempPins);
+      DEBUGBUS_PRINTF_P(PSTR("Selected temp GPIOs: %u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n"),
+                (unsigned)tempPins[0], (unsigned)tempPins[1], (unsigned)tempPins[2], (unsigned)tempPins[3], (unsigned)tempPins[4], (unsigned)tempPins[5],
+                (unsigned)tempPins[6], (unsigned)tempPins[7], (unsigned)tempPins[8], (unsigned)tempPins[9], (unsigned)tempPins[10], (unsigned)tempPins[11], (unsigned)tempPins[12], (unsigned)tempPins[13]);
+      getHub75Pins(_type, (uint8_t*)&(mxconfig.gpio));
+      DEBUGBUS_PRINTF_P(PSTR("Selected GPIOs: %u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n"),
+                (unsigned)mxconfig.gpio.r1, (unsigned)mxconfig.gpio.g1, (unsigned)mxconfig.gpio.b1, (unsigned)mxconfig.gpio.r2, (unsigned)mxconfig.gpio.g2, (unsigned)mxconfig.gpio.b2,
+                (unsigned)mxconfig.gpio.a, (unsigned)mxconfig.gpio.b, (unsigned)mxconfig.gpio.c, (unsigned)mxconfig.gpio.d, (unsigned)mxconfig.gpio.e, (unsigned)mxconfig.gpio.lat, (unsigned)mxconfig.gpio.oe, (unsigned)mxconfig.gpio.clk);
+      }
       break;
     default:
       DEBUGBUS_PRINTLN(F("Unknown HUB75 matrix type. Aborting!"));
@@ -840,7 +850,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   }
   //PinManagerPinType pins[HUB75_PIN_COUNT];
   //for (size_t i = 0; i < HUB75_PIN_COUNT; i++) pins[i] = {((int8_t*)&mxconfig.gpio)[i], true};
-  if (!PinManager::allocateMultiplePins((int8_t*)&mxconfig.gpio, HUB75_PIN_COUNT, PinOwner::HUB75, true)) {
+  if (!PinManager::allocateMultiplePins((int8_t*)&(mxconfig.gpio), HUB75_PIN_COUNT, PinOwner::HUB75, true)) {
     DEBUGBUS_PRINTLN("Failed to allocate pins for HUB75");
     return;
   }
