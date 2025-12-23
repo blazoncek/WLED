@@ -1185,6 +1185,7 @@ void BusManager::removeAll() {
   while (!canAllShow()) yield();
   busses.clear();
   PolyBus::setParallelI2S1Output(false);
+  DEBUGBUS_PRINTLN(F("Removed all!"));
 }
 
 #ifdef ESP32_DATA_IDLE_HIGH
