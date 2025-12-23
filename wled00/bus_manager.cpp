@@ -718,32 +718,32 @@ static inline void setBitArray(uint8_t* byteArray, size_t numBits, bool value) {
 */
 
 static constexpr size_t HUB75_PIN_COUNT = sizeof(HUB75_I2S_CFG::gpio) / sizeof(int8_t);
+static uint8_t __forum[HUB75_PIN_COUNT]     PROGMEM = {  2, 15,  4, 16, 27, 17,  5, 18, 19, 21, 12, 26, 25, 22 };
+static uint8_t __portal[HUB75_PIN_COUNT]    PROGMEM = { 42, 41, 40, 38, 39, 37, 45, 36, 48, 35, 21, 47, 14,  2 };
+static uint8_t __moonhub[HUB75_PIN_COUNT]   PROGMEM = {  1,  5,  6,  7, 13,  9, 16, 48, 47, 21, 38,  8,  4, 18 };
+static uint8_t __trinity[HUB75_PIN_COUNT]   PROGMEM = { 25, 26, 27, 14, 12, 13, 23, 19,  5, 17, 18,  4, 15, 16 };
+static uint8_t __s3generic[HUB75_PIN_COUNT] PROGMEM = {  1,  2, 42, 41, 40, 39, 45, 48, 47, 21, 38,  8,  3, 18 };
 
 // known controller board pinouts
 static const uint8_t * const getHub75Pins(uint8_t type, uint8_t *dest = nullptr) {
   const uint8_t *b = nullptr;
   switch (type) {
     default:
-    case TYPE_HUB75MATRIX_FORUM: {
-      static uint8_t a[HUB75_PIN_COUNT] PROGMEM = { 2, 15,  4, 16, 27, 17,  5, 18, 19, 21, 12, 26, 25, 22 };
-      b = a;
-    }
-    case TYPE_HUB75MATRIX_PORTAL: {
-      static uint8_t a[HUB75_PIN_COUNT] PROGMEM = { 42, 41, 40, 38, 39, 37, 45, 36, 48, 35, 21, 47, 14,  2 };
-      b = a;
-    }
-    case TYPE_HUB75MATRIX_MOONHUB: {
-      static uint8_t a[HUB75_PIN_COUNT] PROGMEM = {  1,  5,  6,  7, 13,  9, 16, 48, 47, 21, 38,  8,  4, 18 };
-      b = a;
-    }
-    case TYPE_HUB75MATRIX_TRINITY: {
-      static uint8_t a[HUB75_PIN_COUNT] PROGMEM = { 25, 26, 27, 14, 12, 13, 23, 19,  5, 17, 18,  4, 15, 16 };
-      b = a;
-    }
-    case TYPE_HUB75MATRIX_S3: {
-      static uint8_t a[HUB75_PIN_COUNT] PROGMEM = {  1,  2, 42, 41, 40, 39, 45, 48, 47, 21, 38,  8,  3, 18 };
-      b = a;
-    }
+    case TYPE_HUB75MATRIX_FORUM:
+      b = __forum;
+      break;
+    case TYPE_HUB75MATRIX_PORTAL:
+      b = __portal;
+      break;
+    case TYPE_HUB75MATRIX_MOONHUB:
+      b = __moonhub;
+      break;
+    case TYPE_HUB75MATRIX_TRINITY:
+      b = __trinity;
+      break;
+    case TYPE_HUB75MATRIX_S3:
+      b = __s3generic;
+      break;
   }
   if (dest != nullptr) memcpy_P(dest, b, HUB75_PIN_COUNT);
   return b;
@@ -832,27 +832,11 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     case TYPE_HUB75MATRIX_MOONHUB:
     case TYPE_HUB75MATRIX_TRINITY:
     case TYPE_HUB75MATRIX_S3:
-      {
-      uint8_t tempPins[HUB75_PIN_COUNT];
-      getHub75Pins(_type, tempPins);
-      DEBUGBUS_PRINTF_P(PSTR("Selected temp GPIOs: %u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n"),
-                (unsigned)tempPins[0], (unsigned)tempPins[1], (unsigned)tempPins[2], (unsigned)tempPins[3], (unsigned)tempPins[4], (unsigned)tempPins[5],
-                (unsigned)tempPins[6], (unsigned)tempPins[7], (unsigned)tempPins[8], (unsigned)tempPins[9], (unsigned)tempPins[10], (unsigned)tempPins[11], (unsigned)tempPins[12], (unsigned)tempPins[13]);
       getHub75Pins(_type, (uint8_t*)&(mxconfig.gpio));
-      DEBUGBUS_PRINTF_P(PSTR("Selected GPIOs: %u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n"),
-                (unsigned)mxconfig.gpio.r1, (unsigned)mxconfig.gpio.g1, (unsigned)mxconfig.gpio.b1, (unsigned)mxconfig.gpio.r2, (unsigned)mxconfig.gpio.g2, (unsigned)mxconfig.gpio.b2,
-                (unsigned)mxconfig.gpio.a, (unsigned)mxconfig.gpio.b, (unsigned)mxconfig.gpio.c, (unsigned)mxconfig.gpio.d, (unsigned)mxconfig.gpio.e, (unsigned)mxconfig.gpio.lat, (unsigned)mxconfig.gpio.oe, (unsigned)mxconfig.gpio.clk);
-      }
       break;
     default:
       DEBUGBUS_PRINTLN(F("Unknown HUB75 matrix type. Aborting!"));
       return;
-  }
-  //PinManagerPinType pins[HUB75_PIN_COUNT];
-  //for (size_t i = 0; i < HUB75_PIN_COUNT; i++) pins[i] = {((int8_t*)&mxconfig.gpio)[i], true};
-  if (!PinManager::allocateMultiplePins((int8_t*)&(mxconfig.gpio), HUB75_PIN_COUNT, PinOwner::HUB75, true)) {
-    DEBUGBUS_PRINTLN("Failed to allocate pins for HUB75");
-    return;
   }
 
   switch (bc.colorOrder) {
@@ -889,6 +873,12 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   DEBUGBUS_PRINTF_P(PSTR("R1_PIN=%u, G1_PIN=%u, B1_PIN=%u, R2_PIN=%u, G2_PIN=%u, B2_PIN=%u, A_PIN=%u, B_PIN=%u, C_PIN=%u, D_PIN=%u, E_PIN=%u, LAT_PIN=%u, OE_PIN=%u, CLK_PIN=%u\n"),
                 mxconfig.gpio.r1, mxconfig.gpio.g1, mxconfig.gpio.b1, mxconfig.gpio.r2, mxconfig.gpio.g2, mxconfig.gpio.b2,
                 mxconfig.gpio.a, mxconfig.gpio.b, mxconfig.gpio.c, mxconfig.gpio.d, mxconfig.gpio.e, mxconfig.gpio.lat, mxconfig.gpio.oe, mxconfig.gpio.clk);
+  //PinManagerPinType pins[HUB75_PIN_COUNT];
+  //for (size_t i = 0; i < HUB75_PIN_COUNT; i++) pins[i] = {((int8_t*)&mxconfig.gpio)[i], true};
+  if (!PinManager::allocateMultiplePins((int8_t*)&(mxconfig.gpio), HUB75_PIN_COUNT, PinOwner::HUB75, true)) {
+    DEBUGBUS_PRINTLN("Failed to allocate pins for HUB75");
+    return;
+  }
 
   // OK, now we can create our matrix object
   display = new(std::nothrow) MatrixPanel_I2S_DMA(mxconfig);
