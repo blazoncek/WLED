@@ -1565,7 +1565,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     };
 
     CRGBA *_pixelsN = topSegment.getPixels();
-    if (topSegment.rotateSpeed || topSegment.zoomAmount) {
+    if (topSegment.rotateSpeed || topSegment.zoomAmount != 8) {
       _pixelsN = new CRGBA[nCols * nRows];
       const int midX = nCols / 2;
       const int midY = nRows / 2;
@@ -1580,7 +1580,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     CRGBA *_pixelsO = topSegment.getPixels();
     if (segO) {
       _pixelsO = segO->getPixels();
-      if (segO->rotateSpeed || segO->zoomAmount) {
+      if (segO->rotateSpeed || segO->zoomAmount != 8) {
         _pixelsO = new CRGBA[oCols * oRows];
         const int midXo = oCols / 2;
         const int midYo = oRows / 2;
@@ -1654,8 +1654,8 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       }
     }
     // clean up
-    if (topSegment.rotateSpeed || topSegment.zoomAmount) delete[] _pixelsN;
-    if (segO && (segO->rotateSpeed || segO->zoomAmount)) delete[] _pixelsO;
+    if (topSegment.rotateSpeed || topSegment.zoomAmount != 8) delete[] _pixelsN;
+    if (segO && (segO->rotateSpeed || segO->zoomAmount != 8)) delete[] _pixelsO;
 #endif
   } else {
     const int nLen = topSegment.virtualLength();
