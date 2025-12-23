@@ -183,7 +183,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       char ma[4] = "MA"; ma[2] = offset+s; ma[3] = 0; //max mA
       char hs[4] = "HS"; hs[2] = offset+s; hs[3] = 0; //hostname (for network types, custom text for others)
       if (!request->hasArg(lp)) {
-        DEBUG_PRINTF_P(PSTR("# of buses: %d\n"), s+1);
+        DEBUG_PRINTF_P(PSTR("# of buses: %d\n"), s);
         break;
       }
       for (int i = 0; i < 5; i++) {

@@ -84,7 +84,7 @@
 		// enable per port limiter and calculate current
 		function enPPL(sDI=0) {
 			const abl = d.Sf.ABL.checked;
-			const ppl = d.Sf.PPL.checked;
+			const ppl = abl && d.Sf.PPL.checked;
 			let sumMA = 0;
 			d.Sf.MA.readonly = ppl;
 			d.Sf.MA.min = abl && !ppl ? 250 : 0;
@@ -96,7 +96,7 @@
 				gId("PSU"+n).style.display = ppl ? "inline" : "none";
 				const t = parseInt(gN("LT"+n).value); // LED type SELECT
 				const c = parseInt(gN("LC"+n).value); //get LED count
-				i.min = ppl && isDig(t) ? 250 : 0;
+				i.min = abl && ppl && isDig(t) ? 250 : 0;
 				if (!abl || !isDig(t)) i.value = 0;
 				else if (ppl) sumMA += parseInt(i.value,10);
 				else if (sDI) i.value = Math.round(parseInt(d.Sf.MA.value,10)*c/sDI);
@@ -405,7 +405,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 			c += `</select>`;
 			c += `<span style="cursor: pointer;" onclick="off('BT${s}')">&nbsp;&#x2715;</span><br></div>`;
 			b.insertAdjacentHTML("beforeend", c);
-			b.querySelector(`select[name=BE${s}]`).selectedIndex = t;
+			b.querySelector(`select[name=BE${s}]`).value = t;
 		}
 		function remBtn() {
 			var b = gId("btns");
@@ -765,7 +765,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 					gId("rf"+n).checked = (gId("rf"+n).checked || t == 31);                 // LEDs require data in off state (mandatory for TM1814)
 					if (isAna(t)) gN("LC"+n).value = 1;                                     // for sanity change analog count just to 1 LED
 					gN("LA"+n).min = (!isDig(t) || !abl) ? 0 : 1;                           // set minimum value for LED mA
-					gN("MA"+n).min = (!isDig(t)) ? 0 : 250;                                 // set minimum value for PSU mA
+					gN("MA"+n).min = (!isDig(t) || !abl) ? 0 : 250;                         // set minimum value for PSU mA
 				}
 				gId("rf"+n).onclick = mustR(t) ? (()=>{return false}) : (()=>{});           // prevent change change of "Refresh" checkmark when mandatory
 				gId("co"+n).style.display = (isVir(t) || isAna(t)) ? "none":"inline";       // hide color order for PWM
@@ -817,7 +817,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				If using multiple outputs it is recommended to use per-output limiter.<br>
 				Analog (PWM) and virtual LEDs cannot use automatic brightness limiter.<br></i>
 			<div id="psuMA">Maximum PSU Current: <input name="MA" type="number" class="xl" min="250" max="65500" oninput="UI()" required> mA<br></div>
-			Use per-output limiter: <input type="checkbox" name="PPL" onchange="UI()"><br>
+			Use per-output limiter: <input type="checkbox" name="PPL" onchange="updateTypeDropdowns();UI()"><br>
 			<div id="ppldis" style="display:none;">
 				<i>Make sure you enter correct value for each LED output.<br>
 				If using multiple outputs with only one PSU, distribute its power proportionally amongst outputs.</i><br>
