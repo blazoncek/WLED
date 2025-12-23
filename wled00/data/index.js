@@ -855,7 +855,7 @@ function populateSegments(s)
 					`</div>`;
 		cn += `<div class="seg lstI ${i==s.mainseg && !simplifiedUI ? 'selected' : ''} ${exp ? "expanded":""}" id="seg${i}" data-set="${inst.set}">`+
 				`<label class="check schkl ${smpl}">`+
-					`<input type="checkbox" id="seg${i}sel" onchange="selSeg(${i})" ${inst.sel ? "checked":""}>`+
+					`<input type="checkbox" id="seg${i}sel" onchange="setSegProp(${i},'sel')" ${inst.sel ? "checked":""}>`+
 					`<span class="checkmark" title="Select"></span>`+
 				`</label>`+
 				`<div class="segname ${smpl}" onclick="selSegEx(${i})">`+
@@ -933,8 +933,8 @@ function populateSegments(s)
 		let z = gId(`seg${i}zA`); if (z) updateTrail(z);
 		gId(`segr${i}`).classList.add("hide");
 	}
-	if (segCount < 2) {
-		gId(`segd${lSeg}`).classList.add("hide"); // hide delete if only one segment
+	if (segCount == 1) {
+		gId(`segd0`).classList.add("hide"); // hide delete if only one segment
 		if (parseInt(gId("seg0bri").value)==255) gId(`segp0`).classList.add("hide");
 		// hide segment controls if there is only one segment in simplified UI
 		if (simplifiedUI) gId("segcont").classList.add("hide");
@@ -974,26 +974,26 @@ function populateEffects(effects)
 	for (let ef of effects) {
 		// add slider and color control to setFX (used by requestjson)
 		let id = ef.id;
-		let nm = ef.name;
-		let fd = "", fl = " ";
+		let nm = ef.name+" ";
+		let fd = "";
 		if (ef.name.indexOf("RSVD") < 0) {
 			if (Array.isArray(fxdata) && fxdata.length>id) {
 				if (fxdata[id].length==0) fd = ";;!;1"
 				else fd = fxdata[id];
 				let eP = (fd == '')?[]:fd.split(";"); // effect parameters
 				let p = (eP.length<3 || eP[2]==='')?[]:eP[2].split(","); // palette data
-				if (p.length>0 && (p[0] !== "" && !isNumeric(p[0]))) fl += "&#x1F3A8;";	// effects using palette
+				if (p.length>0 && (p[0] !== "" && !isNumeric(p[0]))) nm += "&#x1F3A8;";	// effects using palette
 				let m = (eP.length<4 || eP[3]==='')?'1':eP[3]; // flags
 				if (id == 0) m = ''; // solid has no flags
 				if (m.length>0) {
-					if (m.includes('0')) fl += "&#8226;"; // 0D effects (PWM & On/Off)
-					if (m.includes('1')) fl += "&#8942;"; // 1D effects
-					if (m.includes('2')) fl += "&#9638;"; // 2D effects
-					if (m.includes('v')) fl += "&#9834;"; // volume effects
-					if (m.includes('f')) fl += "&#9835;"; // frequency effects
+					if (m.includes('0')) nm += "&#8226;"; // 0D effects (PWM & On/Off)
+					if (m.includes('1')) nm += "&#8942;"; // 1D effects
+					if (m.includes('2')) nm += "&#9638;"; // 2D effects
+					if (m.includes('v')) nm += "&#9834;"; // volume effects
+					if (m.includes('f')) nm += "&#9835;"; // frequency effects
 				}
 			}
-			html += generateListItemHtml('fx',id,`${nm}</span><span class="fltr">${fl}`,'setFX','',fd);
+			html += generateListItemHtml('fx',id,nm,'setFX','',fd);
 		}
 	}
 
@@ -2233,14 +2233,14 @@ function selSegEx(s)
 	obj.mainseg = s;
 	requestJson(obj);
 }
-
+/*
 function selSeg(s)
 {
 	var sel = gId(`seg${s}sel`).checked;
 	var obj = {"seg": {"id": s, "sel": sel}};
 	requestJson(obj);
 }
-
+*/
 function selGrp(g)
 {
 	event.preventDefault();
@@ -2933,7 +2933,7 @@ function search(field, listId = null) {
 	const listItems = gId(listId).querySelectorAll('.lstI');
 	listItems.forEach((listItem, i) => {
 		if (listId !== 'pcont' && i === 0) return;
-		const listItemName = listItem.querySelector('.name').innerText.toUpperCase();
+		const listItemName = listItem.querySelector('.name').innerText.toUpperCase().replace(/[^\x00-\x7F]/g, ""); // ASCII only
 		const searchIndex = listItemName.indexOf(field.value.toUpperCase());
 		listItem.dataset.searchIndex = searchIndex < 0 ? Number.MAX_SAFE_INTEGER : searchIndex;
 		if ((searchIndex < 0) && !listItem.classList.contains("selected")) {
@@ -2949,8 +2949,8 @@ function search(field, listId = null) {
 		const bName = b.querySelector('.name').innerText.toUpperCase();
 		if (listId==='pcont') {
 			// reconstruct pJson entry for proper comparison
-			const al = aName.charCodeAt(0) == 0xe139;
-			const bl = bName.charCodeAt(0) == 0xe139;
+			const al = aName.charCodeAt(0) == 0xe139; // playlist icon
+			const bl = bName.charCodeAt(0) == 0xe139; // playlist icon
 			const aa = [parseInt(a.querySelector('.pid').innerText), {"n": aName.substr(al), "playlist": al}];
 			const bb = [parseInt(b.querySelector('.pid').innerText), {"n": bName.substr(bl), "playlist": bl}];
 			return cmpP(aa, bb);
@@ -3018,7 +3018,7 @@ function filterFx() {
 	inputField.focus();
 	clean(inputField.nextElementSibling);
 	d.querySelectorAll('#fxlist .lstI').forEach((listItem, i) => {
-		const listItemName = listItem.querySelector('.fltr').innerText;
+		const listItemName = listItem.querySelector('.name').innerText;
 		let hide = false;
 		d.querySelectorAll("#filters input[type=checkbox]").forEach((e) => { if (e.checked && !listItemName.includes(e.dataset.flt)) hide = i > 0 /*true*/; });
 		listItem.style.display = hide && !listItem.classList.contains("selected") ? 'none' : '';
