@@ -187,7 +187,7 @@
     #define P9813SpiHzMethod P9813MethodBase<TwoWireHspiImple<SpiSpeedHz>>
   #endif
   // RMT driver selection (remove once NPB employs similar fix; prevents flickering on Xtensa platforms) credit @willmmiles
-  #if !defined(WLED_USE_SHARED_RMT) && !defined(__riscv)
+  #if !defined(WLED_USE_SHARED_RMT) && !defined(__riscv) && !defined(CONFIG_IDF_TARGET_ESP32S2)
     #include <NeoEsp32RmtHIMethod.h>
     #define RmtN RmtHIN
   #endif
