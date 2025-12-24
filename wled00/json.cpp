@@ -164,9 +164,10 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   uint16_t grp       = elem["grp"] | seg.grouping;
   uint16_t spc       = elem[F("spc")] | seg.spacing;
   uint16_t of        = seg.offset;
-  uint8_t  soundSim  = elem["si"] | seg.soundSim;
   uint8_t  rotateSpeed = elem["rS"] | seg.rotateSpeed;
   uint8_t  zoomAmount  = elem["zA"] | seg.zoomAmount;
+  bool     zoomWrap    = getBoolVal(elem["zW"], seg.zoomWrap);
+  bool     zoomMirror  = getBoolVal(elem["zM"], seg.zoomMirror);
   uint8_t  map1D2D   = elem["m12"] | seg.map1D2D;
   uint8_t  set       = elem[F("set")] | seg.set;
   bool     selected  = getBoolVal(elem["sel"], seg.selected);
@@ -293,8 +294,9 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
 
   seg.rotateSpeed = constrain(rotateSpeed, 0, 15);
   seg.zoomAmount  = constrain(zoomAmount, 0, 15);
+  seg.zoomWrap    = zoomWrap;
+  seg.zoomMirror  = zoomMirror;
   seg.set       = constrain(set, 0, 3);
-  seg.soundSim  = constrain(soundSim, 0, 3);
   seg.selected  = selected;
   seg.reverse   = reverse;
   seg.mirror    = mirror;
@@ -656,11 +658,12 @@ static void serializeSegment(JsonObject& root, const Segment& seg, byte id, bool
   root["o1"]  = seg.check1;
   root["o2"]  = seg.check2;
   root["o3"]  = seg.check3;
-  root["si"]  = seg.soundSim;
   root["m12"] = seg.map1D2D;
   root["bm"]  = seg.blendMode;
   root["rS"]  = seg.rotateSpeed;
   root["zA"]  = seg.zoomAmount;
+  root["zW"]  = seg.zoomWrap;
+  root["zM"]  = seg.zoomMirror;
 }
 
 void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segmentBounds, bool selectedSegmentsOnly)

@@ -128,6 +128,8 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 
 // segment options
 #define NO_OPTIONS   (uint16_t)0x0000
+#define ZOOM_MIRROR  (uint16_t)0x2000
+#define ZOOM_WRAP    (uint16_t)0x1000
 #define TRANSPOSED   (uint16_t)0x0100 // rotated 90deg & reversed
 #define MIRROR_Y_2D  (uint16_t)0x0080
 #define REVERSE_Y_2D (uint16_t)0x0040
@@ -425,7 +427,8 @@ class Segment {
         bool    mirror_y      : 1;  //     7 : mirrored Y (2D)
         bool    transpose     : 1;  //     8 : transposed (2D, swapped X & Y)
         uint8_t map1D2D       : 3;  //  9-11 : mapping for 1D effect on 2D (0-use as strip, 1-expand vertically, 2-circular/arc, 3-rectangular/corner, ...)
-        uint8_t soundSim      : 2;  // 12-13 : 0-3 sound simulation types ("soft" & "hard" or "on"/"off")
+        bool    zoomWrap      : 1;  //    12 : zoom/rotate wraparound (2D)
+        bool    zoomMirror    : 1;  //    13 : zoom/rotate mirror (2D)
         mutable uint8_t set   : 2;  // 14-15 : 0-3 UI segment sets/groups
       };
     };
@@ -569,7 +572,7 @@ class Segment {
     , startY(sStartY)
     , stopY(sStopY > sStartY ? sStopY : sStartY+1) // minimum height is 1
     , offset(0)
-    , options(SELECTED | SEGMENT_ON)
+    , options(SELECTED | SEGMENT_ON | ZOOM_WRAP | ZOOM_MIRROR) // default: selected, on, zoom wrap & mirror
     , grouping(1)
     , spacing(0)
     , opacity(255)
@@ -584,9 +587,9 @@ class Segment {
     , check1(false)
     , check2(false)
     , check3(false)
-    , blendMode(0)
-    , zoomAmount(8)
-    , rotateSpeed(0)
+    , blendMode(0)    // top blend mode
+    , zoomAmount(8)   // no zoom
+    , rotateSpeed(0)  // no rotation
     , name(nullptr)
     , next_time(0)
     , step(0)
@@ -595,7 +598,7 @@ class Segment {
     , aux1(0)
     , data(nullptr)
     , _dataLen(0)
-    , _default_palette(6)
+    , _default_palette(6) // PartyColors
     , _capabilities(0)
     , _rotatedAngle(0)
     , _t(nullptr)

@@ -684,14 +684,6 @@ function parseInfo(i) {
 		d.querySelectorAll('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='';});
 	}
 	gId("updBt").style.display = (i.opt & 1) ? '':'none';
-//	if (i.noaudio) {
-//		gId("filterVol").classList.add("hide");
-//		gId("filterFreq").classList.add("hide");
-//	}
-//	if (!i.u || !i.u.AudioReactive) {
-//		gId("filterVol").classList.add("hide"); hideModes(" ♪"); // hide volume reactive effects
-//		gId("filterFreq").classList.add("hide"); hideModes(" ♫"); // hide frequency reactive effects
-//	}
 }
 
 //https://stackoverflow.com/questions/2592092/executing-script-elements-inserted-with-innerhtml
@@ -785,19 +777,22 @@ function populateSegments(s)
 							`<div class="sliderdisplay"></div>`+
 						`</div>`+
 					`</div>`;
-		let zoom = `<div id="segzm${i}" class="lbl-l">`+
+		let zoom = `<div id="segzw${i}" class="lbl-l">`+
 						`Zoom<br>`+
 						`<div class="sliderwrap il" title="Zoom amount">`+
 							`<input id="seg${i}zA" class="noslide" onchange="setSegProp(${i},'zA')" oninput="updateTrail(this)" max="15" min="0" type="range" value="${inst.zA}" />`+
 							`<div class="sliderdisplay"></div>`+
 						`</div>`+
-					`</div>`;
-		let rotate =`<div id="segrt${i}" class="lbl-l">`+
 						`Rotation<br>`+
 						`<div class="sliderwrap il" title="Rotation speed">`+
 							`<input id="seg${i}rS" class="noslide" onchange="setSegProp(${i},'rS')" oninput="updateTrail(this)" max="15" min="0" type="range" value="${inst.rS}" />`+
 							`<div class="sliderdisplay"></div>`+
 						`</div>`+
+						`<table align="center"><tr>`+
+							`<td><label class="check revchkl">Wrap<input type="checkbox" id="seg${i}zW" onchange="gId('seg${i}zM').disabled=!this.checked;setSegProp(${i},'zW')" ${inst.zW?"checked":""}><span class="checkmark"></span></label></td>`+
+							`<td>&nbsp;</td>`+
+							`<td><label class="check revchkl">Mirror<input type="checkbox" id="seg${i}zM" onchange="setSegProp(${i},'zM')" ${inst.zW?(inst.zM?"checked":""):"disabled"}><span class="checkmark"></span></label></td>`+
+						`</tr></table>`+
 					`</div>`;
 		let staX = inst.start;
 		let stoX = inst.stop;
@@ -812,8 +807,8 @@ function populateSegments(s)
 			rvYck = `<label class="check revchkl">Reverse<input type="checkbox" id="seg${i}rY" onchange="setSegProp(${i},'rY')" ${inst.rY?"checked":""}><span class="checkmark"></span></label>`;
 			miYck = `<label class="check revchkl">Mirror<input type="checkbox" id="seg${i}mY" onchange="setSegProp(${i},'mY')" ${inst.mY?"checked":""}><span class="checkmark"></span></label>`;
 		}
-		let map2D = `<div id="seg${i}map2D" data-map="map2D" data-fx="${inst.fx}" class="lbl-s hide">Expand 1D FX<br>`+
-						`<div class="sel-p"><select class="sel-p" id="seg${i}m12" onchange="setSegProp(${i},'m12')">`+
+		let map2D = `<div id="seg${i}map2D" data-map="map2D" data-fx="${inst.fx}" class="lbl-l hide">Expand 1D FX<br>`+
+						`<div class="sel-p"><select class="sel-ple" id="seg${i}m12" onchange="setSegProp(${i},'m12')">`+
 							`<option value="0" ${inst.m12==0?' selected':''}>Pixels</option>`+
 							`<option value="1" ${inst.m12==1?' selected':''}>Bar</option>`+
 							`<option value="2" ${inst.m12==2?' selected':''}>Arc</option>`+
@@ -843,14 +838,6 @@ function populateSegments(s)
 							`<option value="17" ${inst.bm==17?' selected':''}>Hue</option>`+
 							`<option value="18" ${inst.bm==18?' selected':''}>Saturation</option>`+
 							`<option value="19" ${inst.bm==19?' selected':''}>Value</option>`+
-						`</select></div>`+
-					`</div>`;
-		let sndSim = `<div data-snd="si" class="lbl-s hide">Sound sim<br>`+
-						`<div class="sel-p"><select class="sel-p" id="seg${i}si" onchange="setSegProp(${i},'si')">`+
-							`<option value="0" ${inst.si==0?' selected':''}>BeatSin</option>`+
-							`<option value="1" ${inst.si==1?' selected':''}>WeWillRockYou</option>`+
-							`<option value="2" ${inst.si==2?' selected':''}>10/13</option>`+
-							`<option value="3" ${inst.si==3?' selected':''}>14/3</option>`+
 						`</select></div>`+
 					`</div>`;
 		cn += `<div class="seg lstI ${i==s.mainseg && !simplifiedUI ? 'selected' : ''} ${exp ? "expanded":""}" id="seg${i}" data-set="${inst.set}">`+
@@ -902,10 +889,8 @@ function populateSegments(s)
 					`<div class="h bp" id="seg${i}len"></div>`+
 					blend +
 					(!isMSeg ? rvXck : '') +
-					(isMSeg?zoom:'')+
-					(isMSeg?rotate:'')+
 					(isMSeg&&stoY-staY>1&&stoX-staX>1 ? map2D : '') +
-					(s.AudioReactive && s.AudioReactive.on ? "" : sndSim) +
+					(isMSeg?zoom:'')+
 					`<label class="check revchkl" id="seg${i}lbtm">`+
 						(isMSeg?'Transpose':'Mirror effect') + (isMSeg ?
 						'<input type="checkbox" id="seg'+i+'tp" onchange="setSegProp('+i+',\'tp\')" '+(inst.tp?"checked":"")+'>':

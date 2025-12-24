@@ -545,13 +545,14 @@ Segment &Segment::setMode(uint8_t fx, bool loadDefaults) {
       sOpt = extractModeDefaults(fx, "o2");  check2    = (sOpt >= 0) ? (bool)sOpt : false;
       sOpt = extractModeDefaults(fx, "o3");  check3    = (sOpt >= 0) ? (bool)sOpt : false;
       sOpt = extractModeDefaults(fx, "m12"); if (sOpt >= 0) map1D2D   = constrain(sOpt, 0, 7); else map1D2D = M12_Pixels;  // reset mapping if not defined (2D FX may not work)
-      sOpt = extractModeDefaults(fx, "si");  if (sOpt >= 0) soundSim  = constrain(sOpt, 0, 3);
       sOpt = extractModeDefaults(fx, "rev"); if (sOpt >= 0) reverse   = (bool)sOpt;
       sOpt = extractModeDefaults(fx, "mi");  if (sOpt >= 0) mirror    = (bool)sOpt; // NOTE: setting this option is a risky business
       sOpt = extractModeDefaults(fx, "rY");  if (sOpt >= 0) reverse_y = (bool)sOpt;
       sOpt = extractModeDefaults(fx, "mY");  if (sOpt >= 0) mirror_y  = (bool)sOpt; // NOTE: setting this option is a risky business
       sOpt = extractModeDefaults(fx, "rS");  if (sOpt >= 0) rotateSpeed = constrain(sOpt, 0, 15); // 0 = no rotation
       sOpt = extractModeDefaults(fx, "zA");  if (sOpt >= 0) zoomAmount  = constrain(sOpt, 0, 15); // 8 = no zoom
+      sOpt = extractModeDefaults(fx, "zW");  if (sOpt >= 0) zoomWrap    = (bool)sOpt;
+      sOpt = extractModeDefaults(fx, "zM");  if (sOpt >= 0) zoomMirror  = (bool)sOpt;
     }
     sOpt = extractModeDefaults(fx, "pal"); // always extract 'pal' to set _default_palette
     if (sOpt >= 0 && loadDefaults) setPalette(sOpt);
@@ -1497,7 +1498,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     };
 
     // zooming and rotation
-    auto RotateAndZoom = [](const CRGBA *srcPixels, CRGBA *destPixels, int midX, int midY, int cols, int rows, int shearAngle, int zoomOffset) {
+    auto RotateAndZoom = [](const CRGBA *srcPixels, CRGBA *destPixels, int midX, int midY, int cols, int rows, int shearAngle, int zoomOffset, bool wrap, bool mirror) {
       for (int i = 0; i < cols * rows; i++) destPixels[i] = CRGBA(0,0,0); // fill black
     
       constexpr uint8_t Scale_Shift = 10;
@@ -1539,23 +1540,17 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
           int srcY = flip ? (midY - y0) : (midY + y0);
     
           // Bounds check or wrap
-          //if (SEGMENT.check1) { // Always Wrap around
-            srcX = (srcX + WRAP_PAD_X); while (srcX >= cols) srcX -= cols;
+          if (wrap) { // Wrap around
+            srcX = (srcX + WRAP_PAD_X); while (srcX >= cols) srcX -= cols; // modulo operation: srcX %= cols;
             srcY = (srcY + WRAP_PAD_Y); while (srcY >= rows) srcY -= rows;
-          //}
-          //else if (SEGMENT.check2) { // Wrap plus mirror
-          //  int tileX = (srcX + WRAP_PAD_X) / cols;
-          //  int tileY = (srcY + WRAP_PAD_Y) / rows;
-    
-          //  // Wrap src
-          //  srcX = (srcX + WRAP_PAD_X); while (srcX >= cols) srcX -= cols;
-          //  srcY = (srcY + WRAP_PAD_Y); while (srcY >= rows) srcY -= rows;
-    
-          //  // Flip on odd tiles
-          //  if (tileX & 1) srcX = cols - 1 - srcX;
-          //  if (tileY & 1) srcY = rows - 1 - srcY;
-          //}
-          //else
+            if (mirror) { // Wrap plus mirror
+              const int tileX = (srcX + WRAP_PAD_X) / cols;
+              const int tileY = (srcY + WRAP_PAD_Y) / rows;
+              // Flip on odd tiles
+              if (tileX & 1) srcX = cols - 1 - srcX;
+              if (tileY & 1) srcY = rows - 1 - srcY;
+            }
+          }
           if ((unsigned)srcX >= (unsigned)cols || (unsigned)srcY >= (unsigned)rows) continue;
           
           // Sample from source & write to destination
@@ -1564,6 +1559,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       }
     };
 
+    const int speedAdjust = 5 * getTargetFps() / WLED_FPS; // adjust rotation speed based on target fps
     CRGBA *_pixelsN = topSegment.getPixels();
     if (topSegment.rotateSpeed || topSegment.zoomAmount != 8) {
       _pixelsN = new CRGBA[nCols * nRows];
@@ -1575,22 +1571,22 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       } else {
         topSegment._rotatedAngle = 0;
       }
-      RotateAndZoom(topSegment.getPixels(), _pixelsN, midX, midY, nCols, nRows, topSegment._rotatedAngle/10, topSegment.zoomAmount - 8);
+      RotateAndZoom(topSegment.getPixels(), _pixelsN, midX, midY, nCols, nRows, topSegment._rotatedAngle/speedAdjust, topSegment.zoomAmount - 8, topSegment.zoomWrap, topSegment.zoomMirror);
     }
     CRGBA *_pixelsO = topSegment.getPixels();
     if (segO) {
       _pixelsO = segO->getPixels();
       if (segO->rotateSpeed || segO->zoomAmount != 8) {
         _pixelsO = new CRGBA[oCols * oRows];
-        const int midXo = oCols / 2;
-        const int midYo = oRows / 2;
+        const int midX = oCols / 2;
+        const int midY = oRows / 2;
         if (segO->rotateSpeed != 0) {
           segO->_rotatedAngle += segO->rotateSpeed;
           while (segO->_rotatedAngle > 3600) segO->_rotatedAngle -= 3600;
         } else {
           segO->_rotatedAngle = 0;
         }
-        RotateAndZoom(segO->getPixels(), _pixelsO, midXo, midYo, oCols, oRows, segO->_rotatedAngle/10, segO->zoomAmount - 8);
+        RotateAndZoom(segO->getPixels(), _pixelsO, midX, midY, oCols, oRows, segO->_rotatedAngle/speedAdjust, segO->zoomAmount - 8, segO->zoomWrap, segO->zoomMirror);
       }
     }
 
