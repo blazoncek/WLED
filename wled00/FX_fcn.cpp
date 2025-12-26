@@ -1403,9 +1403,9 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
   const size_t  stopIndx   = startIndx + length;
   const unsigned progress  = topSegment.progress();
   const unsigned progInv   = 0xFFFFU - progress;
-  uint8_t       opacity    = topSegment.currentBri(); // returns transitioned opacity for style FADE
-  uint8_t       cct        = topSegment.currentCCT();
-  const bool    hasWhite   = topSegment.hasWhite();
+  const uint8_t  opacity   = topSegment.currentBri(); // returns transitioned opacity for style FADE
+  const uint8_t  cct       = topSegment.currentCCT();
+  const bool     hasWhite  = topSegment.hasWhite();
   const unsigned orgBS     = blendingStyle;
   if (width*height == 1) blendingStyle = BLEND_STYLE_FADE; // disable style for single pixel segments (use fade instead)
 
