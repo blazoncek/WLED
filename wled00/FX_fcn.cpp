@@ -1883,6 +1883,7 @@ void WS2812FX::applySegmentGeometryUpdates() {
     if (upd.id >= _segments.size()) continue; // invalid segment id
     Segment &seg = _segments[upd.id];
     seg.setGeometry(upd.start, upd.stop, upd.grp, upd.spc, upd.off, upd.startY, upd.stopY, upd.m12);
+    seg.refreshLightCapabilities(); // fix for #3403
     if (seg.reset && seg.stop == 0) {
       if (upd.id == getMainSegmentId()) setMainSegmentId(getFirstSelectedSegId());
     }
