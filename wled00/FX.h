@@ -651,7 +651,7 @@ class Segment {
     inline uint16_t height()               const { return stopY - startY; }                   // segment height (if 2D) in physical pixels (it *is* always >=1)
     inline uint16_t length()               const { return width() * height(); }               // segment length (count) in physical pixels
     inline uint16_t groupLength()          const { return grouping + spacing; }
-    inline uint8_t  getLightCapabilities() const { return _capabilities; }
+    inline uint8_t  getLightCapabilities() const { return _capabilities; }                    // bit 0: RGB, bit 1: W, bit 2: CCT, bit 3: manual W
     inline void     deactivate()                 { setGeometry(0,0); }
     inline Segment &clearName()                  { d_free(name); name = nullptr; return *this; }
     inline Segment &setName(const String &name)  { return setName(name.c_str()); }

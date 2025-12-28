@@ -232,7 +232,7 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
         //   string = hex representation of [WW]RRGGBB or "r" for random color
         //   object = individual channel control {"r":0,"g":127,"b":255,"w":255}, each being optional (valid to send {})
         //   array = direct channel values [r,g,b,w] (w element being optional)
-        int rgbw[] = {0,0,0,seg.colors[i].a};
+        uint8_t rgbw[] = {0,0,0,0};
         bool colValid = false;
         JsonArray colX = colarr[i];
         if (colX.isNull()) {
@@ -245,33 +245,33 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
             if (seg.hasWhite()) rgbw[3] = oCol["w"] | seg.colors[i].a;
             colValid = true;
           } else {
-            byte brgbw[] = {0,0,0,seg.colors[i].a};
             const char* hexCol = colarr[i];
             if (hexCol == nullptr) { //Kelvin color temperature (or invalid), e.g 2400
               int kelvin = colarr[i] | -1;
               if (kelvin <  0) continue;
-              if (kelvin >  0) colorKtoRGB(kelvin, brgbw);
+              if (kelvin >  0) colorKtoRGB(kelvin, rgbw);
               colValid = true;
             } else { //HEX string, e.g. "FFAA00"
-              colValid = colorFromHexString(brgbw, hexCol);
+              colValid = colorFromHexString(rgbw, hexCol);
               if (!colValid && tolower(hexCol[0]) == 'r') {
-                setRandomColor(brgbw); // "random" color
+                setRandomColor(rgbw); // "random" color
                 colValid = true;
               }
             }
-            for (size_t c = 0; c < 4; c++) rgbw[c] = brgbw[c];
           }
         } else { //Array of ints (RGB or RGBW color), e.g. [255,160,0]
-          byte sz = colX.size();
+          int sz = colX.size();
           if (sz == 0) continue; //do nothing on empty array
-          copyArray(colX, rgbw, 4);
+          int irgbw[4] = {0,0,0,0};
+          copyArray(colX, irgbw, 4);
+          for (size_t c = 0; c < 4; c++) rgbw[c] = constrain(irgbw[c], 0, 255);
           colValid = true;
         }
 
         if (!colValid) continue;
 
         // rgbw[3] is ignored on RGB-only segments (and is forced to 255 in setColor() as opacity)
-        seg.setColor(i, RGBW32(rgbw[0],rgbw[1],rgbw[2],rgbw[3])); // use transition
+        seg.setColor(i, RGBW32(rgbw[0],rgbw[1],rgbw[2],rgbw[3])); // use transition and forces opacity to 255 if segment does not have White channel
         if (seg.mode == FX_MODE_STATIC) strip.trigger(); //instant refresh
       }
     } else {

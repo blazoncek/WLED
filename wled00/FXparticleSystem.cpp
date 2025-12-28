@@ -587,9 +587,9 @@ void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color,
 void ParticleSystem2D::handleCollisions() {
   // note: partices are binned in x-axis, assumption is that no more than half of the particles are in the same bin
   // if they are, collisionStartIdx is increased so each particle collides at least every second frame (which still gives decent collisions)
-  constexpr int BIN_WIDTH = 6 * PS_P_RADIUS; // width of a bin in sub-pixels
+  constexpr int binWidth = 6 * PS_P_RADIUS; // width of a bin in sub-pixels
   const uint32_t maxBinParticles = max((uint32_t)50, (usedParticles + 1) / 2); // assume no more than half of the particles are in the same bin, do not bin small amounts of particles
-  const uint32_t numBins = (maxX + (BIN_WIDTH - 1)) / BIN_WIDTH; // number of bins in x direction
+  const uint32_t numBins = (maxX + (binWidth - 1)) / binWidth; // number of bins in x direction
   uint16_t binIndices[maxBinParticles]; // creat array on stack for indices, 2kB max for 1024 particles (ESP32_MAXPARTICLES/2)
   uint32_t binParticleCount; // number of particles in the current bin
   uint16_t nextFrameStartIdx = hw_random16(usedParticles); // index of the first particle in the next frame (set to fixed value if bin overflow)
@@ -600,8 +600,8 @@ void ParticleSystem2D::handleCollisions() {
   // fill the binIndices array for this bin
   for (uint32_t bin = 0; bin < numBins; bin++) {
     binParticleCount = 0; // reset for this bin
-    int32_t binStart = bin * BIN_WIDTH - overlap; // note: first bin will extend to negative, but that is ok as out of bounds particles are ignored
-    int32_t binEnd = binStart + BIN_WIDTH + overlap; // note: last bin can be out of bounds, see above;
+    int32_t binStart = bin * binWidth - overlap; // note: first bin will extend to negative, but that is ok as out of bounds particles are ignored
+    int32_t binEnd = binStart + binWidth + (overlap << 1); // add twice the overlap as start is start-overlap, note: last bin can be out of bounds, see above;
 
     // fill the binIndices array for this bin
     for (uint32_t i = 0; i < usedParticles; i++) {

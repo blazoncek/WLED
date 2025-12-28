@@ -452,7 +452,7 @@ uint16_t mode_running_lights(void) {
       }
       a = 255 - a;
     }
-    unsigned palIdx = moving ? (i+counter)%SEGLEN : i;
+    unsigned palIdx = moving ? (i+(counter>>1))%SEGLEN : i;
     uint8_t s = dual ? sin_gap(a) : sin8_t(a);
     CRGBA ca = SEGCOLOR(1).nblend(SEGMENT.color_from_palette(palIdx, true, moving, 0), s);
     if (dual) {
@@ -790,16 +790,16 @@ static const char _data_FX_MODE_CHASE[] PROGMEM = "Chase@!,Width,,,,Rainbow Bg,R
  */
 uint16_t mode_colorful(void) {
   unsigned numColors = 4; //3, 4, or 5
-  CRGBA cols[5]{{0xFF,0,0},{0xEE,0xBB,0},{0,0xEE,0},{0,0x77,0xCC}}; //{0x00FF0000,0x00EEBB00,0x0000EE00,0x000077CC};
+  CRGBA cols[9]{{0xFF,0,0},{0xEE,0xBB,0},{0,0xEE,0},{0,0x77,0xCC}}; //{0x00FF0000,0x00EEBB00,0x0000EE00,0x000077CC};
   if (SEGMENT.intensity > 160 || SEGMENT.palette) { //palette or color
     if (!SEGMENT.palette) {
       numColors = 3;
-      for (size_t i = 0; i < 3; i++) cols[i] = SEGCOLOR(i);
+      for (size_t i = 0; i < numColors; i++) cols[i] = SEGCOLOR(i);
     } else {
       unsigned fac = 80;
       if (SEGMENT.palette == 52) {numColors = 5; fac = 61;} //C9 2 has 5 colors
       for (size_t i = 0; i < numColors; i++) {
-        cols[i] = SEGMENT.color_from_palette(i*fac, false, PALETTE_MOVING, 255);
+        cols[i] = SEGMENT.color_from_palette(i*fac, false, PALETTE_FIXED, 255);
       }
     }
   } else if (SEGMENT.intensity < 80) //pastel (easter) colors
@@ -978,17 +978,20 @@ static const char _data_FX_MODE_RUNNING_RANDOM[] PROGMEM = "Stream@!,Zone size;;
 uint16_t mode_larson_scanner(void) {
   if (SEGLEN <= 1) return mode_static();
 
-  const unsigned speed  = FRAMETIME * map(SEGMENT.speed, 0, 255, 96, 2); // map into useful range
-  const unsigned pixels = SEGLEN / speed; // how many pixels to advance per frame
+  // we need to perform a scan in a matter of seconds (1-30s) so we need to calculate how many pixels to draw per frame
+  // we will do that by mapping speed (0-255) to a scan time (30s - 1s) and calculating pixels per frame from there
+  const unsigned scanTime = map(SEGMENT.speed, 0, 255, 30000, 1000); // in milliseconds
+  // now map that to pixels per frame
+  const unsigned pixelsPerFrame = (SEGLEN * FRAMETIME) / scanTime;
 
   SEGMENT.fade_out(255-SEGMENT.intensity);
 
   if (SEGENV.step > strip.now) return FRAMETIME;  // we have a pause
 
-  unsigned index = SEGENV.aux1 + pixels;
+  unsigned index = SEGENV.aux1 + pixelsPerFrame;
   // are we slow enough to use frames per pixel?
-  if (pixels == 0) {
-    const unsigned frames = speed / SEGLEN; // how many frames per 1 pixel
+  if (pixelsPerFrame == 0) {
+    const unsigned frames = scanTime / (SEGLEN * FRAMETIME); // how many frames per 1 pixel
     if (SEGENV.step++ < frames) return FRAMETIME;
     SEGENV.step = 0;
     index++;
@@ -1004,7 +1007,7 @@ uint16_t mode_larson_scanner(void) {
 
   } else {
 
-    uint32_t cycleTime = 10 + (255 - SEGMENT.speed)*2;
+    uint32_t cycleTime = map(SEGMENT.speed, 0, 255, 10000, 500);
     uint32_t it = strip.now / cycleTime;
     const bool moving = SEGMENT.check1;
     // paint as many pixels as needed
