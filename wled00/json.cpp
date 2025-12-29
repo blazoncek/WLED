@@ -835,14 +835,26 @@ void serializeInfo(JsonObject root)
     wifi_info[F("txPower")] = (int) WiFi.getTxPower();
     wifi_info[F("sleep")] = (bool) WiFi.getSleep();
   #endif
-  #if !defined(CONFIG_IDF_TARGET_ESP32C2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32S3)
-    root[F("arch")] = "esp32";
-  #else
-    root[F("arch")] = ESP.getChipModel();
-  #endif
+  root[F("arch")] = ESP.getChipModel();
   root[F("core")] = ESP.getSdkVersion();
   root[F("clock")] = ESP.getCpuFreqMHz();
   root[F("flash")] = (ESP.getFlashChipSize()/1024)/1024;
+  const char *fmode;
+  switch (ESP.getFlashChipMode()) {
+    case FM_QIO:  fmode = PSTR("QIO"); break;
+    case FM_QOUT: fmode = PSTR("QOUT");break;
+    case FM_DIO:  fmode = PSTR("DIO"); break;
+    case FM_DOUT: fmode = PSTR("DOUT");break;
+    #if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_ESPTOOLPY_FLASHMODE_OPI
+    case FM_FAST_READ: fmode = PSTR("OPI"); break;
+    #else
+    case FM_FAST_READ: fmode = PSTR("fast_read"); break;
+    #endif
+    case FM_SLOW_READ: fmode = PSTR("slow_read"); break;
+    default: fmode = PSTR("N/A"); break;
+  }
+  root[F("fmode")] = FPSTR(fmode);
+  root[F("fspeed")] = ESP.getFlashChipSpeed()/1000000;
   #ifdef WLED_DEBUG
   root[F("maxalloc")] = getContiguousFreeHeap();
   root[F("resetReason0")] = (int)rtc_get_reset_reason(0);
@@ -854,6 +866,17 @@ void serializeInfo(JsonObject root)
   root[F("core")] = ESP.getCoreVersion();
   root[F("clock")] = ESP.getCpuFreqMHz();
   root[F("flash")] = (ESP.getFlashChipSize()/1024)/1024;
+  const char *fmode;
+  switch (ESP.getFlashChipMode()) {
+    // missing: Octal modes
+    case FM_QIO:  fmode = PSTR("QIO"); break;
+    case FM_QOUT: fmode = PSTR("QOUT");break;
+    case FM_DIO:  fmode = PSTR("DIO"); break;
+    case FM_DOUT: fmode = PSTR("DOUT");break;
+    default: fmode = PSTR("N/A"); break;
+  }
+  root[F("fmode")] = FPSTR(fmode);
+  root[F("fspeed")] = ESP.getFlashChipSpeed()/1000000;
   #ifdef WLED_DEBUG
   root[F("maxalloc")] = getContiguousFreeHeap();
   root[F("resetReason")] = (int)ESP.getResetInfoPtr()->reason;

@@ -735,6 +735,7 @@ ${inforow("Average FPS",i.leds.fps)}
 ${inforow("MAC address",i.mac)}
 ${inforow("CPU clock",i.clock," MHz")}
 ${inforow("Flash size",i.flash," MB")}
+${inforow("Flash mode",`(${i.fmode?i.fmode:'N/A'}) ${i.fspeed}`," MHz")}
 ${inforow("Filesystem",i.fs.u + "/" + i.fs.t + " kB (" +Math.round(i.fs.u*100/i.fs.t) + "%)")}
 ${inforow("Environment",i.arch + " " + i.core + " (" + i.lwip + ")")}
 </table>`;
