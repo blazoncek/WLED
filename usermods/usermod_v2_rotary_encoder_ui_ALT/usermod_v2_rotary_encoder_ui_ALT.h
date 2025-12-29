@@ -600,8 +600,8 @@ void RotaryEncoderUIUsermod::loop()
         // find new state
         switch (newState) {
           case  0: strcpy_P(lineBuffer, PSTR("Brightness")); changedState = true; break;
-          case  1: if (!extractModeSlider(effectCurrent, 0, lineBuffer, 63)) newState++; else changedState = true; break; // speed
-          case  2: if (!extractModeSlider(effectCurrent, 1, lineBuffer, 63)) newState++; else changedState = true; break; // intensity
+          case  1: if (!extractModeSlider(effectCurrent, 0, lineBuffer, sizeof(lineBuffer))) newState++; else changedState = true; break; // speed
+          case  2: if (!extractModeSlider(effectCurrent, 1, lineBuffer, sizeof(lineBuffer))) newState++; else changedState = true; break; // intensity
           case  3: strcpy_P(lineBuffer, PSTR("Color Palette")); changedState = true; break;
           case  4: strcpy_P(lineBuffer, PSTR("Effect")); changedState = true; break;
           case  5: strcpy_P(lineBuffer, PSTR("Main Color")); changedState = true; break;
@@ -613,7 +613,7 @@ void RotaryEncoderUIUsermod::loop()
           case  8: if (presetHigh==0 || presetLow == 0) newState++; else { strcpy_P(lineBuffer, PSTR("Preset")); changedState = true; } break;
           case  9:
           case 10:
-          case 11: if (!extractModeSlider(effectCurrent, newState-7, lineBuffer, 63)) newState++; else changedState = true; break; // custom
+          case 11: if (!extractModeSlider(effectCurrent, newState-7, lineBuffer, sizeof(lineBuffer))) newState++; else changedState = true; break; // custom
         }
         if (newState > LAST_UI_STATE) newState = 0;
       } while (!changedState);
