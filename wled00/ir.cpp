@@ -32,7 +32,7 @@ uint8_t lastIR6ColourIdx = 0;
 const uint8_t brightnessSteps[] = {
   5, 7, 9, 12, 16, 20, 26, 34, 43, 56, 72, 93, 119, 154, 198, 255
 };
-const size_t numBrightnessSteps = sizeof(brightnessSteps) / sizeof(uint8_t);
+const size_t numBrightnessSteps = countof(brightnessSteps);
 
 // increment `bri` to the next `brightnessSteps` value
 static void incBrightness()

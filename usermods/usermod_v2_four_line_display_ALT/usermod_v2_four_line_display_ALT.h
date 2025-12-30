@@ -814,7 +814,7 @@ void FourLineDisplayUsermod::showCurrentEffectOrPalette(int inputEffPal, const c
   if (overlayUntil == 0) {
     lockRedraw = true;
     // Find the mode name in JSON
-    unsigned printedChars = extractModeName(inputEffPal, qstring, lineBuffer, MAX_JSON_CHARS-1);
+    unsigned printedChars = extractModeName(inputEffPal, qstring, lineBuffer, countof(lineBuffer));
     if (lineBuffer[0]=='*' && lineBuffer[1]==' ') {
       // remove "* " from dynamic palettes
       for (unsigned i=2; i<=printedChars; i++) lineBuffer[i-2] = lineBuffer[i]; //include '\0'

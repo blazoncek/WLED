@@ -149,7 +149,7 @@ void notify(byte callMode, bool followUp)
     // send global data
     DEBUG_PRINTLN(F("ESP-NOW sending first packet."));
     constexpr size_t headerSize = sizeof(EspNowPartialPacket) - sizeof(EspNowPartialPacket::data);
-    constexpr size_t bufferSize = sizeof(buffer.data)/sizeof(uint8_t);
+    constexpr size_t bufferSize = sizeof(buffer.data);
     size_t packetSize = 41; // size of static UDP data (excluding segments)
     size_t s0 = 0;          // number of already prepared/sent segments
     memcpy(buffer.data, udpOut, packetSize);

@@ -263,11 +263,11 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 
     DEBUG_PRINTLN(F("No busses, init default"));
     constexpr unsigned defDataTypes[] = {LED_TYPES};
-    constexpr unsigned defDataPins[] = {DATA_PINS};
-    constexpr unsigned defCounts[] = {PIXEL_COUNTS};
-    constexpr unsigned defNumTypes = (sizeof(defDataTypes) / sizeof(defDataTypes[0]));
-    constexpr unsigned defNumPins = (sizeof(defDataPins) / sizeof(defDataPins[0]));
-    constexpr unsigned defNumCounts = (sizeof(defCounts) / sizeof(defCounts[0]));
+    constexpr unsigned defDataPins[]  = {DATA_PINS};
+    constexpr unsigned defCounts[]    = {PIXEL_COUNTS};
+    constexpr unsigned defNumTypes    = countof(defDataTypes);
+    constexpr unsigned defNumPins     = countof(defDataPins);
+    constexpr unsigned defNumCounts   = countof(defCounts);
 
     static_assert(validatePinsAndTypes(defDataTypes, defNumTypes, defNumPins),
                   "The default pin list defined in DATA_PINS does not match the pin requirements for the default buses defined in LED_TYPES");
@@ -419,8 +419,8 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     // relies upon only being called once with fromFS == true, which is currently true.
     constexpr uint8_t  defTypes[] = {BTNTYPE};
     constexpr int8_t   defPins[]  = {BTNPIN};
-    constexpr unsigned numTypes   = (sizeof(defTypes) / sizeof(defTypes[0]));
-    constexpr unsigned numPins    = (sizeof(defPins) / sizeof(defPins[0]));
+    constexpr unsigned numTypes   = countof(defTypes);
+    constexpr unsigned numPins    = countof(defPins);
     // check if the number of pins and types are valid; count of pins must be greater than or equal to types
     static_assert(numTypes <= numPins, "The default button pins defined in BTNPIN do not match the button types defined in BTNTYPE");
 

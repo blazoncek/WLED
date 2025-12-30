@@ -3209,7 +3209,7 @@ class AudioReactive : public Usermod {
             // input level or "silence"
             if (maxSample5sec > 1.0f) {
               float my_usage = 100.0f * (maxSample5sec / 255.0f);
-              snprintf_P(myStringBuffer, 15, PSTR(" - peak %3d%%"), int(my_usage));
+              snprintf_P(myStringBuffer, sizeof(myStringBuffer), PSTR(" - peak %3d%%"), int(my_usage));
               infoArr.add(myStringBuffer);
             } else {
               infoArr.add(F(" - quiet"));

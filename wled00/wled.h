@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2512290
+#define VERSION 2512300
 #else
 #define VERSION BUILD
 #endif
@@ -238,6 +238,10 @@ using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
 
 #define STRINGIFY(X) #X
 #define TOSTRING(X) STRINGIFY(X)
+#ifdef countof
+  #undef countof
+#endif
+#define countof(x) (sizeof(x)/sizeof(x[0]))
 
 // Global Variable definitions
 WLED_GLOBAL char versionString[] _INIT(TOSTRING(WLED_VERSION));
