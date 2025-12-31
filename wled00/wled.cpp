@@ -964,7 +964,7 @@ ESP-NOW  inited in AP mode (channel: 6/1).
 
 #ifndef WLED_DISABLE_ESPNOW
   const bool isAPmode  = WiFi.getMode() & WIFI_MODE_AP;
-  const bool isESPNowMasterDefined = masterRemotes.size() > 0;
+  const bool isESPNowMasterDefined = !masterRemotes.empty();
 
   // if we are syncing via ESP-NOW and master has not been heard in a while we shoud retry WiFi
   if (useESPNowSync && !sendNotificationsRT && now > lastReconnectAttempt + 300000 && heartbeatESPNow > 0 && now > heartbeatESPNow + 120000) {

@@ -684,8 +684,8 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     #ifndef WLED_DISABLE_2D
     settingsScript.printf_P(PSTR("maxPanels=%d;resetPanels();"),WLED_MAX_PANELS);
     if (strip.isMatrix) {
-      printSetFormValue(settingsScript,PSTR("PW"),strip.panel.size()>0?strip.panel[0].width:8); //Set generator Width and Height to first panel size for convenience
-      printSetFormValue(settingsScript,PSTR("PH"),strip.panel.size()>0?strip.panel[0].height:8);
+      printSetFormValue(settingsScript,PSTR("PW"),!strip.panel.empty()?strip.panel[0].width:8); //Set generator Width and Height to first panel size for convenience
+      printSetFormValue(settingsScript,PSTR("PH"),!strip.panel.empty()?strip.panel[0].height:8);
       printSetFormValue(settingsScript,PSTR("MPC"),strip.panel.size());
       // panels
       for (unsigned i=0; i<strip.panel.size(); i++) {

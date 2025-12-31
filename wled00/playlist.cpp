@@ -140,7 +140,7 @@ int16_t loadPlaylist(JsonObject playlistObj, byte presetId) {
 
 void handlePlaylist() {
   static unsigned long presetCycledTime = 0;
-  if (currentPlaylist < 0 || playlistEntries.size() == 0) return;
+  if (currentPlaylist < 0 || playlistEntries.empty()) return;
 
   if ((playlistEntryDur < UINT16_MAX && millis() - presetCycledTime > 100 * playlistEntryDur) || doAdvancePlaylist) {
     presetCycledTime = millis();

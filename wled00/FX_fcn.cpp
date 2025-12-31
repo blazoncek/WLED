@@ -1878,7 +1878,7 @@ void WS2812FX::addSegmentGeometryUpdate(uint8_t id, uint16_t sStart, uint16_t sS
 }
 
 void WS2812FX::applySegmentGeometryUpdates() {
-  if (segUpdates.size() == 0) return; // nothing to update
+  if (segUpdates.empty()) return; // nothing to update
   for (auto upd: segUpdates) {
     if (upd.id >= _segments.size()) continue; // invalid segment id
     Segment &seg = _segments[upd.id];
