@@ -4,18 +4,18 @@
  * Handles playlists, timed sequences of presets
  */
 
-typedef struct PlaylistEntry {
+struct PlaylistEntry {
   uint8_t preset; //ID of the preset to apply
   uint16_t dur;   //Duration of the entry (in tenths of seconds)
   uint16_t tr;    //Duration of the transition TO this entry (in tenths of seconds)
-} ple;
+  PlaylistEntry() : preset(0), dur(100), tr(transitionDelay / 100) {}
+};
 
 static byte           playlistRepeat = 1;        //how many times to repeat the playlist (0 = infinitely)
 static byte           playlistEndPreset = 0;     //what preset to apply after playlist end (0 = stay on last preset)
 static byte           playlistOptions = 0;       //bit 0: shuffle playlist after each iteration. bits 1-7 TBD
 
-static PlaylistEntry *playlistEntries = nullptr;
-static byte           playlistLen;               //number of playlist entries
+static std::vector<PlaylistEntry> playlistEntries;
 static int8_t         playlistIndex = -1;
 static uint16_t       playlistEntryDur = 0;      //duration of the current entry in tenths of seconds
 
@@ -26,7 +26,7 @@ static byte           parentPlaylistPresetId = 0; //for re-loading
 
 
 void shufflePlaylist() {
-  int currentIndex = playlistLen;
+  int currentIndex = playlistEntries.size();
   PlaylistEntry temporaryValue;
 
   // While there remain elements to shuffle...
@@ -43,12 +43,10 @@ void shufflePlaylist() {
 
 
 void unloadPlaylist() {
-  if (playlistEntries != nullptr) {
-    delete[] playlistEntries;
-    playlistEntries = nullptr;
-  }
+  playlistEntries.clear();
+  playlistEntries.shrink_to_fit();
   currentPlaylist = playlistIndex = -1;
-  playlistLen = playlistEntryDur = playlistOptions = 0;
+  playlistEntryDur = playlistOptions = 0;
   DEBUG_PRINTLN(F("Playlist unloaded."));
 }
 
@@ -63,12 +61,12 @@ int16_t loadPlaylist(JsonObject playlistObj, byte presetId) {
   unloadPlaylist();
 
   JsonArray presets = playlistObj["ps"];
-  playlistLen = presets.size();
+  int playlistLen = presets.size();
   if (playlistLen == 0) return -1;
   if (playlistLen > 100) playlistLen = 100;
 
-  playlistEntries = new(std::nothrow) PlaylistEntry[playlistLen];
-  if (playlistEntries == nullptr) return -1;
+  playlistEntries.resize(playlistLen);
+  playlistLen = playlistEntries.size();
 
   byte it = 0;
   for (int ps : presets) {
@@ -79,33 +77,31 @@ int16_t loadPlaylist(JsonObject playlistObj, byte presetId) {
 
   it = 0;
   JsonArray durations = playlistObj["dur"];
-  if (durations.isNull()) {
-    playlistEntries[0].dur = playlistObj["dur"] | 100; //10 seconds as fallback
-    it = 1;
-  } else {
-    for (int dur : durations) {
-      if (it >= playlistLen) break;
-      playlistEntries[it].dur = constrain(dur, 0, 65530);
-      it++;
-    }
+  for (int dur : durations) {
+    if (it >= playlistLen) break;
+    playlistEntries[it].dur = constrain(dur, 0, 65530);
+    it++;
   }
-  for (int i = it; i < playlistLen; i++) playlistEntries[i].dur = playlistEntries[it -1].dur;
+  if (durations.size() > 0) // if at least one duration specified, fill remaining with last specified otherwise leave default
+    for (int i = it; i < playlistLen; i++) playlistEntries[i].dur = playlistEntries[it -1].dur;
 
   it = 0;
-  JsonArray tr = playlistObj[F("transition")];
-  if (tr.isNull()) {
-    playlistEntries[0].tr = playlistObj[F("transition")] | (transitionDelay / 100);
-    it = 1;
-  } else {
-    for (int transition : tr) {
-      if (it >= playlistLen) break;
-      playlistEntries[it].tr = transition;
-      it++;
-    }
+  JsonArray transitions = playlistObj[F("transition")];
+  for (int transition : transitions) {
+    if (it >= playlistLen) break;
+    playlistEntries[it].tr = transition;
+    it++;
   }
-  for (int i = it; i < playlistLen; i++) playlistEntries[i].tr = playlistEntries[it -1].tr;
+  if (transitions.size() > 0) // if at least one transition specified, fill remaining with last specified otherwise leave default
+    for (int i = it; i < playlistLen; i++) playlistEntries[i].tr = playlistEntries[it -1].tr;
 
-  int rep = playlistObj[F("repeat")];
+  #ifdef WLED_DEBUG
+  for (const auto &entry : playlistEntries) {
+    DEBUG_PRINTF_P(PSTR("PL Entry: ps %d, dur %d, tr %d\n"), entry.preset, entry.dur, entry.tr);
+  }
+  #endif
+
+  int rep = playlistObj[F("repeat")] | 0; // 0 = infinite
   bool shuffle = false;
   if (rep < 0) { //support negative values as infinite + shuffle
     rep = 0; shuffle = true;
@@ -113,7 +109,7 @@ int16_t loadPlaylist(JsonObject playlistObj, byte presetId) {
 
   playlistRepeat = rep;
   if (playlistRepeat > 0) playlistRepeat++; //add one extra repetition immediately since it will be deducted on first start
-  playlistEndPreset = playlistObj["end"] | 0;
+  playlistEndPreset = playlistObj["end"] | 0; // 0 = no end preset
   // if end preset is 255 restore original preset (if any running) upon playlist end
   if (playlistEndPreset == 255 && currentPreset > 0) {
     playlistEndPreset = currentPreset;
@@ -144,13 +140,13 @@ int16_t loadPlaylist(JsonObject playlistObj, byte presetId) {
 
 void handlePlaylist() {
   static unsigned long presetCycledTime = 0;
-  if (currentPlaylist < 0 || playlistEntries == nullptr) return;
+  if (currentPlaylist < 0 || playlistEntries.empty()) return;
 
   if ((playlistEntryDur < UINT16_MAX && millis() - presetCycledTime > 100 * playlistEntryDur) || doAdvancePlaylist) {
     presetCycledTime = millis();
     if (bri == 0 || nightlightActive) return;
 
-    ++playlistIndex %= playlistLen; // -1 at 1st run (limit to playlistLen)
+    ++playlistIndex %= playlistEntries.size(); // -1 at 1st run (limit to playlistLen)
 
     // playlist roll-over
     if (!playlistIndex) {
@@ -184,9 +180,9 @@ void serializePlaylist(JsonObject sObj) {
   playlist[F("repeat")] = (playlistIndex < 0 && playlistRepeat > 0) ? playlistRepeat - 1 : playlistRepeat; // remove added repetition count (if not yet running)
   playlist["end"] = playlistOptions & PL_OPTION_RESTORE ? 255 : playlistEndPreset;
   playlist["r"] = playlistOptions & PL_OPTION_SHUFFLE;
-  for (int i=0; i<playlistLen; i++) {
-    ps.add(playlistEntries[i].preset);
-    dur.add(playlistEntries[i].dur);
-    transition.add(playlistEntries[i].tr);
+  for (const auto &entry : playlistEntries) {
+    ps.add(entry.preset);
+    dur.add(entry.dur);
+    transition.add(entry.tr);
   }
 }

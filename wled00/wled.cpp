@@ -169,13 +169,19 @@ void WLED::loop()
   // reconnect WiFi to clear stale allocations if heap gets too low
   if (millis() - heapTime > 15000) {
     uint32_t heap = getFreeHeapSize();
-    if (heap < MIN_HEAP_SIZE && lastHeap < MIN_HEAP_SIZE) {
-      DEBUG_PRINTF_P(PSTR("Heap too low! %u\n"), heap);
-      forceReconnect = true;
-      strip.resetSegments(); // remove all but one segments from memory
-    } else if (heap < MIN_HEAP_SIZE) {
-      DEBUG_PRINTLN(F("Heap low, purging segments."));
-      strip.purgeSegments();
+    if (heap < MIN_HEAP_SIZE) {
+      if (lastHeap < MIN_HEAP_SIZE) {
+        DEBUG_PRINTF_P(PSTR("Heap too low! %u\n"), heap);
+        forceReconnect = true;
+        strip.resetSegments(); // remove all but one segments from memory
+      } else {
+        DEBUG_PRINTLN(F("Heap low, purging segments."));
+        strip.purgeSegments();
+      }
+      #ifndef WLED_DISABLE_ESPNOW
+      DEBUG_PRINTLN(F("ESP-NOW stopping on low memory."));
+      stopESPNow(); // stop ESP-NOW if it was running
+      #endif
     }
     lastHeap = heap;
     heapTime = millis();
@@ -451,9 +457,9 @@ void WLED::setup()
   WiFi.persistent(false);
   //WiFi.enableLongRange(true);
   WiFi.onEvent(WiFiEvent);
-#if defined(ARDUINO_ARCH_ESP32) && ESP_IDF_VERSION_MAJOR==4 && !defined(CONFIG_IDF_TARGET_ESP32S2)
-  WiFi.useStaticBuffers(true);    // use preallocated buffers (for speed)
-#endif
+//#if defined(ARDUINO_ARCH_ESP32) && ESP_IDF_VERSION_MAJOR==4 && !defined(CONFIG_IDF_TARGET_ESP32S2)
+//  WiFi.useStaticBuffers(true);    // use preallocated buffers (for speed); WARNING: uses 60kB of RAM!!!
+//#endif
   delay(15);                      // wait for hardware to be ready
 
   if (isWiFiConfigured()) {
@@ -958,7 +964,7 @@ ESP-NOW  inited in AP mode (channel: 6/1).
 
 #ifndef WLED_DISABLE_ESPNOW
   const bool isAPmode  = WiFi.getMode() & WIFI_MODE_AP;
-  const bool isESPNowMasterDefined = masterRemotes.size() > 0;
+  const bool isESPNowMasterDefined = !masterRemotes.empty();
 
   // if we are syncing via ESP-NOW and master has not been heard in a while we shoud retry WiFi
   if (useESPNowSync && !sendNotificationsRT && now > lastReconnectAttempt + 300000 && heartbeatESPNow > 0 && now > heartbeatESPNow + 120000) {

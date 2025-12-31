@@ -3,13 +3,13 @@
 /*
    Main sketch, global variable declarations
    @title WLED project sketch
-   @version 0.15.2-b1
-   @author Christian Schwinne
+   @version 0.15.3-b1
+   @author 2016-2024 Christian Schwinne (@Aircookie), 2021-2026 Blaz Kristan (@blazoncek)
  */
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2511050
+#define VERSION 2601010
 #else
 #define VERSION BUILD
 #endif
@@ -238,6 +238,10 @@ using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
 
 #define STRINGIFY(X) #X
 #define TOSTRING(X) STRINGIFY(X)
+#ifdef countof
+  #undef countof
+#endif
+#define countof(x) (sizeof(x)/sizeof(x[0]))
 
 // Global Variable definitions
 WLED_GLOBAL char versionString[] _INIT(TOSTRING(WLED_VERSION));

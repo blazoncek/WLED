@@ -2,7 +2,7 @@ Import('env')
 import json
 import datetime
 t = datetime.datetime.now()
-env.Append(BUILD_FLAGS=[f"-D BUILD={t.strftime('%y%m%d%-I')}"])
+env.Append(BUILD_FLAGS=[f"-D BUILD={t.strftime('%y%m%d')}{int((t.hour+3)/4)}"])
 
 PACKAGE_FILE = "package.json"
 

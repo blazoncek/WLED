@@ -293,7 +293,7 @@ class EffectMenu : public MenuBase {
       uint8_t mode = strip.getFirstSelectedSeg().mode;
       if (Contains(DIE_LED_MODES, mode)) {
         char lineBuffer[CHAR_WIDTH_BIG + 1];
-        extractModeName(mode, JSON_mode_names, lineBuffer, CHAR_WIDTH_BIG);
+        extractModeName(mode, JSON_mode_names, lineBuffer, countof(lineBuffer));
         tft.setTextColor(TFT_WHITE);
         tft.setCursor(0, 0);
         tft.setTextSize(2);
@@ -305,7 +305,7 @@ class EffectMenu : public MenuBase {
         }
       } else {
         char lineBuffer[CHAR_WIDTH_SMALL + 1];
-        extractModeName(mode, JSON_mode_names, lineBuffer, CHAR_WIDTH_SMALL);
+        extractModeName(mode, JSON_mode_names, lineBuffer, countof(lineBuffer));
         tft.setTextColor(TFT_WHITE);
         tft.setCursor(0, 0);
         tft.setTextSize(1);

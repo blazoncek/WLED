@@ -5,9 +5,9 @@
  * Readability defines and their associated numerical values + compile-time constants
  */
 
-constexpr size_t FASTLED_PALETTE_COUNT = 7;   // = sizeof(fastledPalettes) / sizeof(fastledPalettes[0]);
-constexpr size_t GRADIENT_PALETTE_COUNT = 59; // = sizeof(gGradientPalettes) / sizeof(gGradientPalettes[0]);
-constexpr size_t DYNAMIC_PALETTE_COUNT = 5;   // 1-5 are dynamic palettes (1=random,2=primary,3=primary+secondary,4=primary+secondary+tertiary,5=primary+secondary(+tertiary if not black)
+constexpr size_t FASTLED_PALETTE_COUNT = 7;   // 6-12 = countof(fastledPalettes);
+constexpr size_t GRADIENT_PALETTE_COUNT = 59; // 13-72 = countof(gGradientPalettes);
+constexpr size_t DYNAMIC_PALETTE_COUNT = 6;   // 0-5 dynamic palettes (0=default(virtual),1=random,2=primary,3=primary+secondary,4=primary+secondary+tertiary,5=primary+secondary(+tertiary if not black)
 constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_COUNT + GRADIENT_PALETTE_COUNT; // total number of fixed palettes
 #ifndef WLED_MAX_CUSTOM_PALETTES
   #define WLED_MAX_CUSTOM_PALETTES (255-FIXED_PALETTE_COUNT) // number of custom palettes
@@ -340,6 +340,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #define TYPE_WS2805              32            //RGB + WW + CW
 #define TYPE_TM1914              33            //RGB
 #define TYPE_SM16825             34            //RGB + WW + CW
+#define TYPE_WS281X_DUAL         35            //dual WS28XX chip setup (RGB + W00)
 #define TYPE_DIGITAL_MAX         39            // last usable digital type
 //"Analog" types (40-47)
 #define TYPE_ONOFF               40            //binary output (relays etc.; NOT PWM)

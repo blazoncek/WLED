@@ -254,7 +254,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     if (Network.isConnected()) //is connected
     {
       IPAddress localIP = Network.localIP();
-      sprintf(s, "%d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
+      snprintf(s, sizeof(s), "%d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
 
       #if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
       if (Network.isEthernet()) strcat_P(s ,PSTR(" (Ethernet)"));
@@ -268,7 +268,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     if (apActive && WiFi.softAPIP()[0] != 0) //is active
     {
       IPAddress apIP = WiFi.softAPIP();
-      snprintf(s, sizeof(s)-1, "%d.%d.%d.%d", apIP[0], apIP[1], apIP[2], apIP[3]);
+      snprintf(s, sizeof(s), "%d.%d.%d.%d", apIP[0], apIP[1], apIP[2], apIP[3]);
       printSetIdHTML(settingsScript,PSTR("aip"),s);
     } else
     {
@@ -314,7 +314,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormCheckbox(settingsScript,PSTR("CR"),strip.cctFromRgb);
     printSetFormValue(settingsScript,PSTR("CB"),Bus::getCCTBlend());
     printSetFormValue(settingsScript,PSTR("FR"),strip.getTargetFps());
-    printSetFormValue(settingsScript,PSTR("AW"),Bus::getGlobalAWMode());
+    //printSetFormValue(settingsScript,PSTR("AW"),Bus::getGlobalAWMode());
     printSetFormCheckbox(settingsScript,PSTR("PR"),BusManager::hasParallelOutput());  // get it from bus manager not global variable
 
     unsigned sumMa = 0;
@@ -691,8 +691,8 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     #ifndef WLED_DISABLE_2D
     settingsScript.printf_P(PSTR("maxPanels=%d;resetPanels();"),WLED_MAX_PANELS);
     if (strip.isMatrix) {
-      printSetFormValue(settingsScript,PSTR("PW"),strip.panel.size()>0?strip.panel[0].width:8); //Set generator Width and Height to first panel size for convenience
-      printSetFormValue(settingsScript,PSTR("PH"),strip.panel.size()>0?strip.panel[0].height:8);
+      printSetFormValue(settingsScript,PSTR("PW"),!strip.panel.empty()?strip.panel[0].width:8); //Set generator Width and Height to first panel size for convenience
+      printSetFormValue(settingsScript,PSTR("PH"),!strip.panel.empty()?strip.panel[0].height:8);
       printSetFormValue(settingsScript,PSTR("MPC"),strip.panel.size());
       // panels
       for (unsigned i=0; i<strip.panel.size(); i++) {

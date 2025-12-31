@@ -19,7 +19,7 @@ const ranges = RangeTouch.setup('input[type="range"]', {});
 var retry = false;
 var palettesData;
 var fxdata = [];
-var pJson = {}, eJson = {}, lJson = {};
+var pJson = {}; // array of presets
 var plJson = {}; // array of playlists
 var pN = "", pI = 0, pNum = 0;
 var pmt = 1, pmtLS = 0, pmtLast = 0;
@@ -527,8 +527,7 @@ function loadPalettes(callback = null)
 		return res.json();
 	})
 	.then((json)=>{
-		lJson = Object.entries(json);
-		populatePalettes();
+		populatePalettes(Object.entries(json)); // does not inlcude custom palettes
 		retry = false;
 	})
 	.catch((e)=>{
@@ -554,8 +553,7 @@ function loadFX(callback = null)
 		return res.json();
 	})
 	.then((json)=>{
-		eJson = Object.entries(json);
-		populateEffects();
+		populateEffects(Object.entries(json));
 		retry = false;
 	})
 	.catch((e)=>{
@@ -636,10 +634,10 @@ function populatePresets(fromls)
 
 		cn += `<div class="pres lstI" id="p${i}o">`;
 		if (cfg.comp.pid) cn += `<div class="pid">${i}</div>`;
-		cn += `<div class="pname lstIname" onclick="setPreset(${i})">${i==lastinfo.leds.bootps?"<i class='icons btn-icon'>&#xe410;</i>":""}${isPlaylist(i)?"<i class='icons btn-icon'>&#xe139;</i>":""}${pName(i)}
+		cn += `<div class="pname name" onclick="setPreset(${i})">${i==lastinfo.leds.bootps?"<i class='icons btn-icon'>&#xe410;</i>":""}${isPlaylist(i)?"<i class='icons btn-icon'>&#xe139;</i>":""}${pName(i)}
 	<i class="icons edit-icon flr" id="p${i}nedit" onclick="tglSegn(${i+100})">&#xe2c6;</i></div>
 	<i class="icons e-icon flr" id="sege${i+100}" onclick="expand(${i+100})">&#xe395;</i>
-	<div class="presin lstIcontent" id="seg${i+100}"></div>
+	<div class="presin content" id="seg${i+100}"></div>
 </div>`;
 		pNum++;
 	}
@@ -686,14 +684,6 @@ function parseInfo(i) {
 		d.querySelectorAll('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='';});
 	}
 	gId("updBt").style.display = (i.opt & 1) ? '':'none';
-//	if (i.noaudio) {
-//		gId("filterVol").classList.add("hide");
-//		gId("filterFreq").classList.add("hide");
-//	}
-//	if (!i.u || !i.u.AudioReactive) {
-//		gId("filterVol").classList.add("hide"); hideModes(" ♪"); // hide volume reactive effects
-//		gId("filterFreq").classList.add("hide"); hideModes(" ♫"); // hide frequency reactive effects
-//	}
 }
 
 //https://stackoverflow.com/questions/2592092/executing-script-elements-inserted-with-innerhtml
@@ -745,6 +735,7 @@ ${inforow("Average FPS",i.leds.fps)}
 ${inforow("MAC address",i.mac)}
 ${inforow("CPU clock",i.clock," MHz")}
 ${inforow("Flash size",i.flash," MB")}
+${inforow("Flash mode",`(${i.fmode?i.fmode:'N/A'}) ${i.fspeed}`," MHz")}
 ${inforow("Filesystem",i.fs.u + "/" + i.fs.t + " kB (" +Math.round(i.fs.u*100/i.fs.t) + "%)")}
 ${inforow("Environment",i.arch + " " + i.core + " (" + i.lwip + ")")}
 </table>`;
@@ -783,25 +774,42 @@ function populateSegments(s)
 		let segp = `<div id="segp${i}" class="sbs">`+
 						`<i class="icons slider-icon pwr ${inst.on ? "act":""}" id="seg${i}pwr" title="Power" onclick="setSegPwr(${i})">&#xe08f;</i>`+
 						`<div class="sliderwrap il" title="Opacity/Brightness">`+
-							`<input id="seg${i}bri" class="noslide" onchange="setSegBri(${i})" oninput="updateTrail(this)" max="255" min="1" type="range" value="${inst.bri}" />`+
+							`<input id="seg${i}bri" class="noslide" onchange="setSegProp(${i},'bri')" oninput="updateTrail(this)" max="255" min="1" type="range" value="${inst.bri}" />`+
 							`<div class="sliderdisplay"></div>`+
 						`</div>`+
+					`</div>`;
+		let zoom = `<div id="segzw${i}" class="lbl-l">`+
+						`Zoom<br>`+
+						`<div class="sliderwrap il" title="Zoom amount">`+
+							`<input id="seg${i}zA" class="noslide" onchange="setSegProp(${i},'zA')" oninput="updateTrail(this)" max="15" min="0" type="range" value="${inst.zA}" />`+
+							`<div class="sliderdisplay"></div>`+
+						`</div>`+
+						`Rotation<br>`+
+						`<div class="sliderwrap il" title="Rotation speed">`+
+							`<input id="seg${i}rS" class="noslide" onchange="setSegProp(${i},'rS')" oninput="updateTrail(this)" max="15" min="0" type="range" value="${inst.rS}" />`+
+							`<div class="sliderdisplay"></div>`+
+						`</div>`+
+						`<table align="center"><tr>`+
+							`<td><label class="check revchkl">Wrap<input type="checkbox" id="seg${i}zW" onchange="gId('seg${i}zM').disabled=!this.checked;setSegProp(${i},'zW')" ${inst.zW?"checked":""}><span class="checkmark"></span></label></td>`+
+							`<td>&nbsp;</td>`+
+							`<td><label class="check revchkl">Mirror<input type="checkbox" id="seg${i}zM" onchange="setSegProp(${i},'zM')" ${inst.zW?(inst.zM?"checked":""):"disabled"}><span class="checkmark"></span></label></td>`+
+						`</tr></table>`+
 					`</div>`;
 		let staX = inst.start;
 		let stoX = inst.stop;
 		let staY = inst.startY;
 		let stoY = inst.stopY;
 		let isMSeg = isM && staX<mw*mh; // 2D matrix segment
-		let rvXck = `<label class="check revchkl">Reverse ${isM?'':'direction'}<input type="checkbox" id="seg${i}rev" onchange="setRev(${i})" ${inst.rev?"checked":""}><span class="checkmark"></span></label>`;
-		let miXck = `<label class="check revchkl">Mirror<input type="checkbox" id="seg${i}mi" onchange="setMi(${i})" ${inst.mi?"checked":""}><span class="checkmark"></span></label>`;
+		let rvXck = `<label class="check revchkl">Reverse ${isM?'':'direction'}<input type="checkbox" id="seg${i}rev" onchange="setSegProp(${i},'rev')" ${inst.rev?"checked":""}><span class="checkmark"></span></label>`;
+		let miXck = `<label class="check revchkl">Mirror<input type="checkbox" id="seg${i}mi" onchange="setSegProp(${i},'mi')" ${inst.mi?"checked":""}><span class="checkmark"></span></label>`;
 		let rvYck = "", miYck ="";
 		let smpl = simplifiedUI ? 'hide' : '';
 		if (isMSeg) {
-			rvYck = `<label class="check revchkl">Reverse<input type="checkbox" id="seg${i}rY" onchange="setRevY(${i})" ${inst.rY?"checked":""}><span class="checkmark"></span></label>`;
-			miYck = `<label class="check revchkl">Mirror<input type="checkbox" id="seg${i}mY" onchange="setMiY(${i})" ${inst.mY?"checked":""}><span class="checkmark"></span></label>`;
+			rvYck = `<label class="check revchkl">Reverse<input type="checkbox" id="seg${i}rY" onchange="setSegProp(${i},'rY')" ${inst.rY?"checked":""}><span class="checkmark"></span></label>`;
+			miYck = `<label class="check revchkl">Mirror<input type="checkbox" id="seg${i}mY" onchange="setSegProp(${i},'mY')" ${inst.mY?"checked":""}><span class="checkmark"></span></label>`;
 		}
-		let map2D = `<div id="seg${i}map2D" data-map="map2D" data-fx="${inst.fx}" class="lbl-s hide">Expand 1D FX<br>`+
-						`<div class="sel-p"><select class="sel-p" id="seg${i}m12" onchange="setM12(${i})">`+
+		let map2D = `<div id="seg${i}map2D" data-map="map2D" data-fx="${inst.fx}" class="lbl-l hide">Expand 1D FX<br>`+
+						`<div class="sel-p"><select class="sel-ple" id="seg${i}m12" onchange="setSegProp(${i},'m12')">`+
 							`<option value="0" ${inst.m12==0?' selected':''}>Pixels</option>`+
 							`<option value="1" ${inst.m12==1?' selected':''}>Bar</option>`+
 							`<option value="2" ${inst.m12==2?' selected':''}>Arc</option>`+
@@ -810,7 +818,7 @@ function populateSegments(s)
 						`</select></div>`+
 					`</div>`;
 		let blend = `<div class="lbl-l">Blend mode<br>`+
-						`<div class="sel-p"><select class="sel-ple" id="seg${i}bm" onchange="setBm(${i})">`+
+						`<div class="sel-p"><select class="sel-ple" id="seg${i}bm" onchange="setSegProp(${i},'bm')">`+
 							`<option value="0" ${inst.bm==0?' selected':''}>Top/Default</option>`+
 							`<option value="1" ${inst.bm==1?' selected':''}>Bottom/None</option>`+
 							`<option value="2" ${inst.bm==2?' selected':''}>Add</option>`+
@@ -833,17 +841,9 @@ function populateSegments(s)
 							`<option value="19" ${inst.bm==19?' selected':''}>Value</option>`+
 						`</select></div>`+
 					`</div>`;
-		let sndSim = `<div data-snd="si" class="lbl-s hide">Sound sim<br>`+
-						`<div class="sel-p"><select class="sel-p" id="seg${i}si" onchange="setSi(${i})">`+
-							`<option value="0" ${inst.si==0?' selected':''}>BeatSin</option>`+
-							`<option value="1" ${inst.si==1?' selected':''}>WeWillRockYou</option>`+
-							`<option value="2" ${inst.si==2?' selected':''}>10/13</option>`+
-							`<option value="3" ${inst.si==3?' selected':''}>14/3</option>`+
-						`</select></div>`+
-					`</div>`;
 		cn += `<div class="seg lstI ${i==s.mainseg && !simplifiedUI ? 'selected' : ''} ${exp ? "expanded":""}" id="seg${i}" data-set="${inst.set}">`+
 				`<label class="check schkl ${smpl}">`+
-					`<input type="checkbox" id="seg${i}sel" onchange="selSeg(${i})" ${inst.sel ? "checked":""}>`+
+					`<input type="checkbox" id="seg${i}sel" onchange="setSegProp(${i},'sel')" ${inst.sel ? "checked":""}>`+
 					`<span class="checkmark" title="Select"></span>`+
 				`</label>`+
 				`<div class="segname ${smpl}" onclick="selSegEx(${i})">`+
@@ -891,11 +891,11 @@ function populateSegments(s)
 					blend +
 					(!isMSeg ? rvXck : '') +
 					(isMSeg&&stoY-staY>1&&stoX-staX>1 ? map2D : '') +
-					(s.AudioReactive && s.AudioReactive.on ? "" : sndSim) +
+					(isMSeg?zoom:'')+
 					`<label class="check revchkl" id="seg${i}lbtm">`+
 						(isMSeg?'Transpose':'Mirror effect') + (isMSeg ?
-						'<input type="checkbox" id="seg'+i+'tp" onchange="setTp('+i+')" '+(inst.tp?"checked":"")+'>':
-						'<input type="checkbox" id="seg'+i+'mi" onchange="setMi('+i+')" '+(inst.mi?"checked":"")+'>') +
+						'<input type="checkbox" id="seg'+i+'tp" onchange="setSegProp('+i+',\'tp\')" '+(inst.tp?"checked":"")+'>':
+						'<input type="checkbox" id="seg'+i+'mi" onchange="setSegProp('+i+',\'mi\')" '+(inst.mi?"checked":"")+'>') +
 						`<span class="checkmark"></span>`+
 					`</label>`+
 					`<div class="del">`+
@@ -915,10 +915,12 @@ function populateSegments(s)
 		if (!gId(`seg${i}`)) continue;
 		updateLen(i);
 		updateTrail(gId(`seg${i}bri`));
+		let r = gId(`seg${i}rS`); if (r) updateTrail(r);
+		let z = gId(`seg${i}zA`); if (z) updateTrail(z);
 		gId(`segr${i}`).classList.add("hide");
 	}
-	if (segCount < 2) {
-		gId(`segd${lSeg}`).classList.add("hide"); // hide delete if only one segment
+	if (segCount == 1) {
+		gId(`segd0`).classList.add("hide"); // hide delete if only one segment
 		if (parseInt(gId("seg0bri").value)==255) gId(`segp0`).classList.add("hide");
 		// hide segment controls if there is only one segment in simplified UI
 		if (simplifiedUI) gId("segcont").classList.add("hide");
@@ -938,9 +940,8 @@ function populateSegments(s)
 	tooltip("#Segments");
 }
 
-function populateEffects()
+function populateEffects(effects)
 {
-	var effects = eJson;
 	var html = "";
 
 	effects.shift(); // temporary remove solid
@@ -985,7 +986,7 @@ function populateEffects()
 	gId('fxlist').innerHTML=html;
 }
 
-function populatePalettes()
+function populatePalettes(lJson)
 {
 	lJson.shift(); // temporary remove default
 	lJson.sort((a,b) => (a[1]).localeCompare(b[1]));
@@ -998,33 +999,16 @@ function populatePalettes()
 			pa[0],
 			pa[1],
 			'setPalette',
-			`<div class="lstIprev" style="${genPalPrevCss(pa[0])}"></div>`
+			`<div class="prev" style="${genPalPrevCss(pa[0])}"></div>`
 		);
 	}
 	gId('pallist').innerHTML=html;
-	// append custom palettes (when loading for the 1st time)
-	let li = lastinfo;
-	if (!isEmpty(li) && li.cpalcount) {
-		for (let j = 0; j<li.cpalcount; j++) {
-			let div = d.createElement("div");
-			gId('pallist').appendChild(div);
-			div.outerHTML = generateListItemHtml(
-				'palette',
-				255-j,
-				'~ Custom '+j+' ~',
-				'setPalette',
-				`<div class="lstIprev" style="${genPalPrevCss(255-j)}"></div>`
-			);
-		}
-	}
-	if (li.cpalcount>0) gId("rmPal").classList.remove("hide");
-	else                gId("rmPal").classList.add("hide");
 }
 
 function redrawPalPrev()
 {
 	d.querySelectorAll('#pallist .lstI').forEach((pal,i) =>{
-		let lP = pal.querySelector('.lstIprev');
+		let lP = pal.querySelector('.prev');
 		if (lP) {
 			lP.style = genPalPrevCss(pal.dataset.id);
 		}
@@ -1082,8 +1066,8 @@ function generateListItemHtml(listName, id, name, clickAction, extraHtml = '', e
 		`<label title="(${id})" class="radio schkl" onclick="event.preventDefault()">`+ // (#1984)
 			`<input type="radio" value="${id}" name="${listName}">`+
 			`<span class="radiomark"></span>`+
-			`<div class="lstIcontent">`+
-				`<span class="lstIname">${name}</span>`+
+			`<div class="content">`+
+				`<span class="name">${name}</span>`+
 			`</div>`+
 		`</label>`+
 		extraHtml +
@@ -1215,9 +1199,9 @@ function updateLen(s)
 			if (stop-start>1 && stopY-startY>1) {
 				// 2D segment
 				if (tPL) tPL.classList.remove('hide'); // unhide transpose checkbox
-				let sE = d.querySelector(`#fxlist .lstI[data-id="${selectedFx}"]`);
+				let sE = d.querySelector(`#fxlist div[data-id="${selectedFx}"]`);
 				if (sE) {
-					let sN = sE.querySelector(".lstIname").innerText;
+					let sN = sE.querySelector(".name").innerText;
 					let seg = gId(`seg${s}map2D`);
 					if (seg) {
 						if (sN.indexOf("\u25A6")<0) seg.classList.remove('hide'); // unhide mapping for 1D effects (| in name)
@@ -1328,11 +1312,11 @@ function updateSelectedPalette(s)
 	var selElement = parent.querySelector('.selected');
 	if (selElement) selElement.classList.remove('selected');
 
-	var selectedPalette = parent.querySelector(`.lstI[data-id="${s}"]`);
-	if (selectedPalette)  parent.querySelector(`.lstI[data-id="${s}"]`).classList.add('selected');
+	var selectedPalette = parent.querySelector(`div[data-id="${s}"]`);
+	if (selectedPalette)  parent.querySelector(`div[data-id="${s}"]`).classList.add('selected');
 
 	// Display selected palette name on button in simplified UI
-	let selectedName = selectedPalette.querySelector(".lstIname").innerText;
+	let selectedName = selectedPalette.querySelector(".name").innerText;
 	if (simplifiedUI) {
 		gId("palwbtn").innerText = "Palette: " + selectedName;
 	}
@@ -1360,7 +1344,7 @@ function updateSelectedFx()
 		selElement.style.bottom = null; // remove element style added in slider handling
 	}
 
-	var selectedEffect = parent.querySelector(`.lstI[data-id="${selectedFx}"]`);
+	var selectedEffect = parent.querySelector(`div[data-id="${selectedFx}"]`);
 	if (selectedEffect) {
 		selectedEffect.classList.add('selected');
 		setEffectParameters(selectedFx);
@@ -1378,7 +1362,7 @@ function updateSelectedFx()
 				}
 			}
 		});
-		var selectedName = selectedEffect.querySelector(".lstIname").innerText;
+		var selectedName = selectedEffect.querySelector(".name").innerText;
 
 		// Display selected effect name on button in simplified UI
 		let selectedNameOnlyAscii = selectedName.replace(/[^\x00-\x7F]/g, "");
@@ -1388,7 +1372,7 @@ function updateSelectedFx()
 
 		// hide 2D mapping and/or sound simulation options
 		d.querySelectorAll(`#segcont div[data-map="map2D"]`).forEach((seg)=>{
-			let not2Dfx = d.querySelector(`#fxlist div[data-id="${seg.dataset.fx}"] .lstIname`).innerText.indexOf("\u25A6") < 0;
+			let not2Dfx = d.querySelector(`#fxlist div[data-id="${seg.dataset.fx}"] .name`).innerText.indexOf("\u25A6") < 0;
 			if (not2Dfx) seg.classList.remove('hide');
 			else seg.classList.add('hide');
 		});
@@ -1408,6 +1392,8 @@ function displayRover(i,s)
 
 function cmpP(a, b)
 {
+	// a[0], b[0] = preset/playlist ID/index
+	// a[1], b[1] = preset/playlist object with 'n' (name) and 'playlist' (bool) properties
 	if (cfg.comp.idsort || !a[1].n) return (parseInt(a[0]) > parseInt(b[0]));
 	// sort playlists first, followed by presets with characters and last presets with special 1st character
 	const c = a[1].n.charCodeAt(0);
@@ -1751,8 +1737,26 @@ function requestJson(command=null)
 		if (json.success) return;
 		if (json.info) {
 			let i = json.info;
+			let loadCustomPalettes = isEmpty(lastinfo);
 			parseInfo(i);
-			populatePalettes(i);
+			if (loadCustomPalettes) {
+				// append custom palettes (when loading for the 1st time, previews are already loaded)
+				if (!isEmpty(i) && i.cpalcount) {
+					for (let j = 0; j<i.cpalcount; j++) {
+						let div = d.createElement("div");
+						gId('pallist').appendChild(div);
+						div.outerHTML = generateListItemHtml(
+							'palette',
+							255-j,
+							'~ Custom '+j+' ~',
+							'setPalette',
+							`<div class="prev" style="${genPalPrevCss(255-j)}"></div>`
+						);
+					}
+				}
+				if (i.cpalcount>0) gId("rmPal").classList.remove("hide");
+				else                gId("rmPal").classList.add("hide");
+			}
 			if (isInfo) populateInfo(i);
 			if (simplifiedUI) simplifyUI();
 		}
@@ -2062,17 +2066,17 @@ ${makePlSel(i, plJson[i].end?plJson[i].end:0)}
 	} else {
 		content =
 `<label class="check revchkl">
-	<span class="lstIname">Include brightness</span>
+	<span class="name">Include brightness</span>
 	<input type="checkbox" id="p${i}ibtgl" checked>
 	<span class="checkmark"></span>
 </label>
 <label class="check revchkl">
-	<span class="lstIname">Save segment bounds</span>
+	<span class="name">Save segment bounds</span>
 	<input type="checkbox" id="p${i}sbtgl" checked>
 	<span class="checkmark"></span>
 </label>
 <label class="check revchkl">
-	<span class="lstIname">Checked segments only</span>
+	<span class="name">Checked segments only</span>
 	<input type="checkbox" id="p${i}sbchk">
 	<span class="checkmark"></span>
 </label>`;
@@ -2088,7 +2092,7 @@ ${makePlSel(i, plJson[i].end?plJson[i].end:0)}
 <div class="h">(leave empty for no Quick load button)</div>
 <div ${pl&&i==0?"style='display:none'":""}>
 <label class="check revchkl">
-	<span class="lstIname">${pl?"Show playlist editor":(i>0)?"Overwrite with state":"Use current state"}</span>
+	<span class="name">${pl?"Show playlist editor":(i>0)?"Overwrite with state":"Use current state"}</span>
 	<input type="checkbox" id="p${i}cstgl" onchange="tglCs(${i})" ${(i==0||pl)?"checked":""}>
 	<span class="checkmark"></span>
 </label>
@@ -2096,7 +2100,7 @@ ${makePlSel(i, plJson[i].end?plJson[i].end:0)}
 <div class="po2" id="p${i}o2">API command<br><textarea class="apitxt" id="p${i}api"></textarea></div>
 <div class="po1" id="p${i}o1">${content}</div>
 <label class="check revchkl">
-	<span class="lstIname">Apply at boot</span>
+	<span class="name">Apply at boot</span>
 	<input type="checkbox" id="p${i}bps" ${i==bps?"checked":""}>
 	<span class="checkmark"></span>
 </label>
@@ -2117,7 +2121,7 @@ function makePUtil()
 	p.innerHTML = `<div class="presin expanded">${makeP(0)}</div>`;
 	let pTx = gId('p0txt');
 	pTx.focus();
-	pTx.value = eJson.find((o)=>{return o.id==selectedFx}).name;
+	pTx.value = d.querySelector(`#fxlist div[data-id="${selectedFx}"] .name`).innerText;
 	pTx.select();
 	p.scrollIntoView({
 		behavior: 'smooth',
@@ -2215,14 +2219,14 @@ function selSegEx(s)
 	obj.mainseg = s;
 	requestJson(obj);
 }
-
+/*
 function selSeg(s)
 {
 	var sel = gId(`seg${s}sel`).checked;
 	var obj = {"seg": {"id": s, "sel": sel}};
 	requestJson(obj);
 }
-
+*/
 function selGrp(g)
 {
 	event.preventDefault();
@@ -2307,6 +2311,14 @@ function delSeg(s)
 	requestJson(obj);
 }
 
+function setSegProp(s,p)
+{
+	let o = gId(`seg${s}${p}`);
+	let val = o.type === "checkbox" ? o.checked : parseInt(o.value);
+	var obj = {"seg": {"id": s, [p]: val}};
+	requestJson(obj);
+}
+/*
 function setRev(s)
 {
 	var rev = gId(`seg${s}rev`).checked;
@@ -2362,7 +2374,7 @@ function setTp(s)
 	var obj = {"seg": {"id": s, "tp": tp}};
 	requestJson(obj);
 }
-
+*/
 function setGrp(s, g)
 {
 	event.preventDefault();
@@ -2370,20 +2382,32 @@ function setGrp(s, g)
 	var obj = {"seg": {"id": s, "set": g}};
 	requestJson(obj);
 }
+/*
+function setZoom(s)
+{
+	var obj = {"seg": {"id": s, "zA": parseInt(gId(`seg${s}za`).value)}};
+	requestJson(obj);
+}
 
+function setRotation(s)
+{
+	var obj = {"seg": {"id": s, "rS": parseInt(gId(`seg${s}rs`).value)}};
+	requestJson(obj);
+}
+*/
 function setSegPwr(s)
 {
 	var pwr = gId(`seg${s}pwr`).classList.contains('act');
 	var obj = {"seg": {"id": s, "on": !pwr}};
 	requestJson(obj);
 }
-
+/*
 function setSegBri(s)
 {
 	var obj = {"seg": {"id": s, "bri": parseInt(gId(`seg${s}bri`).value)}};
 	requestJson(obj);
 }
-
+*/
 function tglFreeze(s=null)
 {
 	var obj = {"seg": {"frz": "t"}}; // toggle
@@ -2869,7 +2893,7 @@ function getPalettesData(page, callback)
 function hideModes(txt)
 {
 	for (let e of (d.querySelectorAll('#fxlist .lstI')||[])) {
-		let iT = e.querySelector('.lstIname').innerText;
+		let iT = e.querySelector('.name').innerText;
 		let f = false;
 		if (txt==="2D") f = iT.indexOf("\u25A6") >= 0 && iT.indexOf("\u22EE") < 0; // 2D && !1D
 		else f = iT.indexOf(txt) >= 0;
@@ -2883,17 +2907,6 @@ function search(field, listId = null) {
 
 	const search = field.value !== '';
 
-	// restore default preset sorting if no search term is entered
-	if (!search) {
-		if (listId === 'pcont') { populatePresets(); return; }
-		if (listId === 'pallist') {
-			let id = parseInt(d.querySelector('#pallist input[name="palette"]:checked').value); // preserve selected palette
-			populatePalettes();
-			updateSelectedPalette(id);
-			return;
-		}
-	}
-
 	// clear filter if searching in fxlist
 	if (listId === 'fxlist' && search) {
 		d.querySelectorAll("#filters input[type=checkbox]").forEach((e) => { e.checked = false; });
@@ -2906,28 +2919,34 @@ function search(field, listId = null) {
 	const listItems = gId(listId).querySelectorAll('.lstI');
 	listItems.forEach((listItem, i) => {
 		if (listId !== 'pcont' && i === 0) return;
-		const listItemName = listItem.querySelector('.lstIname').innerText.toUpperCase();
+		const listItemName = listItem.querySelector('.name').innerText.toUpperCase().replace(/[^\x00-\x7F]/g, ""); // ASCII only
 		const searchIndex = listItemName.indexOf(field.value.toUpperCase());
-		if (searchIndex < 0) {
-			listItem.dataset.searchIndex = Number.MAX_SAFE_INTEGER;
+		listItem.dataset.searchIndex = searchIndex < 0 ? Number.MAX_SAFE_INTEGER : searchIndex;
+		if ((searchIndex < 0) && !listItem.classList.contains("selected")) {
+			listItem.classList.add('hide');
 		} else {
-			listItem.dataset.searchIndex = searchIndex;
+			listItem.classList.remove('hide');
 		}
-		listItem.style.display = (searchIndex < 0) && !listItem.classList.contains("selected") ? 'none' : '';
 	});
 
 	// sort list items by search index and name
 	const sortedListItems = Array.from(listItems).sort((a, b) => {
+		const aName = a.querySelector('.name').innerText.toUpperCase();
+		const bName = b.querySelector('.name').innerText.toUpperCase();
+		if (listId==='pcont') {
+			// reconstruct pJson entry for proper comparison
+			const al = aName.charCodeAt(0) == 0xe139; // playlist icon
+			const bl = bName.charCodeAt(0) == 0xe139; // playlist icon
+			const aa = [parseInt(a.querySelector('.pid').innerText), {"n": aName.substr(al), "playlist": al}];
+			const bb = [parseInt(b.querySelector('.pid').innerText), {"n": bName.substr(bl), "playlist": bl}];
+			return cmpP(aa, bb);
+		}
 		const aSearchIndex = parseInt(a.dataset.searchIndex);
 		const bSearchIndex = parseInt(b.dataset.searchIndex);
 
 		if (aSearchIndex !== bSearchIndex) {
 			return aSearchIndex - bSearchIndex;
 		}
-
-		const aName = a.querySelector('.lstIname').innerText.toUpperCase();
-		const bName = b.querySelector('.lstIname').innerText.toUpperCase();
-
 		return aName.localeCompare(bName);
 	});
 	sortedListItems.forEach(item => {
@@ -2961,6 +2980,7 @@ function filterFocus(e) {
 		// compute sticky top (with delay for transition)
 		if (!h) setTimeout(() => {
 			sCol('--sti', (sti+f.offsetHeight) + "px"); // has an unpleasant consequence on palette offset
+			//console.log(sti + " -> " + (sti+f.offsetHeight));
 		}, 255);
 		f.classList.remove('fade');	// immediately show (still has transition)
 	}
@@ -2971,6 +2991,7 @@ function filterFocus(e) {
 			if (!c) {
 				// compute sticky top
 				sCol('--sti', (sti-h) + "px"); // has an unpleasant consequence on palette offset
+				//console.log(sti + " -> " + (sti-h));
 				f.classList.add('fade');
 			}
 		}, 255);	// wait with hiding
@@ -2983,7 +3004,7 @@ function filterFx() {
 	inputField.focus();
 	clean(inputField.nextElementSibling);
 	d.querySelectorAll('#fxlist .lstI').forEach((listItem, i) => {
-		const listItemName = listItem.querySelector('.lstIname').innerText;
+		const listItemName = listItem.querySelector('.name').innerText;
 		let hide = false;
 		d.querySelectorAll("#filters input[type=checkbox]").forEach((e) => { if (e.checked && !listItemName.includes(e.dataset.flt)) hide = i > 0 /*true*/; });
 		listItem.style.display = hide && !listItem.classList.contains("selected") ? 'none' : '';

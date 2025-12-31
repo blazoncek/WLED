@@ -13,18 +13,7 @@
 
 /*
   Custom per-LED mapping has moved!
-
-  Create a file "ledmap.json" using the edit page.
-
-  this is just an example (30 LEDs). It will first set all even, then all uneven LEDs.
-  {"map":[
-  0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28,
-  1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29]}
-
-  another example. Switches direction every 5 LEDs.
-  {"map":[
-  0, 1, 2, 3, 4, 9, 8, 7, 6, 5, 10, 11, 12, 13, 14,
-  19, 18, 17, 16, 15, 20, 21, 22, 23, 24, 29, 28, 27, 26, 25]}
+  Create a file "ledmap.json" using the edit page. See: https://kno.wled.ge/advanced/mapping/
 */
 
 #if MAX_NUM_SEGMENTS < WLED_MAX_BUSSES
@@ -248,12 +237,12 @@ CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) {
       break;}
     default: //progmem palettes
       if (pal > 255 - customPalettes.size()) {
-        targetPalette = customPalettes[255-pal]; // we checked bounds above
-      } else if (pal < DYNAMIC_PALETTE_COUNT+FASTLED_PALETTE_COUNT+1) { // palette 6 - 12, fastled palettes
-        targetPalette = *fastledPalettes[pal-DYNAMIC_PALETTE_COUNT-1];
+        targetPalette = customPalettes[255 - pal]; // we checked bounds above
+      } else if (pal < DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_COUNT) { // palette 6 - 12, fastled palettes
+        targetPalette = *fastledPalettes[pal - DYNAMIC_PALETTE_COUNT];
       } else {
         byte tcp[72];
-        memcpy_P(tcp, (byte*)pgm_read_dword(&(gGradientPalettes[pal-(DYNAMIC_PALETTE_COUNT+FASTLED_PALETTE_COUNT)-1])), 72);
+        memcpy_P(tcp, (byte*)pgm_read_dword(&(gGradientPalettes[pal - (DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_COUNT)])), sizeof(tcp));
         targetPalette.loadDynamicGradientPalette(tcp);
       }
       break;
@@ -398,6 +387,7 @@ void Segment::handleRandomPalette() {
   // if randomPaletteChangeTime is shorter than strip.getTransition() palette will never fully blend
   unsigned frameTime = strip.getFrameTime();  // in ms [8-1000]
   unsigned transitionTime = strip.getTransition(); // in ms [100-65535]
+  if (transitionTime == 0) transitionTime = randomPaletteChangeTime * 100; // 10% of change time if no transition set
   if ((uint16_t)now < Segment::_nextPaletteBlend || now > ((Segment::_lastPaletteChange*1000) + transitionTime + 2*frameTime)) return; // not yet time or past transition time, no need to blend
   unsigned transitionFrames = frameTime > transitionTime ? 1 : transitionTime / frameTime; // i.e. 700ms/23ms = 30 or 20000ms/8ms = 2500 or 100ms/1000ms = 0 -> 1
   unsigned noOfBlends = transitionFrames > 255 ? 1 : (255 + (transitionFrames>>1)) / transitionFrames;  // we do some rounding here
@@ -462,8 +452,8 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
     stop = 0;
     return;
   }
-  // allocate FX render buffer
-  if (length() != oldLength) {
+  // allocate FX render buffer only if increased in size (prevent fragmentation)
+  if (length() > oldLength) {
     // allocate render buffer (always entire segment), prefer IRAM/PSRAM. Note: impact on FPS with PSRAM buffer is low (<2% with QSPI PSRAM) on S2/S3
     p_free(pixels);
     pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
@@ -476,7 +466,7 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
     }
 
   }
-  refreshLightCapabilities();
+  refreshLightCapabilities(); // fix for #3403
 }
 
 
@@ -550,16 +540,19 @@ Segment &Segment::setMode(uint8_t fx, bool loadDefaults) {
       sOpt = extractModeDefaults(fx, "ix");  intensity = (sOpt >= 0) ? sOpt : DEFAULT_INTENSITY;
       sOpt = extractModeDefaults(fx, "c1");  custom1   = (sOpt >= 0) ? sOpt : DEFAULT_C1;
       sOpt = extractModeDefaults(fx, "c2");  custom2   = (sOpt >= 0) ? sOpt : DEFAULT_C2;
-      sOpt = extractModeDefaults(fx, "c3");  custom3   = (sOpt >= 0) ? sOpt : DEFAULT_C3;
+      sOpt = extractModeDefaults(fx, "c3");  custom3   = (sOpt >= 0) ? constrain(sOpt, 0, 31) : DEFAULT_C3;
       sOpt = extractModeDefaults(fx, "o1");  check1    = (sOpt >= 0) ? (bool)sOpt : false;
       sOpt = extractModeDefaults(fx, "o2");  check2    = (sOpt >= 0) ? (bool)sOpt : false;
       sOpt = extractModeDefaults(fx, "o3");  check3    = (sOpt >= 0) ? (bool)sOpt : false;
       sOpt = extractModeDefaults(fx, "m12"); if (sOpt >= 0) map1D2D   = constrain(sOpt, 0, 7); else map1D2D = M12_Pixels;  // reset mapping if not defined (2D FX may not work)
-      sOpt = extractModeDefaults(fx, "si");  if (sOpt >= 0) soundSim  = constrain(sOpt, 0, 3);
       sOpt = extractModeDefaults(fx, "rev"); if (sOpt >= 0) reverse   = (bool)sOpt;
       sOpt = extractModeDefaults(fx, "mi");  if (sOpt >= 0) mirror    = (bool)sOpt; // NOTE: setting this option is a risky business
       sOpt = extractModeDefaults(fx, "rY");  if (sOpt >= 0) reverse_y = (bool)sOpt;
       sOpt = extractModeDefaults(fx, "mY");  if (sOpt >= 0) mirror_y  = (bool)sOpt; // NOTE: setting this option is a risky business
+      sOpt = extractModeDefaults(fx, "rS");  if (sOpt >= 0) rotateSpeed = constrain(sOpt, 0, 15); // 0 = no rotation
+      sOpt = extractModeDefaults(fx, "zA");  if (sOpt >= 0) zoomAmount  = constrain(sOpt, 0, 15); // 8 = no zoom
+      sOpt = extractModeDefaults(fx, "zW");  if (sOpt >= 0) zoomWrap    = (bool)sOpt;
+      sOpt = extractModeDefaults(fx, "zM");  if (sOpt >= 0) zoomMirror  = (bool)sOpt;
     }
     sOpt = extractModeDefaults(fx, "pal"); // always extract 'pal' to set _default_palette
     if (sOpt >= 0 && loadDefaults) setPalette(sOpt);
@@ -1410,9 +1403,9 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
   const size_t  stopIndx   = startIndx + length;
   const unsigned progress  = topSegment.progress();
   const unsigned progInv   = 0xFFFFU - progress;
-  uint8_t       opacity    = topSegment.currentBri(); // returns transitioned opacity for style FADE
-  uint8_t       cct        = topSegment.currentCCT();
-  const bool    hasWhite   = topSegment.hasWhite();
+  const uint8_t  opacity   = topSegment.currentBri(); // returns transitioned opacity for style FADE
+  const uint8_t  cct       = topSegment.currentCCT();
+  const bool     hasWhite  = topSegment.hasWhite();
   const unsigned orgBS     = blendingStyle;
   if (width*height == 1) blendingStyle = BLEND_STYLE_FADE; // disable style for single pixel segments (use fade instead)
 
@@ -1504,6 +1497,99 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       }
     };
 
+    // zooming and rotation
+    auto RotateAndZoom = [](const CRGBA *srcPixels, CRGBA *destPixels, int midX, int midY, int cols, int rows, int shearAngle, int zoomOffset, bool wrap, bool mirror) {
+      for (int i = 0; i < cols * rows; i++) destPixels[i] = CRGBA(0,0,0); // fill black
+    
+      constexpr uint8_t Scale_Shift = 10;
+      constexpr int Fixed_Scale = (1 << Scale_Shift);
+      constexpr int RoundVal = (1 << (Scale_Shift - 1));
+      constexpr int zoomRange = (Fixed_Scale * 3) / 4;  // 768
+      int zoomScale = Fixed_Scale + (zoomOffset * zoomRange) / 8; // zoomOffset: -8 .. +7 -> zoomScale: 256 .. 1696
+      if (zoomScale <= 0) zoomScale = 1; // avoid divide-by-zero and negative zoom
+
+      const bool flip = (shearAngle > 90 && shearAngle < 270); // Flip to avoid instability near 180°
+      if (flip) { shearAngle = (shearAngle + 180); while (shearAngle >= 360) shearAngle -= 360; }
+
+      // Calculate shearX and shearY
+      const float angleRadians = radians(shearAngle);
+      const int shearX = -tan_t(angleRadians / 2) * Fixed_Scale;
+      const int shearY =  sin_t(angleRadians)     * Fixed_Scale;
+
+      const int WRAP_PAD_X = cols << 5; // ×32
+      const int WRAP_PAD_Y = rows << 5; // Ensures wrap works with large negative coordinates when zoomed out
+
+      // Use inverse mapping: iterate destination pixels, find source coordinates
+      for (int destY = 0; destY < rows; destY++) {
+        for (int destX = 0; destX < cols; destX++) {
+          // Translate destination to origin
+          int dx = destX - midX;
+          int dy = destY - midY;
+    
+          // Inverse shear transformations (reverse order)
+          int x1 = dx - ((shearX * dy + RoundVal) >> Scale_Shift);
+          int y0 = dy - ((shearY * x1 + RoundVal) >> Scale_Shift);
+          int x0 = x1 - ((shearX * y0 + RoundVal) >> Scale_Shift);
+    
+          // Apply zoom to source coordinates
+          x0 = (x0 * Fixed_Scale) / zoomScale;
+          y0 = (y0 * Fixed_Scale) / zoomScale;
+    
+          // Handle flip
+          int srcX = flip ? (midX - x0) : (midX + x0);
+          int srcY = flip ? (midY - y0) : (midY + y0);
+    
+          // Bounds check or wrap
+          if (wrap) { // Wrap around
+            srcX = (srcX + WRAP_PAD_X); while (srcX >= cols) srcX -= cols; // modulo operation: srcX %= cols;
+            srcY = (srcY + WRAP_PAD_Y); while (srcY >= rows) srcY -= rows;
+            if (mirror) { // Wrap plus mirror
+              const int tileX = (srcX + WRAP_PAD_X) / cols;
+              const int tileY = (srcY + WRAP_PAD_Y) / rows;
+              // Flip on odd tiles
+              if (tileX & 1) srcX = cols - 1 - srcX;
+              if (tileY & 1) srcY = rows - 1 - srcY;
+            }
+          }
+          if ((unsigned)srcX >= (unsigned)cols || (unsigned)srcY >= (unsigned)rows) continue;
+          
+          // Sample from source & write to destination
+          destPixels[destX + destY * cols] = srcPixels[srcX + srcY * cols];
+        }
+      }
+    };
+
+    const int speedAdjust = 5 * getTargetFps() / WLED_FPS; // adjust rotation speed based on target fps
+    CRGBA *_pixelsN = topSegment.getPixels();
+    if (topSegment.rotateSpeed || topSegment.zoomAmount != 8) {
+      _pixelsN = new CRGBA[nCols * nRows];
+      const int midX = nCols / 2;
+      const int midY = nRows / 2;
+      if (topSegment.rotateSpeed != 0) {
+        topSegment._rotatedAngle += topSegment.rotateSpeed;
+        while (topSegment._rotatedAngle > 3600) topSegment._rotatedAngle -= 3600;
+      } else {
+        topSegment._rotatedAngle = 0;
+      }
+      RotateAndZoom(topSegment.getPixels(), _pixelsN, midX, midY, nCols, nRows, topSegment._rotatedAngle/speedAdjust, topSegment.zoomAmount - 8, topSegment.zoomWrap, topSegment.zoomMirror);
+    }
+    CRGBA *_pixelsO = topSegment.getPixels();
+    if (segO) {
+      _pixelsO = segO->getPixels();
+      if (segO->rotateSpeed || segO->zoomAmount != 8) {
+        _pixelsO = new CRGBA[oCols * oRows];
+        const int midX = oCols / 2;
+        const int midY = oRows / 2;
+        if (segO->rotateSpeed != 0) {
+          segO->_rotatedAngle += segO->rotateSpeed;
+          while (segO->_rotatedAngle > 3600) segO->_rotatedAngle -= 3600;
+        } else {
+          segO->_rotatedAngle = 0;
+        }
+        RotateAndZoom(segO->getPixels(), _pixelsO, midX, midY, oCols, oRows, segO->_rotatedAngle/speedAdjust, segO->zoomAmount - 8, segO->zoomWrap, segO->zoomMirror);
+      }
+    }
+
     // if we blend using "push" style we need to "shift" canvas to left/right/up/down
     int offsetX = (blendingStyle == BLEND_STYLE_PUSH_UP   || blendingStyle == BLEND_STYLE_PUSH_DOWN)  ? 0 : progInv * nCols / 0xFFFFU;
     int offsetY = (blendingStyle == BLEND_STYLE_PUSH_LEFT || blendingStyle == BLEND_STYLE_PUSH_RIGHT) ? 0 : progInv * nRows / 0xFFFFU;
@@ -1517,23 +1603,25 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       const Segment *seg = clipped && segO ? segO : &topSegment;  // pixel is never clipped for FADE
       int vCols = seg == segO ? oCols : nCols;         // old segment may have different dimensions
       int vRows = seg == segO ? oRows : nRows;         // old segment may have different dimensions
+      CRGBA *_pixelsR = seg == segO ? _pixelsO : _pixelsN;
       int x = c;
       int y = r;
       // if we blend using "push" style we need to "shift" canvas to left/right/up/down
-      if (offsetX != 0) x = (x + offsetX) % nCols;
-      if (offsetY != 0) y = (y + offsetY) % nRows;
+      if (offsetX != 0) { x = (x + offsetX); while (x >= nCols) x -= nCols; }
+      if (offsetY != 0) { y = (y + offsetY); while (y >= nRows) y -= nRows; }
       CRGBA c_a = BLACK;
-      if (x < vCols && y < vRows) c_a = seg->getPixelColorRaw(x + y*vCols); // will get clipped pixel from old segment or unclipped pixel from new segment
+      if (x < vCols && y < vRows) c_a = _pixelsR[x + y*vCols]; // will get clipped pixel from old segment or unclipped pixel from new segment
       if (segO && blendingStyle == BLEND_STYLE_FADE
         && (topSegment.mode != segO->mode || (segO->name != topSegment.name && segO->name && topSegment.name && strncmp(segO->name, topSegment.name, WLED_MAX_SEGNAME_LEN) != 0))
         && x < oCols && y < oRows) {
         // we need to blend old segment using fade as pixels are not clipped
-        c_a.nblend(segO->getPixelColorRaw(x + y*oCols), (uint16_t)progInv);
+        c_a.nblend(_pixelsO[x + y*oCols], (uint16_t)progInv);
       } else if (blendingStyle != BLEND_STYLE_FADE) {
+        // if we have global brightness change (not On/Off change) we will ignore transition style and just fade brightness (see led.cpp)
         // workaround for On/Off transition
         // (bri != briT) && !bri => from On to Off
         // (bri != briT) &&  bri => from Off to On
-        if ((!clipped && (bri != briT) && !bri) || (clipped && (bri != briT) && bri)) c_a = BLACK;
+        if ((briOld == 0 || bri == 0) && ((!clipped && (bri != briT) && !bri) || (clipped && (bri != briT) && bri))) c_a = BLACK;
       }
       // map it into frame buffer
       x = c;  // restore coordiates if we were PUSHing
@@ -1561,6 +1649,9 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
         }
       }
     }
+    // clean up
+    if (topSegment.rotateSpeed || topSegment.zoomAmount != 8) delete[] _pixelsN;
+    if (segO && (segO->rotateSpeed || segO->zoomAmount != 8)) delete[] _pixelsO;
 #endif
   } else {
     const int nLen = topSegment.virtualLength();
@@ -1594,19 +1685,21 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       int i = k;
       // if we blend using "push" style we need to "shift" canvas to left or right
       switch (blendingStyle) {
-        case BLEND_STYLE_PUSH_RIGHT: i = (i + offsetI) % nLen;        break;
-        case BLEND_STYLE_PUSH_LEFT:  i = (i - offsetI + nLen) % nLen; break;
+        case BLEND_STYLE_PUSH_RIGHT: i = (i + offsetI);        break;
+        case BLEND_STYLE_PUSH_LEFT:  i = (i - offsetI + nLen); break;
       }
+      while (i >= nLen) i -= nLen;
       CRGBA c_a = BLACK;
       if (i < vLen) c_a = seg->getPixelColorRaw(i); // will get clipped pixel from old segment or unclipped pixel from new segment
       if (segO && blendingStyle == BLEND_STYLE_FADE && topSegment.mode != segO->mode && i < oLen) {
         // we need to blend old segment using fade as pixels are not clipped
         c_a.nblend(segO->getPixelColorRaw(i), (uint16_t)progInv);
       } else if (blendingStyle != BLEND_STYLE_FADE) {
+        // if we have global brightness change (not On/Off change) we will ignore transition style and just fade brightness (see led.cpp)
         // workaround for On/Off transition
         // (bri != briT) && !bri => from On to Off
         // (bri != briT) &&  bri => from Off to On
-        if ((!clipped && (bri != briT) && !bri) || (clipped && (bri != briT) && bri)) c_a = BLACK;
+        if ((briOld == 0 || bri == 0) && ((!clipped && (bri != briT) && !bri) || (clipped && (bri != briT) && bri))) c_a = BLACK;
       }
       // map into frame buffer
       i = k; // restore index if we were PUSHing
@@ -1785,12 +1878,12 @@ void WS2812FX::addSegmentGeometryUpdate(uint8_t id, uint16_t sStart, uint16_t sS
 }
 
 void WS2812FX::applySegmentGeometryUpdates() {
-  if (segUpdates.size() == 0) return; // nothing to update
+  if (segUpdates.empty()) return; // nothing to update
   for (auto upd: segUpdates) {
     if (upd.id >= _segments.size()) continue; // invalid segment id
     Segment &seg = _segments[upd.id];
     seg.setGeometry(upd.start, upd.stop, upd.grp, upd.spc, upd.off, upd.startY, upd.stopY, upd.m12);
-    seg.refreshLightCapabilities();
+    seg.refreshLightCapabilities(); // fix for #3403
     if (seg.reset && seg.stop == 0) {
       if (upd.id == getMainSegmentId()) setMainSegmentId(getFirstSelectedSegId());
     }

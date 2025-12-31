@@ -316,6 +316,7 @@ std::vector<LEDType> BusDigital::getLEDTypes() {
     {TYPE_WS2812_1CH_X3, "D",  PSTR("WS2811 White")},
     //{TYPE_WS2812_2CH_X3, "D",  PSTR("WS281x CCT")}, // not implemented
     {TYPE_WS2812_WWA,    "D",  PSTR("WS281x WWA")}, // amber ignored
+    {TYPE_WS281X_DUAL,   "D",  PSTR("WS281x RGBW Dual-chip")},
     {TYPE_WS2801,        "2P", PSTR("WS2801")},
     {TYPE_APA102,        "2P", PSTR("APA102")},
     {TYPE_LPD8806,       "2P", PSTR("LPD8806")},
@@ -1338,7 +1339,7 @@ bool PolyBus::_useParallelI2S = false;
 // Bus static member definition
 int16_t Bus::_cct = -1;
 uint8_t Bus::_cctBlend = 0;
-uint8_t Bus::_gAWM = 255;
+uint8_t Bus::_gAWM = AW_GLOBAL_DISABLED;
 
 uint16_t BusDigital::_milliAmpsTotal = 0;
 

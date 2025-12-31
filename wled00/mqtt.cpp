@@ -36,17 +36,17 @@ static void onMqttConnect(bool sessionPresent)
 
   if (mqttDeviceTopic[0] != 0) {
     mqtt->subscribe(mqttDeviceTopic, 0);
-    snprintf_P(subuf, sizeof(subuf)-1, sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "col");
+    snprintf_P(subuf, sizeof(subuf), sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "col");
     mqtt->subscribe(subuf, 0);
-    snprintf_P(subuf, sizeof(subuf)-1, sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "api");
+    snprintf_P(subuf, sizeof(subuf), sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "api");
     mqtt->subscribe(subuf, 0);
   }
 
   if (mqttGroupTopic[0] != 0) {
     mqtt->subscribe(mqttGroupTopic, 0);
-    snprintf_P(subuf, sizeof(subuf)-1, sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttGroupTopic, "col");
+    snprintf_P(subuf, sizeof(subuf), sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttGroupTopic, "col");
     mqtt->subscribe(subuf, 0);
-    snprintf_P(subuf, sizeof(subuf)-1, sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttGroupTopic, "api");
+    snprintf_P(subuf, sizeof(subuf), sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttGroupTopic, "api");
     mqtt->subscribe(subuf, 0);
   }
 
@@ -168,21 +168,21 @@ void publishMqtt()
   char subuf[MQTT_MAX_TOPIC_LEN + 16];
 
   sprintf_P(s, PSTR("%u"), bri);
-  snprintf_P(subuf, sizeof(subuf)-1, sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "g");
+  snprintf_P(subuf, sizeof(subuf), sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "g");
   mqtt->publish(subuf, 0, retainMqttMsg, s);         // optionally retain message (#2263)
 
   sprintf_P(s, PSTR("#%06X"), (colPri[3] << 24) | (colPri[0] << 16) | (colPri[1] << 8) | (colPri[2]));
-  snprintf_P(subuf, sizeof(subuf)-1, sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "c");
+  snprintf_P(subuf, sizeof(subuf), sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "c");
   mqtt->publish(subuf, 0, retainMqttMsg, s);         // optionally retain message (#2263)
 
-  snprintf_P(subuf, sizeof(subuf)-1, sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "status");
+  snprintf_P(subuf, sizeof(subuf), sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "status");
   mqtt->publish(subuf, 0, true, "online");          // retain message for a LWT
 
   // TODO: use a DynamicBufferList.  Requires a list-read-capable MQTT client API.
   DynamicBuffer buf(1024);
   bufferPrint pbuf(buf.data(), buf.size());
   XML_response(pbuf);
-  snprintf_P(subuf, sizeof(subuf)-1, sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "v");
+  snprintf_P(subuf, sizeof(subuf), sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "v");
   mqtt->publish(subuf, 0, retainMqttMsg, buf.data(), pbuf.size());   // optionally retain message (#2263)
 }
 
@@ -226,7 +226,7 @@ bool initMqtt()
   mqtt->setClientId(mqttClientID);
   if (mqttUser[0] && mqttPass[0]) mqtt->setCredentials(mqttUser, mqttPass);
 
-  snprintf_P(mqttStatusTopic, sizeof(mqttStatusTopic)-1, sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "status");
+  snprintf_P(mqttStatusTopic, sizeof(mqttStatusTopic), sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "status");
   mqtt->setWill(mqttStatusTopic, 0, true, "offline"); // LWT message
   mqtt->setKeepAlive(MQTT_KEEP_ALIVE_TIME);
   mqtt->connect();

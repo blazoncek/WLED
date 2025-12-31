@@ -1104,10 +1104,10 @@ void UsermodBME68X::saveState() {
 		curr_tm = localtime(&curr_time);
 
 		snprintf_P(charbuffer, 127, PSTR("%s/%s"), mqttDeviceTopic, UMOD_NAME "/Calib Last Run");
-		strftime(contbuffer, 30, "%d %B %Y - %T", curr_tm);
+		strftime(contbuffer, sizeof(contbuffer), "%d %B %Y - %T", curr_tm);
 		if (WLED_MQTT_CONNECTED) mqtt->publish(charbuffer, 0, false, contbuffer);
 
-		snprintf(contbuffer, 30, "%d", stateUpdateCounter);
+		snprintf(contbuffer, sizeof(contbuffer), "%d", stateUpdateCounter);
 		snprintf_P(charbuffer, 127, PSTR("%s/%s"), mqttDeviceTopic, UMOD_NAME "/Calib Count");
 		if (WLED_MQTT_CONNECTED) mqtt->publish(charbuffer, 0, false, contbuffer);
 	}

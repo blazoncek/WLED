@@ -27,7 +27,7 @@ static int brightnessBeforeNightMode = NIGHT_MODE_DEACTIVATED;
 static const byte brightnessSteps[] = {
   6, 9, 14, 22, 33, 50, 75, 113, 170, 255
 };
-static const size_t numBrightnessSteps = sizeof(brightnessSteps) / sizeof(byte);
+static const size_t numBrightnessSteps = countof(brightnessSteps);
 
 inline bool nightModeActive() {
   return brightnessBeforeNightMode != NIGHT_MODE_DEACTIVATED;

@@ -237,7 +237,8 @@ bool PinManager::isPinOk(byte gpio, bool output)
       if (gpio == 16 || gpio == 17) return false;                           // U4WDH/PICO-D?: GPIO 16 and 17 are used for PSRAM
     } else if (strncmp_P(PSTR("ESP32-PICO-V3"), ESP.getChipModel(), 13) == 0) {
       if (gpio == 6 || gpio == 11) return false;                            // PICO-V3: uses GPIO 6 and 11 for flash
-      if (strstr_P(ESP.getChipModel(), PSTR("V3-02")) != nullptr && (gpio == 9 || gpio == 10)) return false; // PICO-V3-02: uses GPIO 9 and 10 for PSRAM; 7, 8 are free
+      // PICO-V3-02: uses GPIO 9 and 10 for PSRAM; 7, 8 are free, 16-18 and 23 are unavailable
+      if (strstr_P(ESP.getChipModel(), PSTR("V3-02")) != nullptr && (gpio == 9 || gpio == 10 || (gpio >= 16 && gpio <= 18) || gpio == 23)) return false;
     } else {
       // for classic ESP32 (non-mini) modules, these are the SPI flash pins
       if (gpio > 5 && gpio < 12) return false;      //SPI flash pins

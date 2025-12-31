@@ -128,6 +128,8 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 
 // segment options
 #define NO_OPTIONS   (uint16_t)0x0000
+#define ZOOM_MIRROR  (uint16_t)0x2000
+#define ZOOM_WRAP    (uint16_t)0x1000
 #define TRANSPOSED   (uint16_t)0x0100 // rotated 90deg & reversed
 #define MIRROR_Y_2D  (uint16_t)0x0080
 #define REVERSE_Y_2D (uint16_t)0x0040
@@ -256,6 +258,8 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_BLENDS                 115
 #define FX_MODE_TV_SIMULATOR           116
 //#define FX_MODE_DYNAMIC_SMOOTH         117  // candidate for removal (check3 in dynamic)
+#define FX_MODE_SHIMMER                161  // gap fill, non SR 1D effect
+
 // new 0.14 2D effects
 #define FX_MODE_2DSPACESHIPS           118 //gap fill
 #define FX_MODE_2DCRAZYBEES            119 //gap fill
@@ -298,7 +302,6 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 // particle 2D
 #ifndef WLED_DISABLE_PARTICLESYSTEM2D
 #define FX_MODE_PARTICLEVOLCANO         37
-#define FX_MODE_PARTICLEFIRE            47
 #define FX_MODE_PARTICLEFIREWORKS       52
 #define FX_MODE_PARTICLEVORTEX          53
 #define FX_MODE_PARTICLEPERLIN          60
@@ -319,38 +322,42 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #endif
 #define FX_MODE_PARTICLEGALAXY         109
 #endif
+/*
 // particle 1D
 #ifndef WLED_DISABLE_PARTICLESYSTEM1D
-#define FX_MODE_PS1DSPARKLER            16
 #define FX_MODE_PS1DHOURGLASS           19
 #define FX_MODE_PS1DSPRAY               23
 #define FX_MODE_PS1DBALANCE             24
 #define FX_MODE_PS1DSPRINGY             36
 #ifdef WLED_PS_REPLACE_FX
-  #define FX_MODE_PS1DDRIP                96
-  #define FX_MODE_PS1DPINBALL             91
-  #define FX_MODE_PS1DDANCINGSHADOWS     112
-  #define FX_MODE_PS1DFIREWORKS           90
-  #define FX_MODE_PS1DCHASE               28
-  #define FX_MODE_PS1DSTARBURST           89
-  #define FX_MODE_PS1DFIRE                66
-  #undef FX_MODE_DRIP
-  #undef FX_MODE_BOUNCING_BALLS
-  #undef FX_MODE_DANCING_SHADOWS
-  #undef FX_MODE_EXPLODING_FIREWORKS
-  #undef FX_MODE_CHASE
-  #undef FX_MODE_STARBURST
-  #undef FX_MODE_FIRE_2012
+  //#define FX_MODE_PS1DDRIP                96
+  //#define FX_MODE_PS1DPINBALL             91
+  //#define FX_MODE_PS1DDANCINGSHADOWS     112
+  //#define FX_MODE_PS1DFIREWORKS           90
+  //#define FX_MODE_PS1DCHASE               28
+  //#define FX_MODE_PS1DSTARBURST           89
+  //#define FX_MODE_PS1DFIRE                66
+  //#define FX_MODE_PS1DSPARKLER            87
+  //#undef FX_MODE_DRIP
+  //#undef FX_MODE_BOUNCING_BALLS
+  //#undef FX_MODE_DANCING_SHADOWS
+  //#undef FX_MODE_EXPLODING_FIREWORKS
+  //#undef FX_MODE_CHASE
+  //#undef FX_MODE_STARBURST
+  //#undef FX_MODE_FIRE_2012
+  //#undef FX_MODE_GLITTER
 #else
-  #define FX_MODE_PS1DDRIP                 4
-  #define FX_MODE_PS1DPINBALL              6
-  #define FX_MODE_PS1DDANCINGSHADOWS      11
-  #define FX_MODE_PS1DFIREWORKS           14
-  #define FX_MODE_PS1DCHASE               26
-  #define FX_MODE_PS1DSTARBURST           29
-  #define FX_MODE_PS1DFIRE                33
+  //#define FX_MODE_PS1DDRIP                 4
+  //#define FX_MODE_PS1DPINBALL              6
+  //#define FX_MODE_PS1DDANCINGSHADOWS      11
+  //#define FX_MODE_PS1DFIREWORKS           14
+  //#define FX_MODE_PS1DSPARKLER            16
+  //#define FX_MODE_PS1DCHASE               26
+  //#define FX_MODE_PS1DSTARBURST           29
+  //#define FX_MODE_PS1DFIRE                33
 #endif
 #endif
+*/
 
 #define MODE_COUNT                     187  // includes audioreactive modes
 
@@ -398,7 +405,7 @@ typedef enum mapping1D2D {
 
 class WS2812FX;
 
-// segment, 72 bytes
+// segment, 80 bytes
 class Segment {
   public:
     CRGBA    colors[NUM_COLORS];  // primary, secondary, tertiary colors (are considered opaque (0xffRRGGBB) if segment has no white channel)
@@ -420,7 +427,8 @@ class Segment {
         bool    mirror_y      : 1;  //     7 : mirrored Y (2D)
         bool    transpose     : 1;  //     8 : transposed (2D, swapped X & Y)
         uint8_t map1D2D       : 3;  //  9-11 : mapping for 1D effect on 2D (0-use as strip, 1-expand vertically, 2-circular/arc, 3-rectangular/corner, ...)
-        uint8_t soundSim      : 2;  // 12-13 : 0-3 sound simulation types ("soft" & "hard" or "on"/"off")
+        bool    zoomWrap      : 1;  //    12 : zoom/rotate wraparound (2D)
+        bool    zoomMirror    : 1;  //    13 : zoom/rotate mirror (2D)
         mutable uint8_t set   : 2;  // 14-15 : 0-3 UI segment sets/groups
       };
     };
@@ -437,9 +445,12 @@ class Segment {
       bool    check1  : 1;        // checkmark 1
       bool    check2  : 1;        // checkmark 2
       bool    check3  : 1;        // checkmark 3
-      //uint8_t blendMode : 4;      // segment blending modes: top, bottom, add, subtract, difference, multiply, divide, lighten, darken, screen, overlay, hardlight, softlight, dodge, burn
     };
     uint8_t   blendMode;          // segment blending modes: top, bottom, add, subtract, difference, multiply, divide, lighten, darken, screen, overlay, hardlight, softlight, dodge, burn
+    struct {
+      uint8_t zoomAmount    : 4;  // zoom amount (0-15)
+      uint8_t rotateSpeed   : 4;  // rotation speed (0-15)
+    };
     char     *name;               // segment name
 
     // runtime data
@@ -465,6 +476,7 @@ class Segment {
         bool    _manualW  : 1;
       };
     };
+    mutable uint16_t _rotatedAngle;    // current rotation angle (2D)
 
     // static variables are use to speed up effect calculations by stashing common pre-calculated values
     static unsigned      _usedSegmentData;    // amount of data used by all segments
@@ -520,14 +532,14 @@ class Segment {
 
     inline CRGBA *getPixels() const                                                     { return pixels; }
     inline void  setPixelColorRaw(unsigned i, CRGBA c) const                            { pixels[i] = c; }
-    inline void  addPixelColorRaw(unsigned i, CRGBA c) const                            { pixels[i] = pixels[i].add(c,true); }      // pixels[i].nadd(c); will crash ESP
+    inline void  addPixelColorRaw(unsigned i, CRGBA c) const                            { pixels[i] = pixels[i].add(c); }           // pixels[i].nadd(c); will crash ESP
     inline void  blendPixelColorRaw(unsigned i, CRGBA c, uint8_t b) const               { pixels[i].nblend(c, b); }
     inline void  fadePixelColorRaw(unsigned i, uint8_t b) const                         { pixels[i] = pixels[i].scale8_video(b); }  // pixels[i].nscale8(b); will crash ESP
     inline CRGBA getPixelColorRaw(unsigned i) const                                     { return pixels[i]; };
   #ifndef WLED_DISABLE_2D
     inline static unsigned XY(unsigned x, unsigned y)                                   { return x + y*Segment::vWidth(); }
     inline void  setPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const              { pixels[XY(x,y)] = c; }
-    inline void  addPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const              { pixels[XY(x,y)] = pixels[XY(x,y)].add(c,true); }      // pixels[XY(x,y)].nadd(c); will crash ESP
+    inline void  addPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const              { pixels[XY(x,y)] = pixels[XY(x,y)].add(c); }           // pixels[XY(x,y)].nadd(c); will crash ESP
     inline void  blendPixelColorXYRaw(unsigned x, unsigned y, CRGBA c, uint8_t b) const { pixels[XY(x,y)].nblend(c, b); }
     inline void  fadePixelColorXYRaw(unsigned x, unsigned y, uint8_t b) const           { pixels[XY(x,y)] = pixels[XY(x,y)].scale8_video(b); }  // pixels[XY(x,y)].nscale8(b); will crash ESP
     inline CRGBA getPixelColorXYRaw(unsigned x, unsigned y) const                       { return pixels[XY(x,y)]; };
@@ -560,7 +572,7 @@ class Segment {
     , startY(sStartY)
     , stopY(sStopY > sStartY ? sStopY : sStartY+1) // minimum height is 1
     , offset(0)
-    , options(SELECTED | SEGMENT_ON)
+    , options(SELECTED | SEGMENT_ON | ZOOM_WRAP | ZOOM_MIRROR) // default: selected, on, zoom wrap & mirror
     , grouping(1)
     , spacing(0)
     , opacity(255)
@@ -575,7 +587,9 @@ class Segment {
     , check1(false)
     , check2(false)
     , check3(false)
-    , blendMode(0)
+    , blendMode(0)    // top blend mode
+    , zoomAmount(8)   // no zoom
+    , rotateSpeed(0)  // no rotation
     , name(nullptr)
     , next_time(0)
     , step(0)
@@ -584,8 +598,9 @@ class Segment {
     , aux1(0)
     , data(nullptr)
     , _dataLen(0)
-    , _default_palette(6)
+    , _default_palette(6) // PartyColors
     , _capabilities(0)
+    , _rotatedAngle(0)
     , _t(nullptr)
     {
       DEBUGFX_PRINTF_P(PSTR("-- Creating segment: %p [%d,%d:%d,%d]\n"), this, (int)start, (int)stop, (int)startY, (int)stopY);
@@ -636,7 +651,7 @@ class Segment {
     inline uint16_t height()               const { return stopY - startY; }                   // segment height (if 2D) in physical pixels (it *is* always >=1)
     inline uint16_t length()               const { return width() * height(); }               // segment length (count) in physical pixels
     inline uint16_t groupLength()          const { return grouping + spacing; }
-    inline uint8_t  getLightCapabilities() const { return _capabilities; }
+    inline uint8_t  getLightCapabilities() const { return _capabilities; }                    // bit 0: RGB, bit 1: W, bit 2: CCT, bit 3: manual W
     inline void     deactivate()                 { setGeometry(0,0); }
     inline Segment &clearName()                  { d_free(name); name = nullptr; return *this; }
     inline Segment &setName(const String &name)  { return setName(name.c_str()); }
@@ -743,11 +758,13 @@ class Segment {
     void moveX(int delta, bool wrap = false) const;
     void moveY(int delta, bool wrap = false) const;
     void move(unsigned dir, unsigned delta, bool wrap = false) const;
-    void drawCircle(uint16_t cx, uint16_t cy, uint16_t radius, CRGBA c, bool fill = false, bool soft = false) const;
-    void drawEllipse(uint16_t cx, uint16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool fill = false) const;
+    void fillEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool wrapX = false, bool wrapY = false) const; //coodinates and radii are in 10.6 fixed point notation
+    inline void fillCircle(int16_t cx, int16_t cy, uint16_t r, CRGBA color, bool wrap = false) const { fillEllipse(cx, cy, r, r, color, wrap, wrap); } // coodinates and radii are in 10.6 fixed point notation
+    void drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA c, bool soft = false, bool wrapX = false, bool wrapY = false) const; // coodinates and radii are in 10.6 fixed point notation
+    void drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool wrapX = false, bool wrapY = false) const; // coodinates and radii are in 10.6 fixed point notation
     void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft = false) const;
     void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA col2 = 0, int8_t rotate = 0) const;
-    void setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const;
+    void setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const; // set Wu anti-aliased pixel at (x,y) in 16.8 fixed point notation
   #else
     inline bool is2D() const                                                            { return false; }
     inline void setPixelColorXY(int x, int y, CRGBA c) const                            { setPixelColor(x, c); }
@@ -770,8 +787,9 @@ class Segment {
     inline void moveX(int delta, bool wrap = false) {}
     inline void moveY(int delta, bool wrap = false) {}
     inline void move(uint8_t dir, uint8_t delta, bool wrap = false) {}
-    inline void drawCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA c, bool soft = false) {}
-    inline void fillCircle(uint16_t cx, uint16_t cy, uint8_t radius, CRGBA c, bool soft = false) {}
+    inline void fillEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA c, bool wrapX = false, bool wrapY = false) {}
+    inline void drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA c, bool soft = false, bool wrapX = false, bool wrapY = false) {}
+    inline void drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA c, bool wrapX = false, bool wrapY = false) {}
     inline void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft = false) {}
     inline void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA = 0, int8_t = 0) {}
     inline void setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) {}

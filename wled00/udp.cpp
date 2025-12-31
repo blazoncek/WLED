@@ -149,7 +149,7 @@ void notify(byte callMode, bool followUp)
     // send global data
     DEBUG_PRINTLN(F("ESP-NOW sending first packet."));
     constexpr size_t headerSize = sizeof(EspNowPartialPacket) - sizeof(EspNowPartialPacket::data);
-    constexpr size_t bufferSize = sizeof(buffer.data)/sizeof(uint8_t);
+    constexpr size_t bufferSize = sizeof(buffer.data);
     size_t packetSize = 41; // size of static UDP data (excluding segments)
     size_t s0 = 0;          // number of already prepared/sent segments
     memcpy(buffer.data, udpOut, packetSize);
@@ -330,8 +330,8 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
           selseg.custom2 = udpIn[30+ofs];
           selseg.custom3 = udpIn[31+ofs] & 0x1F;
           selseg.check1  = (udpIn[31+ofs]>>5) & 0x1;
-          selseg.check1  = (udpIn[31+ofs]>>6) & 0x1;
-          selseg.check1  = (udpIn[31+ofs]>>7) & 0x1;
+          selseg.check2  = (udpIn[31+ofs]>>6) & 0x1;
+          selseg.check3  = (udpIn[31+ofs]>>7) & 0x1;
         }
       }
       if (receiveSegmentBounds) {

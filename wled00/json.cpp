@@ -34,6 +34,9 @@ namespace {
     bool     check1;
     bool     check2;
     bool     check3;
+    uint8_t  blendMode;
+    uint8_t  zoomAmount;
+    uint8_t  rotateSpeed;
   } SegmentCopy;
 
   uint8_t differs(const Segment& b, const SegmentCopy& a) {
@@ -56,6 +59,9 @@ namespace {
     if (a.check3 != b.check3)       d |= SEG_DIFFERS_FX;
     if (a.startY != b.startY)       d |= SEG_DIFFERS_BOUNDS;
     if (a.stopY != b.stopY)         d |= SEG_DIFFERS_BOUNDS;
+    if (a.blendMode != b.blendMode) d |= SEG_DIFFERS_OPT;
+    if (a.zoomAmount != b.zoomAmount)   d |= SEG_DIFFERS_OPT;
+    if (a.rotateSpeed != b.rotateSpeed) d |= SEG_DIFFERS_OPT;
 
     //bit pattern: (msb first)
     // set:2, sound:2, mapping:3, transposed, mirrorY, reverseY, [reset,] paused, mirrored, on, reverse, [selected]
@@ -112,7 +118,10 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     seg.custom3,
     seg.check1,
     seg.check2,
-    seg.check3
+    seg.check3,
+    seg.blendMode,
+    seg.zoomAmount,
+    seg.rotateSpeed
   };
 
   int start = elem["start"] | seg.start;
@@ -155,7 +164,10 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   uint16_t grp       = elem["grp"] | seg.grouping;
   uint16_t spc       = elem[F("spc")] | seg.spacing;
   uint16_t of        = seg.offset;
-  uint8_t  soundSim  = elem["si"] | seg.soundSim;
+  uint8_t  rotateSpeed = elem["rS"] | seg.rotateSpeed;
+  uint8_t  zoomAmount  = elem["zA"] | seg.zoomAmount;
+  bool     zoomWrap    = getBoolVal(elem["zW"], seg.zoomWrap);
+  bool     zoomMirror  = getBoolVal(elem["zM"], seg.zoomMirror);
   uint8_t  map1D2D   = elem["m12"] | seg.map1D2D;
   uint8_t  set       = elem[F("set")] | seg.set;
   bool     selected  = getBoolVal(elem["sel"], seg.selected);
@@ -220,7 +232,7 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
         //   string = hex representation of [WW]RRGGBB or "r" for random color
         //   object = individual channel control {"r":0,"g":127,"b":255,"w":255}, each being optional (valid to send {})
         //   array = direct channel values [r,g,b,w] (w element being optional)
-        int rgbw[] = {0,0,0,seg.colors[i].a};
+        uint8_t rgbw[] = {0,0,0,0};
         bool colValid = false;
         JsonArray colX = colarr[i];
         if (colX.isNull()) {
@@ -233,33 +245,33 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
             if (seg.hasWhite()) rgbw[3] = oCol["w"] | seg.colors[i].a;
             colValid = true;
           } else {
-            byte brgbw[] = {0,0,0,seg.colors[i].a};
             const char* hexCol = colarr[i];
             if (hexCol == nullptr) { //Kelvin color temperature (or invalid), e.g 2400
               int kelvin = colarr[i] | -1;
               if (kelvin <  0) continue;
-              if (kelvin >  0) colorKtoRGB(kelvin, brgbw);
+              if (kelvin >  0) colorKtoRGB(kelvin, rgbw);
               colValid = true;
             } else { //HEX string, e.g. "FFAA00"
-              colValid = colorFromHexString(brgbw, hexCol);
+              colValid = colorFromHexString(rgbw, hexCol);
               if (!colValid && tolower(hexCol[0]) == 'r') {
-                setRandomColor(brgbw); // "random" color
+                setRandomColor(rgbw); // "random" color
                 colValid = true;
               }
             }
-            for (size_t c = 0; c < 4; c++) rgbw[c] = brgbw[c];
           }
         } else { //Array of ints (RGB or RGBW color), e.g. [255,160,0]
-          byte sz = colX.size();
+          int sz = colX.size();
           if (sz == 0) continue; //do nothing on empty array
-          copyArray(colX, rgbw, 4);
+          int irgbw[4] = {0,0,0,0};
+          copyArray(colX, irgbw, 4);
+          for (size_t c = 0; c < 4; c++) rgbw[c] = constrain(irgbw[c], 0, 255);
           colValid = true;
         }
 
         if (!colValid) continue;
 
         // rgbw[3] is ignored on RGB-only segments (and is forced to 255 in setColor() as opacity)
-        seg.setColor(i, RGBW32(rgbw[0],rgbw[1],rgbw[2],rgbw[3])); // use transition
+        seg.setColor(i, RGBW32(rgbw[0],rgbw[1],rgbw[2],rgbw[3])); // use transition and forces opacity to 255 if segment does not have White channel
         if (seg.mode == FX_MODE_STATIC) strip.trigger(); //instant refresh
       }
     } else {
@@ -281,8 +293,11 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   }
   #endif
 
+  seg.rotateSpeed = constrain(rotateSpeed, 0, 15);
+  seg.zoomAmount  = constrain(zoomAmount, 0, 15);
+  seg.zoomWrap    = zoomWrap;
+  seg.zoomMirror  = zoomMirror;
   seg.set       = constrain(set, 0, 3);
-  seg.soundSim  = constrain(soundSim, 0, 3);
   seg.selected  = selected;
   seg.reverse   = reverse;
   seg.mirror    = mirror;
@@ -420,6 +435,9 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     jsonTransitionOnce = true;
     strip.setTransition(tr * 100);
   }
+
+  // global AWM override
+  Bus::setGlobalAWMode(root[F("awm")] | Bus::getGlobalAWMode());  // override AW mode setting
 
   tr = root[F("tb")] | -1;
   if (tr >= 0) strip.timebase = (unsigned long)tr - millis();
@@ -644,9 +662,12 @@ static void serializeSegment(JsonObject& root, const Segment& seg, byte id, bool
   root["o1"]  = seg.check1;
   root["o2"]  = seg.check2;
   root["o3"]  = seg.check3;
-  root["si"]  = seg.soundSim;
   root["m12"] = seg.map1D2D;
   root["bm"]  = seg.blendMode;
+  root["rS"]  = seg.rotateSpeed;
+  root["zA"]  = seg.zoomAmount;
+  root["zW"]  = seg.zoomWrap;
+  root["zM"]  = seg.zoomMirror;
 }
 
 void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segmentBounds, bool selectedSegmentsOnly)
@@ -814,14 +835,26 @@ void serializeInfo(JsonObject root)
     wifi_info[F("txPower")] = (int) WiFi.getTxPower();
     wifi_info[F("sleep")] = (bool) WiFi.getSleep();
   #endif
-  #if !defined(CONFIG_IDF_TARGET_ESP32C2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32S3)
-    root[F("arch")] = "esp32";
-  #else
-    root[F("arch")] = ESP.getChipModel();
-  #endif
+  root[F("arch")] = ESP.getChipModel();
   root[F("core")] = ESP.getSdkVersion();
   root[F("clock")] = ESP.getCpuFreqMHz();
   root[F("flash")] = (ESP.getFlashChipSize()/1024)/1024;
+  const char *fmode;
+  switch (ESP.getFlashChipMode()) {
+    case FM_QIO:  fmode = PSTR("QIO"); break;
+    case FM_QOUT: fmode = PSTR("QOUT");break;
+    case FM_DIO:  fmode = PSTR("DIO"); break;
+    case FM_DOUT: fmode = PSTR("DOUT");break;
+    #if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_ESPTOOLPY_FLASHMODE_OPI
+    case FM_FAST_READ: fmode = PSTR("OPI"); break;
+    #else
+    case FM_FAST_READ: fmode = PSTR("fast_read"); break;
+    #endif
+    case FM_SLOW_READ: fmode = PSTR("slow_read"); break;
+    default: fmode = PSTR("N/A"); break;
+  }
+  root[F("fmode")] = FPSTR(fmode);
+  root[F("fspeed")] = ESP.getFlashChipSpeed()/1000000;
   #ifdef WLED_DEBUG
   root[F("maxalloc")] = getContiguousFreeHeap();
   root[F("resetReason0")] = (int)rtc_get_reset_reason(0);
@@ -833,6 +866,17 @@ void serializeInfo(JsonObject root)
   root[F("core")] = ESP.getCoreVersion();
   root[F("clock")] = ESP.getCpuFreqMHz();
   root[F("flash")] = (ESP.getFlashChipSize()/1024)/1024;
+  const char *fmode;
+  switch (ESP.getFlashChipMode()) {
+    // missing: Octal modes
+    case FM_QIO:  fmode = PSTR("QIO"); break;
+    case FM_QOUT: fmode = PSTR("QOUT");break;
+    case FM_DIO:  fmode = PSTR("DIO"); break;
+    case FM_DOUT: fmode = PSTR("DOUT");break;
+    default: fmode = PSTR("N/A"); break;
+  }
+  root[F("fmode")] = FPSTR(fmode);
+  root[F("fspeed")] = ESP.getFlashChipSpeed()/1000000;
   #ifdef WLED_DEBUG
   root[F("maxalloc")] = getContiguousFreeHeap();
   root[F("resetReason")] = (int)ESP.getResetInfoPtr()->reason;
@@ -939,26 +983,25 @@ void serializePalettes(JsonObject root, int page)
 {
   byte tcp[72];
   #ifdef ESP8266
-  int itemPerPage = 5;
+  constexpr int itemPerPage = 5;
   #else
-  int itemPerPage = 8;
+  constexpr int itemPerPage = 8;
   #endif
 
-  int customPalettesCount = customPalettes.size();
-  int palettesCount = getPaletteCount() - customPalettesCount;
+  const int customPalettesCount = customPalettes.size();
+  const int palettesCount = FIXED_PALETTE_COUNT;
 
-  int maxPage = (palettesCount + customPalettesCount -1) / itemPerPage;
+  const int maxPage = (palettesCount + customPalettesCount) / itemPerPage;
   if (page > maxPage) page = maxPage;
 
-  int start = itemPerPage * page;
-  int end = start + itemPerPage;
-  if (end > palettesCount + customPalettesCount) end = palettesCount + customPalettesCount;
+  const int start = itemPerPage * page;
+  const int end = min(start + itemPerPage, palettesCount + customPalettesCount);
 
   root[F("m")] = maxPage; // inform caller how many pages there are
   JsonObject palettes  = root.createNestedObject("p");
 
   for (int i = start; i < end; i++) {
-    JsonArray curPalette = palettes.createNestedArray(String(i>=palettesCount ? 255 - i + palettesCount : i));
+    JsonArray curPalette = palettes.createNestedArray(String(i >= palettesCount ? 255 - i + palettesCount : i));
     switch (i) {
       case 0: //default palette
         setPaletteColors(curPalette, PartyColors_p);
@@ -987,12 +1030,12 @@ void serializePalettes(JsonObject root, int page)
         curPalette.add("c1");
         break;
       default:
-        if (i >= palettesCount)
+        if (i >= palettesCount) // custom palettes
           setPaletteColors(curPalette, customPalettes[i - palettesCount]);
-        else if (i < 13) // palette 6 - 12, fastled palettes
-          setPaletteColors(curPalette, *fastledPalettes[i-6]);
+        else if (i < DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_COUNT) // palette 6 - 12, fastled palettes
+          setPaletteColors(curPalette, *fastledPalettes[i - DYNAMIC_PALETTE_COUNT]);
         else {
-          memcpy_P(tcp, (byte*)pgm_read_dword(&(gGradientPalettes[i - 13])), 72);
+          memcpy_P(tcp, (byte*)pgm_read_dword(&(gGradientPalettes[i - (DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_COUNT)])), sizeof(tcp));
           setPaletteColors(curPalette, tcp);
         }
         break;
@@ -1052,8 +1095,8 @@ void serializeModeData(JsonArray fxdata)
 {
   char lineBuffer[256];
   for (size_t i = 0; i < strip.getModeCount(); i++) {
-    strncpy_P(lineBuffer, strip.getModeData(i), sizeof(lineBuffer)/sizeof(char)-1);
-    lineBuffer[sizeof(lineBuffer)/sizeof(char)-1] = '\0'; // terminate string
+    strncpy_P(lineBuffer, strip.getModeData(i), sizeof(lineBuffer));
+    lineBuffer[countof(lineBuffer)-1] = '\0'; // terminate string
     if (lineBuffer[0] != 0) {
       char* dataPtr = strchr(lineBuffer,'@');
       if (dataPtr) fxdata.add(dataPtr+1);
@@ -1068,8 +1111,8 @@ void serializeModeNames(JsonArray arr)
 {
   char lineBuffer[256];
   for (size_t i = 0; i < strip.getModeCount(); i++) {
-    strncpy_P(lineBuffer, strip.getModeData(i), sizeof(lineBuffer)/sizeof(char)-1);
-    lineBuffer[sizeof(lineBuffer)/sizeof(char)-1] = '\0'; // terminate string
+    strncpy_P(lineBuffer, strip.getModeData(i), sizeof(lineBuffer));
+    lineBuffer[countof(lineBuffer)-1] = '\0'; // terminate string
     if (lineBuffer[0] != 0) {
       char* dataPtr = strchr(lineBuffer,'@');
       if (dataPtr) *dataPtr = 0; // terminate mode data after name

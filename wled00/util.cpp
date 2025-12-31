@@ -207,8 +207,8 @@ uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLe
     if (mode < strip.getModeCount()) {
       char lineBuffer[256];
       //strcpy_P(lineBuffer, (const char*)pgm_read_dword(&(WS2812FX::_modeData[mode])));
-      strncpy_P(lineBuffer, strip.getModeData(mode), sizeof(lineBuffer)/sizeof(char)-1);
-      lineBuffer[sizeof(lineBuffer)/sizeof(char)-1] = '\0'; // terminate string
+      strncpy_P(lineBuffer, strip.getModeData(mode), sizeof(lineBuffer)-1);
+      lineBuffer[countof(lineBuffer)-1] = '\0'; // terminate string
       size_t len = strlen(lineBuffer);
       size_t j = 0;
       for (; j < maxLen && j < len; j++) {
@@ -323,7 +323,7 @@ uint8_t extractModeSlider(uint8_t mode, uint8_t slider, char *dest, uint8_t maxL
           case 0:  strncpy_P(dest, PSTR("FX Speed"), maxLen); break;
           case 1:  strncpy_P(dest, PSTR("FX Intensity"), maxLen); break;
         }
-        dest[maxLen] = '\0'; // strncpy does not necessarily null terminate string
+        dest[maxLen-1] = '\0'; // strncpy does not necessarily null terminate string
       }
     }
     return strlen(dest);
@@ -337,8 +337,8 @@ int16_t extractModeDefaults(uint8_t mode, const char *segVar)
 {
   if (mode < strip.getModeCount()) {
     char lineBuffer[256];
-    strncpy_P(lineBuffer, strip.getModeData(mode), sizeof(lineBuffer)/sizeof(char)-1);
-    lineBuffer[sizeof(lineBuffer)/sizeof(char)-1] = '\0'; // terminate string
+    strncpy_P(lineBuffer, strip.getModeData(mode), sizeof(lineBuffer)-1);
+    lineBuffer[countof(lineBuffer)-1] = '\0'; // terminate string
     if (lineBuffer[0] != 0) {
       char* startPtr = strrchr(lineBuffer, ';'); // last ";" in FX data
       if (!startPtr) return -1;

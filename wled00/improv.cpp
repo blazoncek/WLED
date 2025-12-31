@@ -207,7 +207,7 @@ void sendImprovInfoResponse() {
   strlwr(bString);
   #endif
   char vString[33];
-  snprintf_P(vString, sizeof(vString)-1, PSTR("%s/%i"), versionString, build);
+  snprintf_P(vString, sizeof(vString), PSTR("%s/%i"), versionString, build);
   //Use serverDescription if it has been changed from the default "WLED", else host name
   const char *str[4] = {"WLED", vString, bString, strcmp(serverDescription, "WLED") == 0 ? hostName : serverDescription};
 

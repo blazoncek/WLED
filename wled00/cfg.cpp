@@ -176,7 +176,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   JsonObject hw_led = hw["led"];
 
   CJSON(strip.milliAmpsMax, hw_led[F("maxpwr")]); // milliAmps max for strip ABL, 0 means no ABL or PP-ABL
-  Bus::setGlobalAWMode(hw_led[F("rgbwm")] | AW_GLOBAL_DISABLED);
+  Bus::setGlobalAWMode(hw_led[F("rgbwm")] | AW_GLOBAL_DISABLED);  // legacy global AW mode setting (remove at some point)
   CJSON(strip.correctWB, hw_led["cct"]);
   CJSON(strip.cctFromRgb, hw_led[F("cr")]);
   CJSON(cctICused, hw_led[F("ic")]);
@@ -242,7 +242,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       bool reversed = elm["rev"];
       bool refresh = elm["ref"] | false;
       uint16_t freqkHz = elm[F("freq")] | 0;  // will be in kHz for DotStar and Hz for PWM
-      uint8_t AWmode = elm[F("rgbwm")] | RGBW_MODE_MANUAL_ONLY;
+      uint8_t AWmode = elm[F("rgbwm")] | (Bus::getGlobalAWMode() == AW_GLOBAL_DISABLED ? RGBW_MODE_MANUAL_ONLY : Bus::getGlobalAWMode());
       uint8_t maPerLed = elm[F("ledma")] | LED_MILLIAMPS_DEFAULT;
       uint16_t maMax = elm[F("maxpwr")] | 0; // maMax > 0 means per bus PP-ABL is enabled (bus has its own maximum allowable current)
       // To disable brightness limiter we either set output max current to 0 or single LED current to 0
@@ -263,11 +263,11 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 
     DEBUG_PRINTLN(F("No busses, init default"));
     constexpr unsigned defDataTypes[] = {LED_TYPES};
-    constexpr unsigned defDataPins[] = {DATA_PINS};
-    constexpr unsigned defCounts[] = {PIXEL_COUNTS};
-    constexpr unsigned defNumTypes = (sizeof(defDataTypes) / sizeof(defDataTypes[0]));
-    constexpr unsigned defNumPins = (sizeof(defDataPins) / sizeof(defDataPins[0]));
-    constexpr unsigned defNumCounts = (sizeof(defCounts) / sizeof(defCounts[0]));
+    constexpr unsigned defDataPins[]  = {DATA_PINS};
+    constexpr unsigned defCounts[]    = {PIXEL_COUNTS};
+    constexpr unsigned defNumTypes    = countof(defDataTypes);
+    constexpr unsigned defNumPins     = countof(defDataPins);
+    constexpr unsigned defNumCounts   = countof(defCounts);
 
     static_assert(validatePinsAndTypes(defDataTypes, defNumTypes, defNumPins),
                   "The default pin list defined in DATA_PINS does not match the pin requirements for the default buses defined in LED_TYPES");
@@ -418,8 +418,8 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     // relies upon only being called once with fromFS == true, which is currently true.
     constexpr uint8_t  defTypes[] = {BTNTYPE};
     constexpr int8_t   defPins[]  = {BTNPIN};
-    constexpr unsigned numTypes   = (sizeof(defTypes) / sizeof(defTypes[0]));
-    constexpr unsigned numPins    = (sizeof(defPins) / sizeof(defPins[0]));
+    constexpr unsigned numTypes   = countof(defTypes);
+    constexpr unsigned numPins    = countof(defPins);
     // check if the number of pins and types are valid; count of pins must be greater than or equal to types
     static_assert(numTypes <= numPins, "The default button pins defined in BTNPIN do not match the button types defined in BTNTYPE");
 
@@ -428,7 +428,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     for (size_t s = 0; s < WLED_MAX_BUTTONS && s < numPins; s++) {
       type = defTypes[s < numTypes ? s : numTypes - 1]; // use last known type to set current type if types less than pins
       if (type == BTN_TYPE_NONE || defPins[s] < 0 || !PinManager::allocatePin(defPins[s], false, PinOwner::Button)) {
-        if (buttons.size() == 0) buttons.emplace_back(-1, BTN_TYPE_NONE); // add disabled button to vector (so we have at least one button)
+        if (buttons.empty()) buttons.emplace_back(-1, BTN_TYPE_NONE); // add disabled button to vector (so we have at least one button)
         continue; // pin not available or invalid, skip configuring this GPIO
       }
       if (disablePullUp) {
@@ -896,7 +896,7 @@ void serializeConfig() {
   hw_led[F("ic")] = cctICused;
   hw_led[F("cb")] = Bus::getCCTBlend();
   hw_led["fps"] = strip.getTargetFps();
-  hw_led[F("rgbwm")] = Bus::getGlobalAWMode(); // global auto white mode override
+  //hw_led[F("rgbwm")] = Bus::getGlobalAWMode(); // global auto white mode override (deprecated and removed from configuration)
   #if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
   hw_led[F("prl")] = BusManager::hasParallelOutput();
   #endif

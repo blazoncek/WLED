@@ -150,13 +150,15 @@
 				if (is8266() && gN("G0"+n).value == 3) { //8266 DMA uses 5x the mem
 					mul = 5;
 				}
-				let parallelI2S = d.Sf.PR.checked && (is32() || isS2() || isS3()) && !isD2P(t);
-				if (isC3() || (isS3() && !parallelI2S)) {
-					mul = 2; // ESP32 RMT uses double buffer
-				} else if ((is32() || isS2() || isS3()) && toNum(n) > (parallelI2S ? 7 : 0)) {
-					mul = 2; // ESP32 RMT uses double buffer
-				} else if ((parallelI2S && toNum(n) < 8) || (toNum(n) == 0 && is32())) { // I2S uses extra DMA buffer
-					dbl = len * ch * 3; // DMA buffer for parallel I2S (TODO: only the bus with largst LED count should be used)
+				if (!is8266()) { // ESP32, S2, S3, C3
+					let parallelI2S = d.Sf.PR.checked && (is32() || isS2() || isS3()) && !isD2P(t);
+					if (isC3() || (isS3() && !parallelI2S)) {
+						mul = 2; // ESP32 RMT uses double buffer
+					} else if ((is32() || isS2() || isS3()) && toNum(n) > (parallelI2S ? 7 : 0)) {
+						mul = 2; // ESP32 RMT uses double buffer
+					} else if ((parallelI2S && toNum(n) < 8) || (toNum(n) == 0 && is32())) { // I2S uses extra DMA buffer
+						dbl += len * ch * 3; // DMA buffer for parallel I2S (TODO: only the bus with largest LED count should be used)
+					}
 				}
 				len += parseInt(gN("SL"+n).value); // skipped LEDs are allocated too
 			}
@@ -196,7 +198,7 @@
 			// display global white channel overrides
 			gId("wc").style.display = (gRGBW) ? 'inline':'none';
 			if (!gRGBW) {
-				d.Sf.AW.selectedIndex = 0;
+				//d.Sf.AW.selectedIndex = 0;
 				d.Sf.CR.checked = false;
 			}
 			// update start indexes, max values, calculate current, etc
@@ -207,9 +209,9 @@
 				// update LED count for Hub75 panels
 				if (gT(t).t.charAt(0) === 'H') LC.value = parseInt(gN("G0"+n).value) * parseInt(gN("G1"+n).value) * parseInt(gN("G2"+n).value);
 				let c = parseInt(LC.value,10);          // get LED count
-				if (c > 0) memu += getMem(t, n, c);     // calc memory (depends on LED count)
-				if (!customStarts || !startsDirty[toNum(n)]) gN("LS"+n).value = sLC; // update start value
-				gN("LS"+n).disabled = !customStarts;    // enable/disable field editing
+				memu += getMem(t, n, c);                // calc memory
+				if (!customStarts || !startsDirty[toNum(n)]) gId("ls"+n).value = sLC; // update start value
+				gId("ls"+n).disabled = !customStarts;   // enable/disable field editing
 				if (c) {
 					let s = parseInt(gN("LS"+n).value); // start value
 					if (s+c > sLC) sLC = s+c;           // update total count
@@ -305,7 +307,7 @@
 <div id="dig${s}w">Swap: <select name="WO${s}"><option value="0">None</option><option value="1">W & B</option><option value="2">W & G</option><option value="3">W & R</option><option data-opt="CCT" value="4">WW & CW</option></select></div>
 <div id="dig${s}l">Clock: <select name="SP${s}"><option value="0">Slowest</option><option value="1">Slow</option><option value="2">Normal</option><option value="3">Fast</option><option value="4">Fastest</option></select></div>
 <div>
-Start: <input type="number" name="LS${s}" class="l starts" min="0" max="8191" value="${lastEnd(i-1)}" oninput="startsDirty[${i}]=true;UI();" required />&nbsp;
+<span id="psd${s}">Start: </span><input type="number" name="LS${s}" id="ls${s}" class="l starts" min="0" max="8191" value="${lastEnd(i-1)}" oninput="startsDirty[${i}]=true;UI();" required />&nbsp;
 <div id="dig${s}c">Length: <input type="number" name="LC${s}" class="l" min="1" max="${maxPB}" value="1" required oninput="UI()" /></div><br>
 </div>
 <div id="pins${s}"><span id="p0d${s}"></span><input type="number" name="G0${s}" required class="s"/><span id="p1d${s}"></span><input type="number" name="G1${s}" class="s"/><span id="p2d${s}"></span><input type="number" name="G2${s}" class="s"/><span id="p3d${s}"></span><input type="number" name="G3${s}" class="s"/><span id="p4d${s}"></span><input type="number" name="G4${s}" class="s"/></div>
@@ -983,6 +985,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 		<h3>White management</h3>
 		White Balance correction: <input type="checkbox" name="CCT"><br>
 		<div id="wc">
+			<!--
 			Global override for Auto-calculate white:<br>
 			<select name="AW">
 				<option value=255>Disabled</option>
@@ -993,6 +996,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				<option value=4>Max</option>
 			</select>
 			<br>
+			-->
 			Calculate CCT from RGB: <input type="checkbox" name="CR"><br>
 			CCT IC used (Athom 15W): <input type="checkbox" name="IC"><br>
 			CCT additive blending: <input type="number" class="s" min="0" max="100" name="CB" onchange="UI()" required> %<br>
