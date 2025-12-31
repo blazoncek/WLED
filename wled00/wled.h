@@ -3,13 +3,13 @@
 /*
    Main sketch, global variable declarations
    @title WLED project sketch
-   @version 0.15.2-b1
+   @version 0.15.3-b1
    @author 2016-2024 Christian Schwinne (@Aircookie), 2021-2026 Blaz Kristan (@blazoncek)
  */
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2512300
+#define VERSION 2601010
 #else
 #define VERSION BUILD
 #endif
