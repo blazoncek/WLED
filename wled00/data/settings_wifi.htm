@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
 	<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
-	<title>WiFi Settings</title>
+	<title>Network Settings</title>
 	<script src="common.js" async type="text/javascript"></script>
 	<script>
 		var scanLoops = 0, preScanSSID = "";
@@ -134,23 +134,93 @@ Static subnet mask:<br>
 		}
 		function S() {
 			getLoc();
-			loadJS(getURL('/settings/s.js?p=1'), false);	// If we set async false, file is loaded and executed, then next statement is processed
+			loadJS(getURL('/settings/s.js?p=1'), false, undefined, genUrl);	// If we set async false, file is loaded and executed, then next statement is processed
 			if (loc) d.Sf.action = getURL('/settings/wifi');
+		}
+		// toggle visibility of ESP-NOW remote list based on checkbox state
+		function tE() {
+			//const e = d.querySelector('input[name="RE"]').checked;
+			// keep the hidden input with MAC addresses, only toggle visibility of the list UI
+			gId('rlc').style.display = d.Sf.RE.checked ? 'block' : 'none';
+			if (d.Sf.RE.checked) d.Sf.ETH.selectedIndex = 0; // disable Ethernet if ESPNOW is enabled
+		}
+		// reset remotes: initialize empty list (called from xml.cpp)
+		function rstR() {
+			gId('rml').innerHTML = ''; // clear remote list
+			uR(); // update remote list
+		}
+		function isMAC(v) { return /^[0-9A-F]{12}$/i.test(v); };
+		// add remote MAC to the list
+		function aR(mac) {
+			let rC = gId("rml").childElementCount;
+			if (rC >= 10) return;
+			let id = 'RM' + rC;
+			mac = mac.replace(/:/g, '').replace(/-/g, '').toUpperCase();
+			if (!isMAC(mac)) mac = 'FFFFFFFFFFFF'; // check for valid hex string
+			let inputs = d.querySelectorAll('#rml input[type="text"]');
+			for (let input of inputs||[]) {
+				if (input.value === '') return;
+				if (input.value === mac) mac = '';
+			}
+			let r = cE('div');
+			let i = cE('input');
+			i.type = 'text';
+			i.name = id;
+			i.value = mac;
+			i.style.width = '13ch'
+			i.maxLength = 12;
+			i.minLength = 12;
+			i.onchange = uR;
+			i.oninput = (e) => {
+				e.target.style.color = !isMAC(e.target.value) ? 'red' : 'white';
+			};
+			r.appendChild(i);
+			let btn = d.createElement('button');
+			btn.type = 'button';
+			btn.className = 'sml';
+			btn.innerText = '-';
+			btn.onclick = (e) => {
+				r.remove();
+				uR();
+			};
+			btn.style.marginBottom = '4px';
+			r.appendChild(btn);
+			gId('rml').appendChild(r);
+			uR();
+		}
+		// update remote list
+		function uR() {
+			let j = 0;
+			d.querySelectorAll('#rml input[type="text"]').forEach((i) => {
+				i.style.color = !isMAC(i.value) ? 'red' : 'white';
+				i.value = i.value.toUpperCase();
+				i.name = 'RM' + j++;
+			});
+			gId('+').style.display = gId("rml").childElementCount < 10 ? 'inline' : 'none';
+			return true; // Allow form submission to continue
+		}
+		function genUrl() {
+			gId("ml").textContent = d.Sf.CM.value;
+			gId('mi').style.display = d.Sf.MD.checked?'inline':'none'
 		}
 	</script>
 	<style>@import url("style.css");</style>
 </head>
 <body onload="S()">
-	<form id="form_s" name="Sf" method="post">
+	<form id="form_s" name="Sf" method="post" onsubmit="return uR()">
 		<div class="toprow">
 		<div class="helpB"><button type="button" onclick="H('features/settings/#wifi-settings')">?</button></div>
 		<button type="button" onclick="B()">Back</button><button type="submit">Save & Connect</button><hr>
 		</div>
-		<h2>WiFi setup</h2>
-		<h3>Connect to existing network</h3>
+		<h2>Network setup</h2>
+		Hostname<br>
+		<input type="text" name="CM" minlength="2" maxlength="32" pattern="[a-zA-Z0-9_\-]*" oninput="genUrl()"><br>
+		Enable mDNS: <input type="checkbox" name="MD" checked onchange="genUrl()"><br>
+		<div id="mi"><i>http://<span id="ml">wled</span>.local</i><br></div>
+		Client IP: <span id="cip"></span><br>
+		<h3>WiFi</h3>
 		<button type="button" id="scan" onclick="N()">Scan</button><br>
 		<div id="wifi">
-			Wireless networks
 			<div id="wifi_entries"></div>
 			<hr class="sml">
 			<button type="button" id="wifi_add" onclick="addWiFi()">+</button>
@@ -158,24 +228,59 @@ Static subnet mask:<br>
 		</div>
 		DNS server address:<br>
 		<input name="D0" type="number" class="s" min="0" max="255" required>.<input name="D1" type="number" class="s" min="0" max="255" required>.<input name="D2" type="number" class="s" min="0" max="255" required>.<input name="D3" type="number" class="s" min="0" max="255" required><br>
-		<br>
-		mDNS address (leave empty for no mDNS):<br>
-		http:// <input type="text" name="CM" maxlength="32"> .local<br>
-		Client IP: <span class="sip"> Not connected </span> <br>
-		<h3>Configure Access Point</h3>
-		AP SSID (leave empty for no AP):<br> <input type="text" name="AS" maxlength="32"><br>
+		<hr class="sml">
+		<h3>Access Point</h3>
+		AP SSID (empty for no AP):<br><input type="text" name="AS" maxlength="32" pattern="[a-zA-Z0-9_\-]*"><br>
 		Hide AP name: <input type="checkbox" name="AH"><br>
-		AP password (leave empty for open):<br> <input type="password" name="AP" maxlength="63" pattern="(.{8,63})|()" title="Empty or min. 8 characters"><br>
+		AP password (empty for open):<br><input type="password" name="AP" maxlength="63" pattern="(.{8,63})|()" title="Empty or min. 8 characters"><br>
 		Access Point WiFi channel: <input name="AC" type="number" class="xs" min="1" max="13" required><br>
-		AP opens:
+		AP opens:<br>
 		<select name="AB">
 			<option value="0">No connection after boot</option>
 			<option value="1">Disconnected</option>
 			<option value="2">Always</option>
-			<option value="3">Never (not recommended)</option>
-			<option value="4">Temporary (no connection after boot)</option>
+			<option value="3">Never (use button!)</option>
+			<option value="4">Temporary</option>
 		</select><br>
-		AP IP: <span class="sip"> Not active </span><br>
+		AP IP: <span id="aip"></span><br>
+		<hr class="sml">
+		<div id="ethd">
+			<h3>Ethernet Type</h3>
+			<select name="ETH" onchange="if(this.selectedIndex!=0)d.Sf.RE.checked=false;">
+				<option value="0">None</option>
+				<option value="9">ABC! WLED V43 & compatible</option>
+				<option value="2">ESP32-POE</option>
+				<option value="11">ESP32-POE-WROVER</option>
+				<option value="6">IoTorero/ESP32Deux/RGB2Go Tetra</option>
+				<option value="7">KIT-VE</option>
+				<option value="12">LILYGO T-POE Pro</option>
+				<option value="8">QuinLED-Dig-Octa & T-ETH-POE</option>
+				<option value="4">QuinLED-ESP32</option>
+				<option value="10">Serg74-ETH32</option>
+				<option value="5">TwilightLord-ESP32</option>
+				<option value="3">WESP32</option>
+				<option value="1">WT32-ETH01</option>
+			</select><br>
+			<i class="warn">ESP-NOW is incompatible with Ethernet.</i>
+		</div>
+		<hr class="sml">
+		<h3>ESP-NOW Wireless</h3>
+		<div id="NoESPNOW" class="hide">
+			<i class="warn">This firmware build does not include ESP-NOW support.<br></i>
+		</div>
+		<div id="ESPNOW">
+			Enable ESP-NOW: <input type="checkbox" name="RE" onchange="tE()"><br>
+			<i>Listen for events over ESP-NOW<br>
+			Keep disabled if not using a remote or wireless sync, increases power consumption.<br></i>
+			<div id="rlc">
+				Last device seen: <span class="rlid" id="ld"></span>
+				<button type="button" class="sml" id="+" onclick="aR(gId('ld').textContent)">+</button><br>
+				Linked MACs:<br>
+				<div id="rml"></div>
+			</div>
+			<input type="hidden" name="RMAC" id="rmacs">
+		</div>
+		<hr class="sml">
 		<h3>Experimental</h3>
 		Force 802.11g mode (ESP8266 only): <input type="checkbox" name="FG"><br>
 		Disable WiFi sleep: <input type="checkbox" name="WS"><br>
@@ -195,37 +300,6 @@ Static subnet mask:<br>
 			<option value="8">2 dBm</option>
 		</select><br>
 		<i class="warn">WARNING: Modifying TX power may render device unreachable.</i>
-		</div>
-
-		<h3>ESP-NOW Wireless</h3>
-		<div id="NoESPNOW" class="hide">
-			<i class="warn">This firmware build does not include ESP-NOW support.<br></i>
-		</div>
-		<div id="ESPNOW">
-			Enable ESP-NOW: <input type="checkbox" name="RE"><br>
-			<i>Listen for events over ESP-NOW<br>
-			Keep disabled if not using a remote or wireless sync, increases power consumption.<br></i>
-			Paired Remote MAC: <input type="text" name="RMAC" minlength="12" maxlength="12"><br>
-			Last device seen: <span class="rlid" onclick="d.Sf.RMAC.value=this.textContent;" style="cursor:pointer;">None</span> <br>
-		</div>
-
-		<div id="ethd">
-			<h3>Ethernet Type</h3>
-			<select name="ETH">
-				<option value="0">None</option>
-				<option value="9">ABC! WLED V43 & compatible</option>
-				<option value="2">ESP32-POE</option>
-				<option value="11">ESP32-POE-WROVER</option>
-				<option value="6">ESP32Deux/RGB2Go Tetra</option>
-				<option value="7">KIT-VE</option>
-				<option value="12">LILYGO T-POE Pro</option>
-				<option value="8">QuinLED-Dig-Octa & T-ETH-POE</option>
-				<option value="4">QuinLED-ESP32</option>
-				<option value="10">Serg74-ETH32</option>
-				<option value="5">TwilightLord-ESP32</option>
-				<option value="3">WESP32</option>
-				<option value="1">WT32-ETH01</option>
-			</select><br><br>
 		</div>
 		<hr>
 		<button type="button" onclick="B()">Back</button><button type="submit">Save & Connect</button>

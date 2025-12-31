@@ -399,23 +399,24 @@ void RotaryEncoderUIUsermod::sortModesAndPalettes() {
   re_sortModes(modes_qstrings, modes_alpha_indexes, strip.getModeCount(), MODE_SORT_SKIP_COUNT);
 
   DEBUGUM_PRINTF_P(PSTR("Sorting palettes: %d (%u)\n"), getPaletteCount(), customPalettes.size());
-  palettes_qstrings = re_findModeStrings(JSON_palette_names, getPaletteCount()-customPalettes.size());
-  palettes_alpha_indexes = re_initIndexArray(getPaletteCount()-customPalettes.size());
+  palettes_qstrings = re_findModeStrings(JSON_palette_names, getPaletteCount()); // need to include custom palettes (as it does malloc())
+  palettes_alpha_indexes = re_initIndexArray(getPaletteCount()); // need to include custom palettes (as it does malloc())
   if (customPalettes.size()) {
+    // append custom palettes at the end
     for (int i=0; i<customPalettes.size(); i++) {
-      palettes_alpha_indexes[getPaletteCount()-customPalettes.size()+i] = 255-i;
-      palettes_qstrings[getPaletteCount()-customPalettes.size()+i] = PSTR("~Custom~");
+      palettes_alpha_indexes[FIXED_PALETTE_COUNT+i] = 255-i;
+      palettes_qstrings[FIXED_PALETTE_COUNT+i] = PSTR("~Custom~");
     }
   }
   // How many palette names start with '*' and should not be sorted?
   // (Also skipping the first one, 'Default').
   int skipPaletteCount = 1;
   while (pgm_read_byte_near(palettes_qstrings[skipPaletteCount]) == '*') skipPaletteCount++;
-  re_sortModes(palettes_qstrings, palettes_alpha_indexes, getPaletteCount()-customPalettes.size(), skipPaletteCount);
+  re_sortModes(palettes_qstrings, palettes_alpha_indexes, FIXED_PALETTE_COUNT, skipPaletteCount); // only sort the fixed palettes, avoid dynamic and custom palettes
 }
 
 byte *RotaryEncoderUIUsermod::re_initIndexArray(int numModes) {
-  byte *indexes = (byte *)w_malloc(sizeof(byte) * numModes);
+  byte *indexes = (byte *)p_malloc(sizeof(byte) * numModes);
   for (unsigned i = 0; i < numModes; i++) {
     indexes[i] = i;
   }
@@ -427,7 +428,7 @@ byte *RotaryEncoderUIUsermod::re_initIndexArray(int numModes) {
  * They don't end in '\0', they end in '"'. 
  */
 const char **RotaryEncoderUIUsermod::re_findModeStrings(const char json[], int numModes) {
-  const char **modeStrings = (const char **)w_malloc(sizeof(const char *) * numModes);
+  const char **modeStrings = (const char **)p_malloc(sizeof(const char *) * numModes);
   uint8_t modeIndex = 0;
   bool insideQuotes = false;
   // advance past the mark for markLineNum that may exist.
@@ -599,8 +600,8 @@ void RotaryEncoderUIUsermod::loop()
         // find new state
         switch (newState) {
           case  0: strcpy_P(lineBuffer, PSTR("Brightness")); changedState = true; break;
-          case  1: if (!extractModeSlider(effectCurrent, 0, lineBuffer, 63)) newState++; else changedState = true; break; // speed
-          case  2: if (!extractModeSlider(effectCurrent, 1, lineBuffer, 63)) newState++; else changedState = true; break; // intensity
+          case  1: if (!extractModeSlider(effectCurrent, 0, lineBuffer, countof(lineBuffer))) newState++; else changedState = true; break; // speed
+          case  2: if (!extractModeSlider(effectCurrent, 1, lineBuffer, countof(lineBuffer))) newState++; else changedState = true; break; // intensity
           case  3: strcpy_P(lineBuffer, PSTR("Color Palette")); changedState = true; break;
           case  4: strcpy_P(lineBuffer, PSTR("Effect")); changedState = true; break;
           case  5: strcpy_P(lineBuffer, PSTR("Main Color")); changedState = true; break;
@@ -612,7 +613,7 @@ void RotaryEncoderUIUsermod::loop()
           case  8: if (presetHigh==0 || presetLow == 0) newState++; else { strcpy_P(lineBuffer, PSTR("Preset")); changedState = true; } break;
           case  9:
           case 10:
-          case 11: if (!extractModeSlider(effectCurrent, newState-7, lineBuffer, 63)) newState++; else changedState = true; break; // custom
+          case 11: if (!extractModeSlider(effectCurrent, newState-7, lineBuffer, countof(lineBuffer))) newState++; else changedState = true; break; // custom
         }
         if (newState > LAST_UI_STATE) newState = 0;
       } while (!changedState);

@@ -44,6 +44,10 @@ bool UsermodManager::onMqttMessage(char* topic, char* payload) {
   for (const auto &ums : usermods) if (ums->onMqttMessage(topic, payload)) return true;
   return false;
 }
+bool UsermodManager::publishMqtt() {
+  for (const auto &ums : usermods) if (ums->publishMqtt()) return true;
+  return false;
+}
 #endif
 #ifndef WLED_DISABLE_ESPNOW
 bool UsermodManager::onEspNowMessage(uint8_t* sender, uint8_t* payload, uint8_t len) {

@@ -600,7 +600,7 @@ void UsermodBME68X::MQTT_PublishHASensor(const String& name, const String& devic
 		avail[F("payload_available")] = "online";
 		avail[F("payload_not_available")] = "offline";
 		JsonObject device = jdoc.createNestedObject(F("device")); // Information about the device this sensor is a part of to tie it into the device registry. Only works when unique_id is set. At least one of identifiers or connections must be present to identify the device.
-		device[F("name")] = serverDescription;
+		device["name"] = serverDescription;
 		device[F("identifiers")] = String(mqttClientID);
 		device[F("manufacturer")] = F("WLED");
 		device[F("model")] = UMOD_DEVICE;
@@ -611,7 +611,7 @@ void UsermodBME68X::MQTT_PublishHASensor(const String& name, const String& devic
 		if (option == 1) jdoc[F("entity_category")] = "diagnostic"; 						// Option 1: The category of the entity | When set, the entity category must be diagnostic for sensors.
 		if (option == 2) jdoc[F("mode")] = "text";                             				// Option 2: Set text mode |
 		jdoc[F("expire_after")] = 1800;           											// If set, it defines the number of seconds after the sensor’s state expires, if it’s not updated. After expiry, the sensor’s state becomes unavailable. Default the sensors state never expires.
-		jdoc[F("name")] = name; 															// The name of the MQTT sensor. Without server/module/device name. The device name will be added by HomeAssinstant anyhow
+		jdoc["name"] = name; 															// The name of the MQTT sensor. Without server/module/device name. The device name will be added by HomeAssinstant anyhow
 		if (unitOfMeasurement != "") jdoc[F("state_class")] = "measurement";        		// NOTE: This entry is missing in some other usermods. But it is very important. Because only with this entry, you can use statistics (such as statistical graphs).
 		jdoc[F("state_topic")] = charbuffer;                      							// The MQTT topic subscribed to receive sensor values. If device_class, state_class, unit_of_measurement or suggested_display_precision is set, and a numeric value is expected, an empty value '' will be ignored and will not update the state, a 'null' value will set the sensor to an unknown state. The device_class can be null.
 		jdoc[F("unique_id")] = String(mqttClientID) + "-" + name; 							// An ID that uniquely identifies this sensor. If two sensors have the same unique ID, Home Assistant will raise an exception.
@@ -1104,10 +1104,10 @@ void UsermodBME68X::saveState() {
 		curr_tm = localtime(&curr_time);
 
 		snprintf_P(charbuffer, 127, PSTR("%s/%s"), mqttDeviceTopic, UMOD_NAME "/Calib Last Run");
-		strftime(contbuffer, 30, "%d %B %Y - %T", curr_tm);
+		strftime(contbuffer, sizeof(contbuffer), "%d %B %Y - %T", curr_tm);
 		if (WLED_MQTT_CONNECTED) mqtt->publish(charbuffer, 0, false, contbuffer);
 
-		snprintf(contbuffer, 30, "%d", stateUpdateCounter);
+		snprintf(contbuffer, sizeof(contbuffer), "%d", stateUpdateCounter);
 		snprintf_P(charbuffer, 127, PSTR("%s/%s"), mqttDeviceTopic, UMOD_NAME "/Calib Count");
 		if (WLED_MQTT_CONNECTED) mqtt->publish(charbuffer, 0, false, contbuffer);
 	}

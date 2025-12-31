@@ -2,6 +2,15 @@
 
 #include "wled.h"
 
+#if !(defined(WLED_DISABLE_PARTICLESYSTEM2D) && defined(WLED_DISABLE_PARTICLESYSTEM1D))
+  #include "FXparticleSystem.h"
+  #ifdef ESP8266
+    #if !(defined(WLED_DISABLE_PARTICLESYSTEM2D) || defined(WLED_DISABLE_PARTICLESYSTEM1D))
+    #error ESP8266 does not support 1D and 2D particle systems simultaneously. Please disable one of them.
+    #endif
+  #endif
+#endif
+
 #ifdef ARDUINO_ARCH_ESP32
 
 #include <driver/i2s.h>
@@ -62,7 +71,6 @@
 #define NUM_GEQ_CHANNELS 16                     // number of frequency channels. Don't change !!
 
 class AudioReactive;                            // forward declaration
-static void simulateSound(uint8_t);
 
 static volatile bool disableSoundProcessing = false;  // if true, sound processing (FFT, filters, AGC) will be suspended. "volatile" as its shared between tasks.
 static uint8_t audioSyncEnabled = 0;            // bit field: bit 0 - send, bit 1 - receive (config value)
@@ -236,8 +244,8 @@ void FFTcode(void * parameter)
   DEBUGSR_PRINT("FFT started on core: "); DEBUGSR_PRINTLN(xPortGetCoreID());
 
   // allocate FFT buffers on first call
-  if (vReal == nullptr) vReal = (float*) d_calloc(sizeof(float), samplesFFT);
-  if (vImag == nullptr) vImag = (float*) d_calloc(sizeof(float), samplesFFT);
+  if (vReal == nullptr) vReal = (float*) d_calloc(samplesFFT, sizeof(float));
+  if (vImag == nullptr) vImag = (float*) d_calloc(samplesFFT, sizeof(float));
   if ((vReal == nullptr) || (vImag == nullptr)) {
     // something went wrong
     d_free(vReal); vReal = nullptr;
@@ -589,6 +597,15 @@ static void autoResetPeak(void) {
 #define FX_MODE_FLOWSTRIPE             179
 #define FX_MODE_ROCKTAVES              185
 #define FX_MODE_2DAKEMI                186
+/*
+// particle 1D - sound reactive
+#define FX_MODE_PS1DGEQ                169
+#define FX_MODE_PS1DSONICSTREAM        170
+#define FX_MODE_PS1DSONICBOOM          171
+*/
+// particle 2D - sound reactive
+#define FX_MODE_PARTICLESGEQ           142
+#define FX_MODE_PARTICLECENTERGEQ      151
 
 static uint16_t mode_static(void) {
   SEGMENT.fill(SEGCOLOR(0));
@@ -617,8 +634,6 @@ static uint16_t mode_ripplepeak(void) {                // * Ripple peak. By Andr
     SEGMENT.custom1 = binNum;
     SEGMENT.custom2 = maxVol * 2;
   }
-
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
 
   binNum = SEGMENT.custom1;                               // Select a bin.
   maxVol = SEGMENT.custom2 / 2;                           // Our volume comparator.
@@ -655,8 +670,8 @@ static uint16_t mode_ripplepeak(void) {                // * Ripple peak. By Andr
         break;
 
       default:                                            // Middle of the ripples.
-        SEGMENT.setPixelColor((ripples[i].pos + ripples[i].state + SEGLEN) % SEGLEN, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(ripples[i].color, false, false, 0), uint8_t(2*255/ripples[i].state)));
-        SEGMENT.setPixelColor((ripples[i].pos - ripples[i].state + SEGLEN) % SEGLEN, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(ripples[i].color, false, false, 0), uint8_t(2*255/ripples[i].state)));
+        SEGMENT.setPixelColor((ripples[i].pos + ripples[i].state + SEGLEN) % SEGLEN, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(ripples[i].color, false, false, 0), uint8_t(2*255/ripples[i].state)));
+        SEGMENT.setPixelColor((ripples[i].pos - ripples[i].state + SEGLEN) % SEGLEN, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(ripples[i].color, false, false, 0), uint8_t(2*255/ripples[i].state)));
         ripples[i].state++;                               // Next step.
         break;
     } // switch step
@@ -683,8 +698,6 @@ static uint16_t mode_gravcenter(void) {                // Gravcenter. By Andrew 
   if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
   Gravity* gravcen = reinterpret_cast<Gravity*>(SEGENV.data);
 
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   //SEGMENT.fade_out(240);
   SEGMENT.fade_out(251);  // 30%
 
@@ -697,8 +710,8 @@ static uint16_t mode_gravcenter(void) {                // Gravcenter. By Andrew 
 
   for (int i=0; i<tempsamp; i++) {
     uint8_t index = inoise8(i*segmentSampleAvg+strip.now, 5000+i*segmentSampleAvg);
-    SEGMENT.setPixelColor(i+SEGLEN/2, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
-    SEGMENT.setPixelColor(SEGLEN/2-i-1, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
+    SEGMENT.setPixelColor(i+SEGLEN/2, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
+    SEGMENT.setPixelColor(SEGLEN/2-i-1, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
   }
 
   if (tempsamp >= gravcen->topLED)
@@ -726,8 +739,6 @@ static uint16_t mode_gravcentric(void) {                     // Gravcentric. By 
   unsigned dataSize = sizeof(gravity);
   if (!SEGENV.allocateData(dataSize)) return mode_static();     //allocation failed
   Gravity* gravcen = reinterpret_cast<Gravity*>(SEGENV.data);
-
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
 
   //SEGMENT.fade_out(240);
   //SEGMENT.fade_out(240); // twice? really?
@@ -772,8 +783,6 @@ static uint16_t mode_gravimeter(void) {                // Gravmeter. By Andrew T
   if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
   Gravity* gravcen = reinterpret_cast<Gravity*>(SEGENV.data);
 
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   //SEGMENT.fade_out(240);
   SEGMENT.fade_out(249);  // 25%
 
@@ -786,7 +795,7 @@ static uint16_t mode_gravimeter(void) {                // Gravmeter. By Andrew T
 
   for (int i=0; i<tempsamp; i++) {
     uint8_t index = inoise8(i*segmentSampleAvg+strip.now, 5000+i*segmentSampleAvg);
-    SEGMENT.setPixelColor(i, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
+    SEGMENT.setPixelColor(i, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(index, false, false, 0), uint8_t(segmentSampleAvg*8)));
   }
 
   if (tempsamp >= gravcen->topLED)
@@ -808,14 +817,12 @@ static const char _data_FX_MODE_GRAVIMETER[] PROGMEM = "Gravimeter@Rate of fall,
 //   * JUGGLES      //
 //////////////////////
 static uint16_t mode_juggles(void) {                   // Juggles. By Andrew Tuline.
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   SEGMENT.fade_out(224); // 6.25%
   uint8_t my_sampleAgc = fmax(fmin(volumeSmth, 255.0), 0);
 
   for (size_t i=0; i<SEGMENT.intensity/32+1U; i++) {
     // if SEGLEN equals 1, we will always set color to the first and only pixel, but the effect is still good looking
-    SEGMENT.setPixelColor(beatsin16(SEGMENT.speed/4+i*2,0,SEGLEN-1), color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(strip.now/4+i*2, false, false, 0), my_sampleAgc));
+    SEGMENT.setPixelColor(beatsin16(SEGMENT.speed/4+i*2,0,SEGLEN-1), SEGCOLOR(1).nblend(SEGMENT.color_from_palette(strip.now/4+i*2, false, false, 0), my_sampleAgc));
   }
 
   return FRAMETIME;
@@ -828,8 +835,6 @@ static const char _data_FX_MODE_JUGGLES[] PROGMEM = "Juggles@!,# of balls;!,!;!;
 //////////////////////
 static uint16_t mode_matripix(void) {                  // Matripix. By Andrew Tuline.
   // effect can work on single pixels, we just lose the shifting effect
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   uint8_t secondHand = micros()/(256-SEGMENT.speed)/500 % 16;
   if(SEGENV.aux0 != secondHand) {
     SEGENV.aux0 = secondHand;
@@ -840,7 +845,7 @@ static uint16_t mode_matripix(void) {                  // Matripix. By Andrew Tu
     for (unsigned i = 0; i < k; i++) {
       SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i+1)); // shift left
     }
-    SEGMENT.setPixelColor(k, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(strip.now, false, false, 0), pixBri));
+    SEGMENT.setPixelColor(k, SEGCOLOR(1).blend(SEGMENT.color_from_palette(strip.now, false, false, 0), (uint8_t)pixBri));
   }
 
   return FRAMETIME;
@@ -853,10 +858,7 @@ static const char _data_FX_MODE_MATRIPIX[] PROGMEM = "Matripix@!,Brightness;!,!;
 //////////////////////
 static uint16_t mode_midnoise(void) {                  // Midnoise. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
-// Changing xdist to SEGENV.aux0 and ydist to SEGENV.aux1.
-
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
+  // Changing xdist to SEGENV.aux0 and ydist to SEGENV.aux1.
   SEGMENT.fade_out(SEGMENT.speed);
   SEGMENT.fade_out(SEGMENT.speed);
 
@@ -889,8 +891,6 @@ static uint16_t mode_noisefire(void) {                 // Noisefire. By Andrew T
                                       CRGB::DarkOrange, CRGB::DarkOrange, CRGB::Orange,  CRGB::Orange,
                                       CRGB::Yellow,     CRGB::Orange,     CRGB::Yellow,  CRGB::Yellow);
 
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   if (SEGENV.call == 0) SEGMENT.fill(BLACK);
 
   for (unsigned i = 0; i < SEGLEN; i++) {
@@ -910,8 +910,6 @@ static const char _data_FX_MODE_NOISEFIRE[] PROGMEM = "Noisefire@!,!;;;01v;m12=2
 //   * Noisemeter    //
 ///////////////////////
 static uint16_t mode_noisemeter(void) {                // Noisemeter. By Andrew Tuline.
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   //uint8_t fadeRate = map(SEGMENT.speed,0,255,224,255);
   uint8_t fadeRate = map(SEGMENT.speed,0,255,200,254);
   SEGMENT.fade_out(fadeRate);
@@ -940,9 +938,6 @@ static const char _data_FX_MODE_NOISEMETER[] PROGMEM = "Noisemeter@Fade rate,Wid
 static uint16_t mode_pixelwave(void) {                 // Pixelwave. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
   // even with 1D effect we have to take logic for 2D segments for allocation as fill_solid() fills whole segment
-
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   uint8_t secondHand = micros()/(256-SEGMENT.speed)/500+1 % 16;
   if (SEGENV.aux0 != secondHand) {
     SEGENV.aux0 = secondHand;
@@ -950,7 +945,7 @@ static uint16_t mode_pixelwave(void) {                 // Pixelwave. By Andrew T
     uint8_t pixBri = volumeRaw * SEGMENT.intensity / 64;
 
     const unsigned halfSeg = SEGLEN/2;
-    SEGMENT.setPixelColor(halfSeg, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(strip.now, false, false, 0), pixBri));
+    SEGMENT.setPixelColor(halfSeg, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(strip.now, false, false, 0), pixBri));
     for (unsigned i = SEGLEN - 1; i > halfSeg; i--) SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i-1)); //move to the left
     for (unsigned i = 0; i < halfSeg; i++)          SEGMENT.setPixelColor(i, SEGMENT.getPixelColor(i+1)); // move to the right
   }
@@ -973,8 +968,6 @@ static uint16_t mode_plasmoid(void) {                  // Plasmoid. By Andrew Tu
   if (!SEGENV.allocateData(sizeof(plasphase))) return mode_static(); //allocation failed
   Plasphase* plasmoip = reinterpret_cast<Plasphase*>(SEGENV.data);
 
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   SEGMENT.fadeToBlackBy(32);
 
   plasmoip->thisphase += beatsin8_t(6,-4,4);                          // You can change direction and speed individually.
@@ -988,7 +981,7 @@ static uint16_t mode_plasmoid(void) {                  // Plasmoid. By Andrew Tu
     uint8_t colorIndex=thisbright;
     if (volumeSmth * SEGMENT.intensity / 64 < thisbright) {thisbright = 0;}
 
-    SEGMENT.addPixelColor(i, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(colorIndex, false, false, 0), thisbright));
+    SEGMENT.addPixelColor(i, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(colorIndex, false, false, 0), thisbright));
   }
 
   return FRAMETIME;
@@ -1002,8 +995,6 @@ static const char _data_FX_MODE_PLASMOID[] PROGMEM = "Plasmoid@Phase,# of pixels
 // Andrew's crappy peak detector. If I were 40+ years younger, I'd learn signal processing.
 static uint16_t mode_puddlepeak(void) {                // Puddlepeak. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
-
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
 
   unsigned size = 0;
   uint8_t fadeVal = map(SEGMENT.speed,0,255, 224, 254);
@@ -1038,8 +1029,6 @@ static const char _data_FX_MODE_PUDDLEPEAK[] PROGMEM = "Puddlepeak@Fade rate,Pud
 //////////////////////
 static uint16_t mode_puddles(void) {                   // Puddles. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   unsigned size = 0;
   uint8_t fadeVal = map(SEGMENT.speed, 0, 255, 224, 254);
   unsigned pos = random16(SEGLEN);                        // Set a random starting position.
@@ -1066,8 +1055,6 @@ static const char _data_FX_MODE_PUDDLES[] PROGMEM = "Puddles@Fade rate,Puddle si
 static uint16_t mode_pixels(void) {                    // Pixels. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
 
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   if (!SEGENV.allocateData(32*sizeof(uint8_t))) return mode_static(); //allocation failed
   uint8_t *myVals = reinterpret_cast<uint8_t*>(SEGENV.data); // Used to store a pile of samples because WLED frame rate and WLED sample rate are not synchronized. Frame rate is too low.
 
@@ -1077,7 +1064,7 @@ static uint16_t mode_pixels(void) {                    // Pixels. By Andrew Tuli
 
   for (int i=0; i <SEGMENT.intensity/8; i++) {
     unsigned segLoc = hw_random16(SEGLEN);                    // 16 bit for larger strands of LED's.
-    SEGMENT.setPixelColor(segLoc, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(myVals[i%32]+i*4, false, false, 0), uint8_t(volumeSmth)));
+    SEGMENT.setPixelColor(segLoc, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(myVals[i%32]+i*4, false, false, 0), uint8_t(volumeSmth)));
   }
 
   return FRAMETIME;
@@ -1098,8 +1085,6 @@ static uint16_t mode_blurz(void) {                    // Blurz. By Andrew Tuline
   // even with 1D effect we have to take logic for 2D segments for allocation as fill_solid() fills whole segment
   const unsigned cycleTime = 5 + 50*(255-SEGMENT.speed)/SEGLEN; // SPEED_FORMULA_L
 
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   if (SEGENV.call == 0) {
     SEGMENT.fill(BLACK);
     SEGENV.aux0 = 0;
@@ -1111,7 +1096,7 @@ static uint16_t mode_blurz(void) {                    // Blurz. By Andrew Tuline
   SEGENV.step += FRAMETIME;
   if (SEGENV.step > cycleTime) {
     unsigned segLoc = hw_random16(SEGLEN);
-    SEGMENT.setPixelColor(segLoc, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(2*fftResult[SEGENV.aux0%16]*240/max(1, (int)SEGLEN-1), false, false, 0), 2*fftResult[SEGENV.aux0%16]));
+    SEGMENT.setPixelColor(segLoc, SEGCOLOR(1).blend(SEGMENT.color_from_palette(2*fftResult[SEGENV.aux0%16]*240/max(1, (int)SEGLEN-1), false, false, 0), (uint8_t)(2*fftResult[SEGENV.aux0%16])));
     ++(SEGENV.aux0) %= 16; // make sure it doesn't cross 16
 
     SEGENV.step = 1;
@@ -1131,13 +1116,11 @@ static uint16_t mode_DJLight(void) {                   // Written by ??? Adapted
   // No need to prevent from executing on single led strips, only mid will be set (mid = 0)
   const int mid = SEGLEN / 2;
 
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   uint8_t secondHand = micros()/(256-SEGMENT.speed)/500+1 % 64;
   if (SEGENV.aux0 != secondHand) {                        // Triggered millis timing.
     SEGENV.aux0 = secondHand;
 
-    CRGB color = CRGB(fftResult[15]/2, fftResult[5]/2, fftResult[0]/2).fadeToBlackBy(map(fftResult[4], 0, 255, 255, 4)); // 16-> 15 as 16 is out of bounds
+    CRGBA color = CRGBA(fftResult[15]/2, fftResult[5]/2, fftResult[0]/2).fadeToBlackBy(map(fftResult[4], 0, 255, 255, 4)); // 16-> 15 as 16 is out of bounds
     SEGMENT.setPixelColor(mid, color);
 
     // if SEGLEN equals 1 these loops won't execute
@@ -1158,8 +1141,6 @@ static uint16_t mode_freqmap(void) {                   // Map FFT_MajorPeak to S
   // Start frequency = 60 Hz and log10(60) = 1.78
   // End frequency = MAX_FREQUENCY in Hz and lo10(MAX_FREQUENCY) = MAX_FREQ_LOG10
 
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   if (SEGENV.call == 0) SEGMENT.fill(BLACK);
   int fadeoutDelay = (256 - SEGMENT.speed) / 32;
   if ((fadeoutDelay <= 1 ) || ((SEGENV.call % fadeoutDelay) == 0)) SEGMENT.fade_out(SEGMENT.speed);
@@ -1173,7 +1154,7 @@ static uint16_t mode_freqmap(void) {                   // Map FFT_MajorPeak to S
 
   uint8_t bright = (uint8_t)my_magnitude;
 
-  SEGMENT.setPixelColor(locn, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(SEGMENT.intensity+pixCol, false, false, 0), bright));
+  SEGMENT.setPixelColor(locn, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(SEGMENT.intensity+pixCol, false, false, 0), bright));
 
   return FRAMETIME;
 } // mode_freqmap()
@@ -1184,7 +1165,6 @@ static const char _data_FX_MODE_FREQMAP[] PROGMEM = "Freqmap@Fade rate,Starting 
 //   ** Freqmatrix   //
 ///////////////////////
 static uint16_t mode_freqmatrix(void) {                // Freqmatrix. By Andreas Pleschung.
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
 
   uint8_t secondHand = micros()/(256-SEGMENT.speed)/500 % 16;
   if(SEGENV.aux0 != secondHand) {
@@ -1196,7 +1176,7 @@ static uint16_t mode_freqmatrix(void) {                // Freqmatrix. By Andreas
 
     float intensity = map(pixVal, 0, 255, 0, 100) / 100.0f;  // make a brightness from the last avg
 
-    uint32_t pixel = BLACK;
+    CRGBA pixel = BLACK;
 
     // MajorPeak holds the freq. value which is most abundant in the last sample.
     // With our sampling rate of 10240Hz we have a usable freq range from roughly 80Hz to 10240/2 Hz
@@ -1208,7 +1188,7 @@ static uint16_t mode_freqmatrix(void) {                // Freqmatrix. By Andreas
       uint8_t i =  lowerLimit!=upperLimit ? map(FFT_MajorPeak, lowerLimit, upperLimit, 0, 255) : FFT_MajorPeak;  // may under/overflow - so we enforce uint8_t
       unsigned b = 255 * intensity;
       if (b > 255) b = 255;
-      pixel = CRGBW(CHSV(i, 240, (uint8_t)b)); // implicit conversion to RGB supplied by FastLED
+      pixel = CRGBA(CHSV32(i, 240, (uint8_t)b)); // implicit conversion to RGB supplied by FastLED
     }
 
     // shift the pixels one pixel up
@@ -1230,7 +1210,6 @@ static const char _data_FX_MODE_FREQMATRIX[] PROGMEM = "Freqmatrix@Speed,Sound e
 //  SEGMENT.speed select faderate
 //  SEGMENT.intensity select colour index
 static uint16_t mode_freqpixels(void) {                // Freqpixel. By Andrew Tuline.
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
 
   // this code translates to speed * (2 - speed/255) which is a) speed*2 or b) speed (when speed is 255)
   // and since fade_out() can only take 0-255 it will behave incorrectly when speed > 127
@@ -1245,7 +1224,7 @@ static uint16_t mode_freqpixels(void) {                // Freqpixel. By Andrew T
   if (FFT_MajorPeak < 61.0f) pixCol = 0;                                               // handle underflow
   for (int i=0; i < SEGMENT.intensity/32+1; i++) {
     unsigned locn = hw_random16(0,SEGLEN);
-    SEGMENT.setPixelColor(locn, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(SEGMENT.intensity+pixCol, false, false, 0), (uint8_t)my_magnitude));
+    SEGMENT.setPixelColor(locn, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(SEGMENT.intensity+pixCol, false, false, 0), (uint8_t)my_magnitude));
   }
 
   return FRAMETIME;
@@ -1269,7 +1248,6 @@ static const char _data_FX_MODE_FREQPIXELS[] PROGMEM = "Freqpixels@Fade rate,Sta
 // As a compromise between speed and accuracy we are currently sampling with 10240Hz, from which we can then determine with a 512bin FFT our max frequency is 5120Hz.
 // Depending on the music stream you have you might find it useful to change the frequency mapping.
 static uint16_t mode_freqwave(void) {                  // Freqwave. By Andreas Pleschung.
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
 
   uint8_t secondHand = micros()/(256-SEGMENT.speed)/500 % 16;
   if(SEGENV.aux0 != secondHand) {
@@ -1279,7 +1257,7 @@ static uint16_t mode_freqwave(void) {                  // Freqwave. By Andreas P
     float pixVal = min(255.0f, volumeSmth * (float)SEGMENT.intensity / 256.0f * sensitivity);
     float intensity = mapf(pixVal, 0.0f, 255.0f, 0.0f, 100.0f) / 100.0f;  // make a brightness from the last avg
 
-    uint32_t pixel = BLACK;
+    CRGBA pixel = BLACK;
 
     // MajorPeak holds the freq. value which is most abundant in the last sample.
     // With our sampling rate of 10240Hz we have a usable freq range from roughly 80Hz to 10240/2 Hz
@@ -1290,7 +1268,7 @@ static uint16_t mode_freqwave(void) {                  // Freqwave. By Andreas P
       int lowerLimit = 80 + 3 * SEGMENT.custom1;
       uint8_t i =  lowerLimit!=upperLimit ? map(FFT_MajorPeak, lowerLimit, upperLimit, 0, 255) : FFT_MajorPeak; // may under/overflow - so we enforce uint8_t
       unsigned b = min(255.0f, 255.0f * intensity);
-      pixel = CRGBW(CHSV(i, 240, (uint8_t)b)); // implicit conversion to RGB supplied by FastLED
+      pixel = CRGBA(CHSV32(i, 240, (uint8_t)b)); // implicit conversion to RGB supplied by FastLED
     }
 
     // shift the pixels one pixel outwards
@@ -1313,8 +1291,6 @@ static uint16_t mode_gravfreq(void) {                  // Gravfreq. By Andrew Tu
   unsigned dataSize = sizeof(gravity);
   if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
   Gravity* gravcen = reinterpret_cast<Gravity*>(SEGENV.data);
-
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
 
   SEGMENT.fade_out(250);
 
@@ -1354,7 +1330,6 @@ static const char _data_FX_MODE_GRAVFREQ[] PROGMEM = "Gravfreq@Rate of fall,Sens
 //   ** Noisemove   //
 //////////////////////
 static uint16_t mode_noisemove(void) {                 // Noisemove.    By: Andrew Tuline
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
 
   int fadeoutDelay = (256 - SEGMENT.speed) / 96;
   if ((fadeoutDelay <= 1 ) || ((SEGENV.call % fadeoutDelay) == 0)) SEGMENT.fadeToBlackBy(4+ SEGMENT.speed/4);
@@ -1364,7 +1339,7 @@ static uint16_t mode_noisemove(void) {                 // Noisemove.    By: Andr
     unsigned locn = inoise16(strip.now*SEGMENT.speed+i*50000, strip.now*SEGMENT.speed);   // Get a new pixel location from moving noise.
     // if SEGLEN equals 1 locn will be always 0, hence we set the first pixel only
     locn = map(locn, 7500, 58000, 0, SEGLEN-1);           // Map that to the length of the strand, and ensure we don't go over.
-    SEGMENT.setPixelColor(locn, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(i*64, false, false, 0), uint8_t(fftResult[i % 16]*4)));
+    SEGMENT.setPixelColor(locn, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(i*64, false, false, 0), uint8_t(fftResult[i % 16]*4)));
   }
 
   return FRAMETIME;
@@ -1376,7 +1351,6 @@ static const char _data_FX_MODE_NOISEMOVE[] PROGMEM = "Noisemove@Move speed,Fade
 //   ** Rocktaves   //
 //////////////////////
 static uint16_t mode_rocktaves(void) {                 // Rocktaves. Same note from each octave is same colour.    By: Andrew Tuline
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
 
   SEGMENT.fadeToBlackBy(16);                              // Just in case something doesn't get faded.
 
@@ -1398,7 +1372,7 @@ static uint16_t mode_rocktaves(void) {                 // Rocktaves. Same note f
 
   unsigned i = map(beatsin8_t(8+octCount*4, 0, 255, 0, octCount*8), 0, 255, 0, SEGLEN-1);
   i = constrain(i, 0U, SEGLEN-1U);
-  SEGMENT.addPixelColor(i, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette((uint8_t)frTemp, false, false, 0), volTemp));
+  SEGMENT.addPixelColor(i, SEGCOLOR(1).nblend(SEGMENT.color_from_palette((uint8_t)frTemp, false, false, 0), volTemp));
 
   return FRAMETIME;
 } // mode_rocktaves()
@@ -1410,7 +1384,6 @@ static const char _data_FX_MODE_ROCKTAVES[] PROGMEM = "Rocktaves@;!,!;!;01f;m12=
 ///////////////////////
 // Combines peak detection with FFT_MajorPeak and FFT_Magnitude.
 static uint16_t mode_waterfall(void) {                   // Waterfall. By: Andrew Tuline
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
 
   // effect can work on single pixels, we just lose the shifting effect
   if (SEGENV.call == 0) {
@@ -1432,9 +1405,9 @@ static uint16_t mode_waterfall(void) {                   // Waterfall. By: Andre
 
     unsigned k = SEGLEN-1;
     if (samplePeak) {
-      SEGMENT.setPixelColor(k, CRGBW(CHSV(92,92,92)));
+      SEGMENT.setPixelColor(k, CRGBA(CHSV32((uint8_t)92,92,92)));
     } else {
-      SEGMENT.setPixelColor(k, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(pixCol+SEGMENT.intensity, false, false, 0), (uint8_t)my_magnitude));
+      SEGMENT.setPixelColor(k, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(pixCol+SEGMENT.intensity, false, false, 0), (uint8_t)my_magnitude));
     }
     // loop will not execute if SEGLEN equals 1
     for (unsigned i = 0; i < k; i++) {
@@ -1454,8 +1427,6 @@ static const char _data_FX_MODE_WATERFALL[] PROGMEM = "Waterfall@!,Adjust color,
 // By: Mark Kriegsman https://gist.github.com/kriegsman/5adca44e14ad025e6d3b , modified by Andrew Tuline
 static uint16_t mode_2DSwirl(void) {
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
-
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
 
   const int cols = SEG_W;
   const int rows = SEG_H;
@@ -1492,8 +1463,6 @@ static const char _data_FX_MODE_2DSWIRL[] PROGMEM = "Swirl@!,Sensitivity,Blur;,B
 static uint16_t mode_2DWaverly(void) {
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
 
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   const int cols = SEG_W;
   const int rows = SEG_H;
 
@@ -1524,9 +1493,8 @@ static const char _data_FX_MODE_2DWAVERLY[] PROGMEM = "Waverly@Amplification,Sen
 static uint16_t mode_2DGEQ(void) { // By Will Tatam. Code reduction by Ewoud Wijma.
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
 
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   const int NUM_BANDS = map(SEGMENT.custom1, 0, 255, 1, 16);
+  const int CENTER_BIN = map(SEGMENT.custom3, 0, 31, 0, 15);
   const int cols = SEG_W;
   const int rows = SEG_H;
 
@@ -1545,14 +1513,18 @@ static uint16_t mode_2DGEQ(void) { // By Will Tatam. Code reduction by Ewoud Wij
   if ((fadeoutDelay <= 1 ) || ((SEGENV.call % fadeoutDelay) == 0)) SEGMENT.fadeToBlackBy(SEGMENT.speed);
 
   for (int x=0; x < cols; x++) {
-    uint8_t  band       = map(x, 0, cols, 0, NUM_BANDS);
-    if (NUM_BANDS < 16) band = map(band, 0, NUM_BANDS - 1, 0, 15); // always use full range. comment out this line to get the previous behaviour.
+    int band = map(x, 0, cols, 0, NUM_BANDS);
+    if (NUM_BANDS <= 1) band = CENTER_BIN;  // use just center bin if only one band
+    else if (NUM_BANDS < 16) {
+      int startBin = constrain(CENTER_BIN - NUM_BANDS/2, 0, 15 - NUM_BANDS + 1);
+      band = map(band, 0, NUM_BANDS - 1, startBin, startBin + NUM_BANDS - 1);
+    }
     band = constrain(band, 0, 15);
     unsigned colorIndex = band * 17;
     int barHeight  = map(fftResult[band], 0, 255, 0, rows); // do not subtract -1 from rows here
     if (barHeight > previousBarHeight[x]) previousBarHeight[x] = barHeight; //drive the peak up
 
-    uint32_t ledColor = BLACK;
+    CRGBA ledColor = BLACK;
     for (int y=0; y < barHeight; y++) {
       if (SEGMENT.check1) //color_vertical / color bars toggle
         colorIndex = map(y, 0, rows-1, 0, 255);
@@ -1568,7 +1540,7 @@ static uint16_t mode_2DGEQ(void) { // By Will Tatam. Code reduction by Ewoud Wij
 
   return FRAMETIME;
 } // mode_2DGEQ()
-static const char _data_FX_MODE_2DGEQ[] PROGMEM = "GEQ@Fade speed,Ripple decay,# of bands,,,Color bars;!,,Peaks;!;2f;c1=255,c2=64,pal=11,si=0"; // Beatsin
+static const char _data_FX_MODE_2DGEQ[] PROGMEM = "GEQ@Fade speed,Ripple decay,# of bands,,Bin,Color bars;!,,Peaks;!;2f;c1=255,c2=64,pal=11,si=0,c3=0";
 
 
 /////////////////////////
@@ -1576,8 +1548,6 @@ static const char _data_FX_MODE_2DGEQ[] PROGMEM = "GEQ@Fade speed,Ripple decay,#
 /////////////////////////
 static uint16_t mode_2DFunkyPlank(void) {              // Written by ??? Adapted by Will Tatam.
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
-
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
 
   const int cols = SEG_W;
   const int rows = SEG_H;
@@ -1602,7 +1572,7 @@ static uint16_t mode_2DFunkyPlank(void) {              // Written by ??? Adapted
       int v = map(fftResult[band % 16], 0, 255, 10, 255);
       for (int w = 0; w < barWidth; w++) {
          int xpos = (barWidth * b) + w;
-         SEGMENT.setPixelColorXY(xpos, 0, CRGBW(CHSV(hue, 255, v)));
+         SEGMENT.setPixelColorXY(xpos, 0, CRGBA(CHSV32((uint8_t)hue, 255, v)));
       }
     }
 
@@ -1660,8 +1630,6 @@ static uint8_t akemi[] PROGMEM = {
 static uint16_t mode_2DAkemi(void) {
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
 
-  simulateSound(SEGMENT.soundSim);                        // will do nothing if usermod is enabled
-
   const int cols = SEG_W;
   const int rows = SEG_H;
 
@@ -1675,10 +1643,10 @@ static uint16_t mode_2DAkemi(void) {
 
   //draw and color Akemi
   for (int y=0; y < rows; y++) for (int x=0; x < cols; x++) {
-    CRGB color;
-    CRGB soundColor = CRGB::Orange;
-    CRGB faceColor  = CRGB(SEGMENT.color_wheel(counter));
-    CRGB armsAndLegsColor = CRGB(SEGCOLOR(1) > 0 ? SEGCOLOR(1) : 0xFFE0A0); //default warmish white 0xABA8FF; //0xFF52e5;//
+    CRGBA color;
+    CRGBA soundColor = CRGB::Orange;
+    CRGBA faceColor  = SEGMENT.color_wheel(counter);
+    CRGBA armsAndLegsColor = SEGCOLOR(1) > 0 ? SEGCOLOR(1) : 0xFFE0A0; //default warmish white 0xABA8FF; //0xFF52e5;//
     uint8_t ak = pgm_read_byte_near(akemi + ((y * 32)/rows) * 32 + (x * 32)/cols); // akemi[(y * 32)/rows][(x * 32)/cols]
     switch (ak) {
       case 3: armsAndLegsColor.r *= lightFactor;  armsAndLegsColor.g *= lightFactor;  armsAndLegsColor.b *= lightFactor;  color = armsAndLegsColor; break; //light arms and legs 0x9B9B9B
@@ -1705,7 +1673,7 @@ static uint16_t mode_2DAkemi(void) {
     unsigned band = map(x, 0, max(xMax,4), 0, 15);  // map 0..cols/8 to 16 GEQ bands
     band = constrain(band, 0, 15);
     int barHeight = map(fftResult[band], 0, 255, 0, 17*rows/32);
-    uint32_t color = SEGMENT.color_from_palette((band * 35), false, false, 0);
+    CRGBA color = SEGMENT.color_from_palette((band * 35), false, false, 0);
 
     for (int y=0; y < barHeight; y++) {
       SEGMENT.setPixelColorXY(x, rows/2-y, color);
@@ -1716,7 +1684,415 @@ static uint16_t mode_2DAkemi(void) {
   return FRAMETIME;
 } // mode_2DAkemi
 static const char _data_FX_MODE_2DAKEMI[] PROGMEM = "Akemi@Color speed,Dance;Head palette,Arms & Legs,Eyes & Mouth;Face palette;2f;si=0"; //beatsin
+
+#ifndef WLED_DISABLE_PARTICLESYSTEM2D
+/*
+  Particle base Graphical Equalizer
+  Uses palette for particle color
+  by DedeHai (Damian Schneider)
+*/
+uint16_t mode_particleGEQ(void) {
+  ParticleSystem2D *PartSys = nullptr;
+
+  if (SEGMENT.call == 0) { // initialization
+    if (!initParticleSystem2D(PartSys, 1))
+      return mode_static(); // allocation failed or not 2D
+    PartSys->setKillOutOfBounds(true);
+    PartSys->setUsedParticles(170); // use 2/3 of available particles
+  }
+  else
+    PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
+  if (PartSys == nullptr)
+    return mode_static(); // something went wrong, no data!
+
+  uint32_t i;
+  // set particle system properties
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
+  PartSys->setWrapX(SEGMENT.check1);
+  PartSys->setBounceX(SEGMENT.check2);
+  PartSys->setBounceY(SEGMENT.check3);
+  //PartSys->enableParticleCollisions(false);
+  PartSys->setWallHardness(SEGMENT.custom2);
+  PartSys->setGravity(SEGMENT.custom3 << 2); // set gravity strength
+
+  //map the bands into 16 positions on x axis, emit some particles according to frequency loudness
+  i = 0;
+  uint32_t binwidth = (PartSys->maxX + 1)>>4; //emit poisition variation for one bin (+/-) is equal to width/16 (for 16 bins)
+  uint32_t threshold = 300 - SEGMENT.intensity;
+  uint32_t emitparticles = 0;
+
+  for (uint32_t bin = 0; bin < 16; bin++) {
+    uint32_t xposition = binwidth*bin + (binwidth>>1); // emit position according to frequency band
+    uint8_t emitspeed = ((uint32_t)fftResult[bin] * (uint32_t)SEGMENT.speed) >> 9; // emit speed according to loudness of band (127 max!)
+    emitparticles = 0;
+
+    if (fftResult[bin] > threshold) {
+      emitparticles = 1;// + (fftResult[bin]>>6);
+    }
+    else if (fftResult[bin] > 0) { // band has low volue
+      uint32_t restvolume = ((threshold - fftResult[bin])>>2) + 2;
+      if (hw_random16() % restvolume == 0)
+        emitparticles = 1;
+    }
+
+    while (i < PartSys->usedParticles && emitparticles > 0) { // emit particles if there are any left, low frequencies take priority
+      if (PartSys->particles[i].ttl == 0) { // find a dead particle
+        //set particle properties TODO: could also use the spray...
+        PartSys->particles[i].ttl = 20 + map(SEGMENT.intensity, 0,255, emitspeed>>1, emitspeed + hw_random16(emitspeed)) ; // set particle alive, particle lifespan is in number of frames
+        PartSys->particles[i].x = xposition + hw_random16(binwidth) - (binwidth>>1); // position randomly, deviating half a bin width
+        PartSys->particles[i].y = 0; // start at the bottom
+        PartSys->particles[i].vx = hw_random16(SEGMENT.custom1>>1)-(SEGMENT.custom1>>2) ; //x-speed variation: +/- custom1/4
+        PartSys->particles[i].vy = emitspeed;
+        PartSys->particles[i].hue = (bin<<4) + hw_random16(17) - 8; // color from palette according to bin
+        emitparticles--;
+      }
+      i++;
+    }
+  }
+
+  PartSys->update(); // update and render
+  return FRAMETIME;
+}
+
+static const char _data_FX_MODE_PARTICLEGEQ[] PROGMEM = "PS GEQ 2D@Speed,Intensity,Diverge,Bounce,Gravity,Cylinder,Walls,Floor;;!;2f;pal=0,sx=155,ix=200,c1=0";
+
+/*
+  Particle rotating GEQ
+  Particles sprayed from center with rotating spray
+  Uses palette for particle color
+  by DedeHai (Damian Schneider)
+*/
+#define NUMBEROFSOURCES 16
+uint16_t mode_particlecenterGEQ(void) {
+  ParticleSystem2D *PartSys = nullptr;
+  uint8_t numSprays;
+  uint32_t i;
+
+  if (SEGMENT.call == 0) { // initialization
+    if (!initParticleSystem2D(PartSys, NUMBEROFSOURCES))  // init, request 16 sources
+      return mode_static(); // allocation failed or not 2D
+
+    numSprays = min(PartSys->numSources, (uint32_t)NUMBEROFSOURCES);
+    for (i = 0; i < numSprays; i++) {
+      PartSys->sources[i].source.x = (PartSys->maxX + 1) >> 1; // center
+      PartSys->sources[i].source.y = (PartSys->maxY + 1) >> 1; // center
+      PartSys->sources[i].source.hue = i * 16; // even color distribution
+      PartSys->sources[i].maxLife = 400;
+      PartSys->sources[i].minLife = 200;
+    }
+    PartSys->setKillOutOfBounds(true);
+  }
+  else
+    PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
+
+  if (PartSys == nullptr)
+    return mode_static(); // something went wrong, no data!
+
+  PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
+  numSprays = min(PartSys->numSources, (uint32_t)NUMBEROFSOURCES);
+
+  uint32_t threshold = 300 - SEGMENT.intensity;
+
+  if (SEGMENT.check2)
+    SEGENV.aux0 += SEGMENT.custom1 << 2;
+  else
+    SEGENV.aux0 -= SEGMENT.custom1 << 2;
+
+  uint16_t angleoffset = (uint16_t)0xFFFF / (uint16_t)numSprays;
+  uint32_t j = hw_random16(numSprays); // start with random spray so all get a chance to emit a particle if maximum number of particles alive is reached.
+  for (i = 0; i < numSprays; i++) {
+    if (SEGMENT.call % (32 - (SEGMENT.custom2 >> 3)) == 0 && SEGMENT.custom2 > 0)
+      PartSys->sources[j].source.hue += 1 + (SEGMENT.custom2 >> 4);
+
+    PartSys->sources[j].var = SEGMENT.custom3 >> 2;
+    int8_t emitspeed = 5 + (((uint32_t)fftResult[j] * ((uint32_t)SEGMENT.speed + 20)) >> 10); // emit speed according to loudness of band
+    uint16_t emitangle = j * angleoffset + SEGENV.aux0;
+
+    uint32_t emitparticles = 0;
+    if (fftResult[j] > threshold)
+      emitparticles = 1;
+    else if (fftResult[j] > 0) { // band has low value
+      uint32_t restvolume = ((threshold - fftResult[j]) >> 2) + 2;
+      if (hw_random16() % restvolume == 0)
+        emitparticles = 1;
+    }
+    if (emitparticles)
+      PartSys->angleEmit(PartSys->sources[j], emitangle, emitspeed);
+
+    j = (j + 1) % numSprays;
+  }
+  PartSys->update(); // update and render
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_PARTICLECIRCULARGEQ[] PROGMEM = "PS GEQ Nova@Speed,Intensity,Rotation Speed,Color Change,Nozzle,,Direction;;!;2f;pal=13,ix=180,c1=0,c2=0,c3=8";
+#endif //WLED_DISABLE_PARTICLESYSTEM2D
+
 #endif
+
+#ifndef WLED_DISABLE_PARTICLESYSTEM1D
+/*
+  Particle based 1D GEQ effect, each frequency bin gets an emitter, distributed over the strip
+  Uses palette for particle color
+  by DedeHai (Damian Schneider)
+*/
+/*
+uint16_t mode_particle1DGEQ(void) {
+  ParticleSystem1D *PartSys = nullptr;
+  uint32_t numSources;
+  uint32_t i;
+
+  if (SEGMENT.call == 0) { // initialization
+    if (!initParticleSystem1D(PartSys, 16, 255, 0, true)) // init, no additional data needed
+      return mode_static(); // allocation failed or is single pixel
+  }
+  else
+    PartSys = reinterpret_cast<ParticleSystem1D *>(SEGENV.data); // if not first call, just set the pointer to the PS
+  if (PartSys == nullptr)
+    return mode_static(); // something went wrong, no data!
+
+  // Particle System settings
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
+  numSources = PartSys->numSources;
+  PartSys->setMotionBlur(SEGMENT.custom2); // anable motion blur
+
+  uint32_t spacing = PartSys->maxX / numSources;
+  for (i = 0; i < numSources; i++) {
+    PartSys->sources[i].source.hue = i * 16; // hw_random16();   //TODO: make adjustable, maybe even colorcycle?
+    PartSys->sources[i].var = SEGMENT.speed >> 2;
+    PartSys->sources[i].minLife = 180 + (SEGMENT.intensity >> 1);
+    PartSys->sources[i].maxLife = 240 + SEGMENT.intensity;
+    PartSys->sources[i].sat = 255;
+    PartSys->sources[i].size = SEGMENT.custom1;
+    PartSys->sources[i].source.x = (spacing >> 1) + spacing * i; //distribute evenly
+  }
+
+  for (i = 0; i < PartSys->usedParticles; i++) {
+    if (PartSys->particles[i].ttl > 20) PartSys->particles[i].ttl -= 20; //ttl is linked to brightness, this allows to use higher brightness but still a short lifespan
+    else PartSys->particles[i].ttl = 0;
+  }
+
+  //map the bands into 16 positions on x axis, emit some particles according to frequency loudness
+  i = 0;
+  uint32_t bin = hw_random16(numSources); //current bin , start with random one to distribute available particles fairly
+  uint32_t threshold = 300 - SEGMENT.intensity;
+
+  for (i = 0; i < numSources; i++) {
+    bin++;
+    bin = bin % numSources;
+    uint32_t emitparticle = 0;
+    // uint8_t emitspeed = ((uint32_t)fftResult[bin] * (uint32_t)SEGMENT.speed) >> 10; // emit speed according to loudness of band (127 max!)
+    if (fftResult[bin] > threshold) {
+      emitparticle = 1;
+    }
+    else if (fftResult[bin] > 0) { // band has low volue
+      uint32_t restvolume = ((threshold - fftResult[bin]) >> 2) + 2;
+      if (hw_random() % restvolume == 0) {
+        emitparticle = 1;
+      }
+    }
+
+    if (emitparticle)
+      PartSys->sprayEmit(PartSys->sources[bin]);
+  }
+  //TODO: add color control?
+
+  PartSys->update(); // update and render
+
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_PS1DGEQ[] PROGMEM = "PS GEQ 1D@Speed,!,Size,Blur,,,,;,!;!;1f;pal=0,sx=50,ix=200,c1=0,c2=0,c3=0,o1=1,o2=1";
+*/
+/*
+  Particle based AR effect, swoop particles along the strip with selected frequency loudness
+  by DedeHai (Damian Schneider)
+*/
+/*
+uint16_t mode_particle1DsonicStream(void) {
+  ParticleSystem1D *PartSys = nullptr;
+
+  if (SEGMENT.call == 0) { // initialization
+    if (!initParticleSystem1D(PartSys, 1, 255, 0, true)) // init, no additional data needed
+      return mode_static(); // allocation failed or is single pixel
+    PartSys->setKillOutOfBounds(true);
+    PartSys->sources[0].source.x = 0; // at start
+    //PartSys->sources[1].source.x = PartSys->maxX; // at end
+    PartSys->sources[0].var = 0;//SEGMENT.custom1 >> 3;
+  }
+  else
+    PartSys = reinterpret_cast<ParticleSystem1D *>(SEGENV.data); // if not first call, just set the pointer to the PS
+  if (PartSys == nullptr)
+    return mode_static(); // something went wrong, no data!
+
+  // Particle System settings
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
+  PartSys->setMotionBlur(20 + (SEGMENT.custom2 >> 1)); // anable motion blur
+  PartSys->setSmearBlur(200); // smooth out the edges
+  PartSys->sources[0].v = 5 + (SEGMENT.speed >> 2);
+
+  uint32_t loudness;
+  uint32_t baseBin = SEGMENT.custom3 >> 1; // 0 - 15 map(SEGMENT.custom3, 0, 31, 0, 14);
+
+  loudness = fftResult[baseBin];// + fftResult[baseBin + 1];
+  if (baseBin > 12)
+    loudness = loudness << 2; // double loudness for high frequencies (better detecion)
+
+  uint32_t threshold = 140 - (SEGMENT.intensity >> 1);
+  if (SEGMENT.check2) { // enable low pass filter for dynamic threshold
+    SEGMENT.step = (SEGMENT.step * 31500 + loudness * (32768 - 31500)) >> 15; // low pass filter for simple beat detection: add average to base threshold
+    threshold = 20 + (threshold >> 1) + SEGMENT.step; // add average to threshold
+  }
+
+  // color
+  uint32_t hueincrement = (SEGMENT.custom1 >> 3); // 0-31
+  PartSys->sources[0].sat = SEGMENT.custom1 > 0 ? 255 : 0; // color slider at zero: set to white
+  PartSys->setColorByPosition(SEGMENT.custom1 == 255);
+
+  // particle manipulation
+  for (uint32_t i = 0; i < PartSys->usedParticles; i++) {
+    if (PartSys->sources[0].sourceFlags.perpetual == false) { // age faster if not perpetual
+      if (PartSys->particles[i].ttl > 2) {
+        PartSys->particles[i].ttl -= 2; //ttl is linked to brightness, this allows to use higher brightness but still a short lifespan
+      }
+      else PartSys->particles[i].ttl = 0;
+    }
+    if (SEGMENT.check1) { // modulate colors by mid frequencies
+      int mids = sqrt32_bw((int)fftResult[5] + (int)fftResult[6] + (int)fftResult[7] + (int)fftResult[8] + (int)fftResult[9] + (int)fftResult[10]); // average the mids, bin 5 is ~500Hz, bin 10 is ~2kHz (see audio_reactive.h)
+      PartSys->particles[i].hue += (mids * perlin8(PartSys->particles[i].x << 2, SEGMENT.step << 2)) >> 9; // color by perlin noise from mid frequencies
+    }
+  }
+
+  if (loudness > threshold) {
+    SEGMENT.aux0 += hueincrement; // change color
+    PartSys->sources[0].minLife = 100 + (((unsigned)SEGMENT.intensity * loudness * loudness) >> 13);
+    PartSys->sources[0].maxLife = PartSys->sources[0].minLife;
+    PartSys->sources[0].source.hue = SEGMENT.aux0;
+    PartSys->sources[0].size = SEGMENT.speed;
+    if (PartSys->particles[SEGMENT.aux1].x > 3 * PS_P_RADIUS_1D || PartSys->particles[SEGMENT.aux1].ttl == 0) { // only emit if last particle is far enough away or dead
+      int partindex = PartSys->sprayEmit(PartSys->sources[0]); // emit a particle
+      if (partindex >= 0) SEGMENT.aux1 = partindex; // track last emitted particle
+    }
+  }
+  else loudness = 0; // required for push mode
+
+  PartSys->update(); // update and render (needs to be done before manipulation for initial particle spacing to be right)
+
+  if (SEGMENT.check3) { // push mode
+    PartSys->sources[0].sourceFlags.perpetual = true; // emitted particles dont age
+    PartSys->applyFriction(1); //slow down particles
+    int32_t movestep = (((int)SEGMENT.speed + 2) * loudness) >> 10;
+    if (movestep) {
+      for (uint32_t i = 0; i < PartSys->usedParticles; i++) {
+        if (PartSys->particles[i].ttl) {
+          PartSys->particles[i].x += movestep; // push particles
+          PartSys->particles[i].vx = 10 + (SEGMENT.speed >> 4) ; // give particles some speed for smooth movement (friction will slow them down)
+        }
+      }
+    }
+  }
+  else {
+    PartSys->sources[0].sourceFlags.perpetual = false; // emitted particles age
+    // move all particles (again) to allow faster speeds
+    for (uint32_t i = 0; i < PartSys->usedParticles; i++) {
+      if (PartSys->particles[i].vx == 0)
+        PartSys->particles[i].vx = PartSys->sources[0].v; // move static particles (after disabling push mode)
+      PartSys->particleMoveUpdate(PartSys->particles[i], PartSys->particleFlags[i], &PartSys->advPartProps[i]);
+    }
+  }
+
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_PS1DSONICSTREAM[] PROGMEM = "PS Sonic Stream@!,!,Color,Blur,Bin,Mod,Filter,Push;,!;!;1f;c3=0,o2=1";
+*/
+/*
+  Particle based AR effect, creates exploding particles on beats
+  by DedeHai (Damian Schneider)
+*/
+/*
+uint16_t mode_particle1DsonicBoom(void) {
+  ParticleSystem1D *PartSys = nullptr;
+  if (SEGMENT.call == 0) { // initialization
+    if (!initParticleSystem1D(PartSys, 1, 255, 0, true)) // init, no additional data needed
+      return mode_static(); // allocation failed or is single pixel
+    PartSys->setKillOutOfBounds(true);
+  }
+  else
+    PartSys = reinterpret_cast<ParticleSystem1D *>(SEGENV.data); // if not first call, just set the pointer to the PS
+  if (PartSys == nullptr)
+    return mode_static(); // something went wrong, no data!
+
+  // Particle System settings
+  PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
+  PartSys->setMotionBlur(180 * SEGMENT.check3);
+  PartSys->setSmearBlur(64 * SEGMENT.check3);
+  PartSys->sources[0].var = map(SEGMENT.speed, 0, 255, 10, 127);
+
+  uint32_t loudness;
+  uint32_t baseBin = SEGMENT.custom3 >> 1; // 0 - 15 map(SEGMENT.custom3, 0, 31, 0, 14);
+  loudness = fftResult[baseBin];// + fftResult[baseBin + 1];
+
+  if (baseBin > 12)
+    loudness = loudness << 2; // double loudness for high frequencies (better detecion)
+  uint32_t threshold = 150 - (SEGMENT.intensity >> 1);
+  if (SEGMENT.check2) { // enable low pass filter for dynamic threshold
+    SEGMENT.step = (SEGMENT.step * 31500 + loudness * (32768 - 31500)) >> 15; // low pass filter for simple beat detection: add average to base threshold
+    threshold = 20 + (threshold >> 1) + SEGMENT.step; // add average to threshold
+  }
+
+  // particle manipulation
+  for (uint32_t i = 0; i < PartSys->usedParticles; i++) {
+    if (SEGMENT.check1) { // modulate colors by mid frequencies
+      int mids = sqrt32_bw((int)fftResult[5] + (int)fftResult[6] + (int)fftResult[7] + (int)fftResult[8] + (int)fftResult[9] + (int)fftResult[10]); // average the mids, bin 5 is ~500Hz, bin 10 is ~2kHz (see audio_reactive.h)
+      PartSys->particles[i].hue += (mids * perlin8(PartSys->particles[i].x << 2, SEGMENT.step << 2)) >> 9; // color by perlin noise from mid frequencies
+    }
+    if (PartSys->particles[i].ttl > 16) {
+      PartSys->particles[i].ttl -= 16; //ttl is linked to brightness, this allows to use higher brightness but still a (very) short lifespan
+    }
+  }
+
+  if (loudness > threshold) {
+    if (SEGMENT.aux1 == 0) { // edge detected, code only runs once per "beat"
+      // update position
+      if (SEGMENT.custom2 < 128) // fixed position
+        PartSys->sources[0].source.x = map(SEGMENT.custom2, 0, 127, 0, PartSys->maxX);
+      else if (SEGMENT.custom2 < 255) { // advances on each "beat"
+        int32_t step = PartSys->maxX / (((270 - SEGMENT.custom2) >> 3)); // step: 2 - 33 steps for full segment width
+        PartSys->sources[0].source.x = (PartSys->sources[0].source.x + step) % PartSys->maxX;
+        if (PartSys->sources[0].source.x < step) // align to be symmetrical by making the first position half a step from start
+          PartSys->sources[0].source.x = step >> 1;
+      }
+      else // position set to max, use random postion per beat
+        PartSys->sources[0].source.x = hw_random(PartSys->maxX);
+
+      // update color
+      //PartSys->setColorByPosition(SEGMENT.custom1 == 255);     // color slider at max: particle color by position
+      PartSys->sources[0].sat = SEGMENT.custom1 > 0 ? 255 : 0; // color slider at zero: set to white
+      if (SEGMENT.custom1 == 255) // emit color by position
+        SEGMENT.aux0 = map(PartSys->sources[0].source.x , 0, PartSys->maxX, 0, 255);
+      else if (SEGMENT.custom1 > 0)
+        SEGMENT.aux0 += (SEGMENT.custom1 >> 1); // change emit color per "beat"
+    }
+    SEGMENT.aux1 = 1; // track edge detection
+
+    PartSys->sources[0].minLife = 200;
+    PartSys->sources[0].maxLife = PartSys->sources[0].minLife + (((unsigned)SEGMENT.intensity * loudness * loudness) >> 13);
+    PartSys->sources[0].source.hue = SEGMENT.aux0;
+    PartSys->sources[0].size = 1; //SEGMENT.speed>>3;
+    uint32_t explosionsize = 4 + (PartSys->maxXpixel >> 2);
+    explosionsize = hw_random16((explosionsize * loudness) >> 10);
+    for (uint32_t e = 0; e < explosionsize; e++) { // emit explosion particles
+        PartSys->sprayEmit(PartSys->sources[0]); // emit a particle
+      }
+  }
+  else
+    SEGMENT.aux1 = 0; // reset edge detection
+
+  PartSys->update(); // update and render (needs to be done before manipulation for initial particle spacing to be right)
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_PS1DSONICBOOM[] PROGMEM = "PS Sonic Boom@!,!,Color,Position,Bin,Mod,Filter,Blur;,!;!;1f;c2=63,c3=0,o2=1";
+*/
+#endif // WLED_DISABLE_PARTICLESYSTEM1D
+
 
 ////////////////////
 // usermod class  //
@@ -1850,7 +2226,7 @@ class AudioReactive : public Usermod {
     // private methods
     void removeAudioPalettes(void);
     void createAudioPalettes(void);
-    CRGB getCRGBForBand(int x, int pal);
+    CRGBA getCRGBForBand(int x, int pal);
     void fillAudioPalettes(void);
 
     ////////////////////
@@ -2357,6 +2733,13 @@ class AudioReactive : public Usermod {
         strip.addEffect(FX_MODE_DJLIGHT, &mode_DJLight, _data_FX_MODE_DJLIGHT);
         strip.addEffect(FX_MODE_BLURZ, &mode_blurz, _data_FX_MODE_BLURZ);
         strip.addEffect(FX_MODE_ROCKTAVES, &mode_rocktaves, _data_FX_MODE_ROCKTAVES);
+        /*
+        #ifndef WLED_DISABLE_PARTICLESYSTEM1D
+        strip.addEffect(FX_MODE_PS1DGEQ, &mode_particle1DGEQ, _data_FX_MODE_PS1DGEQ);
+        strip.addEffect(FX_MODE_PS1DSONICSTREAM, &mode_particle1DsonicStream, _data_FX_MODE_PS1DSONICSTREAM);
+        strip.addEffect(FX_MODE_PS1DSONICBOOM, &mode_particle1DsonicBoom, _data_FX_MODE_PS1DSONICBOOM);
+        #endif // WLED_DISABLE_PARTICLESYSTEM1D
+        */
         // --- 2D  effects ---
         #ifndef WLED_DISABLE_2D
         strip.addEffect(FX_MODE_2DGEQ, &mode_2DGEQ, _data_FX_MODE_2DGEQ); // audio
@@ -2364,6 +2747,10 @@ class AudioReactive : public Usermod {
         strip.addEffect(FX_MODE_2DWAVERLY, &mode_2DWaverly, _data_FX_MODE_2DWAVERLY); // audio
         strip.addEffect(FX_MODE_2DSWIRL, &mode_2DSwirl, _data_FX_MODE_2DSWIRL); // audio
         strip.addEffect(FX_MODE_2DAKEMI, &mode_2DAkemi, _data_FX_MODE_2DAKEMI); // audio
+        #ifndef WLED_DISABLE_PARTICLESYSTEM2D
+        strip.addEffect(FX_MODE_PARTICLESGEQ, &mode_particleGEQ, _data_FX_MODE_PARTICLEGEQ);
+        strip.addEffect(FX_MODE_PARTICLECENTERGEQ, &mode_particlecenterGEQ, _data_FX_MODE_PARTICLECIRCULARGEQ);
+        #endif // WLED_DISABLE_PARTICLESYSTEM2D
         #endif // WLED_DISABLE_2D
       }
 
@@ -2524,7 +2911,7 @@ class AudioReactive : public Usermod {
         disableSoundProcessing = true;
       } else {
         #if defined(WLED_DEBUG_USERMODS) && defined(SR_DEBUG)
-        if ((disableSoundProcessing == true) && (audioSyncEnabled == 0) && audioSource->isInitialized()) {    // we just switched to "enabled"
+        if ((disableSoundProcessing == true) && (audioSyncEnabled == 0) && audioSource && audioSource->isInitialized()) {    // we just switched to "enabled"
           DEBUGSR_PRINTLN(F("[AR userLoop]  realtime mode ended - audio processing resumed."));
           DEBUGSR_PRINTF_P(PSTR("               RealtimeMode = %d; RealtimeOverride = %d\n"), int(realtimeMode), int(realtimeOverride));
         }
@@ -2536,7 +2923,7 @@ class AudioReactive : public Usermod {
       if (audioSyncEnabled & 0x02) disableSoundProcessing = true;   // make sure everything is disabled IF in audio Receive mode
       if (audioSyncEnabled & 0x01) disableSoundProcessing = false;  // keep running audio IF we're in audio Transmit mode
 #ifdef ARDUINO_ARCH_ESP32
-      if (!audioSource->isInitialized()) disableSoundProcessing = true;  // no audio source
+      if (!audioSource || !audioSource->isInitialized()) disableSoundProcessing = true;  // no audio source
 
 
       // Only run the sampling code IF we're not in Receive mode or realtime mode
@@ -2733,7 +3120,7 @@ class AudioReactive : public Usermod {
       // better would be for AudioSource to implement getType()
       if (enabled
           && dmType == 0 && audioPin>=0
-          && (buttonType[b] == BTN_TYPE_ANALOG || buttonType[b] == BTN_TYPE_ANALOG_INVERTED)
+          && (buttons[b].type == BTN_TYPE_ANALOG || buttons[b].type == BTN_TYPE_ANALOG_INVERTED)
          ) {
         return true;
       }
@@ -2822,7 +3209,7 @@ class AudioReactive : public Usermod {
             // input level or "silence"
             if (maxSample5sec > 1.0f) {
               float my_usage = 100.0f * (maxSample5sec / 255.0f);
-              snprintf_P(myStringBuffer, 15, PSTR(" - peak %3d%%"), int(my_usage));
+              snprintf_P(myStringBuffer, sizeof(myStringBuffer), PSTR(" - peak %3d%%"), int(my_usage));
               infoArr.add(myStringBuffer);
             } else {
               infoArr.add(F(" - quiet"));
@@ -3193,28 +3580,25 @@ void AudioReactive::createAudioPalettes(void) {
 }
 
 // credit @netmindz ar palette, adapted for usermod @blazoncek
-CRGB AudioReactive::getCRGBForBand(int x, int pal) {
-  CRGB value;
-  CHSV hsv;
+CRGBA AudioReactive::getCRGBForBand(int x, int pal) {
+  CRGBA value;
   int b;
   switch (pal) {
     case 2:
       b = map(x, 0, 255, 0, NUM_GEQ_CHANNELS/2); // convert palette position to lower half of freq band
-      hsv = CHSV(fftResult[b], 255, x);
-      hsv2rgb_rainbow(hsv, value);  // convert to R,G,B
+      value = CHSV32(fftResult[b], 255, x);
       break;
     case 1:
       b = map(x, 1, 255, 0, 10); // convert palette position to lower half of freq band
-      hsv = CHSV(fftResult[b], 255, map(fftResult[b], 0, 255, 30, 255));  // pick hue
-      hsv2rgb_rainbow(hsv, value);  // convert to R,G,B
+      value = CHSV32(fftResult[b], 255, map(fftResult[b], 0, 255, 30, 255));  // pick hue
       break;
     default:
       if (x == 1) {
-        value = CRGB(fftResult[10]/2, fftResult[4]/2, fftResult[0]/2);
+        value = CRGBA(fftResult[10]/2, fftResult[4]/2, fftResult[0]/2);
       } else if(x == 255) {
-        value = CRGB(fftResult[10]/2, fftResult[0]/2, fftResult[4]/2);
+        value = CRGBA(fftResult[10]/2, fftResult[0]/2, fftResult[4]/2);
       } else {
-        value = CRGB(fftResult[0]/2, fftResult[4]/2, fftResult[10]/2);
+        value = CRGBA(fftResult[0]/2, fftResult[4]/2, fftResult[10]/2);
       }
       break;
   }
@@ -3234,7 +3618,7 @@ void AudioReactive::fillAudioPalettes() {
     tcp[2] = 0;
     tcp[3] = 0;
     
-    CRGB rgb = getCRGBForBand(1, pal);
+    CRGBA rgb = getCRGBForBand(1, pal);
     tcp[4] = 1;  // anchor of first color
     tcp[5] = rgb.r;
     tcp[6] = rgb.g;
@@ -3257,13 +3641,16 @@ void AudioReactive::fillAudioPalettes() {
 }
 
 #ifndef WLED_DISABLE_ESPNOW
-bool AudioReactive::onEspNowMessage(uint8_t *senderESPNow, uint8_t *data, uint8_t len) {
+bool AudioReactive::onEspNowMessage(uint8_t *address, uint8_t *data, uint8_t len) {
   // only handle messages from linked master/remote (ignore PING messages) or any master/remote if 0xFFFFFFFFFFFF
-  uint8_t anyMaster[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-  if (memcmp(senderESPNow, masterESPNow, 6) != 0 && memcmp(masterESPNow, anyMaster, 6) != 0) {
-    //DEBUGSR_PRINTF("ESP-NOW unpaired remote sender (expected " MACSTR ").\n", MAC2STR(masterESPNow));
-    return false;
+  bool knownRemote = false;
+  for (const auto& mac : masterRemotes) {
+    if (memcmp(address, mac.data(), 6) == 0 || memcmp(mac.data(), ESPNOW_BROADCAST_ADDRESS, 6) == 0) {
+      knownRemote = true;
+      break;
+    }
   }
+  if (!knownRemote) return false;
 
   EspNowPartialPacket *buffer = reinterpret_cast<EspNowPartialPacket *>(data);
   if (len < 6 || !(audioSyncEnabled & 0x02) || !useESPNowSync || memcmp(buffer->magic, "WLED", 4) != 0 || WLED_CONNECTED) {
@@ -3298,68 +3685,6 @@ bool AudioReactive::onEspNowMessage(uint8_t *senderESPNow, uint8_t *data, uint8_
   return haveFreshData;
 }
 #endif
-
-///////////////////////////////////////////////////////////////////////////////
-// Begin simulateSound (to enable audio enhanced effects to display something)
-///////////////////////////////////////////////////////////////////////////////
-typedef enum UM_SoundSimulations {
-  UMS_BeatSin = 0,
-  UMS_WeWillRockYou,
-  UMS_10_13,
-  UMS_14_3
-} um_soundSimulations_t;
-
-static void simulateSound(uint8_t simulationId)
-{
-  //if (static_cast<AudioReactive*>(UsermodManager::lookup(USERMOD_ID_AUDIOREACTIVE))->isEnabled()) return;
-  if (AudioReactive::getInstance()->isEnabled()) return;
-
-  uint32_t ms = millis();
-  switch (simulationId) {
-    default:
-    case UMS_BeatSin:
-      for (int i = 0; i<16; i++) fftResult[i] = beatsin8_t(120 / (i+1), 0, 255);
-      volumeSmth = fftResult[8];
-      break;
-    case UMS_WeWillRockYou:
-      if (ms%2000 < 200) {
-        volumeSmth = hw_random8();
-        for (int i = 0; i<5; i++) fftResult[i] = hw_random8();
-      } else if (ms%2000 < 400) {
-        volumeSmth = 0;
-        for (int i = 0; i<16; i++) fftResult[i] = 0;
-      } else if (ms%2000 < 600) {
-        volumeSmth = hw_random8();
-        for (int i = 5; i<11; i++) fftResult[i] = hw_random8();
-      } else if (ms%2000 < 800) {
-        volumeSmth = 0;
-        for (int i = 0; i<16; i++) fftResult[i] = 0;
-      } else if (ms%2000 < 1000) {
-        volumeSmth = hw_random8();
-        for (int i = 11; i<16; i++) fftResult[i] = hw_random8();
-      } else {
-        volumeSmth = 0;
-        for (int i = 0; i<16; i++) fftResult[i] = 0;
-      }
-      break;
-    case UMS_10_13:
-      for (int i = 0; i<16; i++) fftResult[i] = inoise8(beatsin8_t(90 / (i+1), 0, 200)*15 + (ms>>10), ms>>3);
-      volumeSmth = fftResult[8];
-      break;
-    case UMS_14_3:
-      for (int i = 0; i<16; i++) fftResult[i] = inoise8(beatsin8_t(120 / (i+1), 10, 30)*10 + (ms>>14), ms>>3);
-      volumeSmth = fftResult[8];
-      break;
-  }
-
-  samplePeak    = hw_random8() > 250;
-  FFT_MajorPeak = 21.0f + (volumeSmth*volumeSmth) / 8.0f; // walk through full range of 21hz...8200hz
-  maxVol        = 31;  // this gets feedback from UI
-  binNum        = 8;   // this gets feedback from UI
-  volumeRaw     = volumeSmth;
-  my_magnitude  = 10000.0f / 8.0f; //no idea if 10000 is a good value for FFT_Magnitude ???
-  if (volumeSmth < 1 ) my_magnitude = 0.001f;             // noise gate closed - mute
-}
 
 AudioReactive* AudioReactive::instance = nullptr;
 

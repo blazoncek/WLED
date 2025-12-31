@@ -65,7 +65,7 @@ private:
     int position = 0;
 
     // We need to copy the string in order to keep it read only as strtok_r function requires mutable string
-    color_ = (char *)w_malloc(strlen(color) + 1);
+    color_ = (char *)p_malloc(strlen(color) + 1);
     if (NULL == color_) {
       return -1;
     }
@@ -78,7 +78,7 @@ private:
       rgb[position++] = (int)strtoul(token, NULL, 10);
       token = strtok_r(NULL, delim, &cxt);
     }
-    w_free(color_);
+    p_free(color_);
 
     return position;
   }
@@ -150,18 +150,34 @@ public:
     String topic = String(mqttClientID) + "/#";
 
     mqtt->subscribe(topic.c_str(), 0);
+
+    // Publish initial status
+    sendToBroker("report/status", "Smartnest usermod initialized");
+    delay(100);
     sendToBroker("report/online", (bri ? "true" : "false")); // Reports that the device is online
     delay(100);
     sendToBroker("report/firmware", versionString); // Reports the firmware version
     delay(100);
-    sendToBroker("report/ip", (char *)WiFi.localIP().toString().c_str()); // Reports the IP
-    delay(100);
-    sendToBroker("report/network", (char *)WiFi.SSID().c_str()); // Reports the network name
-    delay(100);
+    //sendToBroker("report/ip", (char *)WiFi.localIP().toString().c_str()); // Reports the IP
+    //delay(100);
+    //sendToBroker("report/network", (char *)WiFi.SSID().c_str()); // Reports the network name
+    //delay(100);
+    //String signal(WiFi.RSSI(), 10);
+    //sendToBroker("report/signal", signal.c_str()); // Reports the signal strength
+    //delay(100);
+  }
 
+  bool publishMqtt() {
+    // Report current brightness
+    char brightnessMsg[11];
+    sprintf(brightnessMsg, "%u", bri);
+    sendToBroker("report/brightness", brightnessMsg);
+
+    // Report current signal strength
     String signal(WiFi.RSSI(), 10);
-    sendToBroker("report/signal", signal.c_str()); // Reports the signal strength
-    delay(100);
+    sendToBroker("report/signal", signal.c_str());
+
+    return true;
   }
 
   /**
@@ -177,29 +193,12 @@ public:
    * setup() is called once at startup to initialize the usermod.
    */
   void setup() {
-      DEBUGUM_PRINTF("Smartnest usermod setup initializing...");
-      
-      // Publish initial status
-      sendToBroker("report/status", "Smartnest usermod initialized");
+    DEBUGUM_PRINTF("Smartnest usermod setup initializing...");
+    //Wifi is not yet active at this point
   }
 
   /**
    * loop() is called continuously to keep the usermod running.
    */
-  void loop() {
-    // Periodically report status to MQTT broker
-    unsigned long currentMillis = millis();
-    if (currentMillis - lastMqttReport >= mqttReportInterval) {
-      lastMqttReport = currentMillis;
-      
-      // Report current brightness
-      char brightnessMsg[11];
-      sprintf(brightnessMsg, "%u", bri);
-      sendToBroker("report/brightness", brightnessMsg);
-      
-      // Report current signal strength
-      String signal(WiFi.RSSI(), 10);
-      sendToBroker("report/signal", signal.c_str());
-    }
-  }
+  void loop() {}
 };

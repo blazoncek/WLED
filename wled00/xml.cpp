@@ -1,5 +1,4 @@
 #include "wled.h"
-#include "wled_ethernet.h"
 
 /*
  * Sending XML status files to client
@@ -35,6 +34,21 @@ static void extractPin(Print& settingsScript, const JsonObject &obj, const char 
   } else {
     if (obj[key].as<int>() > -1) { settingsScript.print(","); settingsScript.print(obj[key].as<int>()); }
   }
+}
+
+void fillWLEDVersion(char *buf, size_t len) {
+  if (!buf || len == 0) return;
+
+  snprintf_P(buf,len,PSTR("WLED %s (%d)<br>\\\"%s\\\"<br>(CPU: %s)"),
+    versionString,
+    build,
+    releaseString,
+  #if defined(ARDUINO_ARCH_ESP32)
+    ESP.getChipModel()
+  #else
+    "ESP8266"
+  #endif
+  );
 }
 
 // print used pins by scanning JsonObject (1 level deep)
@@ -172,6 +186,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
   if (subPage == SUBPAGE_WIFI)
   {
     size_t l;
+    char s[32];
     settingsScript.printf_P(PSTR("resetWiFi(%d);"), WLED_MAX_WIFI_COUNT);
     for (size_t n = 0; n < multiWiFi.size(); n++) {
       l = strlen(multiWiFi[n].clientPass);
@@ -194,7 +209,8 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormValue(settingsScript,PSTR("D2"),dnsAddress[2]);
     printSetFormValue(settingsScript,PSTR("D3"),dnsAddress[3]);
 
-    printSetFormValue(settingsScript,PSTR("CM"),cmDNS);
+    printSetFormValue(settingsScript,PSTR("CM"),hostName);
+    printSetFormCheckbox(settingsScript,PSTR("MD"),mDNSenabled);
     printSetFormIndex(settingsScript,PSTR("AB"),apBehavior);
     printSetFormValue(settingsScript,PSTR("AS"),apSSID);
     printSetFormCheckbox(settingsScript,PSTR("AH"),apHide);
@@ -215,10 +231,14 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormCheckbox(settingsScript,PSTR("WS"),noWifiSleep);
 
     #ifndef WLED_DISABLE_ESPNOW
-    char linked_remote[13];
-    fillMAC2Str(linked_remote, masterESPNow);
     printSetFormCheckbox(settingsScript,PSTR("RE"),enableESPNow);
-    printSetFormValue(settingsScript,PSTR("RMAC"),linked_remote);
+    settingsScript.printf_P(PSTR("rstR();"));
+    for (const auto &remote : masterRemotes) {
+      char mac[13];
+      fillMAC2Str(mac, remote.data());
+      settingsScript.printf_P(PSTR("aR(\"%s\");"), mac);
+    }
+    settingsScript.print(F("tE();")); // fill fields
     #else
     //hide remote settings if not compiled
     settingsScript.print(F("toggle('ESPNOW');"));  // hide ESP-NOW setting
@@ -233,39 +253,38 @@ void getSettingsJS(byte subPage, Print& settingsScript)
 
     if (Network.isConnected()) //is connected
     {
-      char s[32];
       IPAddress localIP = Network.localIP();
-      sprintf(s, "%d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
+      snprintf(s, sizeof(s), "%d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
 
       #if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
       if (Network.isEthernet()) strcat_P(s ,PSTR(" (Ethernet)"));
       #endif
-      printSetClassElementHTML(settingsScript,PSTR("sip"),0,s);
+      printSetIdHTML(settingsScript,PSTR("cip"),s);
     } else
     {
-      printSetClassElementHTML(settingsScript,PSTR("sip"),0,(char*)F("Not connected"));
+      printSetIdHTML(settingsScript,PSTR("cip"),(char*)F("Not connected"));
     }
 
-    if (WiFi.softAPIP()[0] != 0) //is active
+    if (apActive && WiFi.softAPIP()[0] != 0) //is active
     {
-      char s[16];
       IPAddress apIP = WiFi.softAPIP();
-      sprintf(s, "%d.%d.%d.%d", apIP[0], apIP[1], apIP[2], apIP[3]);
-      printSetClassElementHTML(settingsScript,PSTR("sip"),1,s);
+      snprintf(s, sizeof(s), "%d.%d.%d.%d", apIP[0], apIP[1], apIP[2], apIP[3]);
+      printSetIdHTML(settingsScript,PSTR("aip"),s);
     } else
     {
-      printSetClassElementHTML(settingsScript,PSTR("sip"),1,(char*)F("Not active"));
+      // WiFi.softAPmacAddress() for AP MAC address
+      printSetIdHTML(settingsScript,PSTR("aip"),(char*)F("Not active"));
     }
 
     #ifndef WLED_DISABLE_ESPNOW
     if (senderESPNow[0] | senderESPNow[1] | senderESPNow[2] | senderESPNow[3] | senderESPNow[4] | senderESPNow[5]) { //Have seen an ESP-NOW Remote
       char last_signal_src[13];
       fillMAC2Str(last_signal_src, senderESPNow);
-      printSetClassElementHTML(settingsScript,PSTR("rlid"),0,last_signal_src);
+      printSetIdHTML(settingsScript,PSTR("ld"),last_signal_src);
     } else if (!enableESPNow) {
-      printSetClassElementHTML(settingsScript,PSTR("rlid"),0,(char*)F("(Enable ESP-NOW to listen)"));
+      printSetIdHTML(settingsScript,PSTR("ld"),(char*)F("(Enable ESP-NOW to listen)"));
     } else {
-      printSetClassElementHTML(settingsScript,PSTR("rlid"),0,(char*)F("None"));
+      printSetIdHTML(settingsScript,PSTR("ld"),(char*)F("None"));
     }
     #endif
   }
@@ -277,7 +296,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     settingsScript.printf_P(PSTR("d.ledTypes=%s;"), BusManager::getLEDTypesJSONString().c_str());
 
     // set limits
-    settingsScript.printf_P(PSTR("bLimits(%d,%d,%d,%d,%d,%d,%d,%d);"),
+    settingsScript.printf_P(PSTR("bLimits(%d,%d,%d,%d,%d,%d,%d,%d,%d);"),
       WLED_MAX_BUSSES,
       WLED_MIN_VIRTUAL_BUSSES, // irrelevant, but kept to distinguish S2/S3 in UI
       MAX_LEDS_PER_BUS,
@@ -285,7 +304,8 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       MAX_LEDS,
       WLED_MAX_COLOR_ORDER_MAPPINGS,
       WLED_MAX_DIGITAL_CHANNELS,
-      WLED_MAX_ANALOG_CHANNELS
+      WLED_MAX_ANALOG_CHANNELS,
+      WLED_MAX_BUTTONS
     );
 
     printSetFormCheckbox(settingsScript,PSTR("MS"),strip.autoSegments);
@@ -294,7 +314,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormCheckbox(settingsScript,PSTR("CR"),strip.cctFromRgb);
     printSetFormValue(settingsScript,PSTR("CB"),Bus::getCCTBlend());
     printSetFormValue(settingsScript,PSTR("FR"),strip.getTargetFps());
-    printSetFormValue(settingsScript,PSTR("AW"),Bus::getGlobalAWMode());
+    //printSetFormValue(settingsScript,PSTR("AW"),Bus::getGlobalAWMode());
     printSetFormCheckbox(settingsScript,PSTR("PR"),BusManager::hasParallelOutput());  // get it from bus manager not global variable
 
     unsigned sumMa = 0;
@@ -302,7 +322,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       const Bus *bus = BusManager::getBus(s);
       if (!bus || !bus->isOk()) break; // should not happen but for safety
       int offset = s < 10 ? '0' : 'A' - 10;
-      char lp[4] = "L0"; lp[2] = offset+s; lp[3] = 0; //ascii 0-9 //strip data pin
+      char lp[4] = "G0"; lp[2] = offset+s; lp[3] = 0; //ascii 0-9 //strip data pin
       char lc[4] = "LC"; lc[2] = offset+s; lc[3] = 0; //strip length
       char co[4] = "CO"; co[2] = offset+s; co[3] = 0; //strip color order
       char lt[4] = "LT"; lt[2] = offset+s; lt[3] = 0; //strip type
@@ -315,6 +335,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       char sp[4] = "SP"; sp[2] = offset+s; sp[3] = 0; //bus clock speed
       char la[4] = "LA"; la[2] = offset+s; la[3] = 0; //LED current
       char ma[4] = "MA"; ma[2] = offset+s; ma[3] = 0; //max per-port PSU current
+      char hs[4] = "HS"; hs[2] = offset+s; hs[3] = 0; //hostname (for network types, custom text for others)
       settingsScript.print(F("addLEDs(1);"));
       uint8_t pins[5];
       int nPins = bus->getPins(pins);
@@ -354,11 +375,14 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       printSetFormValue(settingsScript,sp,speed);
       printSetFormValue(settingsScript,la,bus->getLEDCurrent());
       printSetFormValue(settingsScript,ma,bus->getMaxCurrent());
+      printSetFormValue(settingsScript,hs,bus->getCustomText().c_str());
       sumMa += bus->getMaxCurrent();
     }
-    printSetFormValue(settingsScript,PSTR("MA"),BusManager::ablMilliampsMax() ? BusManager::ablMilliampsMax() : sumMa);
-    printSetFormCheckbox(settingsScript,PSTR("ABL"),BusManager::ablMilliampsMax() || sumMa > 0);
-    printSetFormCheckbox(settingsScript,PSTR("PPL"),!BusManager::ablMilliampsMax() && sumMa > 0);
+    // strip.milliAmpsMax > 0 means per strip ABL is enabled
+    // sumMa > 0 means PP-ABL is enabled
+    printSetFormValue(settingsScript,PSTR("MA"),strip.milliAmpsMax ? strip.milliAmpsMax : sumMa);
+    printSetFormCheckbox(settingsScript,PSTR("ABL"),strip.milliAmpsMax || sumMa > 0);
+    printSetFormCheckbox(settingsScript,PSTR("PPL"),sumMa > 0);
 
     settingsScript.printf_P(PSTR("resetCOM(%d);"), WLED_MAX_COLOR_ORDER_MAPPINGS);
     const ColorOrderMap& com = BusManager::getColorOrderMap();
@@ -384,12 +408,11 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormValue(settingsScript,PSTR("TL"),nightlightDelayMinsDefault);
     printSetFormValue(settingsScript,PSTR("TW"),nightlightMode);
     printSetFormIndex(settingsScript,PSTR("PB"),paletteBlend);
-    printSetFormCheckbox(settingsScript,PSTR("RW"),useRainbowWheel);
     printSetFormValue(settingsScript,PSTR("RL"),rlyPin);
     printSetFormCheckbox(settingsScript,PSTR("RM"),rlyMde);
     printSetFormCheckbox(settingsScript,PSTR("RO"),rlyOpenDrain);
-    for (int i = 0; i < WLED_MAX_BUTTONS; i++) {
-      settingsScript.printf_P(PSTR("addBtn(%d,%d,%d);"), i, btnPin[i], buttonType[i]);
+    for (const auto &button : buttons) {
+      settingsScript.printf_P(PSTR("addBtn(%d,%d);"), button.pin, button.type);
     }
     printSetFormCheckbox(settingsScript,PSTR("IP"),disablePullUp);
     printSetFormValue(settingsScript,PSTR("TT"),touchThreshold);
@@ -503,7 +526,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       default: sprintf_P(hueErrorString,PSTR("Bridge Error %i"),hueError);
     }
 
-    printSetClassElementHTML(settingsScript,PSTR("sip"),0,hueErrorString);
+    printSetIdHTML(settingsScript,PSTR("hue"),hueErrorString);
     #else
     settingsScript.print(F("toggle('Hue');"));    // hide Hue Sync settings
     #endif
@@ -526,10 +549,10 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     dtostrf(latitude,4,2,tm);
     printSetFormValue(settingsScript,PSTR("LT"),tm);
     getTimeString(tm);
-    printSetClassElementHTML(settingsScript,PSTR("times"),0,tm);
+    printSetIdHTML(settingsScript,PSTR("loct"),tm);
     if ((int)(longitude*10.0f) || (int)(latitude*10.0f)) {
       sprintf_P(tm, PSTR("Sunrise: %02d:%02d Sunset: %02d:%02d"), hour(sunrise), minute(sunrise), hour(sunset), minute(sunset));
-      printSetClassElementHTML(settingsScript,PSTR("times"),1,tm);
+      printSetIdHTML(settingsScript,PSTR("sun"),tm);
     }
     printSetFormCheckbox(settingsScript,PSTR("OL"),overlayCurrent);
     printSetFormValue(settingsScript,PSTR("O1"),overlayMin);
@@ -551,13 +574,14 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormValue(settingsScript,PSTR("A1"),macroAlexaOff);
     printSetFormValue(settingsScript,PSTR("MC"),macroCountdown);
     printSetFormValue(settingsScript,PSTR("MN"),macroNl);
-    for (unsigned i=0; i<WLED_MAX_BUTTONS; i++) {
-      settingsScript.printf_P(PSTR("addRow(%d,%d,%d,%d);"), i, macroButton[i], macroLongPress[i], macroDoublePress[i]);
+    int i = 0;
+    for (const auto &button : buttons) {
+      settingsScript.printf_P(PSTR("addRow(%d,%d,%d,%d);"), i++, button.macroButton, button.macroLongPress, button.macroDoublePress);
     }
 
     char k[4];
     k[2] = 0; //Time macros
-    for (int i = 0; i<10; i++)
+    for (i = 0; i<10; i++)
     {
       k[1] = 48+i; //ascii 0,1,2,3
       if (i<8) { k[0] = 'H'; printSetFormValue(settingsScript,k,timerHours[i]); }
@@ -583,12 +607,16 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormCheckbox(settingsScript,PSTR("NO"),otaLock);
     printSetFormCheckbox(settingsScript,PSTR("OW"),wifiLock);
     printSetFormCheckbox(settingsScript,PSTR("AO"),aOtaEnabled);
+    printSetFormCheckbox(settingsScript,PSTR("SU"),otaSameSubnet);
     char tmp_buf[128];
-    snprintf_P(tmp_buf,sizeof(tmp_buf),PSTR("WLED %s (build %d)"),versionString,build);
-    printSetClassElementHTML(settingsScript,PSTR("sip"),0,tmp_buf);
+    fillWLEDVersion(tmp_buf,sizeof(tmp_buf));
+    printSetIdHTML(settingsScript,PSTR("ver"),tmp_buf);
     settingsScript.printf_P(PSTR("sd=\"%s\";"), serverDescription);
-    #ifdef WLED_DISABLE_OTA
     //hide settings if not compiled
+    #ifdef WLED_DISABLE_OTA
+    settingsScript.print(F("toggle('OTA');"));  // hide update section
+    #endif
+    #ifndef WLED_ENABLE_AOTA
     settingsScript.print(F("toggle('aOTA');"));  // hide ArduinoOTA checkbox
     #endif
   }
@@ -643,17 +671,11 @@ void getSettingsJS(byte subPage, Print& settingsScript)
   if (subPage == SUBPAGE_UPDATE) // update
   {
     char tmp_buf[128];
-    snprintf_P(tmp_buf,sizeof(tmp_buf),PSTR("WLED %s<br>%s<br>(%s build %d)"),
-      versionString,
-      releaseString,
-    #if defined(ARDUINO_ARCH_ESP32)
-      ESP.getChipModel(),
-    #else
-      "esp8266",
+    fillWLEDVersion(tmp_buf,sizeof(tmp_buf));
+    printSetIdHTML(settingsScript,PSTR("ver"),tmp_buf);
+    #ifndef ARDUINO_ARCH_ESP32
+    settingsScript.print(F("toggle('rev');"));  // hide revert button on ESP8266
     #endif
-      build);
-
-    printSetClassElementHTML(settingsScript,PSTR("sip"),0,tmp_buf);
   }
 
   if (subPage == SUBPAGE_2D) // 2D matrices

@@ -36,7 +36,7 @@ void notify(byte callMode, bool followUp)
   udpOut[0] = 0; //0: wled notifier protocol 1: WARLS protocol
   udpOut[1] = callMode;
   udpOut[2] = bri;
-  uint32_t col = mainseg.colors[0];
+  uint32_t col = mainseg.colors[0].color32;
   udpOut[3] = R(col);
   udpOut[4] = G(col);
   udpOut[5] = B(col);
@@ -52,7 +52,7 @@ void notify(byte callMode, bool followUp)
   //9: supports sync groups, 37 byte packet 10: supports CCT, 39 byte packet 11: per segment options, variable packet length (40+WS2812FX::getMaxSegments()*3)
   //12: enhanced effect sliders, 2D & mapping options
   udpOut[11] = 12;
-  col = mainseg.colors[1];
+  col = mainseg.colors[1].color32;
   udpOut[12] = R(col);
   udpOut[13] = G(col);
   udpOut[14] = B(col);
@@ -61,7 +61,7 @@ void notify(byte callMode, bool followUp)
   udpOut[17] = (transitionDelay >> 0) & 0xFF;
   udpOut[18] = (transitionDelay >> 8) & 0xFF;
   udpOut[19] = mainseg.palette;
-  col = mainseg.colors[2];
+  col = mainseg.colors[2].color32;
   udpOut[20] = R(col);
   udpOut[21] = G(col);
   udpOut[22] = B(col);
@@ -116,18 +116,18 @@ void notify(byte callMode, bool followUp)
     udpOut[12+ofs] = selseg.speed;
     udpOut[13+ofs] = selseg.intensity;
     udpOut[14+ofs] = selseg.palette;
-    udpOut[15+ofs] = R(selseg.colors[0]);
-    udpOut[16+ofs] = G(selseg.colors[0]);
-    udpOut[17+ofs] = B(selseg.colors[0]);
-    udpOut[18+ofs] = W(selseg.colors[0]);
-    udpOut[19+ofs] = R(selseg.colors[1]);
-    udpOut[20+ofs] = G(selseg.colors[1]);
-    udpOut[21+ofs] = B(selseg.colors[1]);
-    udpOut[22+ofs] = W(selseg.colors[1]);
-    udpOut[23+ofs] = R(selseg.colors[2]);
-    udpOut[24+ofs] = G(selseg.colors[2]);
-    udpOut[25+ofs] = B(selseg.colors[2]);
-    udpOut[26+ofs] = W(selseg.colors[2]);
+    udpOut[15+ofs] = selseg.colors[0].r;
+    udpOut[16+ofs] = selseg.colors[0].g;
+    udpOut[17+ofs] = selseg.colors[0].b;
+    udpOut[18+ofs] = selseg.colors[0].a;
+    udpOut[19+ofs] = selseg.colors[1].r;
+    udpOut[20+ofs] = selseg.colors[1].g;
+    udpOut[21+ofs] = selseg.colors[1].b;
+    udpOut[22+ofs] = selseg.colors[1].a;
+    udpOut[23+ofs] = selseg.colors[2].r;
+    udpOut[24+ofs] = selseg.colors[2].g;
+    udpOut[25+ofs] = selseg.colors[2].b;
+    udpOut[26+ofs] = selseg.colors[2].a;
     udpOut[27+ofs] = selseg.cct;
     udpOut[28+ofs] = (selseg.options>>8) & 0xFF; //mirror_y, transpose, 2D mapping & sound
     udpOut[29+ofs] = selseg.custom1;
@@ -149,7 +149,7 @@ void notify(byte callMode, bool followUp)
     // send global data
     DEBUG_PRINTLN(F("ESP-NOW sending first packet."));
     constexpr size_t headerSize = sizeof(EspNowPartialPacket) - sizeof(EspNowPartialPacket::data);
-    constexpr size_t bufferSize = sizeof(buffer.data)/sizeof(uint8_t);
+    constexpr size_t bufferSize = sizeof(buffer.data);
     size_t packetSize = 41; // size of static UDP data (excluding segments)
     size_t s0 = 0;          // number of already prepared/sent segments
     memcpy(buffer.data, udpOut, packetSize);
@@ -330,8 +330,8 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
           selseg.custom2 = udpIn[30+ofs];
           selseg.custom3 = udpIn[31+ofs] & 0x1F;
           selseg.check1  = (udpIn[31+ofs]>>5) & 0x1;
-          selseg.check1  = (udpIn[31+ofs]>>6) & 0x1;
-          selseg.check1  = (udpIn[31+ofs]>>7) & 0x1;
+          selseg.check2  = (udpIn[31+ofs]>>6) & 0x1;
+          selseg.check3  = (udpIn[31+ofs]>>7) & 0x1;
         }
       }
       if (receiveSegmentBounds) {
@@ -420,7 +420,7 @@ void realtimeLock(uint32_t timeoutMs, byte md)
     }
     // if strip is off (bri==0) and not already in RTM
     if (briT == 0) {
-      strip.setBrightness(scaledBri(briLast), true);
+      strip.setBrightness(briLast, true);
     }
   }
 
@@ -430,14 +430,14 @@ void realtimeLock(uint32_t timeoutMs, byte md)
   realtimeMode = md;
 
   if (realtimeOverride) return;
-  if (arlsForceMaxBri) strip.setBrightness(scaledBri(255), true);
+  if (arlsForceMaxBri) strip.setBrightness(255, true);
   if (briT > 0 && md == REALTIME_MODE_GENERIC) strip.show();
 }
 
 void exitRealtime() {
   if (!realtimeMode) return;
   if (realtimeOverride == REALTIME_OVERRIDE_ONCE) realtimeOverride = REALTIME_OVERRIDE_NONE;
-  strip.setBrightness(scaledBri(bri), true);
+  strip.setBrightness(bri, true);
   realtimeTimeout = 0; // cancel realtime mode immediately
   realtimeMode = REALTIME_MODE_INACTIVE; // inform UI immediately
   realtimeIP[0] = 0;
@@ -923,12 +923,6 @@ uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const
 // if used with unicast messages (PING to master) status will contain success of delivery. this can be used to find master's channel
 void espNowSentCB(uint8_t* address, uint8_t status) {
   DEBUG_PRINTF_P(PSTR("Message sent to " MACSTR ", status: %d (wifi: %d)\n"), MAC2STR(address), status, WiFi.channel());
-//  if (!sendNotificationsRT && status == ESP_NOW_SEND_SUCCESS) {
-//    if (memcmp(address, masterESPNow, 6) == 0) {
-//      // we sent message to master successfully, use current channel
-//      scanESPNow = millis() + 30000; // disable scanning for a few seconds
-//    }
-//  }
 }
 
 // ESP-NOW message receive callback function
@@ -949,8 +943,15 @@ void espNowReceiveCB(uint8_t* address, uint8_t* data, uint8_t len, signed int rs
 
   // only handle messages from linked master/remote (ignore PING messages) or any master/remote if 0xFFFFFFFFFFFF
   //uint8_t anyMaster[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-  if (memcmp(senderESPNow, masterESPNow, 6) != 0 && memcmp(masterESPNow, ESPNOW_BROADCAST_ADDRESS, 6) != 0) {
-    DEBUG_PRINTF_P(PSTR("ESP-NOW unpaired remote sender (expected " MACSTR ").\n"), MAC2STR(masterESPNow));
+  bool knownRemote = false;
+  for (const auto& mac : masterRemotes) {
+    if (memcmp(senderESPNow, mac.data(), 6) == 0 || memcmp(mac.data(), ESPNOW_BROADCAST_ADDRESS, 6) == 0) {
+      knownRemote = true;
+      break;
+    }
+  }
+  if (!knownRemote) {
+    DEBUG_PRINTF_P(PSTR("ESP-NOW unpaired remote sender.\n"));
     return;
   }
 
@@ -999,7 +1000,7 @@ void espNowReceiveCB(uint8_t* address, uint8_t* data, uint8_t len, signed int rs
   if (buffer->packet == 0) {
     packetsReceived = 0; // it will increment later (this is to make sure we start counting packets correctly)
     if (udpIn == nullptr) {
-      udpIn = (uint8_t *)w_malloc(WLEDPACKETSIZE); // we cannot use stack as we are in callback
+      udpIn = (uint8_t *)p_malloc(WLEDPACKETSIZE); // we cannot use stack as we are in callback
       if (!udpIn) return; // memory alocation failed
       DEBUG_PRINTLN(F("ESP-NOW inited UDP buffer."));
     }
@@ -1021,7 +1022,7 @@ void espNowReceiveCB(uint8_t* address, uint8_t* data, uint8_t len, signed int rs
   } else {
     // any out of order packet or incorrectly sized packet or if we have no UDP buffer will abort
     DEBUG_PRINTF_P(PSTR("ESP-NOW incorrect packet: %d (%d) [%d]\n"), (int)buffer->packet, (int)len-3, (int)UDP_SEG_SIZE);
-    w_free(udpIn);
+    p_free(udpIn);
     udpIn = nullptr;
     packetsReceived = 0;
     segsReceived = 0;
@@ -1044,7 +1045,7 @@ void espNowReceiveCB(uint8_t* address, uint8_t* data, uint8_t len, signed int rs
     } else {
       DEBUG_PRINTLN(F("ESP-NOW ignoring complete message."));
     }
-    w_free(udpIn);
+    p_free(udpIn);
     udpIn = nullptr;
     packetsReceived = 0;
     segsReceived = 0;

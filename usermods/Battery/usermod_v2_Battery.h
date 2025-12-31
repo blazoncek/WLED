@@ -134,7 +134,7 @@ class UsermodBattery : public Usermod
       StaticJsonDocument<600> doc;
       char uid[128], json_str[1024], buf[128];
 
-      doc[F("name")] = name;
+      doc["name"] = name;
       doc[F("stat_t")] = topic;
       sprintf_P(uid, PSTR("%s_%s_%s"), escapedMac.c_str(), stringToLower(name).c_str(), type);
       doc[F("uniq_id")] = uid;
@@ -153,7 +153,7 @@ class UsermodBattery : public Usermod
         doc[F("entity_category")] = "diagnostic";
 
       JsonObject device = doc.createNestedObject(F("device")); // attach the sensor to the same device
-      device[F("name")] = serverDescription;
+      device["name"] = serverDescription;
       device[F("ids")]  = String(F("wled-sensor-")) + mqttClientID;
       device[F("mf")]   = F(WLED_BRAND);
       device[F("mdl")]  = F(WLED_PRODUCT_NAME);

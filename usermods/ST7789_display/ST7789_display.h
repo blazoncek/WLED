@@ -290,18 +290,18 @@ class St7789DisplayUsermod : public Usermod {
         tft.setTextColor(TFT_CYAN);
         tft.setCursor(0, 144);
         char lineBuffer[tftcharwidth+1];
-        extractModeName(knownMode, JSON_mode_names, lineBuffer, tftcharwidth);
+        extractModeName(knownMode, JSON_mode_names, lineBuffer, countof(lineBuffer));
         tft.print(lineBuffer);
 
         // palette name
         tft.setTextColor(TFT_YELLOW);
         tft.setCursor(0, 168);
-        extractModeName(knownPalette, JSON_palette_names, lineBuffer, tftcharwidth);
+        extractModeName(knownPalette, JSON_palette_names, lineBuffer, countof(lineBuffer));
         tft.print(lineBuffer);
 
         tft.setCursor(0, 192);
         tft.setTextColor(TFT_SILVER);
-        sprintf_P(buff, PSTR("FX  Spd:%3d Int:%3d"), effectSpeed, effectIntensity);
+        snprintf_P(buff, countof(buff), PSTR("FX  Spd:%3d Int:%3d"), effectSpeed, effectIntensity);
         tft.print(buff);
 
         // Fifth row with estimated mA usage

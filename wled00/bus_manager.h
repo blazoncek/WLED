@@ -123,7 +123,7 @@ class Bus {
     virtual void     setPixelColor(unsigned pix, uint32_t c)    = 0;
     virtual void     setBrightness(uint8_t b)                   { _bri = b; };
     virtual void     setColorOrder(uint8_t co)                  {}
-    virtual uint32_t getPixelColor(unsigned pix) const          { return 0; }
+    virtual uint8_t  getBrightness() const                      { return _bri; }
     virtual size_t   getPins(uint8_t* pinArray = nullptr) const { return 0; }
     virtual uint16_t getLength() const                          { return isOk() ? _len : 0; }
     virtual uint8_t  getColorOrder() const                      { return COL_ORDER_RGB; }
@@ -133,6 +133,7 @@ class Bus {
     virtual uint16_t getUsedCurrent() const                     { return 0; }
     virtual uint16_t getMaxCurrent() const                      { return 0; }
     virtual size_t   getBusSize() const                         { return sizeof(Bus); }
+    virtual const String getCustomText() const                  { return String(); }
 
     inline  bool     hasRGB() const                             { return _hasRgb; }
     inline  bool     hasWhite() const                           { return _hasWhite; }
@@ -189,9 +190,9 @@ class Bus {
     static inline void     setGlobalAWMode(uint8_t m) { if (m < 5) _gAWM = m; else _gAWM = AW_GLOBAL_DISABLED; }
     static inline uint8_t  getGlobalAWMode()          { return _gAWM; }
     static inline void     setCCT(int16_t cct)        { _cct = cct; }
-    static inline uint8_t  getCCTBlend()              { return _cctBlend; }
+    static inline uint8_t  getCCTBlend()              { return (_cctBlend * 100 + 64) / 127; }
     static inline void     setCCTBlend(uint8_t b) {
-      _cctBlend = (std::min((int)b,100) * 127) / 100;
+      _cctBlend = (std::min((int)b,100) * 127 + 50) / 100;
       //compile-time limiter for hardware that can't power both white channels at max
       #ifdef WLED_MAX_CCT_BLEND
         if (_cctBlend > WLED_MAX_CCT_BLEND) _cctBlend = WLED_MAX_CCT_BLEND;
@@ -215,7 +216,7 @@ class Bus {
     uint8_t  _autoWhiteMode;
     // global Auto White Calculation override
     static uint8_t _gAWM;
-    // _cct has the following menaings (see calculateCCT() & BusManager::setSegmentCCT()):
+    // _cct has the following meanings (see calculateCCT() & BusManager::setSegmentCCT()):
     //    -1 means to extract approximate CCT value in K from RGB (in calcualteCCT())
     //    [0,255] is the exact CCT value where 0 means warm and 255 cold
     //    [1900,10060] only for color correction expressed in K (colorBalanceFromKelvin())
@@ -237,11 +238,9 @@ class BusDigital : public Bus {
 
     void show() override;
     bool canShow() const override;
-    void setBrightness(uint8_t b) override;
     void setStatusPixel(uint32_t c) override;
     [[gnu::hot]] void setPixelColor(unsigned pix, uint32_t c) override;
     void setColorOrder(uint8_t colorOrder) override;
-    [[gnu::hot]] uint32_t getPixelColor(unsigned pix) const override;
     uint8_t  getColorOrder() const override  { return _colorOrder; }
     size_t   getPins(uint8_t* pinArray = nullptr) const override;
     unsigned skippedLeds() const override    { return _skip; }
@@ -250,12 +249,19 @@ class BusDigital : public Bus {
     uint16_t getUsedCurrent() const override { return _milliAmpsTotal; }
     uint16_t getMaxCurrent() const override  { return _milliAmpsMax; }
     size_t   getBusSize() const override;
+
+    inline void setCurrentLimit(uint16_t milliAmps) { _milliAmpsLimit = milliAmps; DEBUGBUS_PRINTF_P(PSTR("Bus: Set current limit to %d mA\n"), (int)milliAmps); }
+    inline void addPixelCurrent(int sum)            { _busPowerSum += sum; }
+    inline void clearPixelsCurrent()                { _busPowerSum = 0; }
+
     void begin() override;
     void cleanup();
 
     static std::vector<LEDType> getLEDTypes();
 
   private:
+    void    *_busPtr;
+    uint32_t _busPowerSum;
     uint8_t  _skip;
     uint8_t  _colorOrder;
     uint8_t  _pins[2];
@@ -263,8 +269,7 @@ class BusDigital : public Bus {
     uint16_t _frequencykHz;
     uint8_t  _milliAmpsPerLed;
     uint16_t _milliAmpsMax;
-    //uint8_t *_data;
-    void    *_busPtr;
+    uint16_t _milliAmpsLimit;
 
     static uint16_t _milliAmpsTotal; // is overwitten/recalculated on each show()
 
@@ -273,13 +278,13 @@ class BusDigital : public Bus {
         uint8_t* chan = (uint8_t*) &c;
         for (uint_fast8_t i=0; i<4; i++) {
           uint_fast16_t val = chan[i];
-          chan[i] = ((val << 8) + restoreBri) / (restoreBri + 1); //adding _bri slightly improves recovery / stops degradation on re-scale
+          chan[i] = ((val << 8) + restoreBri) / (restoreBri + 1); // adding restoreBri slightly improves recovery / stops degradation on re-scale
         }
       }
       return c;
     }
 
-    uint8_t  estimateCurrentAndLimitBri() const;
+    void estimateCurrentAndLimitBri();
 };
 
 
@@ -289,7 +294,6 @@ class BusPwm : public Bus {
     ~BusPwm() { cleanup(); }
 
     void setPixelColor(unsigned pix, uint32_t c) override;
-    uint32_t getPixelColor(unsigned pix) const override; //does no index check
     size_t   getPins(uint8_t* pinArray = nullptr) const override;
     uint16_t getFrequency() const override { return _frequency; }
     size_t   getBusSize() const override   { return sizeof(BusPwm); }
@@ -317,7 +321,6 @@ class BusOnOff : public Bus {
     ~BusOnOff() { cleanup(); }
 
     void setPixelColor(unsigned pix, uint32_t c) override;
-    uint32_t getPixelColor(unsigned pix) const override;
     size_t   getPins(uint8_t* pinArray) const override;
     size_t   getBusSize() const override { return sizeof(BusOnOff); }
     void show() override;
@@ -338,11 +341,14 @@ class BusNetwork : public Bus {
 
     bool canShow() const override  { return !_broadcastLock; } // this should be a return value from UDP routine if it is still sending data out
     [[gnu::hot]] void setPixelColor(unsigned pix, uint32_t c) override;
-    [[gnu::hot]] uint32_t getPixelColor(unsigned pix) const override;
     size_t getPins(uint8_t* pinArray = nullptr) const override;
     size_t getBusSize() const override  { return sizeof(BusNetwork) + (isOk() ? _len * _UDPchannels : 0); }
     void   show() override;
     void   cleanup();
+    #ifdef ARDUINO_ARCH_ESP32
+    void   resolveHostname();
+    const String getCustomText() const override { return _hostname; }
+    #endif
 
     static std::vector<LEDType> getLEDTypes();
 
@@ -352,6 +358,9 @@ class BusNetwork : public Bus {
     uint8_t   _UDPchannels;
     bool      _broadcastLock;
     uint8_t   *_data;
+    #ifdef ARDUINO_ARCH_ESP32
+    String    _hostname;
+    #endif
 };
 
 
@@ -367,11 +376,11 @@ struct BusConfig {
   uint8_t autoWhite;
   uint8_t pins[5] = {255, 255, 255, 255, 255};
   uint16_t frequency;
-//  bool doubleBuffer;
   uint8_t milliAmpsPerLed;
   uint16_t milliAmpsMax;
+  String text;
 
-  BusConfig(uint8_t busType, uint8_t* ppins, uint16_t pstart, uint16_t len = 1, uint8_t pcolorOrder = COL_ORDER_GRB, bool rev = false, uint8_t skip = 0, byte aw=RGBW_MODE_MANUAL_ONLY, uint16_t clock_kHz=0U, /*bool dblBfr=false,*/ uint8_t maPerLed=LED_MILLIAMPS_DEFAULT, uint16_t maMax=ABL_MILLIAMPS_DEFAULT)
+  BusConfig(uint8_t busType, uint8_t* ppins, uint16_t pstart = 0, uint16_t len = DEFAULT_LED_COUNT, uint8_t pcolorOrder = COL_ORDER_GRB, bool rev = false, uint8_t skip = 0, byte aw=RGBW_MODE_MANUAL_ONLY, uint16_t clock_kHz=0U, uint8_t maPerLed=LED_MILLIAMPS_DEFAULT, uint16_t maMax=ABL_MILLIAMPS_DEFAULT, String sometext = "")
   : count(std::max(len,(uint16_t)1))
   , start(pstart)
   , colorOrder(pcolorOrder)
@@ -379,12 +388,13 @@ struct BusConfig {
   , skipAmount(skip)
   , autoWhite(aw)
   , frequency(clock_kHz)
-//  , doubleBuffer(dblBfr)
   , milliAmpsPerLed(maPerLed)
   , milliAmpsMax(maMax)
+  , text(sometext)
   {
     refreshReq = (bool) GET_BIT(busType,7);
     type = busType & 0x7F;  // bit 7 may be/is hacked to include refresh info (1=refresh in off state, 0=no refresh)
+    if (Bus::isDigital(type)) count = std::min(count, (uint16_t)MAX_LEDS_PER_BUS);
     size_t nPins = Bus::getNumberOfPins(type);
     for (size_t i = 0; i < nPins; i++) pins[i] = ppins[i];
     DEBUGBUS_PRINTF_P(PSTR("Bus: Config (%d-%d, type:%d, CO:%d, rev:%d, skip:%d, AW:%d kHz:%d, mA:%d/%d)\n"),
@@ -397,18 +407,6 @@ struct BusConfig {
       (int)frequency,
       (int)milliAmpsPerLed, (int)milliAmpsMax
     );
-  }
-
-  //validates start and length and extends total if needed
-  bool adjustBounds(uint16_t& total) {
-    if (!count) count = 1;
-    if (count > MAX_LEDS_PER_BUS) count = MAX_LEDS_PER_BUS;
-    if (start >= MAX_LEDS) return false;
-    //limit length of strip if it would exceed total permissible LEDs
-    if (start + count > MAX_LEDS) count = MAX_LEDS - start;
-    //extend total count accordingly
-    if (start + count > total) total = start + count;
-    return true;
   }
 
   size_t memUsage(unsigned nr = 0) const;
@@ -428,9 +426,7 @@ struct BusConfig {
 namespace BusManager {
 
   extern std::vector<std::unique_ptr<Bus>> busses;
-  //extern std::vector<Bus*> busses;
   extern uint16_t _gMilliAmpsUsed;
-  extern uint16_t _gMilliAmpsMax;
 
   #ifdef ESP32_DATA_IDLE_HIGH
   void    esp32RMTInvertIdle() ;
@@ -442,10 +438,8 @@ namespace BusManager {
   }
 
   size_t          memUsage();
-  inline uint16_t currentMilliamps()            { return _gMilliAmpsUsed + MA_FOR_ESP; }
-  //inline uint16_t ablMilliampsMax()             { unsigned sum = 0; for (auto &bus : busses) sum += bus->getMaxCurrent(); return sum; }
-  inline uint16_t ablMilliampsMax()             { return _gMilliAmpsMax; }  // used for compatibility reasons (and enabling virtual global ABL)
-  inline void     setMilliampsMax(uint16_t max) { _gMilliAmpsMax = max;}
+  inline uint16_t currentMilliamps()     { return _gMilliAmpsUsed; }
+  void            initializeABL(unsigned gMilliAmpsMax);  // setup per output ABL parameters, call once after buses are initialized
 
   void useParallelOutput(); // workaround for inaccessible PolyBus
   bool hasParallelOutput(); // workaround for inaccessible PolyBus
@@ -458,7 +452,6 @@ namespace BusManager {
   void off();
 
   [[gnu::hot]] void     setPixelColor(unsigned pix, uint32_t c);
-  [[gnu::hot]] uint32_t getPixelColor(unsigned pix);
   void        show();
   bool        canAllShow();
   inline void setStatusPixel(uint32_t c) { for (auto &bus : busses) bus->setStatusPixel(c);}

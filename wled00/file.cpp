@@ -1,5 +1,15 @@
 #include "wled.h"
 
+#ifdef WLED_DEBUG_FS
+  #define DEBUGFS_PRINT(x) DEBUGOUT.print(x)
+  #define DEBUGFS_PRINTLN(x) DEBUGOUT.println(x)
+  #define DEBUGFS_PRINTF(x...) DEBUGOUT.printf(x)
+#else
+  #define DEBUGFS_PRINT(x)
+  #define DEBUGFS_PRINTLN(x)
+  #define DEBUGFS_PRINTF(x...)
+#endif
+
 /*
  * Utility for SPIFFS filesystem
  */
@@ -377,7 +387,7 @@ void updateFSInfo() {
 }
 
 
-#ifdef ARDUINO_ARCH_ESP32
+#ifdef BOARD_HAS_PSRAM
 // caching presets in PSRAM may prevent occasional flashes seen when HomeAssitant polls WLED
 // original idea by @akaricchi (https://github.com/Akaricchi)
 // returns a pointer to the PSRAM buffer, updates size parameter
@@ -392,7 +402,7 @@ static const uint8_t *getPresetCache(size_t &size) {
 
   if ((presetsModifiedTime != presetsCachedTime) || (presetsCachedValidate != cacheInvalidate)) {
     if (presetsCached) {
-      w_free(presetsCached);
+      p_free(presetsCached);
       presetsCached = nullptr;
     }
   }
@@ -403,7 +413,7 @@ static const uint8_t *getPresetCache(size_t &size) {
       presetsCachedTime = presetsModifiedTime;
       presetsCachedValidate = cacheInvalidate;
       presetsCachedSize = 0;
-      presetsCached = (uint8_t*)w_malloc(file.size() + 1);
+      presetsCached = (uint8_t*)p_malloc(file.size() + 1);
       if (presetsCached) {
         presetsCachedSize = file.size();
         file.read(presetsCached, presetsCachedSize);
@@ -422,8 +432,8 @@ bool handleFileRead(AsyncWebServerRequest* request, String path){
   DEBUGFS_PRINT(F("WS FileRead: ")); DEBUGFS_PRINTLN(path);
   if(path.endsWith("/")) path += "index.htm";
   if(path.indexOf(F("sec")) > -1) return false;
-  #ifdef ARDUINO_ARCH_ESP32
-  if (psramSafe && psramFound() && path.endsWith(FPSTR(getPresetsFileName()))) {
+  #ifdef BOARD_HAS_PSRAM
+  if (psramFound() && path.endsWith(FPSTR(getPresetsFileName()))) {
     size_t psize;
     const uint8_t *presets = getPresetCache(psize);
     if (presets) {
@@ -438,4 +448,19 @@ bool handleFileRead(AsyncWebServerRequest* request, String path){
     return true;
   }
   return false;
+}
+
+bool initFS() {
+  bool fsinit = false;
+  DEBUGFS_PRINTLN(F("Mount FS"));
+  #ifdef ARDUINO_ARCH_ESP32
+  fsinit = WLED_FS.begin(true);
+  #else
+  fsinit = WLED_FS.begin();
+  #endif
+  if (!fsinit) {
+    DEBUGFS_PRINTLN(F("FS failed!"));
+    errorFlag = ERR_FS_BEGIN;
+  }
+  return fsinit;
 }

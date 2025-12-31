@@ -5,7 +5,13 @@
  * Readability defines and their associated numerical values + compile-time constants
  */
 
-#define GRADIENT_PALETTE_COUNT 58
+constexpr size_t FASTLED_PALETTE_COUNT = 7;   // 6-12 = countof(fastledPalettes);
+constexpr size_t GRADIENT_PALETTE_COUNT = 59; // 13-72 = countof(gGradientPalettes);
+constexpr size_t DYNAMIC_PALETTE_COUNT = 6;   // 0-5 dynamic palettes (0=default(virtual),1=random,2=primary,3=primary+secondary,4=primary+secondary+tertiary,5=primary+secondary(+tertiary if not black)
+constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_COUNT + GRADIENT_PALETTE_COUNT; // total number of fixed palettes
+#ifndef WLED_MAX_CUSTOM_PALETTES
+  #define WLED_MAX_CUSTOM_PALETTES (255-FIXED_PALETTE_COUNT) // number of custom palettes
+#endif
 
 // You can define custom product info from build flags.
 // This is useful to allow API consumer to identify what type of WLED version
@@ -31,6 +37,49 @@
 #define DEFAULT_OTA_PASS    "wledota"
 #define DEFAULT_MDNS_NAME   "x"
 
+#ifndef WLED_VERSION
+  #define WLED_VERSION dev
+#endif
+#ifndef WLED_RELEASE_NAME
+  #define WLED_RELEASE_NAME "dev_release"
+#endif
+
+#ifndef CLIENT_SSID
+  #define CLIENT_SSID DEFAULT_CLIENT_SSID
+#endif
+
+#ifndef CLIENT_PASS
+  #define CLIENT_PASS ""
+#endif
+
+#ifndef MDNS_NAME
+  #define MDNS_NAME DEFAULT_MDNS_NAME
+#endif
+
+#if defined(WLED_AP_PASS) && !defined(WLED_AP_SSID)
+  #error WLED_AP_PASS is defined but WLED_AP_SSID is still the default. \
+         Please change WLED_AP_SSID to something unique.
+#endif
+
+#ifndef WLED_AP_SSID
+  #define WLED_AP_SSID DEFAULT_AP_SSID
+#endif
+
+#ifndef WLED_AP_PASS
+  #define WLED_AP_PASS DEFAULT_AP_PASS
+#endif
+
+#ifndef WLED_PIN
+  #define WLED_PIN ""
+#endif
+
+#ifndef BTNPIN
+  #define BTNPIN 0
+#endif
+#ifndef BTNTYPE
+  #define BTNTYPE BTN_TYPE_PUSH
+#endif
+
 //increase if you need more
 #ifndef WLED_MAX_WIFI_COUNT
   #define WLED_MAX_WIFI_COUNT 3
@@ -44,11 +93,15 @@
   #endif
 #endif
 
+// NOTE: These values are also used to determine ESP type in led_settings.htm 
 #ifdef ESP8266
   #define WLED_MAX_DIGITAL_CHANNELS 3
   #define WLED_MAX_ANALOG_CHANNELS 5
   #define WLED_MIN_VIRTUAL_BUSSES 3         // no longer used for bus creation but used to distinguish S2/S3 in UI
 #else
+  #if !defined(LEDC_CHANNEL_MAX) || !defined(LEDC_SPEED_MODE_MAX)
+    #include "driver/ledc.h"
+  #endif
   #define WLED_MAX_ANALOG_CHANNELS (LEDC_CHANNEL_MAX*LEDC_SPEED_MODE_MAX)
   #if defined(CONFIG_IDF_TARGET_ESP32C3)    // 2 RMT, 6 LEDC, only has 1 I2S but NPB does not support it ATM
     #define WLED_MAX_DIGITAL_CHANNELS 2
@@ -88,11 +141,7 @@
 #endif
 
 #ifndef WLED_MAX_BUTTONS
-  #ifdef ESP8266
-    #define WLED_MAX_BUTTONS 2
-  #else
-    #define WLED_MAX_BUTTONS 4
-  #endif
+  #define WLED_MAX_BUTTONS 32
 #else
   #if WLED_MAX_BUTTONS < 2
     #undef WLED_MAX_BUTTONS
@@ -289,6 +338,7 @@
 #define TYPE_WS2805              32            //RGB + WW + CW
 #define TYPE_TM1914              33            //RGB
 #define TYPE_SM16825             34            //RGB + WW + CW
+#define TYPE_WS281X_DUAL         35            //dual WS28XX chip setup (RGB + W00)
 #define TYPE_DIGITAL_MAX         39            // last usable digital type
 //"Analog" types (40-47)
 #define TYPE_ONOFF               40            //binary output (relays etc.; NOT PWM)
@@ -542,8 +592,21 @@
   #endif
 #endif
 
-//#define MIN_HEAP_SIZE (8k for AsyncWebServer)
-#define MIN_HEAP_SIZE 8192
+// minimum heap size required to process web requests: try to keep free heap above this value
+#ifdef ESP8266
+  #define MIN_HEAP_SIZE (8*1024)
+#else
+  #define MIN_HEAP_SIZE (12*1024)
+#endif
+// threshold for PSRAM use: if heap is running low, requests above PSRAM_THRESHOLD will be allocated in PSRAM
+// if heap is plenty, requests below PSRAM_THRESHOLD will be allocated in DRAM for speed
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+  #define PSRAM_THRESHOLD 5120
+#elif defined(CONFIG_IDF_TARGET_ESP32)
+  #define PSRAM_THRESHOLD 4096
+#else
+  #define PSRAM_THRESHOLD 1024 // S2 does not have a lot of RAM. C3 and ESP8266 do not support PSRAM: the value is not used
+#endif
 
 // Maximum size of node map (list of other WLED instances)
 #ifdef ESP8266
@@ -555,13 +618,21 @@
 // Defaults pins, type and counts to configure LED output
 #if defined(ESP8266) || defined(CONFIG_IDF_TARGET_ESP32C3)
   #ifdef WLED_ENABLE_DMX
-    #define DEFAULT_LED_PIN 1
+    #define DEFAULT_LED_PIN 1   // may be used on some Ethernet boards, a better and still safe GPIO might be 3; but this is ESP8266 or C3 configuration
     #warning "Compiling with DMX. The default LED pin has been changed to pin 1."
   #else
-    #define DEFAULT_LED_PIN 2    // GPIO2 (D4) on Wemos D1 mini compatible boards, safe to use on any board
+    #define DEFAULT_LED_PIN 2   // GPIO2 (D4) on Wemos D1 mini compatible boards, safe to use on any board
   #endif
 #else
-  #define DEFAULT_LED_PIN 16   // aligns with GPIO2 (D4) on Wemos D1 mini32 compatible boards (if it is unusable it will be reassigned in WS2812FX::finalizeInit())
+  #ifdef WLED_USE_ETHERNET
+    #ifdef WLED_ENABLE_DMX
+      #define DEFAULT_LED_PIN 3 // safe to use on any board
+    #else
+      #define DEFAULT_LED_PIN 2 // safe to use on any board
+    #endif
+  #else
+    #define DEFAULT_LED_PIN 16  // aligns with GPIO2 (D4) on Wemos D1 mini32 compatible boards (if it is unusable it will be reassigned in WS2812FX::finalizeInit())
+  #endif
 #endif
 #define DEFAULT_LED_TYPE TYPE_WS2812_RGB
 #define DEFAULT_LED_COUNT 30

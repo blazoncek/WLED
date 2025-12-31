@@ -107,35 +107,37 @@ size_t printSetFormValue(Print& settingsScript, const char* key, const char* val
   return settingsScript.printf_P(PSTR("d.Sf.%s.value=\"%s\";"),key,val);
 }
 
-size_t printSetClassElementHTML(Print& settingsScript, const char* key, const int index, const char* val) {
-  return settingsScript.printf_P(PSTR("d.getElementsByClassName(\"%s\")[%d].innerHTML=\"%s\";"), key, index, val);
+size_t printSetIdHTML(Print& settingsScript, const char* key, const char* val) {
+  return settingsScript.printf_P(PSTR("gId(\"%s\").innerHTML=\"%s\";"), key, val);
 }
 
-
-
-void prepareHostname(char* hostname)
+/*
+// prepare a unique hostname based on the last 6 digits of the MAC address
+// if no mDNS name or serverDescription is set, otherwise use hostName or serverDescription
+// the hostname will be at most 24 characters long, starting with "wled-"
+// and containing only alphanumeric characters and hyphens
+// the hostname will not end with a hyphen and will be null-terminated
+void prepareHostname(char* hostname, size_t maxLen)
 {
-  sprintf_P(hostname, PSTR("wled-%*s"), 6, escapedMac.c_str() + 6);
-  const char *pC = serverDescription;
-  unsigned pos = 5;          // keep "wled-"
-  while (*pC && pos < 24) { // while !null and not over length
-    if (isalnum(*pC)) {     // if the current char is alpha-numeric append it to the hostname
-      hostname[pos] = *pC;
-      pos++;
+  // create a unique hostname based on the last 6 digits of the MAC address if no mDNS name or serverDescription is set
+  snprintf_P(hostname, maxLen, PSTR("wled-%.*s"), 6, escapedMac.c_str() + 6);
+  const char *pC = hostName;    // use hostName as hostname if set
+  if (strlen(pC) == 0) pC = serverDescription;  // else use serverDescription
+  unsigned pos = strstr_P(pC, PSTR("wled-")) == pC ? 0 : 5; // keep "wled-" from unique name if hostName does not start with it
+  while (*pC && pos < maxLen) { // while !null and not over length
+    if (isalnum(*pC)) {         // if the current char is alpha-numeric append it to the hostname
+      hostname[pos++] = *pC;
     } else if (*pC == ' ' || *pC == '_' || *pC == '-' || *pC == '+' || *pC == '!' || *pC == '?' || *pC == '*') {
-      hostname[pos] = '-';
-      pos++;
+      hostname[pos++] = '-';
     }
     // else do nothing - no leading hyphens and do not include hyphens for all other characters.
     pC++;
   }
-  //last character must not be hyphen
-  if (pos > 5) {
-    while (pos > 4 && hostname[pos -1] == '-') pos--;
-    hostname[pos] = '\0'; // terminate string (leave at least "wled")
-  }
+  // last character must not be hyphen
+  while (pos > 4 && hostname[pos-1] == '-') pos--;
+  hostname[pos] = '\0'; // terminate string (leave at least "wled")
 }
-
+*/
 
 bool isAsterisksOnly(const char* str, byte maxLen)
 {
@@ -205,8 +207,8 @@ uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLe
     if (mode < strip.getModeCount()) {
       char lineBuffer[256];
       //strcpy_P(lineBuffer, (const char*)pgm_read_dword(&(WS2812FX::_modeData[mode])));
-      strncpy_P(lineBuffer, strip.getModeData(mode), sizeof(lineBuffer)/sizeof(char)-1);
-      lineBuffer[sizeof(lineBuffer)/sizeof(char)-1] = '\0'; // terminate string
+      strncpy_P(lineBuffer, strip.getModeData(mode), sizeof(lineBuffer)-1);
+      lineBuffer[countof(lineBuffer)-1] = '\0'; // terminate string
       size_t len = strlen(lineBuffer);
       size_t j = 0;
       for (; j < maxLen && j < len; j++) {
@@ -218,7 +220,7 @@ uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLe
     } else return 0;
   }
 
-  if (src == JSON_palette_names && mode > (GRADIENT_PALETTE_COUNT + 13)) {
+  if (src == JSON_palette_names && mode > 255-customPalettes.size()) {
     snprintf_P(dest, maxLen, PSTR("~ Custom %d ~"), 255-mode);
     dest[maxLen-1] = '\0';
     return strlen(dest);
@@ -321,7 +323,7 @@ uint8_t extractModeSlider(uint8_t mode, uint8_t slider, char *dest, uint8_t maxL
           case 0:  strncpy_P(dest, PSTR("FX Speed"), maxLen); break;
           case 1:  strncpy_P(dest, PSTR("FX Intensity"), maxLen); break;
         }
-        dest[maxLen] = '\0'; // strncpy does not necessarily null terminate string
+        dest[maxLen-1] = '\0'; // strncpy does not necessarily null terminate string
       }
     }
     return strlen(dest);
@@ -335,8 +337,8 @@ int16_t extractModeDefaults(uint8_t mode, const char *segVar)
 {
   if (mode < strip.getModeCount()) {
     char lineBuffer[256];
-    strncpy_P(lineBuffer, strip.getModeData(mode), sizeof(lineBuffer)/sizeof(char)-1);
-    lineBuffer[sizeof(lineBuffer)/sizeof(char)-1] = '\0'; // terminate string
+    strncpy_P(lineBuffer, strip.getModeData(mode), sizeof(lineBuffer)-1);
+    lineBuffer[countof(lineBuffer)-1] = '\0'; // terminate string
     if (lineBuffer[0] != 0) {
       char* startPtr = strrchr(lineBuffer, ';'); // last ";" in FX data
       if (!startPtr) return -1;
@@ -421,7 +423,7 @@ void enumerateLedmaps() {
 
     #ifndef ESP8266
     if (ledmapNames[i-1]) { //clear old name
-      w_free(ledmapNames[i-1]);
+      p_free(ledmapNames[i-1]);
       ledmapNames[i-1] = nullptr;
     }
     #endif
@@ -439,7 +441,7 @@ void enumerateLedmaps() {
             const char *name = root["n"].as<const char*>();
             if (name != nullptr) len = strlen(name);
             if (len > 0 && len < 33) {
-              ledmapNames[i-1] = static_cast<char*>(w_malloc(len+1));
+              ledmapNames[i-1] = static_cast<char*>(p_malloc(len+1));
               if (ledmapNames[i-1]) strlcpy(ledmapNames[i-1], name, 33);
             }
           }
@@ -447,7 +449,7 @@ void enumerateLedmaps() {
             char tmp[33];
             snprintf_P(tmp, 32, s_ledmap_tmpl, i);
             len = strlen(tmp);
-            ledmapNames[i-1] = static_cast<char*>(w_malloc(len+1));
+            ledmapNames[i-1] = static_cast<char*>(p_malloc(len+1));
             if (ledmapNames[i-1]) strlcpy(ledmapNames[i-1], tmp, 33);
           }
         }
@@ -498,64 +500,329 @@ uint32_t hw_random(uint32_t lowerlimit, uint32_t upperlimit) {
   return hw_random(diff) + lowerlimit;
 }
 
-#ifndef ESP8266
-void *w_malloc(size_t size) {
-  int caps1 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
-  int caps2 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
-  if (psramSafe) {
-    if (heap_caps_get_free_size(caps2) > 3*MIN_HEAP_SIZE && size < 512) std::swap(caps1, caps2);  // use DRAM for small alloactions & when heap is plenty
-    return heap_caps_malloc_prefer(size, 2, caps1, caps2); // otherwise prefer PSRAM if it exists
+#ifdef BOARD_HAS_PSRAM
+  #if defined(CONFIG_IDF_TARGET_ESP32)
+    #warning "If compiling for ESP32 (rev.1), make sure to use '-mfix-esp32-psram-cache-issue' compiler flag to avoid PSRAM cache issues!"
+  #endif
+// p_x prefer PSRAM
+void *p_malloc(size_t size) {
+  void *buffer = nullptr;
+  buffer = heap_caps_malloc_prefer(size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // prefer PSRAM if it exists
+  if ((uintptr_t)buffer >= SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && getContiguousFreeHeap() < MIN_HEAP_SIZE) {
+    // allocation used DRAM and left less than MIN_HEAP_SIZE free
+    DEBUG_PRINTF_P(PSTR("p_malloc(%u) released, not enough DRAM free (%u)\n"), size, getContiguousFreeHeap());
+    heap_caps_free(buffer); // free old buffer
+    buffer = nullptr; // not enough DRAM free
   }
-  return heap_caps_malloc(size, caps2);
+  return buffer; // return allocated buffer
 }
 
-void *w_realloc(void *ptr, size_t size) {
-  int caps1 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
-  int caps2 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
-  if (psramSafe) {
-    if (heap_caps_get_free_size(caps2) > 3*MIN_HEAP_SIZE && size < 512) std::swap(caps1, caps2);  // use DRAM for small alloactions & when heap is plenty
-    return heap_caps_realloc_prefer(ptr, size, 2, caps1, caps2); // otherwise prefer PSRAM if it exists
+void *p_realloc(void *ptr, size_t size) {
+  #ifdef WLED_SIMPLE_REALLOC
+  p_free(ptr); // free old buffer
+  return p_malloc(size); // use malloc
+  #else
+  void *buffer = nullptr;
+  buffer = heap_caps_realloc_prefer(ptr, size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // otherwise prefer PSRAM if it exists
+  if ((uintptr_t)buffer >= SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && getContiguousFreeHeap() < MIN_HEAP_SIZE) {
+    // allocation used DRAM and left less than MIN_HEAP_SIZE free
+    DEBUG_PRINTF_P(PSTR("p_realloc(%u) released, not enough DRAM free (%u)\n"), size, getContiguousFreeHeap());
+    heap_caps_free(buffer); // free allocated buffer
+    return nullptr; // not enough DRAM free
   }
-  return heap_caps_realloc(ptr, size, caps2);
+  if (buffer) return buffer; // realloc successful
+  else {
+    p_free(ptr); // free old buffer if realloc failed (to keep consumer allocation logic simple)
+    return p_malloc(size); // fallback to malloc if realloc failed (buffer will not be copied!!!)
+  }
+  #endif
 }
 
-void *w_calloc(size_t count, size_t size) {
-  int caps1 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
-  int caps2 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
-  if (psramSafe) {
-    if (heap_caps_get_free_size(caps2) > 3*MIN_HEAP_SIZE && size < 512) std::swap(caps1, caps2);  // use DRAM for small alloactions & when heap is plenty
-    return heap_caps_calloc_prefer(count, size, 2, caps1, caps2); // otherwise prefer PSRAM if it exists
-  }
-  return heap_caps_calloc(count, size, caps2);
+void *p_calloc(size_t count, size_t size) {
+  void *buffer = p_malloc(count * size);
+  if (buffer) memset(buffer, 0, count * size); // clear allocated buffer
+  return buffer;
 }
+#endif // BOARD_HAS_PSRAM
 
 void *d_malloc(size_t size) {
-  int caps1 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
-  int caps2 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
-  if (psramSafe) {
-    if (size > MIN_HEAP_SIZE) std::swap(caps1, caps2);  // prefer PSRAM for large alloactions
-    return heap_caps_malloc_prefer(size, 2, caps1, caps2); // otherwise prefer DRAM
+  void *buffer = nullptr;
+  #ifdef ESP8266
+  buffer = malloc(size);
+  if (getContiguousFreeHeap() < MIN_HEAP_SIZE) {
+    // allocation used DRAM and left less than MIN_HEAP_SIZE free
+    DEBUG_PRINTF_P(PSTR("d_malloc(%u) released, not enough DRAM free (%u)\n"), size, getContiguousFreeHeap());
+    free(buffer); // free allocated buffer
+    buffer = nullptr; // not enough DRAM free
   }
-  return heap_caps_malloc(size, caps1);
+  #else
+  #ifdef BOARD_HAS_PSRAM // only ESP32 & S variants have PSRAM
+  // if heap would fall below MIN_HEAP_SIZE or size is larger than PSRAM_THRESHOLD, prefer PSRAM
+  if (getContiguousFreeHeap() < (MIN_HEAP_SIZE + size) || size > PSRAM_THRESHOLD) {
+    buffer = heap_caps_malloc_prefer(size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // otherwise prefer DRAM
+  } else
+  #endif
+    buffer = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // regular malloc, prefer DRAM
+  if ((uintptr_t)buffer >= SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && getContiguousFreeHeap() < MIN_HEAP_SIZE) {
+    // allocation used DRAM and left less than MIN_HEAP_SIZE free
+    DEBUG_PRINTF_P(PSTR("d_malloc(%u) released, not enough DRAM free (%u)\n"), size, getContiguousFreeHeap());
+    heap_caps_free(buffer); // free allocated buffer
+    buffer = nullptr; // not enough DRAM free
+  }
+  #endif
+  return buffer;
 }
 
 void *d_realloc(void *ptr, size_t size) {
-  int caps1 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
-  int caps2 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
-  if (psramSafe) {
-    if (size > MIN_HEAP_SIZE) std::swap(caps1, caps2);  // prefer PSRAM for large alloactions
-    return heap_caps_realloc_prefer(ptr, size, 2, caps1, caps2); // otherwise prefer DRAM
+  #ifdef WLED_SIMPLE_REALLOC
+  d_free(ptr); // free old buffer
+  return d_malloc(size); // use malloc
+  #else
+  void *buffer = nullptr;
+  #ifdef BOARD_HAS_PSRAM
+  // if heap would fall below MIN_HEAP_SIZE or size is larger than PSRAM_THRESHOLD, prefer PSRAM
+  if (getContiguousFreeHeap() < (MIN_HEAP_SIZE + size) || size > PSRAM_THRESHOLD) {
+    buffer = heap_caps_realloc_prefer(ptr, size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // otherwise prefer DRAM
+    if (buffer) return buffer; // realloc successful
+    else {
+      d_free(ptr); // free old buffer if realloc failed (to keep consumer allocation logic simple)
+      return d_malloc(size); // fallback to malloc if realloc failed (buffer will not be copied!!!)
+    }
   }
-  return heap_caps_realloc(ptr, size, caps1);
+  #endif
+  #ifdef ESP8266
+  buffer = realloc(ptr, size);
+  #else
+  buffer = heap_caps_realloc(ptr, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  #endif
+  if (buffer) return buffer; // realloc successful
+  else {
+    // this behaviour simplifies the consumer allocation logic in case of failed realloc
+    d_free(ptr); // free old buffer if realloc failed
+    return d_malloc(size); // fallback to malloc if realloc failed
+  }
+  #endif
 }
 
 void *d_calloc(size_t count, size_t size) {
-  int caps1 = MALLOC_CAP_DEFAULT | MALLOC_CAP_8BIT;
-  int caps2 = MALLOC_CAP_SPIRAM  | MALLOC_CAP_8BIT;
-  if (psramSafe) {
-    if (size > MIN_HEAP_SIZE) std::swap(caps1, caps2);  // prefer PSRAM for large alloactions
-    return heap_caps_calloc_prefer(count, size, 2, caps1, caps2); // otherwise prefer DRAM
-  }
-  return heap_caps_calloc(count, size, caps1);
+  void *buffer = d_malloc(count * size);
+  if (buffer) memset(buffer, 0, count * size); // clear allocated buffer
+  return buffer;
 }
-#endif
+
+
+// allocation function for large buffers like pixel-buffers and segment data
+// ensures that a contiguous block of MIN_HEAP_SIZE remains to keep the UI working, otherwise returns nullptr
+void *allocate_buffer(size_t size, uint32_t type) {
+  void *buffer = nullptr;
+  #if defined(ESP8266) // ESP8266 does not support PSRAM
+  if (getContiguousFreeHeap() > MIN_HEAP_SIZE + size) buffer = malloc(size); // use malloc for ESP8266 and ESP32-C3
+  #else
+  if (type & BFRALLOC_ENFORCE_DRAM) {
+    buffer = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // use DRAM only
+  } else if (type & BFRALLOC_ENFORCE_PSRAM) {
+    #ifdef BOARD_HAS_PSRAM
+    buffer = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); // use PSRAM if available
+    #else
+    return nullptr; // PSRAM not available, cannot allocate
+    #endif
+  } else {
+    // we will try to allocate memory in a single call using fallbacks
+    #ifdef BOARD_HAS_PSRAM
+    int caps1 = ((type & BFRALLOC_PREFER_PSRAM || size > PSRAM_THRESHOLD) ? MALLOC_CAP_SPIRAM : MALLOC_CAP_INTERNAL) | MALLOC_CAP_8BIT; // prefer PSRAM if requested, otherwise use DRAM
+    #else
+    int caps1 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT; // prefer PSRAM if requested, otherwise use DRAM
+    #endif
+    int caps2 = ((type & BFRALLOC_NOBYTEACCESS) ? MALLOC_CAP_32BIT : MALLOC_CAP_8BIT) | MALLOC_CAP_INTERNAL; // prefer 32bit access if requested, otherwise use 8bit DRAM;
+    if (type & BFRALLOC_NOBYTEACCESS) std::swap(caps1, caps2); // swap if we want 32bit access to prioritise it
+    buffer = heap_caps_malloc_prefer(size, 3, caps1, caps2, MALLOC_CAP_8BIT); // if caps1 and caps2 fail, use 8bit fallback in any memory type available
+    #ifdef CONFIG_IDF_TARGET_ESP32
+    // ESP32 (classic) has a special 32bit DRAM region (accessible only in 32-bit chunks; MALLOC_CAP_32BIT)
+    // check if it succeeded (stuff everything in debug statement to avoid code bloat)
+    DEBUG_PRINTF_P(((type & BFRALLOC_NOBYTEACCESS) && (uintptr_t)buffer < SOC_DRAM_HIGH) ? PSTR("WARN: buffer (%u @ %p) did not fit into 32bit DRAM region, using 8bit RAM\n") : "", size, buffer);
+    #endif
+    if ((uintptr_t)buffer >= SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && getContiguousFreeHeap() < MIN_HEAP_SIZE) {
+      DEBUG_PRINTLN(F("WARN: heap too low after allocation! Releasing."));
+      heap_caps_free(buffer); // free buffer if heap is too low
+      return nullptr; // not enough heap free
+    }
+  }
+  #endif
+  if (buffer && (type & BFRALLOC_CLEAR)) memset(buffer, 0, size); // clear allocated buffer
+  return buffer;
+}
+
+/*
+ * Fixed point integer based Perlin noise functions by @dedehai
+ * Note: optimized for speed and to mimic fastled inoise functions, not for accuracy or best randomness
+ */
+#define PERLIN_SHIFT 1
+
+// calculate gradient for corner from hash value
+static inline __attribute__((always_inline)) int32_t hashToGradient(uint32_t h) {
+  // using more steps yields more "detailed" perlin noise but looks less like the original fastled version (adjust PERLIN_SHIFT to compensate, also changes range and needs proper adustment)
+  // return (h & 0xFF) - 128; // use PERLIN_SHIFT 7
+  // return (h & 0x0F) - 8; // use PERLIN_SHIFT 3
+  // return (h & 0x07) - 4; // use PERLIN_SHIFT 2
+  return (h & 0x03) - 2; // use PERLIN_SHIFT 1 -> closest to original fastled version
+}
+
+// Gradient functions for 1D, 2D and 3D Perlin noise  note: forcing inline produces smaller code and makes it 3x faster!
+static inline __attribute__((always_inline)) int32_t gradient1D(uint32_t x0, int32_t dx) {
+  uint32_t h = x0 * 0x27D4EB2D;
+  h ^= h >> 15;
+  h *= 0x92C3412B;
+  h ^= h >> 13;
+  h ^= h >> 7;
+  return (hashToGradient(h) * dx) >> PERLIN_SHIFT;
+}
+
+static inline __attribute__((always_inline)) int32_t gradient2D(uint32_t x0, int32_t dx, uint32_t y0, int32_t dy) {
+  uint32_t h = (x0 * 0x27D4EB2D) ^ (y0 * 0xB5297A4D);
+  h ^= h >> 15;
+  h *= 0x92C3412B;
+  h ^= h >> 13;
+  return (hashToGradient(h) * dx + hashToGradient(h>>PERLIN_SHIFT) * dy) >> (1 + PERLIN_SHIFT);
+}
+
+static inline __attribute__((always_inline)) int32_t gradient3D(uint32_t x0, int32_t dx, uint32_t y0, int32_t dy, uint32_t z0, int32_t dz) {
+  // fast and good entropy hash from corner coordinates
+  uint32_t h = (x0 * 0x27D4EB2D) ^ (y0 * 0xB5297A4D) ^ (z0 * 0x1B56C4E9);
+  h ^= h >> 15;
+  h *= 0x92C3412B;
+  h ^= h >> 13;
+  return ((hashToGradient(h) * dx + hashToGradient(h>>(1+PERLIN_SHIFT)) * dy + hashToGradient(h>>(1 + 2*PERLIN_SHIFT)) * dz) * 85) >> (8 + PERLIN_SHIFT); // scale to 16bit, x*85 >> 8 = x/3
+}
+
+// fast cubic smoothstep: t*(3 - 2t²), optimized for fixed point, scaled to avoid overflows
+static uint32_t smoothstep(const uint32_t t) {
+  uint32_t t_squared = (t * t) >> 16;
+  uint32_t factor = (3 << 16) - ((t << 1));
+  return (t_squared * factor) >> 18; // scale to avoid overflows and give best resolution
+}
+
+// simple linear interpolation for fixed-point values, scaled for perlin noise use
+static inline int32_t lerpPerlin(int32_t a, int32_t b, int32_t t) {
+    return a + (((b - a) * t) >> 14); // match scaling with smoothstep to yield 16.16bit values
+}
+
+// 1D Perlin noise function that returns a value in range of -24691 to 24689
+int32_t perlin1D_raw(uint32_t x, bool is16bit) {
+  // integer and fractional part coordinates
+  int32_t x0 = x >> 16;
+  int32_t x1 = x0 + 1;
+  if(is16bit) x1 = x1 & 0xFF; // wrap back to zero at 0xFF instead of 0xFFFF
+
+  int32_t dx0 = x & 0xFFFF;
+  int32_t dx1 = dx0 - 0x10000;
+  // gradient values for the two corners
+  int32_t g0 = gradient1D(x0, dx0);
+  int32_t g1 = gradient1D(x1, dx1);
+  // interpolate and smooth function
+  int32_t tx = smoothstep(dx0);
+  int32_t noise = lerpPerlin(g0, g1, tx);
+  return noise;
+}
+
+// 2D Perlin noise function that returns a value in range of -20633 to 20629
+int32_t perlin2D_raw(uint32_t x, uint32_t y, bool is16bit) {
+  int32_t x0 = x >> 16;
+  int32_t y0 = y >> 16;
+  int32_t x1 = x0 + 1;
+  int32_t y1 = y0 + 1;
+
+  if(is16bit) {
+    x1 = x1 & 0xFF; // wrap back to zero at 0xFF instead of 0xFFFF
+    y1 = y1 & 0xFF;
+  }
+
+  int32_t dx0 = x & 0xFFFF;
+  int32_t dy0 = y & 0xFFFF;
+  int32_t dx1 = dx0 - 0x10000;
+  int32_t dy1 = dy0 - 0x10000;
+
+  int32_t g00 = gradient2D(x0, dx0, y0, dy0);
+  int32_t g10 = gradient2D(x1, dx1, y0, dy0);
+  int32_t g01 = gradient2D(x0, dx0, y1, dy1);
+  int32_t g11 = gradient2D(x1, dx1, y1, dy1);
+
+  uint32_t tx = smoothstep(dx0);
+  uint32_t ty = smoothstep(dy0);
+
+  int32_t nx0 = lerpPerlin(g00, g10, tx);
+  int32_t nx1 = lerpPerlin(g01, g11, tx);
+
+  int32_t noise = lerpPerlin(nx0, nx1, ty);
+  return noise;
+}
+
+// 3D Perlin noise function that returns a value in range of -16788 to 16381
+int32_t perlin3D_raw(uint32_t x, uint32_t y, uint32_t z, bool is16bit) {
+  int32_t x0 = x >> 16;
+  int32_t y0 = y >> 16;
+  int32_t z0 = z >> 16;
+  int32_t x1 = x0 + 1;
+  int32_t y1 = y0 + 1;
+  int32_t z1 = z0 + 1;
+
+  if(is16bit) {
+    x1 = x1 & 0xFF; // wrap back to zero at 0xFF instead of 0xFFFF
+    y1 = y1 & 0xFF;
+    z1 = z1 & 0xFF;
+  }
+
+  int32_t dx0 = x & 0xFFFF;
+  int32_t dy0 = y & 0xFFFF;
+  int32_t dz0 = z & 0xFFFF;
+  int32_t dx1 = dx0 - 0x10000;
+  int32_t dy1 = dy0 - 0x10000;
+  int32_t dz1 = dz0 - 0x10000;
+
+  int32_t g000 = gradient3D(x0, dx0, y0, dy0, z0, dz0);
+  int32_t g001 = gradient3D(x0, dx0, y0, dy0, z1, dz1);
+  int32_t g010 = gradient3D(x0, dx0, y1, dy1, z0, dz0);
+  int32_t g011 = gradient3D(x0, dx0, y1, dy1, z1, dz1);
+  int32_t g100 = gradient3D(x1, dx1, y0, dy0, z0, dz0);
+  int32_t g101 = gradient3D(x1, dx1, y0, dy0, z1, dz1);
+  int32_t g110 = gradient3D(x1, dx1, y1, dy1, z0, dz0);
+  int32_t g111 = gradient3D(x1, dx1, y1, dy1, z1, dz1);
+
+  uint32_t tx = smoothstep(dx0);
+  uint32_t ty = smoothstep(dy0);
+  uint32_t tz = smoothstep(dz0);
+
+  int32_t nx0 = lerpPerlin(g000, g100, tx);
+  int32_t nx1 = lerpPerlin(g010, g110, tx);
+  int32_t nx2 = lerpPerlin(g001, g101, tx);
+  int32_t nx3 = lerpPerlin(g011, g111, tx);
+  int32_t ny0 = lerpPerlin(nx0, nx1, ty);
+  int32_t ny1 = lerpPerlin(nx2, nx3, ty);
+
+  int32_t noise = lerpPerlin(ny0, ny1, tz);
+  return noise;
+}
+
+// scaling functions for fastled replacement
+uint16_t perlin16(uint32_t x) {
+  return ((perlin1D_raw(x) * 1159) >> 10) + 32803; //scale to 16bit and offset (fastled range: about 4838 to 60766)
+}
+
+uint16_t perlin16(uint32_t x, uint32_t y) {
+ return ((perlin2D_raw(x, y) * 1537) >> 10) + 32725; //scale to 16bit and offset (fastled range: about 1748 to 63697)
+}
+
+uint16_t perlin16(uint32_t x, uint32_t y, uint32_t z) {
+  return ((perlin3D_raw(x, y, z) * 1731) >> 10) + 33147; //scale to 16bit and offset (fastled range: about 4766 to 60840)
+}
+
+uint8_t perlin8(uint16_t x) {
+  return (((perlin1D_raw((uint32_t)x << 8, true) * 1353) >> 10) + 32769) >> 8; //scale to 16 bit, offset, then scale to 8bit
+}
+
+uint8_t perlin8(uint16_t x, uint16_t y) {
+  return (((perlin2D_raw((uint32_t)x << 8, (uint32_t)y << 8, true) * 1620) >> 10) + 32771) >> 8; //scale to 16 bit, offset, then scale to 8bit
+}
+
+uint8_t perlin8(uint16_t x, uint16_t y, uint16_t z) {
+  return (((perlin3D_raw((uint32_t)x << 8, (uint32_t)y << 8, (uint32_t)z << 8, true) * 2015) >> 10) + 33168) >> 8; //scale to 16 bit, offset, then scale to 8bit
+}

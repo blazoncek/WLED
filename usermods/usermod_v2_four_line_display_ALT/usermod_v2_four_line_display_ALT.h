@@ -814,7 +814,7 @@ void FourLineDisplayUsermod::showCurrentEffectOrPalette(int inputEffPal, const c
   if (overlayUntil == 0) {
     lockRedraw = true;
     // Find the mode name in JSON
-    unsigned printedChars = extractModeName(inputEffPal, qstring, lineBuffer, MAX_JSON_CHARS-1);
+    unsigned printedChars = extractModeName(inputEffPal, qstring, lineBuffer, countof(lineBuffer));
     if (lineBuffer[0]=='*' && lineBuffer[1]==' ') {
       // remove "* " from dynamic palettes
       for (unsigned i=2; i<=printedChars; i++) lineBuffer[i-2] = lineBuffer[i]; //include '\0'
@@ -1066,12 +1066,12 @@ bool FourLineDisplayUsermod::handleButton(uint8_t b) {
   yield();
   if (!enabled
     || b // button 0 only
-    || buttonType[b] == BTN_TYPE_SWITCH
-    || buttonType[b] == BTN_TYPE_NONE
-    || buttonType[b] == BTN_TYPE_RESERVED
-    || buttonType[b] == BTN_TYPE_PIR_SENSOR
-    || buttonType[b] == BTN_TYPE_ANALOG
-    || buttonType[b] == BTN_TYPE_ANALOG_INVERTED) {
+    || buttons[b].type == BTN_TYPE_SWITCH
+    || buttons[b].type == BTN_TYPE_NONE
+    || buttons[b].type == BTN_TYPE_RESERVED
+    || buttons[b].type == BTN_TYPE_PIR_SENSOR
+    || buttons[b].type == BTN_TYPE_ANALOG
+    || buttons[b].type == BTN_TYPE_ANALOG_INVERTED) {
     return false;
   }
 
@@ -1140,6 +1140,7 @@ bool FourLineDisplayUsermod::handleButton(uint8_t b) {
   #endif
 #endif
 void FourLineDisplayUsermod::onUpdateBegin(bool init) {
+  if (init) overlay("Updating", "firmware", 10000);
 #if defined(ARDUINO_ARCH_ESP32) && defined(FLD_ESP32_USE_THREADS)
   if (init && Display_Task) {
     vTaskSuspend(Display_Task);   // update is about to begin, disable task to prevent crash

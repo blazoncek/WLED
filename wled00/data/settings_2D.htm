@@ -272,7 +272,7 @@ Y: <input name="P${i}Y" type="number" min="0" max="255" value="0" oninput="UI()"
 			Serpentine: <input type="checkbox" name="PS"><br>
 			<i  class="warn">Pressing Populate will create LED panel layout with pre-arranged matrix.<br>Values above <i>will not</i> affect final layout.<br>
 				WARNING: You may need to update each panel parameters after they are generated.</i><br>
-			<button type="button" onclick="gen();expand(gId('expGen'),gId('mxGen'));">Populate</button>
+			<button type="button" onclick="gen();expand(gId('expGen'),gId('mxGen'));UI();">Populate</button>
 		</div>
 		<hr class="sml">
 		<h3>Panel set-up</h3>
@@ -287,7 +287,7 @@ Y: <input name="P${i}Y" type="number" min="0" max="255" value="0" oninput="UI()"
 		<canvas id="canvas"></canvas>
 		<div id="json" >Gap file: <input type="file" name="data" accept=".json"><button type="button" class="sml" onclick="uploadFile(d.Sf.data,'/2d-gaps.json')">Upload</button></div>
 		<i>Note: Gap file is a <b>.json</b> file containing an array with number of elements equal to the matrix size.<br>
-			A value of -1 means that pixel at that position is missing, a value of 0 means never paint that pixel, and 1 means regular pixel.</i>
+			A value of -1 means that pixel at that position is missing, a value of 0 means ignore that pixel, and 1 means regular pixel.</i>
 	</div>
 	<hr>
 	<button type="button" onclick="B()">Back</button><button type="button" onclick="fS()">Save</button>

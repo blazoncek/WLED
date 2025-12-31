@@ -13,7 +13,7 @@ function isN(n)     { return !isNaN(parseFloat(n)) && isFinite(n); } // isNumber
 // https://stackoverflow.com/questions/3885817/how-do-i-check-that-a-number-is-float-or-integer
 function isF(n)     { return n === +n && n !== (n|0); } // isFloat
 function isI(n)     { return n === +n && n === (n|0); } // isInteger
-function toggle(el) { gId(el).classList.toggle("hide"); gId('No'+el).classList.toggle("hide"); }
+function toggle(el) { gId(el).classList.toggle("hide"); let n = gId('No'+el); if (n) n.classList.toggle("hide"); }
 function tooltip(cont=null) {
 	d.querySelectorAll((cont?cont+" ":"")+"[title]").forEach((element)=>{
 		element.addEventListener("mouseover", ()=>{
@@ -82,10 +82,9 @@ function getLoc() {
 		}
 	} else {
 		// detect reverse proxy
-		let path = l.pathname;
-		let paths = path.slice(1,path.endsWith('/')?-1:undefined).split("/");
-		if (paths.length > 1) paths.pop(); // remove subpage (or "settings")
-		if (paths.length > 0 && paths[paths.length-1]=="settings") paths.pop(); // remove "settings"
+		let paths = l.pathname.split("/").slice(1); // first is always empty
+		let settingsIndex = paths.lastIndexOf("settings"); // -1 or index of "settings"
+		paths = paths.slice(0,settingsIndex); // if we don't have "settings", remove last entry (empty / or file)
 		if (paths.length > 1) {
 			locproto = l.protocol;
 			loc = true;

@@ -186,7 +186,7 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol){
         // only change brightness if value changed
         if (bri != e131_data[dataOffset]) {                                        
           bri = e131_data[dataOffset];
-          strip.setBrightness(scaledBri(bri), false);
+          strip.setBrightness(bri, false);
           stateUpdated(CALL_MODE_WS_SEND);
         }
         return;

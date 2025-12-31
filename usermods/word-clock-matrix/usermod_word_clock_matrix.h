@@ -326,7 +326,7 @@ public:
     {
       JsonObject modName = root.createNestedObject("id");
       modName[F("mdns")] = "wled-word-clock";
-      modName[F("name")] = "WLED WORD CLOCK";
+      modName["name"] = "WLED WORD CLOCK";
     }
 
     uint16_t getId()

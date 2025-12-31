@@ -33,7 +33,7 @@ void drawGrid(TetrisAIGame* tetris, TetrisAI_data* tetrisai_data)
   {
     for (auto index_x = 0; index_x < tetris->grid.width; index_x++)
     {
-      CRGB color;
+      CRGBA color;
       if (*tetris->grid.getPixel(index_x, index_y) == 0)
       {
         //BG color

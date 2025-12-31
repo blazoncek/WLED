@@ -32,7 +32,7 @@ uint8_t lastIR6ColourIdx = 0;
 const uint8_t brightnessSteps[] = {
   5, 7, 9, 12, 16, 20, 26, 34, 43, 56, 72, 93, 119, 154, 198, 255
 };
-const size_t numBrightnessSteps = sizeof(brightnessSteps) / sizeof(uint8_t);
+const size_t numBrightnessSteps = countof(brightnessSteps);
 
 // increment `bri` to the next `brightnessSteps` value
 static void incBrightness()
@@ -126,24 +126,23 @@ static void changeEffectSpeed(int8_t amount)
       strip.getMainSegment().speed = effectSpeed;
       setValuesFromMainSeg();
     }
-  } else { // if Effect == "solid Color", change the hue of the primary color
+  } else { // if Effect == "Solid Color", change the hue of the primary color
     Segment& sseg = irApplyToAllSelected ? strip.getFirstSelectedSeg() : strip.getMainSegment();
-    CRGB fastled_col = CRGB(sseg.colors[0]);
-    CHSV prim_hsv = rgb2hsv(fastled_col);
-    int16_t new_val = (int16_t)prim_hsv.h + amount;
-    if (new_val > 255) new_val -= 255;  // roll-over if  bigger than 255
-    if (new_val < 0) new_val += 255;    // roll-over if smaller than 0
-    prim_hsv.h = (byte)new_val;
-    hsv2rgb_rainbow(prim_hsv, fastled_col);
+    CHSV32 prim_hsv(sseg.colors[0]);
+    int32_t new_val = (int32_t)prim_hsv.h + (amount<<8);
+    if (new_val > 65535) new_val -= 65535;  // roll-over if  bigger than 255
+    if (new_val < 0) new_val += 65535;      // roll-over if smaller than 0
+    prim_hsv.h = new_val;
+    CRGBA col(prim_hsv);
     if (irApplyToAllSelected) {
       for (unsigned i = 0; i < strip.getSegmentsNum(); i++) {
         Segment& seg = strip.getSegment(i);
         if (!seg.isActive() || !seg.isSelected()) continue;
-        seg.colors[0] = RGBW32(fastled_col.red, fastled_col.green, fastled_col.blue, W(sseg.colors[0]));
+        seg.colors[0] = (uint32_t)col;
       }
       setValuesFromFirstSelectedSeg();
     } else {
-      strip.getMainSegment().colors[0] = RGBW32(fastled_col.red, fastled_col.green, fastled_col.blue, W(sseg.colors[0]));
+      strip.getMainSegment().colors[0] = (uint32_t)col;
       setValuesFromMainSeg();
     }
   }
@@ -172,20 +171,19 @@ static void changeEffectIntensity(int8_t amount)
     }
   } else { // if Effect == "solid Color", change the saturation of the primary color
     Segment& sseg = irApplyToAllSelected ? strip.getFirstSelectedSeg() : strip.getMainSegment();
-    CRGB fastled_col = CRGB(sseg.colors[0]);
-    CHSV prim_hsv = rgb2hsv(fastled_col);
-    int16_t new_val = (int16_t) prim_hsv.s + amount;
+    CHSV32 prim_hsv(sseg.colors[0]);
+    int16_t new_val = prim_hsv.s + amount;
     prim_hsv.s = (byte)constrain(new_val,0,255);  // constrain to 0-255
-    hsv2rgb_rainbow(prim_hsv, fastled_col);
+    CRGBA col(prim_hsv);
     if (irApplyToAllSelected) {
       for (unsigned i = 0; i < strip.getSegmentsNum(); i++) {
         Segment& seg = strip.getSegment(i);
         if (!seg.isActive() || !seg.isSelected()) continue;
-        seg.colors[0] = RGBW32(fastled_col.red, fastled_col.green, fastled_col.blue, W(sseg.colors[0]));
+        seg.colors[0] = (uint32_t)col;
       }
       setValuesFromFirstSelectedSeg();
     } else {
-      strip.getMainSegment().colors[0] = RGBW32(fastled_col.red, fastled_col.green, fastled_col.blue, W(sseg.colors[0]));
+      strip.getMainSegment().colors[0] = (uint32_t)col;
       setValuesFromMainSeg();
     }
   }
@@ -203,14 +201,13 @@ static void changeColor(uint32_t c, int16_t cct=-1)
     for (unsigned i = 0; i < strip.getSegmentsNum(); i++) {
       Segment& seg = strip.getSegment(i);
       if (!seg.isActive() || !seg.isSelected()) continue;
-      byte capabilities = seg.getLightCapabilities();
       uint32_t mask = 0;
-      bool isRGB   = GET_BIT(capabilities, 0);  // is segment RGB capable
-      bool hasW    = GET_BIT(capabilities, 1);  // do we have white/CCT channel
-      bool isCCT   = GET_BIT(capabilities, 2);  // is segment CCT capable
-      bool wSlider = GET_BIT(capabilities, 3);  // is white auto calculated (white slider NOT shown in UI)
-      if (isRGB) mask |= 0x00FFFFFF; // RGB
-      if (hasW)  mask |= 0xFF000000; // white
+      bool isRGB   = seg.hasRGB();    // is segment RGB capable
+      bool hasW    = seg.hasWhite();  // do we have white/CCT channel
+      bool isCCT   = seg.isCCT();     // is segment CCT capable
+      bool wSlider = seg.isWmanual(); // is white auto calculated (white slider NOT shown in UI)
+      if (isRGB) mask |= 0x00FFFFFF;  // RGB
+      if (hasW)  mask |= 0xFF000000;  // white
       if (hasW && !wSlider && (c & 0xFF000000)) { // segment has white channel & white channel is auto calculated & white specified
         seg.setColor(0, c | 0xFFFFFF); // for accurate/brighter mode we fake white (since button may not set white color to 0xFFFFFF)
       } else if (c & mask) seg.setColor(0, c & mask); // only apply if not black
@@ -220,14 +217,13 @@ static void changeColor(uint32_t c, int16_t cct=-1)
   } else {
     byte i = strip.getMainSegmentId();
     Segment& seg = strip.getSegment(i);
-    byte capabilities = seg.getLightCapabilities();
     uint32_t mask = 0;
-    bool isRGB   = GET_BIT(capabilities, 0);  // is segment RGB capable
-    bool hasW    = GET_BIT(capabilities, 1);  // do we have white/CCT channel
-    bool isCCT   = GET_BIT(capabilities, 2);  // is segment CCT capable
-    bool wSlider = GET_BIT(capabilities, 3);  // is white auto calculated (white slider NOT shown in UI)
-    if (isRGB) mask |= 0x00FFFFFF; // RGB
-    if (hasW)  mask |= 0xFF000000; // white
+    bool isRGB   = seg.hasRGB();    // is segment RGB capable
+    bool hasW    = seg.hasWhite();  // do we have white/CCT channel
+    bool isCCT   = seg.isCCT();     // is segment CCT capable
+    bool wSlider = seg.isWmanual(); // is white auto calculated (white slider NOT shown in UI)
+    if (isRGB) mask |= 0x00FFFFFF;  // RGB
+    if (hasW)  mask |= 0xFF000000;  // white
     if (hasW && !wSlider && (c & 0xFF000000)) { // segment has white channel & white channel is auto calculated & white specified
       seg.setColor(0, c | 0xFFFFFF); // for accurate/brighter mode we fake white (since button may not set white color to 0xFFFFFF)
     } else if (c & mask) seg.setColor(0, c & mask); // only apply if not black
@@ -240,10 +236,10 @@ static void changeColor(uint32_t c, int16_t cct=-1)
 static void changeWhite(int8_t amount, int16_t cct=-1)
 {
   Segment& seg = irApplyToAllSelected ? strip.getFirstSelectedSeg() : strip.getMainSegment();
-  byte r = R(seg.colors[0]);
-  byte g = G(seg.colors[0]);
-  byte b = B(seg.colors[0]);
-  byte w = relativeChange(W(seg.colors[0]), amount, 5);
+  byte r = seg.colors[0].r;
+  byte g = seg.colors[0].g;
+  byte b = seg.colors[0].b;
+  byte w = seg.hasWhite() ? relativeChange(seg.colors[0].a, amount, 5) : 255;
   changeColor(RGBW32(r, g, b, w), cct);
 }
 
@@ -346,10 +342,10 @@ static void decodeIR24CT(uint32_t code)
 static void decodeIR40(uint32_t code)
 {
   Segment& seg = irApplyToAllSelected ? strip.getFirstSelectedSeg() : strip.getMainSegment();
-  byte r = R(seg.colors[0]);
-  byte g = G(seg.colors[0]);
-  byte b = B(seg.colors[0]);
-  byte w = W(seg.colors[0]);
+  byte r = seg.colors[0].r;
+  byte g = seg.colors[0].g;
+  byte b = seg.colors[0].b;
+  byte w = seg.hasWhite() ? seg.colors[0].a : 255;
   switch (code) {
     case IR40_BPLUS        : incBrightness();                            break;
     case IR40_BMINUS       : decBrightness();                            break;
@@ -435,7 +431,7 @@ static void decodeIR44(uint32_t code)
     case IR44_DIY2        : presetFallback(2, FX_MODE_BREATH,        0); break;
     case IR44_DIY3        : presetFallback(3, FX_MODE_FIRE_FLICKER,  0); break;
     case IR44_DIY4        : presetFallback(4, FX_MODE_RAINBOW,       0); break;
-    case IR44_DIY5        : presetFallback(5, FX_MODE_METEOR_SMOOTH, 0); break;
+    case IR44_DIY5        : presetFallback(5, FX_MODE_METEOR,        0); break;
     case IR44_DIY6        : presetFallback(6, FX_MODE_RAIN,          0); break;
     case IR44_AUTO        : changeEffect(FX_MODE_STATIC);                break;
     case IR44_FLASH       : changeEffect(FX_MODE_PALETTE);               break;
@@ -588,14 +584,17 @@ static void decodeIRJson(uint32_t code)
       if (cmdStr.startsWith(F("!incBri"))) {
         lastValidCode = code;
         incBrightness();
+        stateUpdated(CALL_MODE_BUTTON_PRESET);
       } else if (cmdStr.startsWith(F("!decBri"))) {
         lastValidCode = code;
         decBrightness();
+        stateUpdated(CALL_MODE_BUTTON_PRESET);
       } else if (cmdStr.startsWith(F("!presetF"))) { //!presetFallback
         uint8_t p1 = fdo["PL"] | 1;
         uint8_t p2 = fdo["FX"] | hw_random8(strip.getModeCount() -1);
         uint8_t p3 = fdo["FP"] | 0;
         presetFallback(p1, p2, p3);
+        stateUpdated(CALL_MODE_BUTTON_PRESET);
       }
     } else {
       // HTTP API command
@@ -609,6 +608,7 @@ static void decodeIRJson(uint32_t code)
       }
       fdo.clear();                                                 // clear JSON buffer (it is no longer needed)
       handleSet(nullptr, cmdStr, false);                           // no stateUpdated() call here
+      stateUpdated(CALL_MODE_BUTTON_PRESET);
     }
   } else {
     // command is JSON object
@@ -619,6 +619,7 @@ static void decodeIRJson(uint32_t code)
         jsonCmdObj["seg"] = seg;                                  // replace array with object
       }
       deserializeState(jsonCmdObj, CALL_MODE_BUTTON_PRESET);      // **will call stateUpdated() with correct CALL_MODE**
+      stateUpdated(CALL_MODE_BUTTON_PRESET);
     } else {
       uint8_t psave = jsonCmdObj[F("psave")].as<int>();
       char pname[33];
@@ -634,7 +635,6 @@ static void applyRepeatActions()
 {
   if (irEnabled == 8) {
     decodeIRJson(lastValidCode);
-    stateUpdated(CALL_MODE_BUTTON_PRESET);
     return;
   } else switch (lastRepeatableAction) {
     case ACTION_BRIGHT_UP :      incBrightness();                            stateUpdated(CALL_MODE_BUTTON); return;
@@ -671,7 +671,6 @@ static void decodeIR(uint32_t code)
 
   if (irEnabled == 8) { // any remote configurable with ir.json file
     decodeIRJson(code);
-    stateUpdated(CALL_MODE_BUTTON_PRESET);
     return;
   }
   if (code > 0xFFFFFF) return; //invalid code

@@ -717,6 +717,10 @@ output.sliderbubbleshow {
 	opacity: 1;
 }
 
+input:invalid {
+	color: var(--c-r) !important;
+}
+
 input[type=range] {
 	-webkit-appearance: none;
 	width: 100%;
@@ -1382,13 +1386,13 @@ dialog {
 }
 
 /* list item content */
-.lstIcontent {
+.lstI .content {
 	padding: 9px 0 7px;
 	position: relative;
 }
 
 /* list item name (for sorting) */
-.lstIname {
+.lstI .name, .lstI .fltr {
 	white-space: nowrap;
 	text-overflow: ellipsis;
 	-webkit-filter: grayscale(100%); /* Safari 6.0 - 9.0 */
@@ -1396,7 +1400,7 @@ dialog {
 }
 
 /* list item palette preview */
-.lstIprev {
+.lstI .prev {
 	width: 100%;
 	height: 6px;
 	position: absolute;
@@ -1442,7 +1446,7 @@ dialog {
 
 /* segment & preset inner/expanded content */
 .segin,
-.presin {
+.presin, .presin.content {
 	padding: 8px;
 	position: relative;
 }
@@ -1464,7 +1468,7 @@ dialog {
 }
 
 /* hidden list items, must be after .expanded */
-.pres .lstIcontent, .segin {
+.pres .content, .segin {
 	display: none;
 }
 
@@ -1623,7 +1627,7 @@ dialog {
 	input[type="number"] {
 		width: 32px;
 	}
-	.lstIcontent {
+	.lstI .content {
 		padding-left: 8px;
 	}
 	.revchkl {
