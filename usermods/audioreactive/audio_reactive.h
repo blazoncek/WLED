@@ -239,7 +239,7 @@ static float fftAddAvg(int from, int to) {
 //
 // FFT main task
 //
-void FFTcode(void * parameter)
+static void FFTcode(void * parameter)
 {
   DEBUGSR_PRINT("FFT started on core: "); DEBUGSR_PRINTLN(xPortGetCoreID());
 
@@ -562,6 +562,67 @@ static void autoResetPeak(void) {
     samplePeak = false;
     if (audioSyncEnabled == 0) udpSamplePeak = false;  // this is normally reset by transmitAudioData
   }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Begin simulateSound (to enable audio enhanced effects to display something)
+///////////////////////////////////////////////////////////////////////////////
+typedef enum SoundSimulations {
+  UMS_BeatSin = 0,
+  UMS_WeWillRockYou,
+  UMS_10_13,
+  UMS_14_3,
+  UMS_count
+} soundSimulations_t;
+static soundSimulations_t simulationId = UMS_WeWillRockYou;
+
+static void simulateSound() {
+  uint32_t ms = millis();
+  switch (simulationId) {
+    default:
+    case UMS_BeatSin:
+      for (int i = 0; i<16; i++) fftResult[i] = beatsin8_t(120 / (i+1), 0, 255);
+      volumeSmth = fftResult[8];
+      break;
+    case UMS_WeWillRockYou:
+      if (ms%2000 < 200) {
+        volumeSmth = hw_random8();
+        for (int i = 0; i<5; i++) fftResult[i] = hw_random8();
+      } else if (ms%2000 < 400) {
+        volumeSmth = 0;
+        for (int i = 0; i<16; i++) fftResult[i] = 0;
+      } else if (ms%2000 < 600) {
+        volumeSmth = hw_random8();
+        for (int i = 5; i<11; i++) fftResult[i] = hw_random8();
+      } else if (ms%2000 < 800) {
+        volumeSmth = 0;
+        for (int i = 0; i<16; i++) fftResult[i] = 0;
+      } else if (ms%2000 < 1000) {
+        volumeSmth = hw_random8();
+        for (int i = 11; i<16; i++) fftResult[i] = hw_random8();
+      } else {
+        volumeSmth = 0;
+        for (int i = 0; i<16; i++) fftResult[i] = 0;
+      }
+      break;
+    case UMS_10_13:
+      for (int i = 0; i<16; i++) fftResult[i] = inoise8(beatsin8_t(90 / (i+1), 0, 200)*15 + (ms>>10), ms>>3);
+      volumeSmth = fftResult[8];
+      break;
+    case UMS_14_3:
+      for (int i = 0; i<16; i++) fftResult[i] = inoise8(beatsin8_t(120 / (i+1), 10, 30)*10 + (ms>>14), ms>>3);
+      volumeSmth = fftResult[8];
+      break;
+  }
+
+  samplePeak    = hw_random8() > 250;
+  FFT_MajorPeak = 21.0f + (volumeSmth*volumeSmth) / 8.0f; // walk through full range of 21hz...8200hz
+  maxVol        = 31;  // this gets feedback from UI
+  binNum        = 8;   // this gets feedback from UI
+  volumeRaw     = volumeSmth;
+  my_magnitude  = 10000.0f / 8.0f; //no idea if 10000 is a good value for FFT_Magnitude ???
+  if (volumeSmth < 1 ) my_magnitude = 0.001f;             // noise gate closed - mute
 }
 
 
@@ -2220,6 +2281,7 @@ class AudioReactive : public Usermod {
 #endif
     static const char _digitalmic[];
     static const char _addPalettes[];
+    static const char _soundSim[];
     static const char UDP_SYNC_HEADER[];
     static const char UDP_SYNC_HEADER_v1[];
 
@@ -2888,6 +2950,7 @@ class AudioReactive : public Usermod {
 
       if (!enabled) {
         disableSoundProcessing = true;   // keep processing suspended (FFT task)
+        simulateSound();
         lastUMRun = millis();            // update time keeping
         return;
       }
@@ -3375,6 +3438,7 @@ class AudioReactive : public Usermod {
       JsonObject top = root.createNestedObject(FPSTR(_name));
       top[FPSTR(_enabled)] = enabled;
       top[FPSTR(_addPalettes)] = addPalettes;
+      top[FPSTR(_soundSim)] = simulationId;
 
 #ifdef ARDUINO_ARCH_ESP32
     #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
@@ -3434,6 +3498,7 @@ class AudioReactive : public Usermod {
 
       configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled);
       configComplete &= getJsonValue(top[FPSTR(_addPalettes)], addPalettes);
+      configComplete &= getJsonValue(top[FPSTR(_soundSim)], simulationId);
 
 #ifdef ARDUINO_ARCH_ESP32
     #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
@@ -3480,6 +3545,11 @@ class AudioReactive : public Usermod {
     void appendConfigData(Print& uiScript) override
     {
       uiScript.print(F("ux='AudioReactive';"));         // ux = shortcut for Audioreactive - fingers crossed that "ux" isn't already used as JS var, html post parameter or css style
+      uiScript.print(F("dd=addDropdown(ux,'sound-sim');"));
+      uiScript.print(F("addOption(dd,'BeatSin',0);"));
+      uiScript.print(F("addOption(dd,'WeWillRockYou',1);"));
+      uiScript.print(F("addOption(dd,'10/13',2);"));
+      uiScript.print(F("addOption(dd,'14/3',3);"));
 #ifdef ARDUINO_ARCH_ESP32
       uiScript.print(F("uxp=ux+':digitalmic:pin[]';")); // uxp = shortcut for AudioReactive:digitalmic:pin[]
       uiScript.print(F("dd=addDropdown(ux,'digitalmic:type');"));
@@ -3700,5 +3770,6 @@ const char AudioReactive::_analogmic[]  PROGMEM = "analogmic";
 #endif
 const char AudioReactive::_digitalmic[] PROGMEM = "digitalmic";
 const char AudioReactive::_addPalettes[]       PROGMEM = "add-palettes";
+const char AudioReactive::_soundSim[]          PROGMEM = "sound-sim";
 const char AudioReactive::UDP_SYNC_HEADER[]    PROGMEM = "00002"; // new sync header version, as format no longer compatible with previous structure
 const char AudioReactive::UDP_SYNC_HEADER_v1[] PROGMEM = "00001"; // old sync header version - need to add backwards-compatibility feature
