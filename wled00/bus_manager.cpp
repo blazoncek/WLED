@@ -316,6 +316,7 @@ std::vector<LEDType> BusDigital::getLEDTypes() {
     {TYPE_LPD8806,       "2P", PSTR("LPD8806")},
     {TYPE_LPD6803,       "2P", PSTR("LPD6803")},
     {TYPE_P9813,         "2P", PSTR("PP9813")},
+    {TYPE_HD108,         "2P", PSTR("HD108")}
   };
 }
 

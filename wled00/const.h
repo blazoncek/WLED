@@ -357,6 +357,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #define TYPE_LPD8806             52
 #define TYPE_P9813               53
 #define TYPE_LPD6803             54
+#define TYPE_HD108               55
 #define TYPE_2PIN_MAX            63
 //Network types (master broadcast) (80-95)
 #define TYPE_VIRTUAL_MIN         80

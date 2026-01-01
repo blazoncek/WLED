@@ -561,38 +561,29 @@ Swap: <select id="xw${s}" name="XW${s}">
 		function pinDropdowns() {
 			// construct array of GPIO fields
 			let fields = ["IR","RL"]; // IR & relay
+			//d.querySelectorAll('input[type="number"]:is([name="IR"],[name="RL"])').forEach((e)=>{fields.push(e.name);}); // IR & relay
 			d.querySelectorAll('#btns input[type="number"]').forEach((e)=>{fields.push(e.name);}); // buttons
 			d.querySelectorAll('.iST input[name^=G]:not(:is([data-type^=N],[data-type^=V])):required').forEach((e)=>{fields.push(e.name);}); // LED GPIO pins
 			// iterate through all form's pin fields and replace with dropdowns
-			for (let i of d.Sf.elements) {
-				if (i.type === "number" && fields.includes(i.name)) { //select all pin select elements
-					let v = parseInt(i.value);
-					let sel = addDropdown(i);
-					for (var j = -1; j < d.max_gpio; j++) {
-						if (d.rsvd.includes(j)) continue; // skip reserved pins
-						let foundPin = d.um_p.indexOf(j);
-						let txt = (j === -1) ? "unused" : `${j}`;
-						if (foundPin >= 0 && j !== v) txt += ` used`; // already reserved pin
-						if (d.ro_gpio.includes(j)) txt += " (R/O)";
-						let opt = addOption(sel, txt, j);
-						if (j === v) opt.selected = true; // this is "our" pin
-						else if (d.um_p.includes(j)) opt.disabled = true; // someone else's pin
-					}
+			fields.forEach((n,x)=>{
+				let i = d.Sf[n];
+				if (i.type !== "number") return; // skip non-number fields
+				let v = parseInt(i.value);
+				let sel = addDropdown(i);
+				for (var j = -1; j < d.max_gpio; j++) {
+					if (d.rsvd.includes(j)) continue; // skip reserved pins
+					let foundPin = d.um_p.includes(j);
+					let txt = (j === -1) ? "unused" : `${j}`;
+					if (foundPin && j !== v) txt += ` used`; // already reserved pin
+					if (d.ro_gpio.includes(j)) txt += " (R/O)";
+					let opt = addOption(sel, txt, j);
+					if (j === v) opt.selected = true; // this is "our" pin
+					else if (foundPin) opt.disabled = true; // someone else's pin
 				}
-			}
+			});
 			// update select options to reflect current usage and bus unchangeable pins
 			d.querySelectorAll("select.pin").forEach((e)=>{
 				pinUpd(e); // update current select across all selects
-				// now disable options that are reserved/unchangeable by other buses
-				e.querySelectorAll("option").forEach((i)=>{
-					if (rsvdPins.includes(parseInt(i.value))) {
-						i.disabled = true;
-						i.text = i.value + " reserved";
-					} else if (i.text.endsWith(" reserved")) {
-						i.disabled = false;
-						i.text = i.value;
-					}
-				});
 			});
 		}
 		function pinUpd(e) {
@@ -616,10 +607,23 @@ Swap: <select id="xw${s}" name="XW${s}">
 					}
 					if (i.value==e.value) {
 						i.disabled = true;
-						i.text += ` ${txt.charAt(0)=="G"?'LED':txt}`;
+						i.text += ` ${txt.charAt(0)=="G"?'LED'+txt.charAt(2):txt}`;
 					}
 					if (d.ro_gpio.includes(parseInt(i.value))) i.text += " (R/O)";
 				});
+			});
+			// now disable options that are reserved/unchangeable by other buses
+			e.querySelectorAll("option").forEach((i)=>{
+				if (rsvdPins.includes(parseInt(i.value))) {
+					i.disabled = true;
+					i.text = i.value + " reserved";
+				} else if (is8266() && e.name.indexOf("G0") == 0 && !["-1","1","2","3"].includes(i.value)) {
+					// on ESP8266, only GPIO 1,2,3 are usable for data pin
+					i.disabled = i.text.length > 2 || e.dataset.type == "D";
+				} else if (i.text.endsWith(" reserved")) {
+					i.disabled = false;
+					i.text = i.value;
+				}
 			});
 		}
 		// https://stackoverflow.com/questions/39729741/javascript-change-input-text-to-select-option
@@ -717,11 +721,14 @@ Swap: <select id="xw${s}" name="XW${s}">
 						LK.max = 255;
 						LK.step = 1;
 					}
-					LK.setAttribute("data-type", type); // set data-type for pin selects
 					const used = LK.required = (p < pins);
+					if ((LK.dataset.type && LK.dataset.type !== type) || !used) {
+						LK.value = "-1"; // reset pin if type changed or pin not used
+						pinUpd(LK);
+					}
+					LK.setAttribute("data-type", type); // set data-type for pin selects
 					if (p==0) continue; // 1st input is always required and shown
 					LK.style.display = used ? "inline" : "none";
-					if (!used) LK.value="";
 				}
 			}
 			// count currently used buses (including last added bus)
