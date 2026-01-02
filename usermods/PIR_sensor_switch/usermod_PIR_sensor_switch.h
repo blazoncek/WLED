@@ -302,7 +302,7 @@ void PIRsensorSwitch::publishHomeAssistantAutodiscovery()
     doc[F("stat_t")] = buf;
     doc[F("pl_on")]  = "on";
     doc[F("pl_off")] = "off";
-    sprintf_P(uid, PSTR("%s_motion"), escapedMac.c_str());
+    sprintf_P(uid, PSTR("%s_motion"), escapedMac);
     doc[F("uniq_id")] = uid;
     doc[F("dev_cla")] = F("motion");
     doc[F("exp_aft")] = 1800;

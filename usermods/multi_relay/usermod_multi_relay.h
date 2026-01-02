@@ -464,7 +464,7 @@ void MultiRelay::publishHomeAssistantAutodiscovery() {
   for (int i = 0; i < MULTI_RELAY_MAX_RELAYS; i++) {
     char uid[24], json_str[1024], buf[128];
     size_t payload_size;
-    sprintf_P(uid, PSTR("%s_sw%d"), escapedMac.c_str(), i);
+    sprintf_P(uid, PSTR("%s_sw%d"), escapedMac, i);
 
     if (_relay[i].pin >= 0 && _relay[i].external) {
       StaticJsonDocument<1024> json;

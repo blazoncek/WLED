@@ -212,11 +212,11 @@ void UsermodTemperature::publishHomeAssistantAutodiscovery() {
   strcat_P(buf, _Temperature);
   json[F("state_topic")] = buf;
   json[F("device_class")] = FPSTR(_temperature);
-  json[F("unique_id")] = escapedMac.c_str();
+  json[F("unique_id")] = escapedMac;
   json[F("unit_of_measurement")] = F("°C");
   payload_size = serializeJson(json, json_str);
 
-  sprintf_P(buf, PSTR("homeassistant/sensor/%s/config"), escapedMac.c_str());
+  sprintf_P(buf, PSTR("homeassistant/sensor/%s/config"), escapedMac);
   mqtt->publish(buf, 0, true, json_str, payload_size);
   HApublished = true;
 }

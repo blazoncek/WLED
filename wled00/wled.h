@@ -746,6 +746,8 @@ WLED_GLOBAL bool     udpConnected _INIT(false);
 WLED_GLOBAL bool     udp2Connected _INIT(false);
 WLED_GLOBAL bool     udpRgbConnected _INIT(false);
 #endif
+WLED_GLOBAL char escapedMac[13] _INIT("");
+WLED_GLOBAL DNSServer dnsServer;
 
 // ui style
 WLED_GLOBAL bool showWelcomePage _INIT(false);
@@ -813,14 +815,10 @@ WLED_GLOBAL unsigned long lastInterfaceUpdate _INIT(0);
 WLED_GLOBAL byte interfaceUpdateCallMode _INIT(CALL_MODE_INIT);
 
 // alexa udp
-WLED_GLOBAL String escapedMac;
 #ifndef WLED_DISABLE_ALEXA
   WLED_GLOBAL Espalexa espalexa;
   WLED_GLOBAL EspalexaDevice* espalexaDevice;
 #endif
-
-// dns server
-WLED_GLOBAL DNSServer dnsServer;
 
 // network time
 #ifndef WLED_LAT
@@ -987,16 +985,16 @@ WLED_GLOBAL volatile uint8_t jsonBufferLock _INIT(0);
 
 #ifndef WLED_AP_SSID_UNIQUE
   #define WLED_SET_AP_SSID() do { \
-    strcpy_P(apSSID, PSTR(WLED_AP_SSID)); \
+    strncpy_P(apSSID, sizeof(apSSID), PSTR(WLED_AP_SSID)); \
   } while(0)
 #else
   #define WLED_SET_AP_SSID() do { \
-    snprintf_P(\
+    snprintf_P( \
       apSSID, \
-      sizeof(apSSID)-1, \
+      sizeof(apSSID), \
       PSTR("%s_%s"), \
       WLED_AP_SSID, \
-      escapedMac.c_str()+6 \
+      escapedMac+6 \
     ); \
   } while(0)
 #endif

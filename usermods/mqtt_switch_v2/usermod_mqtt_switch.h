@@ -110,7 +110,7 @@ inline void UsermodMqttSwitch::onMqttConnect(bool sessionPresent)
         json[F("pl_on")] = F("ON");
 
         char uid[16];
-        sprintf(uid, "%s_sw%d", escapedMac.c_str(), pinNr);
+        sprintf(uid, "%s_sw%d", escapedMac, pinNr);
         json[F("unique_id")] = uid;
 
         strcpy(buf, mqttDeviceTopic);

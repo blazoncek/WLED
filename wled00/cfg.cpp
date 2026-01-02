@@ -53,7 +53,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   getStringFromJson(hostName, id[F("mdns")], sizeof(hostName));
   if (strlen(hostName) == 0) {
     mDNSenabled = false; // if no host name is set, disable mDNS
-    sprintf_P(hostName, PSTR("wled-%.*s"), 6, escapedMac.c_str() + 6);
+    sprintf_P(hostName, PSTR("wled-%.*s"), 6, escapedMac + 6);
   }
 
   getStringFromJson(serverDescription, id["name"], sizeof(serverDescription));
@@ -630,9 +630,9 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   getStringFromJson(mqttUser, if_mqtt[F("user")], 41);
   getStringFromJson(mqttPass, if_mqtt["psk"], 65); //normally not present due to security
   getStringFromJson(mqttClientID, if_mqtt[F("cid")], 41);
-  if (mqttClientID[0] == 0) sprintf_P(mqttClientID, PSTR("WLED-%.*s"), 6, escapedMac.c_str() + 6);
+  if (mqttClientID[0] == 0) sprintf_P(mqttClientID, PSTR("WLED-%.*s"), 6, escapedMac + 6);
   getStringFromJson(mqttDeviceTopic, if_mqtt[F("topics")][F("device")], MQTT_MAX_TOPIC_LEN+1); // "wled/test"
-  if (mqttDeviceTopic[0] == 0) sprintf_P(mqttDeviceTopic, PSTR("wled/%.*s"), 6, escapedMac.c_str() + 6);
+  if (mqttDeviceTopic[0] == 0) sprintf_P(mqttDeviceTopic, PSTR("wled/%.*s"), 6, escapedMac + 6);
   getStringFromJson(mqttGroupTopic, if_mqtt[F("topics")][F("group")], MQTT_MAX_TOPIC_LEN+1); // ""
   CJSON(retainMqttMsg, if_mqtt[F("rtn")]);
 #endif
