@@ -862,7 +862,7 @@ void serializeInfo(JsonObject root)
   #endif
   root[F("lwip")] = 0; //deprecated
 #else
-  root[F("arch")] = "esp8266";
+  root[F("arch")] = "esp8266"; // must be lowercase (see index.js)
   root[F("core")] = ESP.getCoreVersion();
   root[F("clock")] = ESP.getCpuFreqMHz();
   root[F("flash")] = (ESP.getFlashChipSize()/1024)/1024;

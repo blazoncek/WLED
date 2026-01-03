@@ -65,7 +65,7 @@ function isNumeric(n) {return !isNaN(parseFloat(n)) && isFinite(n);}
 function isRgbBlack(a) {return (parseInt(a.r) == 0 && parseInt(a.g) == 0 && parseInt(a.b) == 0);}
 
 // returns RGB color from a given dataset
-function rgbStr(a) {return "rgb(" + a.r + "," + a.g + "," + a.b + ")";}
+function rgbStr(a) {return `rgb(${a.r},${a.g},${a.b})`;}
 
 // brightness approximation for selecting white as text color if background bri < 127, and black if higher
 function rgbBri(a) {return 0.2126*parseInt(a.r) + 0.7152*parseInt(a.g) + 0.0722*parseInt(a.b);}
@@ -404,14 +404,14 @@ function checkUsed(i)
 function pName(i)
 {
 	var n = "Preset " + i;
-	if (pJson && pJson[i] && pJson[i].n) n = pJson[i].n;
+	if (pJson?.[i]?.n) n = pJson[i].n;
 	return n;
 }
 
 function isPlaylist(i)
 {
-	if (isNumeric(i)) return pJson[i].playlist && pJson[i].playlist.ps;
-	if (isObj(i)) return i.playlist && i.playlist.ps;
+	if (isNumeric(i)) return !!pJson?.[i]?.playlist?.ps;
+	if (isObj(i)) return !!i?.playlist?.ps;
 	return false;
 }
 
@@ -928,7 +928,7 @@ function populateSegments(s)
 	if (!isM && !noNewSegs && (cfg.comp.seglen?parseInt(gId(`seg${lSeg}s`).value):0)+parseInt(gId(`seg${lSeg}e`).value)<ledCount) gId(`segr${lSeg}`).classList.remove("hide");
 	gId('segutil2').style.display = (segCount > 1) ? "block":"none"; // rsbtn parent
 
-	if (Array.isArray(li.maps) && li.maps.length>1) {
+	if (li?.maps?.length>1) {
 		let cont = `Ledmap:&nbsp;<select class="sel-sg" onchange="requestJson({'ledmap':parseInt(this.value)})">`;
 		for (const k of li.maps) cont += `<option ${s.ledmap===k.id?"selected":""} value="${k.id}">${k.id==0?'Default':(k.n?k.n:'ledmap'+k.id+'.json')}</option>`;
 		cont += "</select></div>";
@@ -963,7 +963,7 @@ function populateEffects(effects)
 		let nm = ef.name+" ";
 		let fd = "";
 		if (ef.name.indexOf("RSVD") < 0) {
-			if (Array.isArray(fxdata) && fxdata.length>id) {
+			if (fxdata?.length>id) {
 				if (fxdata[id].length==0) fd = ";;!;1"
 				else fd = fxdata[id];
 				let eP = (fd == '')?[]:fd.split(";"); // effect parameters
@@ -1365,7 +1365,7 @@ function updateSelectedFx()
 		var selectedName = selectedEffect.querySelector(".name").innerText;
 
 		// Display selected effect name on button in simplified UI
-		let selectedNameOnlyAscii = selectedName.replace(/[^\x00-\x7F]/g, "");
+		let selectedNameOnlyAscii = selectedName.replace(/[^\x20-\x7F]/g, "");
 		if (simplifiedUI) {
 			gId("fxbtn").innerText = "Effect: " + selectedNameOnlyAscii;
 		}
@@ -1578,7 +1578,7 @@ function readState(s,command=false)
 //       - Defining SEGCOL(<i>) can override a specific palette using these values (e.g. Color Gradient)
 function setEffectParameters(idx)
 {
-	if (!(Array.isArray(fxdata) && fxdata.length>idx)) return;
+	if (!(fxdata?.length>idx)) return;
 	var controlDefined = fxdata[idx].length;
 	var effectPar = fxdata[idx];
 	var effectPars = (effectPar == '')?[]:effectPar.split(";");
@@ -1710,7 +1710,7 @@ function requestJson(command=null)
 		//command.bs = parseInt(gId('bs').value);
 		req = JSON.stringify(command);
 		if (req.length > 1340) useWs = false; // do not send very long requests over websocket
-		if (req.length >  500 && lastinfo && lastinfo.arch == "esp8266") useWs = false; // esp8266 can only handle 500 bytes
+		if (req.length >  500 && lastinfo?.arch == "esp8266") useWs = false; // esp8266 can only handle 500 bytes
 	};
 
 	if (useWs) {
@@ -1767,7 +1767,7 @@ function requestJson(command=null)
 		if (!pJson || isEmpty(pJson)) setTimeout(()=>{
 			loadPresets(()=>{
 				wsRpt = 0;
-				if (!(ws && ws.readyState === WebSocket.OPEN)) makeWS();
+				if (!(ws?.readyState === WebSocket.OPEN)) makeWS();
 			});
 		},25);
 		reqsLegal = true;
@@ -1786,7 +1786,7 @@ function togglePower()
 {
 	isOn = !isOn;
 	var obj = {"on": isOn};
-	if (isOn && lastinfo && lastinfo.live && lastinfo.liveseg>=0) {
+	if (isOn && lastinfo?.live && lastinfo?.liveseg>=0) {
 		obj.live = false;
 		obj.seg = [];
 		obj.seg[0] = {"id": lastinfo.liveseg, "frz": false};
@@ -1824,7 +1824,7 @@ function toggleLiveview()
 	if (isInfo && isM) toggleInfo();
 	if (isNodes && isM) toggleNodes();
 	isLv = !isLv;
-	let wsOn = ws && ws.readyState === WebSocket.OPEN;
+	let wsOn = ws?.readyState === WebSocket.OPEN;
 
 	var lvID = "liveview";
 	if (isM && wsOn) {
@@ -2080,7 +2080,7 @@ ${makePlSel(i, plJson[i].end?plJson[i].end:0)}
 	<input type="checkbox" id="p${i}sbchk">
 	<span class="checkmark"></span>
 </label>`;
-		if (Array.isArray(lastinfo.maps) && lastinfo.maps.length>1) {
+		if (lastinfo?.maps?.length>1) {
 			content += `<div class="lbl-l">Ledmap:&nbsp;<div class="sel-p"><select class="sel-p" id="p${i}lmp"><option value="">Unchanged</option>`;
 			for (const k of lastinfo.maps) content += `<option value="${k.id}"${(i>0 && pJson[i].ledmap==k.id)?" selected":""}>${k.id==0?'Default':(k.n?k.n:'ledmap'+k.id+'.json')}</option>`;
 			content += "</select></div></div>";
@@ -2121,7 +2121,7 @@ function makePUtil()
 	p.innerHTML = `<div class="presin expanded">${makeP(0)}</div>`;
 	let pTx = gId('p0txt');
 	pTx.focus();
-	pTx.value = d.querySelector(`#fxlist div[data-id="${selectedFx}"] .name`).innerText;
+	pTx.value = d.querySelector(`#fxlist div[data-id="${selectedFx}"] .name`).innerText.replace(/[^\x20-\x7F]/g, "").trim(); // remove non-ascii chars
 	pTx.select();
 	p.scrollIntoView({
 		behavior: 'smooth',
@@ -2414,7 +2414,7 @@ function tglFreeze(s=null)
 	if (s!==null) {
 		obj.seg.id = s;
 		// if live segment, enter live override (which also unfreezes)
-		if (lastinfo && s==lastinfo.liveseg && lastinfo.live) obj = {"lor":1};
+		if (s==lastinfo?.liveseg && lastinfo?.live) obj = {"lor":1};
 	}
 	requestJson(obj);
 }
@@ -2501,7 +2501,9 @@ function setLor(i)
 function setPreset(i)
 {
 	var obj = {"ps":i};
-	if (!isPlaylist(i) && pJson && pJson[i] && (!pJson[i].win || pJson[i].win.indexOf("Please") <= 0)) {
+	if (isPlaylist(i)) {
+		obj.on = true; // force on
+	} else if (pJson?.[i] && (!pJson[i]?.win?.indexOf("Please") > 0)) { // must use ! check here as undefined is possible in optional chaining (?.)
 		// we will send the complete preset content as to avoid delay introduced by
 		// async nature of applyPreset() and having to read the preset from file system.
 		obj = {"pd":i}; // use "pd" instead of "ps" to indicate that we are sending the preset content directly
@@ -2509,8 +2511,7 @@ function setPreset(i)
 		delete obj.ql; // no need for quick load
 		delete obj.n;  // no need for name
 	}
-	if (isPlaylist(i)) obj.on = true; // force on
-	showToast("Loading preset " + pName(i) +" (" + i + ")");
+	showToast(`Loading preset ${pName(i)} (${i})`);
 	requestJson(obj);
 }
 
@@ -2558,7 +2559,7 @@ function saveP(i,pl)
 	var pQN = gId(`p${i}ql`).value;
 	if (pQN.length > 0) obj.ql = pQN;
 
-	showToast("Saving " + pN +" (" + pI + ")");
+	showToast(`Saving ${pN} (${pI})`);
 	requestJson(obj);
 	if (obj.o) {
 		pJson[pI] = obj;
@@ -2848,7 +2849,7 @@ function loadPalettesData(callback = null)
 	if (lsPalData) {
 		try {
 			var dp = JSON.parse(lsPalData);
-			if (dp && isObj(dp.p)) {
+			if (isObj(dp?.p)) {
 				palettesData = dp.p;
 				if (callback) callback();
 				return;
@@ -2919,7 +2920,7 @@ function search(field, listId = null) {
 	const listItems = gId(listId).querySelectorAll('.lstI');
 	listItems.forEach((listItem, i) => {
 		if (listId !== 'pcont' && i === 0) return;
-		const listItemName = listItem.querySelector('.name').innerText.toUpperCase().replace(/[^\x00-\x7F]/g, ""); // ASCII only
+		const listItemName = listItem.querySelector('.name').innerText.toUpperCase().replace(/[^\x20-\x7F]/g, ""); // ASCII only
 		const searchIndex = listItemName.indexOf(field.value.toUpperCase());
 		listItem.dataset.searchIndex = searchIndex < 0 ? Number.MAX_SAFE_INTEGER : searchIndex;
 		if ((searchIndex < 0) && !listItem.classList.contains("selected")) {
@@ -2980,18 +2981,16 @@ function filterFocus(e) {
 		// compute sticky top (with delay for transition)
 		if (!h) setTimeout(() => {
 			sCol('--sti', (sti+f.offsetHeight) + "px"); // has an unpleasant consequence on palette offset
-			//console.log(sti + " -> " + (sti+f.offsetHeight));
 		}, 255);
 		f.classList.remove('fade');	// immediately show (still has transition)
 	}
 	if (e.type === "blur") {
 		setTimeout(() => {
-			if (e.target === document.activeElement && document.hasFocus()) return;
+			if (e.target === d.activeElement && d.hasFocus()) return;
 			// do not hide if filter is active
 			if (!c) {
 				// compute sticky top
 				sCol('--sti', (sti-h) + "px"); // has an unpleasant consequence on palette offset
-				//console.log(sti + " -> " + (sti-h));
 				f.classList.add('fade');
 			}
 		}, 255);	// wait with hiding
@@ -3157,7 +3156,7 @@ function size()
 
 function togglePcMode(fromB = false)
 {
-	let ap = (fromB && !lastinfo) || (lastinfo && lastinfo.wifi && lastinfo.wifi.ap);
+	let ap = (fromB && !lastinfo) || (lastinfo?.wifi?.ap);
 	if (fromB) {
 		pcModeA = !pcModeA;
 		localStorage.setItem('pcm', pcModeA);
