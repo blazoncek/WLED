@@ -2160,7 +2160,8 @@ bool WS2812FX::deserializeMap(unsigned n) {
 
     DEBUG_PRINTF_P(PSTR("ledmap allocated: %uB @ %p\n"), sizeof(uint16_t)*getLengthTotal(), customMappingTable);
     File f = WLED_FS.open(fileName, "r");
-    if (!f.find("\"map\":[")) { // stops after the '[' of "map":[...
+    // look for "map":[ (which may include spaces/newlines in between tokens)
+    if (!f.find("\"map\"") || !f.find(':') || !f.find('[')) { // stops after the "map":[
       DEBUG_PRINTF_P(PSTR("ERROR Invalid ledmap in %s: no map found\n"), fileName);
       p_free(customMappingTable);
       customMappingTable = nullptr;
@@ -2205,7 +2206,6 @@ bool WS2812FX::deserializeMap(unsigned n) {
         if (index >= getLengthTotal()) break;
         f.find(',');  // skip to next entry
       }
-      customMappingSize = getLengthTotal();
     } else
     #endif
     while (f.available()) { // f.position() < f.size() - 1
@@ -2218,10 +2218,12 @@ bool WS2812FX::deserializeMap(unsigned n) {
     currentLedmap = n;
     f.close();
 
+    customMappingSize = max(minMappingSize, (size_t)getLengthTotal());
+
     #ifdef WLED_DEBUG
     DEBUG_PRINT(F("Loaded ledmap:"));
     for (unsigned i = 0; i < customMappingSize; i++) {
-      DEBUG_PRINTF_P(PSTR("%4d,%c"), (int)(int16_t)customMappingTable[i], i%Segment::maxWidth ? ' ' : '\n');
+      DEBUG_PRINTF_P(PSTR("%c%4d,"), i%Segment::maxWidth ? ' ' : '\n', (int)(int16_t)customMappingTable[i]);
     }
     DEBUG_PRINTLN();
     #endif
