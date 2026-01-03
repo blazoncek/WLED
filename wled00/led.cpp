@@ -131,7 +131,7 @@ void stateUpdated(byte callMode) {
 
 
 void updateInterfaces(uint8_t callMode) {
-  if (!interfaceUpdateCallMode || millis() - lastInterfaceUpdate < INTERFACE_UPDATE_COOLDOWN) return;
+  if (!interfaceUpdateCallMode || jsonBufferLock || millis() - lastInterfaceUpdate < INTERFACE_UPDATE_COOLDOWN) return;
 
   sendDataWs();
   lastInterfaceUpdate = millis();

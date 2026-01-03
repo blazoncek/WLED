@@ -37,6 +37,7 @@ void wsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
 
         bool verboseResponse = false;
         if (!requestJSONBufferLock(11)) {
+          DEBUG_PRINTF_P(PSTR("WS JSON buffer lock failed (client %u)."), client->id());
           client->text(F("{\"error\":3}")); // ERR_NOBUF
           return;
         }
@@ -110,6 +111,7 @@ void sendDataWs(AsyncWebSocketClient * client)
   if (!ws.count()) return;
 
   if (!requestJSONBufferLock(12)) {
+    DEBUG_PRINTF_P(PSTR("WS JSON buffer lock failed (%s client%c)."), client ? "single" : "all", client ? ' ' : 's');
     const char* error = PSTR("{\"error\":3}");
     if (client) {
       client->text(FPSTR(error)); // ERR_NOBUF
