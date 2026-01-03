@@ -949,8 +949,9 @@ div.sel-p:after {
 	border-right: 8px solid transparent;
 	border-top: 8px solid var(--c-f);
 }
-select.sel-ple {
+select.sel-ple, select.sel-sg {
 	text-align: center;
+	text-overflow: ellipsis;
 }
 select.sel-sg {
 	margin: 5px 0;

@@ -518,6 +518,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   UsermodManager::readFromJsonState(root);
 
   loadLedmap = root[F("ledmap")] | loadLedmap;
+  if (loadLedmap >= 0) stateResponse = false; // force LED map reload without notification
 
   byte ps = root[F("psave")];
   if (ps > 0 && ps < 251) savePreset(ps, nullptr, root);
@@ -594,6 +595,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
         forceReconnect = true;
       staActive = wifiOn;
     }
+    stateResponse = false; // wifi changes do not require state response
   }
 
   if (stateChanged) stateUpdated(callMode);
