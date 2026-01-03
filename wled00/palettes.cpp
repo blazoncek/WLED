@@ -82,8 +82,7 @@ const uint8_t es_pinksplash_08_gp[] PROGMEM = {
   127, 227,   9,  85,
   175, 234, 205, 213,
   221, 205,  38, 176,
-  255, 205,  38, 176,
-};
+  255, 205,  38, 176};
 
 // Gradient palette "es_ocean_breeze_036_gp", originally from
 // http://seaviewsensing.com/pub/cpt-city/es/ocean_breeze/es_ocean_breeze_036.c3g
@@ -369,10 +368,10 @@ const uint8_t Blue_Cyan_Yellow_gp[] PROGMEM = {
 
 //Custom palette by Aircoookie
 const byte Orange_Teal_gp[] PROGMEM = {
-    0,   0,150, 92,
-   55,   0,150, 92,
-  200, 255, 72,  0,
-  255, 255, 72,  0};
+    0,   0, 150,  92,
+   55,   0, 150,  92,
+  200, 255,  72,   0,
+  255, 255,  72,   0};
 
 //Custom palette by Aircoookie
 const byte Tiamat_gp[] PROGMEM = {
@@ -581,8 +580,7 @@ const uint8_t yelblu_hot_gp[] PROGMEM = {
   158, 197,  57,  22,
   183, 218, 117,  27,
   219, 239, 177,  32,
-  255, 246, 247,  27,
-};
+  255, 246, 247,  27};
 
 // Gradient palette "bhw2_45_gp", originally from
 // http://seaviewsensing.com/pub/cpt-city/bhw/bhw2/bhw2_45.c3g
@@ -663,7 +661,7 @@ const byte trafficlight_gp[] PROGMEM = {
 
 const byte Aurora2_gp[] PROGMEM = {
     0,  17, 177,  13,    //Greenish
-    64, 121, 242,   5,    //Greenish
+   64, 121, 242,   5,    //Greenish
   128,  25, 173, 121,    //Turquoise
   192, 250,  77, 127,    //Pink
   255, 171, 101, 221};   //Purple

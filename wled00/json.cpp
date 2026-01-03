@@ -981,7 +981,7 @@ void setPaletteColors(JsonArray json, byte* tcp)
 
 void serializePalettes(JsonObject root, int page)
 {
-  byte tcp[72];
+  CRGBPalette16 tmpPalette;
   #ifdef ESP8266
   constexpr int itemPerPage = 5;
   #else
@@ -1001,13 +1001,14 @@ void serializePalettes(JsonObject root, int page)
   JsonObject palettes  = root.createNestedObject("p");
 
   for (int i = start; i < end; i++) {
-    JsonArray curPalette = palettes.createNestedArray(String(i >= palettesCount ? 255 - i + palettesCount : i));
+    const int palIndex = i >= palettesCount ? 255 - i + palettesCount : i;
+    JsonArray curPalette = palettes.createNestedArray(String(palIndex));
     switch (i) {
       case 0: //default palette
         setPaletteColors(curPalette, PartyColors_p);
         break;
       case 1: //random
-           for (int j = 0; j < 4; j++) curPalette.add("r");
+        for (int j = 0; j < 4; j++) curPalette.add("r");
         break;
       case 2: //primary color only
         curPalette.add("c1");
@@ -1030,14 +1031,7 @@ void serializePalettes(JsonObject root, int page)
         curPalette.add("c1");
         break;
       default:
-        if (i >= palettesCount) // custom palettes
-          setPaletteColors(curPalette, customPalettes[i - palettesCount]);
-        else if (i < DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_COUNT) // palette 6 - 12, fastled palettes
-          setPaletteColors(curPalette, *fastledPalettes[i - DYNAMIC_PALETTE_COUNT]);
-        else {
-          memcpy_P(tcp, (byte*)pgm_read_dword(&(gGradientPalettes[i - (DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_COUNT)])), sizeof(tcp));
-          setPaletteColors(curPalette, tcp);
-        }
+        setPaletteColors(curPalette, strip.getMainSegment().loadPalette(tmpPalette, palIndex));
         break;
     }
   }
