@@ -1036,15 +1036,18 @@ function genPalPrevCss(id)
 		let r, g, b;
 		let index = false;
 		if (Array.isArray(e)) {
+			// handle actual color entry [index, r, g, b]
 			index = Math.round(e[0]/255*100);
 			r = e[1];
 			g = e[2];
 			b = e[3];
 		} else if (e == 'r') {
+			// handle "r" entry for random colors
 			r = Math.random() * 255;
 			g = Math.random() * 255;
 			b = Math.random() * 255;
 		} else {
+			// handle "c1", "c2", ... color references (since palettesData is only filled once and then used from local storage)
 			let i = e[1] - 1;
 			var cd = gId('csl').children;
 			r = parseInt(cd[i].dataset.r);
@@ -1445,6 +1448,43 @@ function readState(s,command=false)
 {
 	if (!s) return false;
 	if (s.success) return true; // no data to process
+	if (s.error && s.error != 0) {
+		var errstr = "";
+		switch (s.error) {
+			case  1:
+				errstr = "Denied!";
+				break;
+			case  3:
+				errstr = "Buffer locked!";
+				break;
+			case  7:
+				errstr = "Buffer allocation failed!";
+				break;
+			case  8:
+				errstr = "Effect RAM depleted!";
+				break;
+			case  9:
+				errstr = "JSON parsing error!";
+				break;
+			case 10:
+				errstr = "Could not mount filesystem!";
+				break;
+			case 11:
+				errstr = "Not enough space to save preset!";
+				break;
+			case 12:
+				errstr = "Preset not found.";
+				break;
+			case 13:
+				errstr = "Missing ir.json.";
+				break;
+			case 19:
+				errstr = "A filesystem error has occured.";
+				break;
+		}
+		showToast('Error ' + s.error + ": " + errstr, true);
+		return s.error != 3;
+	}
 
 	isOn = s.on;
 	gId('sliderBri').value = s.bri;
@@ -1510,43 +1550,6 @@ function readState(s,command=false)
 	gId('checkO1').checked = !(!i.o1);
 	gId('checkO2').checked = !(!i.o2);
 	gId('checkO3').checked = !(!i.o3);
-
-	if (s.error && s.error != 0) {
-		var errstr = "";
-		switch (s.error) {
-			case  1:
-				errstr = "Denied!";
-				break;
-			case  3:
-				errstr = "Buffer locked!";
-				break;
-			case  7:
-				errstr = "Buffer allocation failed!";
-				break;
-			case  8:
-				errstr = "Effect RAM depleted!";
-				break;
-			case  9:
-				errstr = "JSON parsing error!";
-				break;
-			case 10:
-				errstr = "Could not mount filesystem!";
-				break;
-			case 11:
-				errstr = "Not enough space to save preset!";
-				break;
-			case 12:
-				errstr = "Preset not found.";
-				break;
-			case 13:
-				errstr = "Missing ir.json.";
-				break;
-			case 19:
-				errstr = "A filesystem error has occured.";
-				break;
-		}
-		showToast('Error ' + s.error + ": " + errstr, true);
-	}
 
 	selectedPal = i.pal;
 	selectedFx = i.fx;
@@ -1761,7 +1764,10 @@ function requestJson(command=null)
 			if (simplifiedUI) simplifyUI();
 		}
 		var s = json.state ? json.state : json;
-		readState(s);
+		if (!readState(s)) {
+			setTimeout(requestJson,250);
+			return;
+		}
 
 		//load presets and open websocket sequentially
 		if (!pJson || isEmpty(pJson)) setTimeout(()=>{
