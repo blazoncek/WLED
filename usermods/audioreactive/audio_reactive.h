@@ -883,7 +883,7 @@ static uint16_t mode_juggles(void) {                   // Juggles. By Andrew Tul
 
   for (size_t i=0; i<SEGMENT.intensity/32+1U; i++) {
     // if SEGLEN equals 1, we will always set color to the first and only pixel, but the effect is still good looking
-    SEGMENT.setPixelColor(beatsin16(SEGMENT.speed/4+i*2,0,SEGLEN-1), SEGCOLOR(1).nblend(SEGMENT.color_from_palette(strip.now/4+i*2, false, false, 0), my_sampleAgc));
+    SEGMENT.setPixelColor(beatsin16_t(SEGMENT.speed/4+i*2,0,SEGLEN-1), SEGCOLOR(1).nblend(SEGMENT.color_from_palette(strip.now/4+i*2, false, false, 0), my_sampleAgc));
   }
 
   return FRAMETIME;
