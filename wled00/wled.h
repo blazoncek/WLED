@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2601010
+#define VERSION 2601060
 #else
 #define VERSION BUILD
 #endif
@@ -166,6 +166,12 @@
 #define FASTLED_INTERNAL //remove annoying pragma messages
 #define USE_GET_MILLISECOND_TIMER
 #include "FastLED.h"
+// fastled sin16 replacement
+#ifdef sin16
+  #undef sin16
+#endif
+#define sin16(x) sin16_t(x)
+#define cos16(x) cos16_t(x)
 #include "const.h"
 #include "colors.h"
 #include "fcn_declare.h"
