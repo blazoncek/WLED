@@ -19,7 +19,7 @@ function tooltip(cont=null) {
 		element.addEventListener("mouseover", ()=>{
 			// save title
 			element.setAttribute("data-title", element.getAttribute("title"));
-			const tooltip = d.createElement("span");
+			const tooltip = cE("span");
 			tooltip.className = "tooltip";
 			tooltip.textContent = element.getAttribute("title");
 
@@ -53,7 +53,7 @@ function tooltip(cont=null) {
 };
 // https://www.educative.io/edpresso/how-to-dynamically-load-a-js-file-in-javascript
 function loadJS(FILE_URL, async = true, preGetV = undefined, postGetV = undefined) {
-	let scE = d.createElement("script");
+	let scE = cE("script");
 	scE.setAttribute("src", FILE_URL);
 	scE.setAttribute("type", "text/javascript");
 	scE.setAttribute("async", async);
