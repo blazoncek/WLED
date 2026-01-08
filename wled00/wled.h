@@ -884,7 +884,9 @@ WLED_GLOBAL AsyncWebHandler *editHandler _INIT(nullptr);
 // udp interface objects
 WLED_GLOBAL WiFiUDP notifierUdp, rgbUdp, notifier2Udp;
 WLED_GLOBAL WiFiUDP ntpUdp;
+#ifndef WLED_USE_DDP_ONLY
 WLED_GLOBAL ESPAsyncE131 e131 _INIT_N(((handleE131Packet)));
+#endif
 WLED_GLOBAL ESPAsyncE131 ddp  _INIT_N(((handleE131Packet)));
 WLED_GLOBAL bool e131NewData _INIT(false);
 

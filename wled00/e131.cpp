@@ -8,60 +8,224 @@
  * E1.31 handler
  */
 
-//DDP protocol support, called by handleE131Packet
-//handles RGB data only
-void handleDDPPacket(e131_packet_t* p) {
-  static bool ddpSeenPush = false;  // have we seen a push yet?
-  int lastPushSeq = e131LastSequenceNumber[0];
+#ifndef WLED_USE_DDP_ONLY
+// ArtNet Poll support
+static void prepareArtnetPollReply(ArtPollReply *reply) {
+  // Art-Net
+  reply->reply_id[0] = 0x41;
+  reply->reply_id[1] = 0x72;
+  reply->reply_id[2] = 0x74;
+  reply->reply_id[3] = 0x2d;
+  reply->reply_id[4] = 0x4e;
+  reply->reply_id[5] = 0x65;
+  reply->reply_id[6] = 0x74;
+  reply->reply_id[7] = 0x00;
 
-  //reject late packets belonging to previous frame (assuming 4 packets max. before push)
-  if (e131SkipOutOfSequence && lastPushSeq) {
-    int sn = p->sequenceNum & 0xF;
-    if (sn) {
-      if (lastPushSeq > 5) {
-        if (sn > (lastPushSeq -5) && sn < lastPushSeq) return;
-      } else {
-        if (sn > (10 + lastPushSeq) || sn < lastPushSeq) return;
-      }
-    }
+  reply->reply_opcode = ARTNET_OPCODE_OPPOLLREPLY;
+
+  IPAddress localIP = Network.localIP();
+  for (unsigned i = 0; i < 4; i++) {
+    reply->reply_ip[i] = localIP[i];
   }
 
-  unsigned ddpChannelsPerLed = ((p->dataType & 0b00111000)>>3 == 0b011) ? 4 : 3; // data type 0x1B (formerly 0x1A) is RGBW (type 3, 8 bit/channel)
+  reply->reply_port = ARTNET_DEFAULT_PORT;
 
-  uint32_t start =  htonl(p->channelOffset) / ddpChannelsPerLed;
-  start += DMXAddress / ddpChannelsPerLed;
-  unsigned stop = start + htons(p->dataLen) / ddpChannelsPerLed;
-  uint8_t* data = p->data;
-  unsigned c = 0;
-  if (p->flags & DDP_TIMECODE_FLAG) c = 4; //packet has timecode flag, we do not support it, but data starts 4 bytes later
+  const char * numberEnd = strchr(versionString,'.');
+  reply->reply_version_h = (uint8_t)strtoul(versionString, nullptr, 10);
+  reply->reply_version_l = (uint8_t)(numberEnd != nullptr ? strtoul(++numberEnd, nullptr, 10) : 0);
 
-  if (realtimeMode != REALTIME_MODE_DDP) ddpSeenPush = false; // just starting, no push yet
-  realtimeLock(realtimeTimeoutMs, REALTIME_MODE_DDP);
+  // Switch values depend on universe, set before sending
+  reply->reply_net_sw = 0x00;
+  reply->reply_sub_sw = 0x00;
 
-  if (!realtimeOverride) {
-    for (unsigned i = start; i < stop; i++, c += ddpChannelsPerLed) {
-      setRealtimePixel(i, data[c], data[c+1], data[c+2], ddpChannelsPerLed >3 ? data[c+3] : 0);
-    }
+  reply->reply_oem_h = 0x00; // TODO add assigned oem code
+  reply->reply_oem_l = 0x00;
+
+  reply->reply_ubea_ver = 0x00;
+
+  // Indicators in Normal Mode
+  // All or part of Port-Address programmed by network or Web browser
+  reply->reply_status_1 = 0xE0;
+
+  reply->reply_esta_man = 0x0000;
+
+  strlcpy((char *)(reply->reply_short_name), serverDescription, 18);
+  strlcpy((char *)(reply->reply_long_name), serverDescription, 64);
+
+  reply->reply_node_report[0] = '\0';
+
+  reply->reply_num_ports_h = 0x00;
+  reply->reply_num_ports_l = 0x01; // One output port
+
+  reply->reply_port_types[0] = 0x80; // Output DMX data
+  reply->reply_port_types[1] = 0x00;
+  reply->reply_port_types[2] = 0x00;
+  reply->reply_port_types[3] = 0x00;
+
+  // No inputs
+  reply->reply_good_input[0] = 0x00;
+  reply->reply_good_input[1] = 0x00;
+  reply->reply_good_input[2] = 0x00;
+  reply->reply_good_input[3] = 0x00;
+
+  // One output
+  reply->reply_good_output_a[0] = 0x80; // Data is being transmitted
+  reply->reply_good_output_a[1] = 0x00;
+  reply->reply_good_output_a[2] = 0x00;
+  reply->reply_good_output_a[3] = 0x00;
+
+  // Values depend on universe, set before sending
+  reply->reply_sw_in[0] = 0x00;
+  reply->reply_sw_in[1] = 0x00;
+  reply->reply_sw_in[2] = 0x00;
+  reply->reply_sw_in[3] = 0x00;
+
+  // Values depend on universe, set before sending
+  reply->reply_sw_out[0] = 0x00;
+  reply->reply_sw_out[1] = 0x00;
+  reply->reply_sw_out[2] = 0x00;
+  reply->reply_sw_out[3] = 0x00;
+
+  reply->reply_sw_video = 0x00;
+  reply->reply_sw_macro = 0x00;
+  reply->reply_sw_remote = 0x00;
+
+  reply->reply_spare[0] = 0x00;
+  reply->reply_spare[1] = 0x00;
+  reply->reply_spare[2] = 0x00;
+
+  // A DMX to / from Art-Net device
+  reply->reply_style = 0x00;
+
+  Network.localMAC(reply->reply_mac);
+
+  for (unsigned i = 0; i < 4; i++) {
+    reply->reply_bind_ip[i] = localIP[i];
   }
 
-  bool push = p->flags & DDP_PUSH_FLAG;
-  ddpSeenPush |= push;
-  if (!ddpSeenPush || push) { // if we've never seen a push, or this is one, render display
-    e131NewData = true;
-    int sn = p->sequenceNum & 0xF;
-    if (sn) e131LastSequenceNumber[0] = sn;
+  reply->reply_bind_index = 1;
+
+  // Product supports web browser configuration
+  // Node’s IP is DHCP or manually configured
+  // Node is DHCP capable
+  // Node supports 15 bit Port-Address (Art-Net 3 or 4)
+  // Node is able to switch between ArtNet and sACN
+  reply->reply_status_2 = (multiWiFi[0].staticIP[0] == 0) ? 0x1F : 0x1D;
+
+  // RDM is disabled
+  // Output style is continuous
+  reply->reply_good_output_b[0] = 0xC0;
+  reply->reply_good_output_b[1] = 0xC0;
+  reply->reply_good_output_b[2] = 0xC0;
+  reply->reply_good_output_b[3] = 0xC0;
+
+  // Fail-over state: Hold last state
+  // Node does not support fail-over
+  reply->reply_status_3 = 0x00;
+
+  for (unsigned i = 0; i < 21; i++) {
+    reply->reply_filler[i] = 0x00;
   }
 }
 
-//E1.31 and Art-Net protocol support
-void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol){
+static void sendArtnetPollReply(ArtPollReply *reply, IPAddress ipAddress, uint16_t portAddress) {
+  reply->reply_net_sw = (uint8_t)((portAddress >> 8) & 0x007F);
+  reply->reply_sub_sw = (uint8_t)((portAddress >> 4) & 0x000F);
+  reply->reply_sw_out[0] = (uint8_t)(portAddress & 0x000F);
 
+  snprintf_P((char *)reply->reply_node_report, sizeof(reply->reply_node_report)-1, PSTR("#0001 [%04u] OK - WLED v%s"), pollReplyCount, versionString);
+
+  if (pollReplyCount < 9999) {
+    pollReplyCount++;
+  } else {
+    pollReplyCount = 0;
+  }
+
+  notifierUdp.beginPacket(ipAddress, ARTNET_DEFAULT_PORT);
+  notifierUdp.write(reply->raw, sizeof(ArtPollReply));
+  notifierUdp.endPacket();
+
+  reply->reply_bind_index++;
+}
+
+static void handleArtnetPollReply(IPAddress ipAddress) {
+  ArtPollReply artnetPollReply;
+  prepareArtnetPollReply(&artnetPollReply);
+
+  unsigned startUniverse = e131Universe;
+  unsigned endUniverse = e131Universe;
+
+  switch (DMXMode) {
+    case DMX_MODE_DISABLED:
+      break;
+
+    case DMX_MODE_SINGLE_RGB:
+    case DMX_MODE_SINGLE_DRGB:
+    case DMX_MODE_PRESET:
+    case DMX_MODE_EFFECT:
+    case DMX_MODE_EFFECT_W:
+    case DMX_MODE_EFFECT_SEGMENT:
+    case DMX_MODE_EFFECT_SEGMENT_W:
+      break;  // 1 universe is enough
+
+    case DMX_MODE_MULTIPLE_DRGB:
+    case DMX_MODE_MULTIPLE_RGB:
+    case DMX_MODE_MULTIPLE_RGBW:
+      {
+        bool is4Chan = (DMXMode == DMX_MODE_MULTIPLE_RGBW);
+        const unsigned dmxChannelsPerLed = is4Chan ? 4 : 3;
+        const unsigned dimmerOffset = (DMXMode == DMX_MODE_MULTIPLE_DRGB) ? 1 : 0;
+        const unsigned dmxLenOffset = (DMXAddress == 0) ? 0 : 1; // For legacy DMX start address 0
+        const unsigned ledsInFirstUniverse = (((MAX_CHANNELS_PER_UNIVERSE - DMXAddress) + dmxLenOffset) - dimmerOffset) / dmxChannelsPerLed;
+        const unsigned totalLen = strip.getLengthTotal();
+
+        if (totalLen > ledsInFirstUniverse) {
+          const unsigned ledsPerUniverse = is4Chan ? MAX_4_CH_LEDS_PER_UNIVERSE : MAX_3_CH_LEDS_PER_UNIVERSE;
+          const unsigned remainLED = totalLen - ledsInFirstUniverse;
+
+          endUniverse += (remainLED / ledsPerUniverse);
+
+          if ((remainLED % ledsPerUniverse) > 0) {
+            endUniverse++;
+          }
+
+          if ((endUniverse - startUniverse) > E131_MAX_UNIVERSE_COUNT) {
+            endUniverse = startUniverse + E131_MAX_UNIVERSE_COUNT - 1;
+          }
+        }
+        break;
+      }
+    default:
+      DEBUG_PRINTLN(F("unknown E1.31 DMX mode"));
+      return;  // nothing to do
+      break;
+  }
+
+  if (DMXMode != DMX_MODE_DISABLED) {
+    for (unsigned i = startUniverse; i <= endUniverse; ++i) {
+      sendArtnetPollReply(&artnetPollReply, ipAddress, i);
+    }
+  }
+
+  #ifdef WLED_ENABLE_DMX
+    if (e131ProxyUniverse > 0 && (DMXMode == DMX_MODE_DISABLED || (e131ProxyUniverse < startUniverse || e131ProxyUniverse > endUniverse))) {
+      sendArtnetPollReply(&artnetPollReply, ipAddress, e131ProxyUniverse);
+    }
+  #endif
+}
+#endif
+
+//DDP protocol support
+static bool ddpSeenPush = false;  // have we seen a push yet?
+
+//E1.31 and Art-Net protocol support
+void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol) {
+#ifndef WLED_USE_DDP_ONLY
   int uni = 0, dmxChannels = 0;
   uint8_t* e131_data = nullptr;
   int seq = 0, mde = REALTIME_MODE_E131;
 
-  if (protocol == P_ARTNET)
-  {
+  if (protocol == P_ARTNET) {
     if (p->art_opcode == ARTNET_OPCODE_OPPOLL) {
       handleArtnetPollReply(clientIP);
       return;
@@ -86,12 +250,47 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol){
       if (p->priority >= highPriority.get()) highPriority.set(p->priority);
       if (p->priority < highPriority.get()) return;
     }
-  } else { //DDP
+  } else
+#endif
+  { //DDP
     realtimeIP = clientIP;
-    handleDDPPacket(p);
+    int lastPushSeq = e131LastSequenceNumber[0];
+    //reject late packets belonging to previous frame (assuming 4 packets max. before push)
+    if (e131SkipOutOfSequence && lastPushSeq) {
+      int sn = p->sequenceNum & 0xF;
+      if (sn) {
+        if (lastPushSeq > 5) {
+          if (sn > (lastPushSeq -5) && sn < lastPushSeq) return;
+        } else {
+          if (sn > (10 + lastPushSeq) || sn < lastPushSeq) return;
+        }
+      }
+    }
+    unsigned ddpChannelsPerLed = ((p->dataType & 0b00111000)>>3 == 0b011) ? 4 : 3; // data type 0x1B (formerly 0x1A) is RGBW (type 3, 8 bit/channel)
+    uint32_t start =  htonl(p->channelOffset) / ddpChannelsPerLed;
+    start += DMXAddress / ddpChannelsPerLed;
+    unsigned stop = start + htons(p->dataLen) / ddpChannelsPerLed;
+    uint8_t* data = p->data;
+    unsigned c = 0;
+    if (p->flags & DDP_TIMECODE_FLAG) c = 4; //packet has timecode flag, we do not support it, but data starts 4 bytes later
+    if (realtimeMode != REALTIME_MODE_DDP) ddpSeenPush = false; // just starting, no push yet
+    realtimeLock(realtimeTimeoutMs, REALTIME_MODE_DDP);
+    if (!realtimeOverride) {
+      for (unsigned i = start; i < stop; i++, c += ddpChannelsPerLed) {
+        setRealtimePixel(i, data[c], data[c+1], data[c+2], ddpChannelsPerLed >3 ? data[c+3] : 0);
+      }
+    }
+    bool push = p->flags & DDP_PUSH_FLAG;
+    ddpSeenPush |= push;
+    if (!ddpSeenPush || push) { // if we've never seen a push, or this is one, render display
+      e131NewData = true;
+      int sn = p->sequenceNum & 0xF;
+      if (sn) e131LastSequenceNumber[0] = sn;
+    }
     return;
   }
 
+#ifndef WLED_USE_DDP_ONLY
   #ifdef WLED_ENABLE_DMX
   // does not act on out-of-order packets yet
   if (e131ProxyUniverse > 0 && uni == e131ProxyUniverse) {
@@ -321,208 +520,5 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol){
   }
 
   e131NewData = true;
-}
-
-void handleArtnetPollReply(IPAddress ipAddress) {
-  ArtPollReply artnetPollReply;
-  prepareArtnetPollReply(&artnetPollReply);
-
-  unsigned startUniverse = e131Universe;
-  unsigned endUniverse = e131Universe;
-
-  switch (DMXMode) {
-    case DMX_MODE_DISABLED:
-      break;
-
-    case DMX_MODE_SINGLE_RGB:
-    case DMX_MODE_SINGLE_DRGB:
-    case DMX_MODE_PRESET:
-    case DMX_MODE_EFFECT:
-    case DMX_MODE_EFFECT_W:
-    case DMX_MODE_EFFECT_SEGMENT:
-    case DMX_MODE_EFFECT_SEGMENT_W:
-      break;  // 1 universe is enough
-
-    case DMX_MODE_MULTIPLE_DRGB:
-    case DMX_MODE_MULTIPLE_RGB:
-    case DMX_MODE_MULTIPLE_RGBW:
-      {
-        bool is4Chan = (DMXMode == DMX_MODE_MULTIPLE_RGBW);
-        const unsigned dmxChannelsPerLed = is4Chan ? 4 : 3;
-        const unsigned dimmerOffset = (DMXMode == DMX_MODE_MULTIPLE_DRGB) ? 1 : 0;
-        const unsigned dmxLenOffset = (DMXAddress == 0) ? 0 : 1; // For legacy DMX start address 0
-        const unsigned ledsInFirstUniverse = (((MAX_CHANNELS_PER_UNIVERSE - DMXAddress) + dmxLenOffset) - dimmerOffset) / dmxChannelsPerLed;
-        const unsigned totalLen = strip.getLengthTotal();
-
-        if (totalLen > ledsInFirstUniverse) {
-          const unsigned ledsPerUniverse = is4Chan ? MAX_4_CH_LEDS_PER_UNIVERSE : MAX_3_CH_LEDS_PER_UNIVERSE;
-          const unsigned remainLED = totalLen - ledsInFirstUniverse;
-
-          endUniverse += (remainLED / ledsPerUniverse);
-
-          if ((remainLED % ledsPerUniverse) > 0) {
-            endUniverse++;
-          }
-
-          if ((endUniverse - startUniverse) > E131_MAX_UNIVERSE_COUNT) {
-            endUniverse = startUniverse + E131_MAX_UNIVERSE_COUNT - 1;
-          }
-        }
-        break;
-      }
-    default:
-      DEBUG_PRINTLN(F("unknown E1.31 DMX mode"));
-      return;  // nothing to do
-      break;
-  }
-
-  if (DMXMode != DMX_MODE_DISABLED) {
-    for (unsigned i = startUniverse; i <= endUniverse; ++i) {
-      sendArtnetPollReply(&artnetPollReply, ipAddress, i);
-    }
-  }
-
-  #ifdef WLED_ENABLE_DMX
-    if (e131ProxyUniverse > 0 && (DMXMode == DMX_MODE_DISABLED || (e131ProxyUniverse < startUniverse || e131ProxyUniverse > endUniverse))) {
-      sendArtnetPollReply(&artnetPollReply, ipAddress, e131ProxyUniverse);
-    }
-  #endif
-}
-
-void prepareArtnetPollReply(ArtPollReply *reply) {
-  // Art-Net
-  reply->reply_id[0] = 0x41;
-  reply->reply_id[1] = 0x72;
-  reply->reply_id[2] = 0x74;
-  reply->reply_id[3] = 0x2d;
-  reply->reply_id[4] = 0x4e;
-  reply->reply_id[5] = 0x65;
-  reply->reply_id[6] = 0x74;
-  reply->reply_id[7] = 0x00;
-
-  reply->reply_opcode = ARTNET_OPCODE_OPPOLLREPLY;
-
-  IPAddress localIP = Network.localIP();
-  for (unsigned i = 0; i < 4; i++) {
-    reply->reply_ip[i] = localIP[i];
-  }
-
-  reply->reply_port = ARTNET_DEFAULT_PORT;
-
-  const char * numberEnd = strchr(versionString,'.');
-  reply->reply_version_h = (uint8_t)strtoul(versionString, nullptr, 10);
-  reply->reply_version_l = (uint8_t)(numberEnd != nullptr ? strtoul(++numberEnd, nullptr, 10) : 0);
-
-  // Switch values depend on universe, set before sending
-  reply->reply_net_sw = 0x00;
-  reply->reply_sub_sw = 0x00;
-
-  reply->reply_oem_h = 0x00; // TODO add assigned oem code
-  reply->reply_oem_l = 0x00;
-
-  reply->reply_ubea_ver = 0x00;
-
-  // Indicators in Normal Mode
-  // All or part of Port-Address programmed by network or Web browser
-  reply->reply_status_1 = 0xE0;
-
-  reply->reply_esta_man = 0x0000;
-
-  strlcpy((char *)(reply->reply_short_name), serverDescription, 18);
-  strlcpy((char *)(reply->reply_long_name), serverDescription, 64);
-
-  reply->reply_node_report[0] = '\0';
-
-  reply->reply_num_ports_h = 0x00;
-  reply->reply_num_ports_l = 0x01; // One output port
-
-  reply->reply_port_types[0] = 0x80; // Output DMX data
-  reply->reply_port_types[1] = 0x00;
-  reply->reply_port_types[2] = 0x00;
-  reply->reply_port_types[3] = 0x00;
-
-  // No inputs
-  reply->reply_good_input[0] = 0x00;
-  reply->reply_good_input[1] = 0x00;
-  reply->reply_good_input[2] = 0x00;
-  reply->reply_good_input[3] = 0x00;
-
-  // One output
-  reply->reply_good_output_a[0] = 0x80; // Data is being transmitted
-  reply->reply_good_output_a[1] = 0x00;
-  reply->reply_good_output_a[2] = 0x00;
-  reply->reply_good_output_a[3] = 0x00;
-
-  // Values depend on universe, set before sending
-  reply->reply_sw_in[0] = 0x00;
-  reply->reply_sw_in[1] = 0x00;
-  reply->reply_sw_in[2] = 0x00;
-  reply->reply_sw_in[3] = 0x00;
-
-  // Values depend on universe, set before sending
-  reply->reply_sw_out[0] = 0x00;
-  reply->reply_sw_out[1] = 0x00;
-  reply->reply_sw_out[2] = 0x00;
-  reply->reply_sw_out[3] = 0x00;
-
-  reply->reply_sw_video = 0x00;
-  reply->reply_sw_macro = 0x00;
-  reply->reply_sw_remote = 0x00;
-
-  reply->reply_spare[0] = 0x00;
-  reply->reply_spare[1] = 0x00;
-  reply->reply_spare[2] = 0x00;
-
-  // A DMX to / from Art-Net device
-  reply->reply_style = 0x00;
-
-  Network.localMAC(reply->reply_mac);
-
-  for (unsigned i = 0; i < 4; i++) {
-    reply->reply_bind_ip[i] = localIP[i];
-  }
-
-  reply->reply_bind_index = 1;
-
-  // Product supports web browser configuration
-  // Node’s IP is DHCP or manually configured
-  // Node is DHCP capable
-  // Node supports 15 bit Port-Address (Art-Net 3 or 4)
-  // Node is able to switch between ArtNet and sACN
-  reply->reply_status_2 = (multiWiFi[0].staticIP[0] == 0) ? 0x1F : 0x1D;
-
-  // RDM is disabled
-  // Output style is continuous
-  reply->reply_good_output_b[0] = 0xC0;
-  reply->reply_good_output_b[1] = 0xC0;
-  reply->reply_good_output_b[2] = 0xC0;
-  reply->reply_good_output_b[3] = 0xC0;
-
-  // Fail-over state: Hold last state
-  // Node does not support fail-over
-  reply->reply_status_3 = 0x00;
-
-  for (unsigned i = 0; i < 21; i++) {
-    reply->reply_filler[i] = 0x00;
-  }
-}
-
-void sendArtnetPollReply(ArtPollReply *reply, IPAddress ipAddress, uint16_t portAddress) {
-  reply->reply_net_sw = (uint8_t)((portAddress >> 8) & 0x007F);
-  reply->reply_sub_sw = (uint8_t)((portAddress >> 4) & 0x000F);
-  reply->reply_sw_out[0] = (uint8_t)(portAddress & 0x000F);
-
-  snprintf_P((char *)reply->reply_node_report, sizeof(reply->reply_node_report)-1, PSTR("#0001 [%04u] OK - WLED v%s"), pollReplyCount, versionString);
-
-  if (pollReplyCount < 9999) {
-    pollReplyCount++;
-  } else {
-    pollReplyCount = 0;
-  }
-
-  notifierUdp.beginPacket(ipAddress, ARTNET_DEFAULT_PORT);
-  notifierUdp.write(reply->raw, sizeof(ArtPollReply));
-  notifierUdp.endPacket();
-
-  reply->reply_bind_index++;
+#endif
 }
