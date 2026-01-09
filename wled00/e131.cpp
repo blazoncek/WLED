@@ -373,17 +373,17 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol) {
 
         // limit max. selectable preset to 250, even though DMX max. val is 255
         int dmxValPreset = (e131_data[dataOffset+1] > 250 ? 250 : e131_data[dataOffset+1]);
-        
-        // only apply preset if value changed 
-        if (dmxValPreset != 0 && dmxValPreset != currentPreset &&  
+
+        // only apply preset if value changed
+        if (dmxValPreset != 0 && dmxValPreset != currentPreset &&
             // only apply preset if not in playlist, or playlist changed
-            (currentPlaylist < 0 || dmxValPreset != currentPlaylist)) { 
+            (currentPlaylist < 0 || dmxValPreset != currentPlaylist)) {
           presetCycCurr = dmxValPreset;
           applyPreset(dmxValPreset, CALL_MODE_NOTIFICATION);
         }
 
         // only change brightness if value changed
-        if (bri != e131_data[dataOffset]) {                                        
+        if (bri != e131_data[dataOffset]) {
           bri = e131_data[dataOffset];
           strip.setBrightness(bri, false);
           stateUpdated(CALL_MODE_WS_SEND);
@@ -415,7 +415,7 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol) {
 
           if (e131_data[dataOffset+1] < strip.getModeCount())
             if (e131_data[dataOffset+1] != seg.mode)      seg.setMode(   e131_data[dataOffset+1]);
-          if (e131_data[dataOffset+2]   != seg.speed)     seg.speed     = e131_data[dataOffset+2];      
+          if (e131_data[dataOffset+2]   != seg.speed)     seg.speed     = e131_data[dataOffset+2];
           if (e131_data[dataOffset+3]   != seg.intensity) seg.intensity = e131_data[dataOffset+3];
           if (e131_data[dataOffset+4]   != seg.palette)   seg.setPalette(e131_data[dataOffset+4]);
 
@@ -457,7 +457,7 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol) {
         return;
         break;
       }
-      
+
     case DMX_MODE_MULTIPLE_DRGB:
     case DMX_MODE_MULTIPLE_RGB:
     case DMX_MODE_MULTIPLE_RGBW:

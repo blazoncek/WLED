@@ -387,7 +387,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
             PinManager::deallocatePin(pin, PinOwner::Button);
             pin = -1;
             continue;
-          }          
+          }
           //if touch pin, enable the touch interrupt on ESP32 S2 & S3
           #ifdef SOC_TOUCH_VERSION_2    // ESP32 S2 and S3 have a function to check touch state but need to attach an interrupt to do so
           else touchAttachInterrupt(pin, touchButtonISR, touchThreshold << 4); // threshold on Touch V2 is much higher (1500 is a value given by Espressif example, I measured changes of over 5000)
@@ -448,7 +448,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
           DEBUG_PRINTF_P(PSTR("PIN ALLOC error: GPIO%d for touch button #%d is not a touch pin!\n"), defPins[s], s);
           PinManager::deallocatePin(defPins[s], PinOwner::Button);
           continue;
-        }          
+        }
         //if touch pin, enable the touch interrupt on ESP32 S2 & S3
         #ifdef SOC_TOUCH_VERSION_2    // ESP32 S2 and S3 have a function to check touch state but need to attach an interrupt to do so
         else touchAttachInterrupt(defPins[s], touchButtonISR, touchThreshold << 4); // threshold on Touch V2 is much higher (1500 is a value given by Espressif example, I measured changes of over 5000)

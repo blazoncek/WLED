@@ -4,7 +4,7 @@
 
 /*
  * Usermod that implements BobLight "ambilight" protocol
- * 
+ *
  * See the accompanying README.md file for more info.
  */
 
@@ -38,7 +38,7 @@ class BobLightUsermod : public Usermod {
 
     /*
     # boblight
-    # Copyright (C) Bob  2009 
+    # Copyright (C) Bob  2009
     #
     # makeboblight.sh created by Adam Boeglin <adamrb@gmail.com>
     #
@@ -46,12 +46,12 @@ class BobLightUsermod : public Usermod {
     # under the terms of the GNU General Public License as published by the
     # Free Software Foundation, either version 3 of the License, or
     # (at your option) any later version.
-    # 
+    #
     # boblight is distributed in the hope that it will be useful, but
     # WITHOUT ANY WARRANTY; without even the implied warranty of
     # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
     # See the GNU General Public License for more details.
-    # 
+    #
     # You should have received a copy of the GNU General Public License along
     # with this program.  If not, see <http://www.gnu.org/licenses/>.
     */
@@ -148,7 +148,7 @@ class BobLightUsermod : public Usermod {
           rcount+=1;
         }
       }
-      
+
       // right side of bottom strip (2nd half)
       if (bottom > 0) {
         float brange = 100.0/bottom;
@@ -218,7 +218,7 @@ class BobLightUsermod : public Usermod {
     }
 
     void enable(bool en) { enabled = en; }
-    
+
 #ifndef WLED_DISABLE_MQTT
     /**
      * handling of MQTT message
@@ -369,7 +369,7 @@ const char BobLightUsermod::_enabled[] PROGMEM = "enabled";
 
 // main boblight handling (definition here prevents inlining)
 void BobLightUsermod::pollBob() {
-  
+
   //check if there are any new clients
   if (bob && bob->hasClient()) {
     //find free/disconnected spot
@@ -384,7 +384,7 @@ void BobLightUsermod::pollBob() {
     BobClear();
     exitRealtime();
   }
-  
+
   //check clients for data
   if (bobClient && bobClient.connected()) {
     realtimeLock(realtimeTimeoutMs); // lock strip as we have a client connected
@@ -420,7 +420,7 @@ void BobLightUsermod::pollBob() {
       } else if (input.startsWith(F("set light "))) { // <id> <cmd in rgb, speed, interpolation> <value> ...
         input.remove(0,10);
         String tmp = input.substring(0,input.indexOf(' '));
-        
+
         int light_id = -1;
         for (uint16_t i=0; i<numLights; i++) {
           if (strncmp(lights[i].lightname, tmp.c_str(), 4) == 0) {

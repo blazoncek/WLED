@@ -131,7 +131,7 @@ static void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProp
 }
 
 // Print adapter for flat buffers
-namespace { 
+namespace {
 class bufferPrint : public Print {
   char* _buf;
   size_t _size, _offset;

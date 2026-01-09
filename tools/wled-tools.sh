@@ -135,23 +135,23 @@ EOF
 }
 
 # Discover devices using mDNS
-discover_devices() {  
-    if ! command -v avahi-browse &> /dev/null; then  
+discover_devices() {
+    if ! command -v avahi-browse &> /dev/null; then
         log "ERROR" "$RED" "'avahi-browse' is required but not installed, please install avahi-utils using your preferred package manager."
-        exit 1  
-    fi  
+        exit 1
+    fi
 
     # Map avahi responses to strings seperated by 0x1F (unit separator)
-    mapfile -t raw_devices < <(avahi-browse _wled._tcp --terminate -r -p | awk -F';' '/^=/ {print $7"\x1F"$8"\x1F"$9}')  
+    mapfile -t raw_devices < <(avahi-browse _wled._tcp --terminate -r -p | awk -F';' '/^=/ {print $7"\x1F"$8"\x1F"$9}')
 
-    local devices_array=()  
-    for device in "${raw_devices[@]}"; do  
-        IFS=$'\x1F' read -r hostname address port <<< "$device"  
-        devices_array+=("$hostname" "$address" "$port")  
-    done  
+    local devices_array=()
+    for device in "${raw_devices[@]}"; do
+        IFS=$'\x1F' read -r hostname address port <<< "$device"
+        devices_array+=("$hostname" "$address" "$port")
+    done
 
-    echo "${devices_array[@]}"  
-}  
+    echo "${devices_array[@]}"
+}
 
 # Backup one device
 backup_one() {
@@ -165,24 +165,24 @@ backup_one() {
 
     local file_prefix="${backup_dir}/${hostname}"
 
-    if ! fetch "http://$address:$port/cfg.json" "${file_prefix}.cfg.json"; then  
-        log "ERROR" "$RED" "Failed to backup configuration for $hostname"  
-        return 1  
-    fi  
-    
-    if ! fetch "http://$address:$port/presets.json" "${file_prefix}.presets.json"; then  
-        log "ERROR" "$RED" "Failed to backup presets for $hostname"  
-        return 1  
+    if ! fetch "http://$address:$port/cfg.json" "${file_prefix}.cfg.json"; then
+        log "ERROR" "$RED" "Failed to backup configuration for $hostname"
+        return 1
+    fi
+
+    if ! fetch "http://$address:$port/presets.json" "${file_prefix}.presets.json"; then
+        log "ERROR" "$RED" "Failed to backup presets for $hostname"
+        return 1
     fi
 
     # ir.json is optional
     if ! fetch "http://$address:$port/ir.json" "${file_prefix}.ir.json" "200 404"; then
-        log "ERROR" "$RED" "Failed to backup ir config for $hostname" 
+        log "ERROR" "$RED" "Failed to backup ir config for $hostname"
     fi
 
     # ledmap.json is optional
     if ! fetch "http://$address:$port/ledmap.json" "${file_prefix}.ledmap.json" "200 404"; then
-        log "ERROR" "$RED" "Failed to backup default ledmap for $hostname" 
+        log "ERROR" "$RED" "Failed to backup default ledmap for $hostname"
     fi
     for i in "1 2 3 4 5 6 7 8 9"; do
         fetch "http://$address:$port/ledmap$i.json" "${file_prefix}.ledmap$i.json" "200 404"
@@ -207,7 +207,7 @@ update_one() {
         log "ERROR" "$RED" "Failed to update firmware for $hostname"
         return 1
     fi
-    
+
     log "INFO" "$GREEN" "Successfully initiated firmware update for $hostname"
     return 0
 }
@@ -313,7 +313,7 @@ case "$command" in
             log "ERROR" "$RED" "Please provide a file in --firmware that exists"
             exit 1
         fi
-        
+
         if [ -n "$target" ]; then
             # Assume target is both the hostname and address, with port 80
             update_one "$target" "$target" "80" "$firmware_file"

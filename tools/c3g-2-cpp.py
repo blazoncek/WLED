@@ -31,7 +31,7 @@ def extract_colors_from_gradient(gradient):
     """
     # Regex to match the colors in rgb(r, g, b) format and their positions
     color_position_regex = r'rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\)\s*(\d+\.\d+)%'
-    
+
     # Find all colors and their positions in the gradient string
     return [(f'rgb({r}, {g}, {b})', float(position)) for r, g, b, position in re.findall(color_position_regex, gradient)]
 
@@ -62,7 +62,7 @@ def c3g_to_cpp_array(c3g_file_path, array_name):
         # Skip empty lines
         if not line:
             continue
-        
+
         # If the line contains a linear-gradient, extract the colors and positions
         if 'rgb(' in line:
             # Extract the gradient colors and their positions
@@ -72,10 +72,10 @@ def c3g_to_cpp_array(c3g_file_path, array_name):
                 r, g, b = rgb_to_tuple(color)
                 index = position_to_index(position)
                 color_array.append(f"{index:>3}, {r:>3}, {g:>3}, {b:>3}")
-    
+
     # Format the final C++ array string with the custom array name
     cpp_array = f"const uint8_t {array_name}[] PROGMEM = {{\n  " + ",\n  ".join(color_array) + "};"
-    
+
     return cpp_array
 
 
@@ -139,14 +139,14 @@ def process_urls_from_file(url_file, array_name=None):
 def main():
     # Create the parser object
     parser = argparse.ArgumentParser(description="Convert .c3g file with gradients to a C++ array for FastLED.")
-    
+
     # Add command-line argument for the .c3g file
     parser.add_argument("c3g_file", help="Path to the .c3g file to be converted or .txt file with URLs")
     parser.add_argument("array_name", nargs="?", help="Name of the C++ array to be generated")
 
     # Parse arguments
     args = parser.parse_args()
-    
+
 
     if args.c3g_file.endswith('.c3g'):
         # If no array name is provided, use the file name without extension as the array name
@@ -157,12 +157,12 @@ def main():
 
         # Call the function to process the file and convert to C++ array format
         cpp_palette_code = c3g_to_cpp_array(args.c3g_file, array_name)
-        
+
         # Output the result to the console
         print(f"// Gradient palette \"{array_name}\", originally from")
         print(f"// {args.c3g_file}")
         print(cpp_palette_code)
-        
+
     else:
         # Process URLs from the provided text file
         process_urls_from_file(args.c3g_file, args.array_name)

@@ -1362,7 +1362,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
 
   const size_t blendMode = topSegment.blendMode < (sizeof(funcs) / sizeof(FuncType)) ? topSegment.blendMode : 0;
   const auto func  = funcs[blendMode]; // blendMode % (sizeof(funcs) / sizeof(FuncType))
-  const auto blend = [&](uint32_t t, uint32_t b){ 
+  const auto blend = [&](uint32_t t, uint32_t b){
     // handle special modes first
     switch (blendMode) {
       case 0 : return t;              // top (faster than lambda)
@@ -1500,7 +1500,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     // zooming and rotation
     auto RotateAndZoom = [](const CRGBA *srcPixels, CRGBA *destPixels, int midX, int midY, int cols, int rows, int shearAngle, int zoomOffset, bool wrap, bool mirror) {
       for (int i = 0; i < cols * rows; i++) destPixels[i] = CRGBA(0,0,0); // fill black
-    
+
       constexpr uint8_t Scale_Shift = 10;
       constexpr int Fixed_Scale = (1 << Scale_Shift);
       constexpr int RoundVal = (1 << (Scale_Shift - 1));
@@ -1525,20 +1525,20 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
           // Translate destination to origin
           int dx = destX - midX;
           int dy = destY - midY;
-    
+
           // Inverse shear transformations (reverse order)
           int x1 = dx - ((shearX * dy + RoundVal) >> Scale_Shift);
           int y0 = dy - ((shearY * x1 + RoundVal) >> Scale_Shift);
           int x0 = x1 - ((shearX * y0 + RoundVal) >> Scale_Shift);
-    
+
           // Apply zoom to source coordinates
           x0 = (x0 * Fixed_Scale) / zoomScale;
           y0 = (y0 * Fixed_Scale) / zoomScale;
-    
+
           // Handle flip
           int srcX = flip ? (midX - x0) : (midX + x0);
           int srcY = flip ? (midY - y0) : (midY + y0);
-    
+
           // Bounds check or wrap
           if (wrap) { // Wrap around
             srcX = (srcX + WRAP_PAD_X); while (srcX >= cols) srcX -= cols; // modulo operation: srcX %= cols;
@@ -1552,7 +1552,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
             }
           }
           if ((unsigned)srcX >= (unsigned)cols || (unsigned)srcY >= (unsigned)rows) continue;
-          
+
           // Sample from source & write to destination
           destPixels[destX + destY * cols] = srcPixels[srcX + srcY * cols];
         }

@@ -58,7 +58,7 @@
  * This usermod handles multiple relay outputs.
  * These outputs complement built-in relay output in a way that the activation can be delayed.
  * They can also activate/deactivate in reverse logic independently.
- * 
+ *
  * Written and maintained by @blazoncek
  */
 
@@ -216,7 +216,7 @@ class MultiRelay : public Usermod {
     /**
      * restore the changeable values
      * readFromConfig() is called before setup() to populate properties from values stored in cfg.json
-     * 
+     *
      * The function should return true if configuration was successfully loaded or false if there was no configuration.
      */
     bool readFromConfig(JsonObject &root) override;
@@ -237,7 +237,7 @@ void MultiRelay::publishMqtt(int relay) {
 }
 
 /**
- * switch off the strip if the delay has elapsed 
+ * switch off the strip if the delay has elapsed
  */
 void MultiRelay::handleOffTimer() {
   unsigned long now = millis();
@@ -342,7 +342,7 @@ int MultiRelay::getValue(String data, char separator, int index) {
 byte MultiRelay::IOexpanderWrite(byte address, byte _data ) {
   Wire.beginTransmission(address);
   Wire.write(_data);
-  return Wire.endTransmission(); 
+  return Wire.endTransmission();
 }
 
 //Read a byte from the IO expander
@@ -591,7 +591,7 @@ bool MultiRelay::handleButton(uint8_t b) {
     }
 
     if (buttons[b].longPressed == buttons[b].pressedBefore) return handled;
-      
+
     if (now - buttons[b].pressedTime > WLED_DEBOUNCE_THRESHOLD) { //fire edge event only after 50ms without change (debounce)
       for (int i=0; i<MULTI_RELAY_MAX_RELAYS; i++) {
         if (_relay[i].button == b) {
@@ -774,7 +774,7 @@ void MultiRelay::appendConfigData() {
 /**
  * restore the changeable values
  * readFromConfig() is called before setup() to populate properties from values stored in cfg.json
- * 
+ *
  * The function should return true if configuration was successfully loaded or false if there was no configuration.
  */
 bool MultiRelay::readFromConfig(JsonObject &root) {

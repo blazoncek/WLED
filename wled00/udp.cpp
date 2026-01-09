@@ -188,7 +188,7 @@ void notify(byte callMode, bool followUp)
       DEBUG_PRINTLN(F("ESP-NOW sending packet failed."));
     }
   }
-  if (udpConnected) 
+  if (udpConnected)
 #endif
   {
     DEBUG_PRINTLN(F("UDP sending packet."));
@@ -867,7 +867,7 @@ uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const
       const size_t ARTNET_CHANNELS_PER_PACKET = isRGBW?512:510; // 512/4=128 RGBW LEDs, 510/3=170 RGB LEDs
       const size_t packetCount = ((channelCount-1)/ARTNET_CHANNELS_PER_PACKET)+1;
 
-      uint32_t channel = 0; 
+      uint32_t channel = 0;
       size_t bufferOffset = 0;
 
       sequenceNumber++;

@@ -179,7 +179,7 @@ typedef struct WizMoteMessageStructure {
   uint8_t button;   // Identifies which button is being pressed
   uint8_t dt2;      // Battery Level Data Type (0x01)
   uint8_t batLevel; // Battery Level 0-100
-  
+
   uint8_t byte10;   // Unknown, maybe checksum
   uint8_t byte11;   // Unknown, maybe checksum
   uint8_t byte12;   // Unknown, maybe checksum

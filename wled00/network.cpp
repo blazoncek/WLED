@@ -104,10 +104,10 @@ const ethernet_settings ethernetBoards[] = {
 
   // ABC! WLED Controller V43 + Ethernet Shield & compatible
   {
-    1,                    // eth_address, 
-    5,                    // eth_power, 
-    23,                   // eth_mdc, 
-    33,                   // eth_mdio, 
+    1,                    // eth_address,
+    5,                    // eth_power,
+    23,                   // eth_mdc,
+    33,                   // eth_mdio,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO17_OUT	// eth_clk_mode
   },
@@ -131,7 +131,7 @@ const ethernet_settings ethernetBoards[] = {
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO0_OUT   // eth_clk_mode
   },
-  
+
   // LILYGO T-POE Pro
   // https://github.com/Xinyuan-LilyGO/LilyGO-T-ETH-Series/blob/master/schematic/T-POE-PRO.pdf
   {
@@ -203,7 +203,7 @@ bool initEthernet()
   /*
   For LAN8720 the most correct way is to perform clean reset each time before init
   applying LOW to power or nRST pin for at least 100 us (please refer to datasheet, page 59)
-  ESP_IDF > V4 implements it (150 us, lan87xx_reset_hw(esp_eth_phy_t *phy) function in 
+  ESP_IDF > V4 implements it (150 us, lan87xx_reset_hw(esp_eth_phy_t *phy) function in
   /components/esp_eth/src/esp_eth_phy_lan87xx.c, line 280)
   but ESP_IDF < V4 does not. Lets do it:
   [not always needed, might be relevant in some EMI situations at startup and for hot resets]

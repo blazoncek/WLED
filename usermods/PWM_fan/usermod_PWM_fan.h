@@ -99,12 +99,12 @@ class PWMFanUsermod : public Usermod {
 
       // start of tacho measurement
       // detach interrupt while calculating rpm
-      detachInterrupt(digitalPinToInterrupt(tachoPin)); 
+      detachInterrupt(digitalPinToInterrupt(tachoPin));
       // calculate rpm
       last_rpm = (counter_rpm * 60) / numberOfInterrupsInOneSingleRotation;
       last_rpm /= tachoUpdateSec;
       // reset counter
-      counter_rpm = 0; 
+      counter_rpm = 0;
       // attach interrupt again
       attachInterrupt(digitalPinToInterrupt(tachoPin), rpm_fan, FALLING);
     }
@@ -166,7 +166,7 @@ class PWMFanUsermod : public Usermod {
       // dividing minPercent and maxPercent into equal pwmvalue sizes
       int pwmStepSize = ((maxPWMValuePct - minPWMValuePct) * _pwmMaxValue) / (_pwmMaxStepCount*100);
       int pwmStep = calculatePwmStep(temp - targetTemperature);
-      // minimum based on full speed - not entered MaxPercent 
+      // minimum based on full speed - not entered MaxPercent
       int pwmMinimumValue = (minPWMValuePct * _pwmMaxValue) / 100;
       updateFanSpeed(pwmMinimumValue + pwmStep*pwmStepSize);
     }
@@ -180,8 +180,8 @@ class PWMFanUsermod : public Usermod {
         return 0;
       }
       int calculatedStep = (diffTemp / _pwmTempStepSize)+1;
-      // anything greater than max stepcount gets max 
-      return (uint8_t)min((int)_pwmMaxStepCount,calculatedStep);      
+      // anything greater than max stepcount gets max
+      return (uint8_t)min((int)_pwmMaxStepCount,calculatedStep);
     }
 
   public:
@@ -189,7 +189,7 @@ class PWMFanUsermod : public Usermod {
     // gets called once at boot. Do all initialization that doesn't depend on
     // network here
     void setup() override {
-      #ifdef USERMOD_DALLASTEMPERATURE   
+      #ifdef USERMOD_DALLASTEMPERATURE
       // This Usermod requires Temperature usermod
       tempUM = (UsermodTemperature*) UsermodManager::lookup(USERMOD_ID_TEMPERATURE);
       #elif defined(USERMOD_SHT)
@@ -295,14 +295,14 @@ class PWMFanUsermod : public Usermod {
      * addToConfig() can be used to add custom persistent settings to the cfg.json file in the "um" (usermod) object.
      * It will be called by WLED when settings are actually saved (for example, LED settings are saved)
      * If you want to force saving the current state, use serializeConfig() in your loop().
-     * 
+     *
      * CAUTION: serializeConfig() will initiate a filesystem write operation.
      * It might cause the LEDs to stutter and will cause flash wear if called too often.
      * Use it sparingly and always in the loop, never in network callbacks!
-     * 
+     *
      * addToConfig() will also not yet add your setting to one of the settings pages automatically.
      * To make that work you still have to add the setting to the HTML, xml.cpp and set.cpp manually.
-     * 
+     *
      * I highly recommend checking out the basics of ArduinoJson serialization and deserialization in order to use custom settings!
      */
     void addToConfig(JsonObject& root) override {
@@ -321,11 +321,11 @@ class PWMFanUsermod : public Usermod {
     /*
      * readFromConfig() can be used to read back the custom settings you added with addToConfig().
      * This is called by WLED when settings are loaded (currently this only happens once immediately after boot)
-     * 
+     *
      * readFromConfig() is called BEFORE setup(). This means you can use your persistent values in setup() (e.g. pin assignments, buffer sizes),
      * but also that if you want to write persistent values to a dynamic buffer, you'd need to allocate it here instead of in setup.
      * If you don't know what that is, don't fret. It most likely doesn't affect your use case :)
-     * 
+     *
      * The function should return true if configuration was successfully loaded or false if there was no configuration.
      */
     bool readFromConfig(JsonObject& root) override {

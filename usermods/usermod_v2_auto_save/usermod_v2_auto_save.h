@@ -2,7 +2,7 @@
 
 #include "wled.h"
 
-// v2 Usermod to automatically save settings 
+// v2 Usermod to automatically save settings
 // to configurable preset after a change to any of
 //
 // * brightness
@@ -11,14 +11,14 @@
 // * mode (effect)
 // * palette
 //
-// but it will wait for configurable number of seconds, a "settle" 
-// period in case there are other changes (any change will 
+// but it will wait for configurable number of seconds, a "settle"
+// period in case there are other changes (any change will
 // extend the "settle" window).
 //
 // It can be configured to load auto saved preset at startup,
 // during the first `loop()`.
 //
-// AutoSaveUsermod is standalone, but if FourLineDisplayUsermod 
+// AutoSaveUsermod is standalone, but if FourLineDisplayUsermod
 // is installed, it will notify the user of the saved changes.
 
 // format: "~ MM-DD HH:MM:SS ~"
@@ -46,7 +46,7 @@ class AutoSaveUsermod : public Usermod {
     #endif
 
     #ifdef USERMOD_AUTO_SAVE_ON_BOOT
-    bool applyAutoSaveOnBoot = USERMOD_AUTO_SAVE_ON_BOOT; 
+    bool applyAutoSaveOnBoot = USERMOD_AUTO_SAVE_ON_BOOT;
     #else
     bool applyAutoSaveOnBoot = false;     // do we load auto-saved preset on boot?
     #endif
@@ -74,7 +74,7 @@ class AutoSaveUsermod : public Usermod {
     void inline saveSettings() {
       char presetNameBuffer[PRESET_NAME_BUFFER_SIZE];
       updateLocalTime();
-      sprintf_P(presetNameBuffer, 
+      sprintf_P(presetNameBuffer,
         PSTR("~ %02d-%02d %02d:%02d:%02d ~"),
         month(localTime), day(localTime),
         hour(localTime), minute(localTime), second(localTime));
@@ -100,7 +100,7 @@ class AutoSaveUsermod : public Usermod {
     // gets called once at boot. Do all initialization that doesn't depend on
     // network here
     void setup() {
-      #ifdef USERMOD_FOUR_LINE_DISPLAY    
+      #ifdef USERMOD_FOUR_LINE_DISPLAY
       // This Usermod has enhanced functionality if
       // FourLineDisplayUsermod is available.
       display = (FourLineDisplayUsermod*) UsermodManager::lookup(USERMOD_ID_FOUR_LINE_DISP);
@@ -208,14 +208,14 @@ class AutoSaveUsermod : public Usermod {
      * addToConfig() can be used to add custom persistent settings to the cfg.json file in the "um" (usermod) object.
      * It will be called by WLED when settings are actually saved (for example, LED settings are saved)
      * If you want to force saving the current state, use serializeConfig() in your loop().
-     * 
+     *
      * CAUTION: serializeConfig() will initiate a filesystem write operation.
      * It might cause the LEDs to stutter and will cause flash wear if called too often.
      * Use it sparingly and always in the loop, never in network callbacks!
-     * 
+     *
      * addToConfig() will also not yet add your setting to one of the settings pages automatically.
      * To make that work you still have to add the setting to the HTML, xml.cpp and set.cpp manually.
-     * 
+     *
      * I highly recommend checking out the basics of ArduinoJson serialization and deserialization in order to use custom settings!
      */
     void addToConfig(JsonObject& root) {
@@ -231,11 +231,11 @@ class AutoSaveUsermod : public Usermod {
     /*
      * readFromConfig() can be used to read back the custom settings you added with addToConfig().
      * This is called by WLED when settings are loaded (currently this only happens once immediately after boot)
-     * 
+     *
      * readFromConfig() is called BEFORE setup(). This means you can use your persistent values in setup() (e.g. pin assignments, buffer sizes),
      * but also that if you want to write persistent values to a dynamic buffer, you'd need to allocate it here instead of in setup.
      * If you don't know what that is, don't fret. It most likely doesn't affect your use case :)
-     * 
+     *
      * The function should return true if configuration was successfully loaded or false if there was no configuration.
      */
     bool readFromConfig(JsonObject& root) {

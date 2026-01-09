@@ -15,129 +15,128 @@ Timezone* tz;
 #define TZ_INIT 255
 byte tzCurrent = TZ_INIT; //uninitialized
 
-/* C++11 form -- static std::array<std::pair<TimeChangeRule, TimeChangeRule>, TZ_COUNT> TZ_TABLE PROGMEM = {{ */
-static const std::tuple<const char*, TimeChangeRule, TimeChangeRule> TZ_TABLE[] PROGMEM = {
-  /* TZ_UTC */ {
+static const std::tuple<const char*, const TimeChangeRule, const TimeChangeRule> TZ_TABLE[] PROGMEM = {
+  {
     "UTC",
     {Last, Sun, Mar, 1, 0}, // UTC
     {Last, Sun, Mar, 1, 0}  // Same
   },
-  /* TZ_UK */ {
+  {
     "GMT/BST",
     {Last, Sun, Mar, 1, 60},      //British Summer Time
     {Last, Sun, Oct, 2, 0}       //Standard Time
   },
-  /* TZ_EUROPE_CENTRAL */ {
+  {
     "CET/CEST",
     {Last, Sun, Mar, 2, 120},     //Central European Summer Time
     {Last, Sun, Oct, 3, 60}      //Central European Standard Time
   },
-  /* TZ_EUROPE_EASTERN */ {
+  {
     "EET/EEST",
     {Last, Sun, Mar, 3, 180},     //East European Summer Time
     {Last, Sun, Oct, 4, 120}     //East European Standard Time
   },
-  /* TZ_US_EASTERN */ {
+  {
     "US-EST/EDT",
     {Second, Sun, Mar, 2, -240},  //EDT = UTC - 4 hours
     {First,  Sun, Nov, 2, -300}  //EST = UTC - 5 hours
   },
-  /* TZ_US_CENTRAL */ {
+  {
     "US-CST/CDT",
     {Second, Sun, Mar, 2, -300},  //CDT = UTC - 5 hours
     {First,  Sun, Nov, 2, -360}  //CST = UTC - 6 hours
   },
-  /* TZ_US_MOUNTAIN */ {
+  {
     "US-MST/MDT",
     {Second, Sun, Mar, 2, -360},  //MDT = UTC - 6 hours
     {First,  Sun, Nov, 2, -420}  //MST = UTC - 7 hours
   },
-  /* TZ_US_ARIZONA */ {
+  {
     "US-AZ",
     {First,  Sun, Nov, 2, -420},  //MST = UTC - 7 hours
     {First,  Sun, Nov, 2, -420}  //MST = UTC - 7 hours
   },
-  /* TZ_US_PACIFIC */ {
+  {
     "US-PST/PDT",
     {Second, Sun, Mar, 2, -420},  //PDT = UTC - 7 hours
     {First,  Sun, Nov, 2, -480}  //PST = UTC - 8 hours
   },
-  /* TZ_CHINA */ {
+  {
     "CST (AWST, PHST)",
     {Last, Sun, Mar, 1, 480},     //CST = UTC + 8 hours
     {Last, Sun, Mar, 1, 480}
   },
-  /* TZ_JAPAN */ {
+  {
     "JST (KST)",
     {Last, Sun, Mar, 1, 540},     //JST = UTC + 9 hours
     {Last, Sun, Mar, 1, 540}
   },
-  /* TZ_AUSTRALIA_EASTERN */ {
+  {
     "AEST/AEDT",
     {First,  Sun, Oct, 2, 660},   //AEDT = UTC + 11 hours
     {First,  Sun, Apr, 3, 600}   //AEST = UTC + 10 hours
   },
-  /* TZ_NEW_ZEALAND */ {
+  {
     "NZST/NZDT",
     {Last,   Sun, Sep, 2, 780},   //NZDT = UTC + 13 hours
     {First,  Sun, Apr, 3, 720}   //NZST = UTC + 12 hours
   },
-  /* TZ_NORTH_KOREA */ {
+  {
     "North Korea",
     {Last, Sun, Mar, 1, 510},     //Pyongyang Time = UTC + 8.5 hours
     {Last, Sun, Mar, 1, 510}
   },
-  /* TZ_INDIA */ {
+  {
     "IST (India)",
     {Last, Sun, Mar, 1, 330},     //India Standard Time = UTC + 5.5 hours
     {Last, Sun, Mar, 1, 330}
   },
-  /* TZ_SASKACHEWAN */ {
+  {
     "CA-Saskatchewan",
     {First,  Sun, Nov, 2, -360},  //CST = UTC - 6 hours
     {First,  Sun, Nov, 2, -360}
   },
-  /* TZ_AUSTRALIA_NORTHERN */ {
+  {
     "ACST",
     {First, Sun, Apr, 3, 570},   //ACST = UTC + 9.5 hours
     {First, Sun, Apr, 3, 570}
   },
-  /* TZ_AUSTRALIA_SOUTHERN */ {
+  {
     "ACST/ACDT",
     {First, Sun, Oct, 2, 630},   //ACDT = UTC + 10.5 hours
     {First, Sun, Apr, 3, 570}   //ACST = UTC + 9.5 hours
   },
-  /* TZ_HAWAII */ {
+  {
     "HST (Hawaii)",
     {Last, Sun, Mar, 1, -600},   //HST =  UTC - 10 hours
     {Last, Sun, Mar, 1, -600}
   },
-  /* TZ_NOVOSIBIRSK */ {
+  {
     "NOVT (Novosibirsk)",
     {Last, Sun, Mar, 1, 420},     //CST = UTC + 7 hours
     {Last, Sun, Mar, 1, 420}
   },
-  /* TZ_ANCHORAGE */ {
+  {
     "AKST/AKDT (Anchorage)",
     {Second, Sun, Mar, 2, -480},  //AKDT = UTC - 8 hours
     {First, Sun, Nov, 2, -540}   //AKST = UTC - 9 hours
   },
-    /* TZ_MX_CENTRAL */ {
+  {
     "MX-CST",
     {First, Sun, Apr, 2, -360},  //CST = UTC - 6 hours
     {First, Sun, Apr, 2, -360}
   },
-  /* TZ_PAKISTAN */ {
+  {
     "PKT (Pakistan)",
     {Last, Sun, Mar, 1, 300},     //Pakistan Standard Time = UTC + 5 hours
     {Last, Sun, Mar, 1, 300}
   },
-  /* TZ_BRASILIA */ {
+  {
     "BRT (Brasília)",
     {Last, Sun, Mar, 1, -180},    //Brasília Standard Time = UTC - 3 hours
     {Last, Sun, Mar, 1, -180}
   },
-  /* TZ_AUSTRALIA_WESTERN */ {
+  {
     "AWST (Perth)",
     {Last, Sun, Mar, 1, 480},     //AWST = UTC + 8 hours
     {Last, Sun, Mar, 1, 480}      //AWST = UTC + 8 hours (no DST)
@@ -245,7 +244,7 @@ static bool isValidNtpResponse(const byte * ntpPacket) {
   // if((ntpPacket[0] & 0b00111000) >> 3 < 0b100) return false; //reject Version < 4
   if((ntpPacket[0] & 0b00000111) != 0b100)      return false; //reject Mode != Server
   if((ntpPacket[1] < 1) || (ntpPacket[1] > 15)) return false; //reject invalid Stratum
-  if( ntpPacket[16] == 0 && ntpPacket[17] == 0 && 
+  if( ntpPacket[16] == 0 && ntpPacket[17] == 0 &&
       ntpPacket[18] == 0 && ntpPacket[19] == 0 &&
       ntpPacket[20] == 0 && ntpPacket[21] == 0 &&
       ntpPacket[22] == 0 && ntpPacket[23] == 0)               //reject ReferenceTimestamp == 0
@@ -492,7 +491,7 @@ static int getSunriseUTC(int year, int month, int day, float lat, float lon, boo
 	return UT*60;
 }
 
-#define SUNSET_MAX (24*60) // 1day = max expected absolute value for sun offset in minutes 
+#define SUNSET_MAX (24*60) // 1day = max expected absolute value for sun offset in minutes
 // calculate sunrise and sunset (if longitude and latitude are set)
 void calculateSunriseAndSunset() {
   if ((int)(longitude*10.) || (int)(latitude*10.)) {

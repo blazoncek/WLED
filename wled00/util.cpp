@@ -172,7 +172,7 @@ bool requestJSONBufferLock(uint8_t moduleID)
   }
 #else
   #error Unsupported task framework - fix requestJSONBufferLock
-#endif  
+#endif
   // If the lock is still held - by us, or by another task
   if (jsonBufferLock) {
     DEBUG_PRINTF_P(PSTR("ERROR: Locking JSON buffer (%d) failed! (still locked by %d)\n"), moduleID, jsonBufferLock);
@@ -195,7 +195,7 @@ void releaseJSONBufferLock()
   jsonBufferLock = 0;
 #ifdef ARDUINO_ARCH_ESP32
   xSemaphoreGiveRecursive(jsonBufferLockMutex);
-#endif  
+#endif
 }
 
 

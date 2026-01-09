@@ -71,14 +71,14 @@
       #bCont span {
         display: inline-flex;
         align-items: center;
-        color: #fff; 
+        color: #fff;
         font-size: 12px;
         vertical-align: middle;
       }
       #info {
         display: "";
         text-align: center;
-        color: #fff; 
+        color: #fff;
         font-size: 12px;
         position: relative;
         margin-top: 10px;
@@ -108,18 +108,18 @@
       .palTop {
         height: fit-content;
         text-align: center;
-        color: #fff; 
+        color: #fff;
         font-size: 12px;
         position: relative;
         line-height: 1;
       }
       .palGradPar {
         display: flex;
-        align-items: center; 
+        align-items: center;
         height: fit-content;
         margin-top: 10px;
         text-align: center;
-        color: #fff; 
+        color: #fff;
         font-size: 12px;
         position: relative;
         line-height: 1;
@@ -167,9 +167,9 @@
 
   <div style="display: flex; justify-content: center;">
     <div id="info">
-      Click on the gradient editor to add new color slider, then the colored box below the slider to change its color. 
-      Click the red box below indicator (and confirm) to delete. 
-      Once finished, click the arrow icon to upload into the desired slot. 
+      Click on the gradient editor to add new color slider, then the colored box below the slider to change its color.
+      Click the red box below indicator (and confirm) to delete.
+      Once finished, click the arrow icon to upload into the desired slot.
       To edit existing palette, click the pencil icon.
     </div>
   </div>
@@ -218,7 +218,7 @@
   window.addEventListener('resize', chkW);
 
   gBox.addEventListener("click", clikOnGradient);
-  
+
   //Sets start and stop, mandatory
   addC(0);
   addC(255);
@@ -239,12 +239,12 @@
     colorMarkers.forEach((colorMarker, i) => {
       if (colorMarker.getAttribute("data-truepos") == truePos) {
         iExist = true;
-      } 
+      }
     });
 
     if (colorMarkers.length > 17) iExist = true;
     if (iExist) return; // Exit the function early if iExist is true
-    
+
     if (truePos > 0 && truePos < 255) {
       //calculate first available > 0
       for (var i = 1; i <= 16 && position < 1; i++) {
@@ -258,7 +258,7 @@
     if (thisColor == ''){
       thisColor = `#${(Math.random() * 0xFFFFFF << 0).toString(16).padStart(6, '0')}`;// set random color as default
     }
-      
+
     const colorMarker = cE('span'); // create a marker for the color position
     colorMarker.className = 'cMark';
     colorMarker.id = 'colorMarker' + position.toString();
@@ -267,7 +267,7 @@
     colorMarker.setAttribute("data-offset", mOffs);
     colorMarker.addEventListener('click', stopFurtherProp); //Added to prevent the gradient click to fire when covered by a marker
     colorMarker.style.left = `${Math.round((gLen / 256) * truePos)+mOffs}px`;
-    
+
     const colorPicker = cE('input');
     colorPicker.type = 'color';
     colorPicker.value = thisColor;
@@ -282,7 +282,7 @@
     colorPickerMarker.addEventListener('click', colClk);
     colorPickerMarker.style.left = colorMarker.style.left;
     colorPicker.style.left = colorMarker.style.left;
-    
+
     const deleteMarker = cE('span'); // create a delete marker for the color position
     if (position > 0 && position < 255) {
       deleteMarker.className = 'dMark';
@@ -296,9 +296,9 @@
     colorMarker.style.backgroundColor = colorPicker.value; // set marker color to match color picker
     colorPickerMarker.style.backgroundColor = colorPicker.value;
 
-    gBox.appendChild(colorPicker); 
+    gBox.appendChild(colorPicker);
     gBox.appendChild(colorMarker);
-    gBox.appendChild(colorPickerMarker); 
+    gBox.appendChild(colorPickerMarker);
     if (position != 0 && position != 255) gBox.appendChild(deleteMarker); // append the marker if not start or end
     //make markers slidable IF they are not the first or last slider
     if (position > 0 && position < 255) makeMeDrag(gId(colorMarker.id));
@@ -353,7 +353,7 @@
   //Just call: makeMeDrag(myElement); And you are good to go.
   function makeMeDrag(elmnt) {
     var posNew = 0, mousePos = 0, mouseOffset = 0
-    
+
     //Set these to whatever you want to limit your movement to
     var rect = gBox.getBoundingClientRect();
     var maxX = rect.right; // maximum X coordinate
@@ -387,7 +387,7 @@
       posNew = mousePos - clientX;
       mousePos = clientX;
       mousePosInGradient = mousePos - (minX + 1)
-      
+
       truePos = Math.round((mousePosInGradient/gLen)*256);
       oldTruePos = elmnt.getAttribute("data-truepos");
       // set the element's new position if new position within min/max limits:
@@ -432,14 +432,14 @@
     renderOffsetX = 15 - 5;
     renderX = e.srcElement.getBoundingClientRect().x - renderOffsetX;
     renderY = e.srcElement.getBoundingClientRect().y + 13;
-    
+
     trash.id = "trash";
     trash.innerHTML = svgTrash;
     trash.style.position = "absolute";
     trash.style.left = (renderX) + "px";
     trash.style.top = (renderY) + "px";
     d.body.appendChild(trash);
-    
+
     trash.addEventListener("click", (e)=>{
       trash.parentNode.removeChild(trash);
       thisDeleteMarker.parentNode.removeChild(thisDeleteMarker);
@@ -713,9 +713,9 @@
     d.querySelectorAll('span[id^="colorMarker"], span[id^="colorPickerMarker"], span[id^="deleteMarker"]').forEach((span) => {
       span.parentNode.removeChild(span);
     });
-    
+
     let colArray = JSON.parse(gId(`palette${i}`).getAttribute("data-colarray"));
-    
+
     for (let j = 0; j < colArray.length; j += 2) {
       const position = colArray[j];
       let hex;

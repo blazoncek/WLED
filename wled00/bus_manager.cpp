@@ -100,7 +100,7 @@ void Bus::calculateCCT(uint32_t c, uint8_t &ww, uint8_t &cw) {
   } else {
     cct = (approximateKelvinFromRGB(c) - 1900) >> 5;  // convert K (from RGB value) to relative format
   }
-  
+
   //0 - linear (CCT 127 = 50% warm, 50% cold), 127 - additive CCT blending (CCT 127 = 100% warm, 100% cold)
   if (cct       < _cctBlend) ww = 255;
   else                       ww = ((255-cct) * 255) / (255 - _cctBlend);
@@ -355,7 +355,7 @@ void BusDigital::cleanup() {
 #else
   #ifdef SOC_LEDC_TIMER_BIT_WIDE_NUM
     // C6/H2/P4: 20 bit, S2/S3/C2/C3: 14 bit
-    #define MAX_BIT_WIDTH SOC_LEDC_TIMER_BIT_WIDE_NUM 
+    #define MAX_BIT_WIDTH SOC_LEDC_TIMER_BIT_WIDE_NUM
   #else
     // ESP32: 20 bit (but in reality we would never go beyond 16 bit as the frequency would be to low)
     #define MAX_BIT_WIDTH 14
@@ -453,7 +453,7 @@ void BusPwm::show() {
   // https://github.com/wled/WLED/pull/4115 and https://github.com/zalatnaicsongor/WLED/pull/1)
   const bool     dithering = _needsRefresh; // avoid working with bitfield
   const size_t   numPins = getPins();
-  const unsigned maxBri = (1<<_depth);      // possible values: 16384 (14), 8192 (13), 4096 (12), 2048 (11), 1024 (10), 512 (9) and 256 (8) 
+  const unsigned maxBri = (1<<_depth);      // possible values: 16384 (14), 8192 (13), 4096 (12), 2048 (11), 1024 (10), 512 (9) and 256 (8)
   [[maybe_unused]] const unsigned bitShift = dithering * 4;  // if dithering, _depth is 12 bit but LEDC channel is set to 8 bit (using 4 fractional bits)
 
   // use CIE brightness formula (linear + cubic) to approximate human eye perceived brightness
@@ -469,13 +469,13 @@ void BusPwm::show() {
 
   [[maybe_unused]] unsigned hPoint = 0;  // phase shift (0 - maxBri)
   // we will be phase shifting every channel by previous pulse length (plus dead time if required)
-  // phase shifting is only mandatory when using H-bridge to drive reverse-polarity PWM CCT (2 wire) LED type 
+  // phase shifting is only mandatory when using H-bridge to drive reverse-polarity PWM CCT (2 wire) LED type
   // CCT additive blending must be 0 (WW & CW will not overlap) otherwise signals *will* overlap
   // for all other cases it will just try to "spread" the load on PSU
   // Phase shifting requires that LEDC timers are synchronised (see setup()). For PWM CCT (and H-bridge) it is
   // also mandatory that both channels use the same timer (pinManager takes care of that).
   for (unsigned i = 0; i < numPins; i++) {
-    unsigned duty = (_data[i] * pwmBri) / 255;    
+    unsigned duty = (_data[i] * pwmBri) / 255;
     #ifdef ESP8266
     if (_reversed) duty = maxBri - duty;
     analogWrite(_pins[i], duty);

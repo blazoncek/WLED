@@ -154,7 +154,7 @@ class St7789DisplayUsermod : public Usermod {
         tft.setTextDatum(MC_DATUM);
         tft.setTextSize(2);
         tft.print("Loading...");
-        if (TFT_BL >= 0) 
+        if (TFT_BL >= 0)
         {
             pinMode(TFT_BL, OUTPUT); // Set backlight pin to output mode
             digitalWrite(TFT_BL, HIGH); // Turn backlight on.
@@ -188,13 +188,13 @@ class St7789DisplayUsermod : public Usermod {
             return;
         }
         lastUpdate = millis();
-  
+
         // Turn off display after 5 minutes with no change.
         if (!displayTurnedOff && millis() - lastRedraw > 5*60*1000)
         {
-            if (TFT_BL >= 0) digitalWrite(TFT_BL, LOW); // Turn backlight off. 
+            if (TFT_BL >= 0) digitalWrite(TFT_BL, LOW); // Turn backlight off.
             displayTurnedOff = true;
-        } 
+        }
 
         // Check if values which are shown on display changed from the last time.
         if ((((apActive) ? String(apSSID) : WiFi.SSID()) != knownSsid) ||
@@ -213,7 +213,7 @@ class St7789DisplayUsermod : public Usermod {
             return;
         }
         needRedraw = false;
-    
+
         if (displayTurnedOff)
         {
             digitalWrite(TFT_BL, HIGH); // Turn backlight on.

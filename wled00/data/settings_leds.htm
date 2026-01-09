@@ -327,7 +327,7 @@
 					if (type.p != undefined && Array.isArray(type.p) && type.p.length > 0) {
 						opt.setAttribute('data-pins', type.p.join(','));
 					}
-					sel.appendChild(opt);			
+					sel.appendChild(opt);
 				}
 				enLA(gN("LL"+s)); // update LED mA
 				if (!init) {
@@ -777,7 +777,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				gId("rf"+n).onclick = mustR(t) ? (()=>{return false}) : (()=>{});           // prevent change change of "Refresh" checkmark when mandatory
 				gId("co"+n).style.display = (isVir(t) || isAna(t)) ? "none":"inline";       // hide color order for PWM
 				gId("dig"+n+"w").style.display = (isDig(t) && hasW(t)) ? "inline":"none";   // show swap channels dropdown
-				gId("dig"+n+"w").querySelector("[data-opt=CCT]").disabled = !hasCCT(t);     // disable WW/CW swapping	
+				gId("dig"+n+"w").querySelector("[data-opt=CCT]").disabled = !hasCCT(t);     // disable WW/CW swapping
 				if (!(isDig(t) && hasW(t))) gN("WO"+n).value = 0;                           // reset swapping
 				gId("dig"+n+"c").style.display = (isAna(t)) ? "none":"inline";              // hide count for analog
 				gId("dig"+n+"r").style.display = (isVir(t)) ? "none":"block";               // hide reversed for virtual
