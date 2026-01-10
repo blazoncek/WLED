@@ -732,10 +732,10 @@ void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segme
 
 void serializeInfo(JsonObject root)
 {
-  root[F("ver")] = versionString;
+  root[F("ver")] = FPSTR(versionString);
   root[F("vid")] = build;
   root[F("cn")] = F(WLED_CODENAME);
-  root[F("release")] = releaseString;
+  root[F("release")] = FPSTR(releaseString);
 
   JsonObject leds = root.createNestedObject(F("leds"));
   leds[F("count")] = strip.getLengthTotal();

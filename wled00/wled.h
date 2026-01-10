@@ -250,9 +250,9 @@ using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
 #define countof(x) (sizeof(x)/sizeof(x[0]))
 
 // Global Variable definitions
-WLED_GLOBAL char versionString[] _INIT(TOSTRING(WLED_VERSION));
-WLED_GLOBAL unsigned build       _INIT(VERSION);
-WLED_GLOBAL char releaseString[] _INIT(WLED_RELEASE_NAME); // somehow this will not work if using "const char releaseString[]
+WLED_GLOBAL unsigned build _INIT(VERSION);
+WLED_GLOBAL char versionString[] _INIT_PROGMEM(TOSTRING(WLED_VERSION));
+WLED_GLOBAL char releaseString[] _INIT_PROGMEM(WLED_RELEASE_NAME); // somehow this will not work if using "const char releaseString[]
 #define WLED_CODENAME "Kōsen"
 
 // AP and OTA default passwords (for maximum security change them!)
@@ -261,22 +261,19 @@ WLED_GLOBAL char otaPass[33] _INIT(DEFAULT_OTA_PASS);
 
 // Hardware and pin config
 #ifndef RLYPIN
-WLED_GLOBAL int8_t rlyPin _INIT(-1);
-#else
-WLED_GLOBAL int8_t rlyPin _INIT(RLYPIN);
+  #define RLYPIN -1
 #endif
+WLED_GLOBAL int8_t rlyPin _INIT(RLYPIN);
 //Relay mode (1 = active high, 0 = active low, flipped in cfg.json)
 #ifndef RLYMDE
-WLED_GLOBAL bool rlyMde _INIT(true);
-#else
-WLED_GLOBAL bool rlyMde _INIT(RLYMDE);
+  #define RLYMDE true
 #endif
+WLED_GLOBAL bool rlyMde _INIT(RLYMDE);
 //Use open drain (floating pin) when relay should be off
 #ifndef RLYODRAIN
-WLED_GLOBAL bool rlyOpenDrain _INIT(false);
-#else
-WLED_GLOBAL bool rlyOpenDrain _INIT(RLYODRAIN);
+  #define RLYODRAIN false
 #endif
+WLED_GLOBAL bool rlyOpenDrain _INIT(RLYODRAIN);
 #ifndef IRPIN
   #define IRPIN -1
 #endif
