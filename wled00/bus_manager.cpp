@@ -745,6 +745,7 @@ int BusManager::add(const BusConfig &bc) {
 // credit @willmmiles
 static String LEDTypesToJson(const std::vector<LEDType>& types) {
   String json;
+  json.reserve(512); // prevent heap fragmentation by allocating needed space upfront
   for (const auto &type : types) {
     // capabilities follows similar pattern as JSON API
     int capabilities = Bus::hasRGB(type.id) | Bus::hasWhite(type.id)<<1 | Bus::hasCCT(type.id)<<2 | Bus::is16bit(type.id)<<4 | Bus::mustRefresh(type.id)<<5;
@@ -758,6 +759,7 @@ static String LEDTypesToJson(const std::vector<LEDType>& types) {
 // credit @willmmiles & @netmindz https://github.com/wled/WLED/pull/4056
 String BusManager::getLEDTypesJSONString() {
   String json = "[";
+  json.reserve(1536); // prevent heap fragmentation by allocating needed space upfront
   json += LEDTypesToJson(BusDigital::getLEDTypes());
   json += LEDTypesToJson(BusOnOff::getLEDTypes());
   json += LEDTypesToJson(BusPwm::getLEDTypes());

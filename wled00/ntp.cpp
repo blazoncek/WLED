@@ -187,6 +187,7 @@ void updateTimezone() {
 
 String getTZNamesJSONString() {
   String names = "[";
+  names.reserve(512); // prevent heap fragmentation by allocating needed space upfront
   for (size_t i = 0; i < countof(TZ_TABLE); i++) {
     // the following is shorter code than sprintf()
     names += '"';

@@ -87,7 +87,7 @@ static void fillUMPins(Print& settingsScript, const JsonObject &mods)
 }
 
 void appendGPIOinfo(Print& settingsScript) {
-  settingsScript.print(F("d.um_p=[-1")); // has to have 1 element
+  settingsScript.print(F("um_p=[-1")); // has to have 1 element
   if (i2c_sda > -1 && i2c_scl > -1) {
     settingsScript.printf_P(PSTR(",%d,%d"), i2c_sda, i2c_scl);
   }
@@ -106,7 +106,7 @@ void appendGPIOinfo(Print& settingsScript) {
 
   // add reserved (unusable) pins
   bool firstPin = true;
-  settingsScript.print(F("d.rsvd=["));
+  settingsScript.print(F("rsvd=["));
   for (unsigned i = 0; i < WLED_NUM_PINS; i++) {
     if (!PinManager::isPinOk(i, false)) {  // include readonly pins
       if (!firstPin) settingsScript.print(',');
@@ -148,7 +148,7 @@ void appendGPIOinfo(Print& settingsScript) {
   settingsScript.print(F("];")); // rsvd
 
   // add info for read-only GPIO
-  settingsScript.print(F("d.ro_gpio=["));
+  settingsScript.print(F("ro_gpio=["));
   firstPin = true;
   for (unsigned i = 0; i < WLED_NUM_PINS; i++) {
     if (PinManager::isReadOnlyPin(i)) {
@@ -161,7 +161,7 @@ void appendGPIOinfo(Print& settingsScript) {
   settingsScript.print(F("];"));
 
   // add info about max. # of pins
-  settingsScript.printf_P(PSTR("d.max_gpio=%d;"),WLED_NUM_PINS);
+  settingsScript.printf_P(PSTR("max_gpio=%d;"),WLED_NUM_PINS);
 }
 
 //get values for settings form in javascript
@@ -293,7 +293,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
   {
     appendGPIOinfo(settingsScript);
 
-    settingsScript.printf_P(PSTR("d.ledTypes=%s;"), BusManager::getLEDTypesJSONString().c_str());
+    settingsScript.printf_P(PSTR("ledTypes=%s;"), BusManager::getLEDTypesJSONString().c_str());
 
     // set limits
     settingsScript.printf_P(PSTR("bLimits(%d,%d,%d,%d,%d,%d,%d,%d,%d);"),
