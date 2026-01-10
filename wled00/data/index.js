@@ -448,7 +448,7 @@ function presetError(empty)
 		if (bckstr.length > 10) hasBackup = true;
 	} catch (e) {}
 
-	var cn = `<div class="pres c" style="padding:8px;margin-bottom:8px;${empty?'':'cursor:pointer;'}" ${empty?'':'onclick="pmtLast=0;loadPresets();"'}>`;
+	var cn = `<div class="pres c" style="padding:8px;margin-bottom:8px;${empty?'':'cursor:pointer;'}" ${empty?'':'onclick="pmtLast=0;loadPresets();"'} title=";${empty?'':'Reload'}">`;
 	if (empty)
 		cn += `You have no presets yet!`;
 	else
@@ -493,7 +493,7 @@ function loadPresets(callback = null)
 	}
 
 	// afterwards
-	if (!callback && pmt == pmtLast) return;
+	if (!callback && pmtLast > 0 && pmt == pmtLast) return;
 
 	fetch(getURL('/presets.json'), {
 		method: 'get'
