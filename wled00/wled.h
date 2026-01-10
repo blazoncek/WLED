@@ -869,9 +869,9 @@ WLED_GLOBAL bool ledStatusState _INIT(false); // the current LED state
 #endif
 
 // server library objects
-WLED_GLOBAL AsyncWebServer server _INIT_N(((80)));
+WLED_GLOBAL AsyncWebServer server _INIT({{80}});
 #ifdef WLED_ENABLE_WEBSOCKETS
-WLED_GLOBAL AsyncWebSocket ws _INIT_N((("/ws")));
+WLED_GLOBAL AsyncWebSocket ws _INIT({{"/ws"}});
 #endif
 #ifndef WLED_DISABLE_HUESYNC
 WLED_GLOBAL AsyncClient     *hueClient _INIT(NULL);
@@ -882,9 +882,9 @@ WLED_GLOBAL AsyncWebHandler *editHandler _INIT(nullptr);
 WLED_GLOBAL WiFiUDP notifierUdp, rgbUdp, notifier2Udp;
 WLED_GLOBAL WiFiUDP ntpUdp;
 #ifndef WLED_USE_DDP_ONLY
-WLED_GLOBAL ESPAsyncE131 e131 _INIT_N(((handleE131Packet)));
+WLED_GLOBAL ESPAsyncE131 e131 _INIT({{handleE131Packet}});
 #endif
-WLED_GLOBAL ESPAsyncE131 ddp  _INIT_N(((handleE131Packet)));
+WLED_GLOBAL ESPAsyncE131 ddp  _INIT({{handleE131Packet}});
 WLED_GLOBAL bool e131NewData _INIT(false);
 
 // led fx library object
