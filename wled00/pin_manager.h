@@ -115,7 +115,7 @@ namespace PinManager {
   bool isPinAllocated(byte gpio, PinOwner tag = PinOwner::None);
   // will return false for reserved pins
   bool isPinOk(byte gpio, bool output = true);
-  
+
   bool isReadOnlyPin(byte gpio);
 
   PinOwner getPinOwner(byte gpio);

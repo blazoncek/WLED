@@ -36,9 +36,6 @@ void handleDMX();
 
 //e131.cpp
 void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol);
-void handleArtnetPollReply(IPAddress ipAddress);
-void prepareArtnetPollReply(ArtPollReply* reply);
-void sendArtnetPollReply(ArtPollReply* reply, IPAddress ipAddress, uint16_t portAddress);
 
 //file.cpp
 bool handleFileRead(AsyncWebServerRequest*, String path);
@@ -130,6 +127,7 @@ bool initMqtt();
 void publishMqtt();
 
 //ntp.cpp
+String getTZNamesJSONString();
 void handleTime();
 void handleNetworkTime();
 void sendNTPPacket();
@@ -181,7 +179,7 @@ typedef struct WizMoteMessageStructure {
   uint8_t button;   // Identifies which button is being pressed
   uint8_t dt2;      // Battery Level Data Type (0x01)
   uint8_t batLevel; // Battery Level 0-100
-  
+
   uint8_t byte10;   // Unknown, maybe checksum
   uint8_t byte11;   // Unknown, maybe checksum
   uint8_t byte12;   // Unknown, maybe checksum

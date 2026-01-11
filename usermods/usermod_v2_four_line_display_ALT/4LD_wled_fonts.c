@@ -11,7 +11,7 @@
   * this logo ...WLED/images/wled_logo_akemi.png
   * encode map = 1, 2, 3
 */
-const uint8_t u8x8_wled_logo_akemi_4x4[388] U8X8_FONT_SECTION("u8x8_wled_logo_akemi_4x4") = 
+const uint8_t u8x8_wled_logo_akemi_4x4[388] U8X8_FONT_SECTION("u8x8_wled_logo_akemi_4x4") =
   "\1\3\4\4\0\0\0\0\0\0\0\0\0\340\360\10\350\10\350\210\270\210\350\210\270\350\10\360\340\0\0\0"
   "\0\0\200\200\0\0@\340\300\340@\0\0\377\377\377\377\377\377\37\37\207\207\371\371\371\377\377\377\0\0\374"
   "\374\7\7\371\0\0\6\4\15\34x\340\200\177\177\377\351yy\376\356\357\217\177\177\177o\377\377\0\70\77"
@@ -36,7 +36,7 @@ const uint8_t u8x8_wled_logo_akemi_4x4[388] U8X8_FONT_SECTION("u8x8_wled_logo_ak
   * encoded = 1, 2, 3
 */
 /*
-const uint8_t u8x8_wled_logo_akemi_5x5[604] U8X8_FONT_SECTION("u8x8_wled_logo_akemi_5x5") = 
+const uint8_t u8x8_wled_logo_akemi_5x5[604] U8X8_FONT_SECTION("u8x8_wled_logo_akemi_5x5") =
   "\1\3\5\5\0\0\0\0\0\0\0\0\0\0\0\0\340\340\374\14\354\14\354\14|\14\354\14||\14\354"
   "\14\374\340\340\0\0\0\0\0\0\0\200\0\0\0\200\200\0\200\200\0\0\0\0\377\377\377\376\377\376\377\377"
   "\377\377\77\77\307\307\307\307\306\377\377\377\0\0\0\360\374>\77\307\0\0\61cg\357\347\303\301\200\0\0"
@@ -66,7 +66,7 @@ const uint8_t u8x8_wled_logo_akemi_5x5[604] U8X8_FONT_SECTION("u8x8_wled_logo_ak
   * this logo  https://cdn.discordapp.com/attachments/706623245935444088/927361780613799956/wled_scaled.png
   * encode map = 1, 2, 3, 4
 */
-const uint8_t u8x8_wled_logo_2x2[133] U8X8_FONT_SECTION("u8x8_wled_logo_2x2") = 
+const uint8_t u8x8_wled_logo_2x2[133] U8X8_FONT_SECTION("u8x8_wled_logo_2x2") =
   "\1\4\2\2\0\0\0\0\0\200\200\360\360\16\16\16\16\0\0\0\340\340\340\340\340\37\37\1\1\0\0\0"
   "\0\0\0\0\360\360\16\16\16\200\200\16\16\16\360\360\0\0\0\200\37\37\340\340\340\37\37\340\340\340\37\37"
   "\0\0\0\37\200~~\0\0\0\0\0\0\0\360\360\216\216\216\216\37\340\340\340\340\340\340\340\0\0\37\37"
@@ -83,7 +83,7 @@ const uint8_t u8x8_wled_logo_2x2[133] U8X8_FONT_SECTION("u8x8_wled_logo_2x2") =
   * encode map = 1, 2, 3, 4
 */
 /*
-const uint8_t u8x8_wled_logo_4x4[517] U8X8_FONT_SECTION("u8x8_wled_logo_4x4") = 
+const uint8_t u8x8_wled_logo_4x4[517] U8X8_FONT_SECTION("u8x8_wled_logo_4x4") =
   "\1\4\4\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\374\374\374\374\374\374\374\374\374"
   "\0\0\0\0\0\0\0\0\0\0\0\0\0\300\300\300\300\300\377\377\377\377\377\0\0\0\0\0\0\0\0\0"
   "\0\0\0\0\0\0\0\0\0\0\0\0\0\377\377\377\377\377\17\17\17\17\17\0\0\0\0\0\0\0\0\0"
@@ -125,7 +125,7 @@ const uint8_t u8x8_wled_logo_4x4[517] U8X8_FONT_SECTION("u8x8_wled_logo_4x4") =
   * 20 = wifi
   * 21 = media-play
 */
-const uint8_t u8x8_4LineDisplay_WLED_icons_1x1[172] U8X8_FONT_SECTION("u8x8_4LineDisplay_WLED_icons_1x1") = 
+const uint8_t u8x8_4LineDisplay_WLED_icons_1x1[172] U8X8_FONT_SECTION("u8x8_4LineDisplay_WLED_icons_1x1") =
   "\1\25\1\1\0B\30<<\30B\0~<\30\0~<\30\0p\374\77\216\340\370\360\0<n\372\377"
   "\275\277\26\34\374\374\77\77\374\374\60\60<~~\360\340``\0\200\340\360p\14\16\6\1<~\377\377"
   "\201\201B<\70D\200\217\200D\70\0\0\10x<<x\10\0\14\36>||>\36\14\64 \336\67"
@@ -149,10 +149,10 @@ const uint8_t u8x8_4LineDisplay_WLED_icons_1x1[172] U8X8_FONT_SECTION("u8x8_4Lin
   * 8  = contrast
   * 9  = power-standby
   * 10 = star
-  * 11 = heart  
+  * 11 = heart
   * 12 = Akemi
 */
-const uint8_t u8x8_4LineDisplay_WLED_icons_2x1[196] U8X8_FONT_SECTION("u8x8_4LineDisplay_WLED_icons_2x1") = 
+const uint8_t u8x8_4LineDisplay_WLED_icons_2x1[196] U8X8_FONT_SECTION("u8x8_4LineDisplay_WLED_icons_2x1") =
   "\1\14\2\1\20\20BB\30\30<\275\275<\30\30BB\20\20\377~<<\70\30\20\0\377~<<"
   "\70\30\20\0\60p\370\374\77>\236\214\300\340\370\360\360\340\0\0\34<v\326\336\375\375\377\277\275=>"
   "\66\66<\34\374\374\374\374~\77\77~\374\374\374\374 pp \30<~~\377\370\360\360\340\340\340\340"
@@ -164,7 +164,7 @@ const uint8_t u8x8_4LineDisplay_WLED_icons_2x1[196] U8X8_FONT_SECTION("u8x8_4Lin
 
 /*
   Fontname: 4LineDisplay_WLED_icons_2x
-  Copyright: 
+  Copyright:
   Glyphs: 11/11
   BBX Build Mode: 3
   * 1  = sun
@@ -177,10 +177,10 @@ const uint8_t u8x8_4LineDisplay_WLED_icons_2x1[196] U8X8_FONT_SECTION("u8x8_4Lin
   * 8  = contrast
   * 9  = power-standby
   * 10 = star
-  * 11 = heart  
+  * 11 = heart
   * 12 = Akemi
 */
-const uint8_t u8x8_4LineDisplay_WLED_icons_2x2[389] U8X8_FONT_SECTION("u8x8_4LineDisplay_WLED_icons_2x2") = 
+const uint8_t u8x8_4LineDisplay_WLED_icons_2x2[389] U8X8_FONT_SECTION("u8x8_4LineDisplay_WLED_icons_2x2") =
   "\1\14\2\2\200\200\14\14\300\340\360\363\363\360\340\300\14\14\200\200\1\1\60\60\3\7\17\317\317\17\7\3"
   "\60\60\1\1\374\370\360\340\340\300\200\0\374\370\360\340\340\300\200\0\77\37\17\7\7\3\1\0\77\37\17\7"
   "\7\3\1\0\0\200\340\360\377\376\374\360\0\0\300\200\0\0\0\0\17\77\177\377\17\7\301\340\370\374\377\377"
@@ -210,10 +210,10 @@ const uint8_t u8x8_4LineDisplay_WLED_icons_2x2[389] U8X8_FONT_SECTION("u8x8_4Lin
   * 8  = contrast
   * 9  = power-standby
   * 10 = star
-  * 11 = heart  
+  * 11 = heart
   * 12 = Akemi
 */
-const uint8_t u8x8_4LineDisplay_WLED_icons_3x3[868] U8X8_FONT_SECTION("u8x8_4LineDisplay_WLED_icons_3x3") = 
+const uint8_t u8x8_4LineDisplay_WLED_icons_3x3[868] U8X8_FONT_SECTION("u8x8_4LineDisplay_WLED_icons_3x3") =
   "\1\14\3\3\0\0\34\34\34\0\200\300\300\340\347\347\347\340\300\300\200\0\34\34\34\0\0\0\34\34\34\0"
   "\0>\377\377\377\377\377\377\377\377\377\377\377>\0\0\34\34\34\0\0\0\16\16\16\0\0\1\1\3ss"
   "s\3\1\1\0\0\34\34\34\0\0\0\370\360\340\300\300\200\0\0\0\0\0\0\370\360\340\300\300\200\0\0"
@@ -260,11 +260,11 @@ const uint8_t u8x8_4LineDisplay_WLED_icons_3x3[868] U8X8_FONT_SECTION("u8x8_4Lin
   * 8  = contrast
   * 9  = power-standby
   * 10 = star
-  * 11 = heart  
+  * 11 = heart
   * 12 = Akemi
 */
 /*
-const uint8_t u8x8_4LineDisplay_WLED_icons_4x4[1540] U8X8_FONT_SECTION("u8x8_4LineDisplay_WLED_icons_4x4") = 
+const uint8_t u8x8_4LineDisplay_WLED_icons_4x4[1540] U8X8_FONT_SECTION("u8x8_4LineDisplay_WLED_icons_4x4") =
   "\1\14\4\4\0\0\0\0`\360\360`\0\0\0\0\0\0\6\17\17\6\0\0\0\0\0\0`\360\360`"
   "\0\0\0\0\200\300\300\200\0\0\0\0\340\370\374\376\376\377\377\377\377\377\377\376\376\374\370\340\0\0\0\0"
   "\200\300\300\200\1\3\3\1\0\0\0\0\7\37\77\177\177\377\377\377\377\377\377\177\177\77\37\7\0\0\0\0"
@@ -335,7 +335,7 @@ const uint8_t u8x8_4LineDisplay_WLED_icons_4x4[1540] U8X8_FONT_SECTION("u8x8_4Li
   * 12 = Akemi
 */
 // you can replace this (wasteful) font by using 3x3 variant with draw2x2Glyph()
-const uint8_t u8x8_4LineDisplay_WLED_icons_6x6[3460] U8X8_FONT_SECTION("u8x8_4LineDisplay_WLED_icons_6x6") = 
+const uint8_t u8x8_4LineDisplay_WLED_icons_6x6[3460] U8X8_FONT_SECTION("u8x8_4LineDisplay_WLED_icons_6x6") =
   "\1\14\6\6\0\0\0\0\0\0\200\300\300\300\300\200\0\0\0\0\0\0\0\0\0\36\77\77\77\77\36\0"
   "\0\0\0\0\0\0\0\0\200\300\300\300\300\200\0\0\0\0\0\0\0\0\0\0\0\0\7\17\17\17\17\7"
   "\0\0\0\0\200\300\340\340\340\360\360\360\360\360\360\340\340\340\300\200\0\0\0\0\7\17\17\17\17\7\0\0"
@@ -456,7 +456,7 @@ const uint8_t u8x8_4LineDisplay_WLED_icons_6x6[3460] U8X8_FONT_SECTION("u8x8_4Li
   * 12 = Akemi
 */
 /*
-const uint8_t u8x8_akemi_8x8[516] U8X8_FONT_SECTION("u8x8_akemi_8x8") = 
+const uint8_t u8x8_akemi_8x8[516] U8X8_FONT_SECTION("u8x8_akemi_8x8") =
   "\14\14\10\10\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
   "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
   "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"

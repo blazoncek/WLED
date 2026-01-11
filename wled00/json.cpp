@@ -518,6 +518,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   UsermodManager::readFromJsonState(root);
 
   loadLedmap = root[F("ledmap")] | loadLedmap;
+  if (loadLedmap >= 0) stateResponse = false; // force LED map reload without notification
 
   byte ps = root[F("psave")];
   if (ps > 0 && ps < 251) savePreset(ps, nullptr, root);
@@ -571,7 +572,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   }
 
   doAdvancePlaylist = root[F("np")] | doAdvancePlaylist; //advances to next preset in playlist when true
-  
+
   JsonObject wifi = root[F("wifi")];
   if (!wifi.isNull()) {
     bool apMode = getBoolVal(wifi[F("ap")], apActive);
@@ -594,6 +595,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
         forceReconnect = true;
       staActive = wifiOn;
     }
+    stateResponse = false; // wifi changes do not require state response
   }
 
   if (stateChanged) stateUpdated(callMode);
@@ -730,10 +732,10 @@ void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segme
 
 void serializeInfo(JsonObject root)
 {
-  root[F("ver")] = versionString;
+  root[F("ver")] = FPSTR(versionString);
   root[F("vid")] = build;
   root[F("cn")] = F(WLED_CODENAME);
-  root[F("release")] = releaseString;
+  root[F("release")] = FPSTR(releaseString);
 
   JsonObject leds = root.createNestedObject(F("leds"));
   leds[F("count")] = strip.getLengthTotal();
@@ -862,7 +864,7 @@ void serializeInfo(JsonObject root)
   #endif
   root[F("lwip")] = 0; //deprecated
 #else
-  root[F("arch")] = "esp8266";
+  root[F("arch")] = "esp8266"; // must be lowercase (see index.js)
   root[F("core")] = ESP.getCoreVersion();
   root[F("clock")] = ESP.getCpuFreqMHz();
   root[F("flash")] = (ESP.getFlashChipSize()/1024)/1024;
@@ -981,7 +983,7 @@ void setPaletteColors(JsonArray json, byte* tcp)
 
 void serializePalettes(JsonObject root, int page)
 {
-  byte tcp[72];
+  CRGBPalette16 tmpPalette;
   #ifdef ESP8266
   constexpr int itemPerPage = 5;
   #else
@@ -1001,13 +1003,14 @@ void serializePalettes(JsonObject root, int page)
   JsonObject palettes  = root.createNestedObject("p");
 
   for (int i = start; i < end; i++) {
-    JsonArray curPalette = palettes.createNestedArray(String(i >= palettesCount ? 255 - i + palettesCount : i));
+    const int palIndex = i >= palettesCount ? 255 - i + palettesCount : i;
+    JsonArray curPalette = palettes.createNestedArray(String(palIndex));
     switch (i) {
       case 0: //default palette
         setPaletteColors(curPalette, PartyColors_p);
         break;
       case 1: //random
-           for (int j = 0; j < 4; j++) curPalette.add("r");
+        for (int j = 0; j < 4; j++) curPalette.add("r");
         break;
       case 2: //primary color only
         curPalette.add("c1");
@@ -1030,14 +1033,7 @@ void serializePalettes(JsonObject root, int page)
         curPalette.add("c1");
         break;
       default:
-        if (i >= palettesCount) // custom palettes
-          setPaletteColors(curPalette, customPalettes[i - palettesCount]);
-        else if (i < DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_COUNT) // palette 6 - 12, fastled palettes
-          setPaletteColors(curPalette, *fastledPalettes[i - DYNAMIC_PALETTE_COUNT]);
-        else {
-          memcpy_P(tcp, (byte*)pgm_read_dword(&(gGradientPalettes[i - (DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_COUNT)])), sizeof(tcp));
-          setPaletteColors(curPalette, tcp);
-        }
+        setPaletteColors(curPalette, strip.getMainSegment().loadPalette(tmpPalette, palIndex));
         break;
     }
   }
@@ -1131,7 +1127,7 @@ class LockedJsonResponse: public AsyncJsonResponse {
   // if the lock was not acquired (using JSONBufferGuard class) previous implementation still cleared existing buffer
   inline LockedJsonResponse(JsonDocument* doc, bool isArray) : AsyncJsonResponse(doc, isArray), _holding_lock(true) {};
 
-  virtual size_t _fillBuffer(uint8_t *buf, size_t maxLen) { 
+  virtual size_t _fillBuffer(uint8_t *buf, size_t maxLen) {
     size_t result = AsyncJsonResponse::_fillBuffer(buf, maxLen);
     // Release lock as soon as we're done filling content
     if (((result + _sentLength) >= (_contentLength)) && _holding_lock) {
@@ -1248,7 +1244,7 @@ bool serveLiveLeds(AsyncWebServerRequest* request, uint32_t wsClient)
   }
 #endif
 
-  DynamicBuffer buffer(9 + (9*(1+(used/n))) + 7 + 5 + 6 + 5 + 6 + 5 + 2);  
+  DynamicBuffer buffer(9 + (9*(1+(used/n))) + 7 + 5 + 6 + 5 + 6 + 5 + 2);
   char* buf = buffer.data();      // assign buffer for oappnd() functions
   strncpy_P(buffer.data(), PSTR("{\"leds\":["), buffer.size());
   buf += 9; // sizeof(PSTR()) from last line
@@ -1278,7 +1274,7 @@ bool serveLiveLeds(AsyncWebServerRequest* request, uint32_t wsClient)
 #endif
   (*buf++) = '}';
   (*buf++) = 0;
-  
+
   if (request) {
     request->send(200, FPSTR(CONTENT_TYPE_JSON), toString(std::move(buffer)));
   }
@@ -1286,7 +1282,7 @@ bool serveLiveLeds(AsyncWebServerRequest* request, uint32_t wsClient)
   else {
     wsc->text(toString(std::move(buffer)));
   }
-  #endif  
+  #endif
   return true;
 }
 #endif

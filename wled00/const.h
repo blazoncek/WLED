@@ -93,7 +93,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
   #endif
 #endif
 
-// NOTE: These values are also used to determine ESP type in led_settings.htm 
+// NOTE: These values are also used to determine ESP type in led_settings.htm
 #ifdef ESP8266
   #define WLED_MAX_DIGITAL_CHANNELS 3
   #define WLED_MAX_ANALOG_CHANNELS 5
@@ -359,6 +359,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #define TYPE_LPD8806             52
 #define TYPE_P9813               53
 #define TYPE_LPD6803             54
+#define TYPE_HD108               55
 #define TYPE_2PIN_MAX            63
 //Digital types (Hub75 matrix) (64-71)
 #define TYPE_HUB75MATRIX_MIN     64

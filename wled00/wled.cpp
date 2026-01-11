@@ -421,12 +421,12 @@ void WLED::setup()
   updateFSInfo();
 
   // generate module IDs must be done before AP setup
-  escapedMac = WiFi.macAddress();
-  escapedMac.replace(":", "");
-  escapedMac.toLowerCase();
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  fillMAC2Str(escapedMac, mac);
 
   // generate host name if no compile time default is set
-  if (strcmp(hostName, DEFAULT_MDNS_NAME) == 0) sprintf_P(hostName, PSTR("wled-%.*s"), 6, escapedMac.c_str() + 6);
+  if (strcmp(hostName, DEFAULT_MDNS_NAME) == 0) sprintf_P(hostName, PSTR("wled-%.*s"), 6, escapedMac + 6);
   WLED_SET_AP_SSID(); // otherwise it is empty on first boot until config is saved
 
   DEBUG_PRINTLN(F("Reading config"));
@@ -629,7 +629,9 @@ void WLED::initAP(bool resetAP)
     if (udpPort2 > 0 && udpPort2 != ntpLocalPort && udpPort2 != udpPort && udpPort2 != udpRgbPort) {
       udp2Connected = notifier2Udp.begin(udpPort2);
     }
+    #ifndef WLED_USE_DDP_ONLY
     e131.begin(false, e131Port, e131Universe, E131_MAX_UNIVERSE_COUNT);
+    #endif
     ddp.begin(false, DDP_DEFAULT_PORT);
 
     dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
@@ -727,7 +729,7 @@ void WLED::connected()
     DEBUG_PRINTLN(F("mDNS started"));
     MDNS.addService("http", "tcp", 80);
     MDNS.addService("wled", "tcp", 80);
-    MDNS.addServiceTxt("wled", "tcp", "mac", escapedMac.c_str());
+    MDNS.addServiceTxt("wled", "tcp", "mac", (const char*)escapedMac);
     DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
   }
   server.begin();
@@ -744,7 +746,9 @@ void WLED::connected()
   if (ntpEnabled)
     ntpConnected = ntpUdp.begin(ntpLocalPort);
 
+  #ifndef WLED_USE_DDP_ONLY
   e131.begin(e131Multicast, e131Port, e131Universe, E131_MAX_UNIVERSE_COUNT);
+  #endif
   ddp.begin(false, DDP_DEFAULT_PORT);
 
 #ifndef WLED_DISABLE_HUESYNC

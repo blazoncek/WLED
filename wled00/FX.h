@@ -38,10 +38,6 @@
   #define DEBUGFX_PRINTF_P(x...)
 #endif
 
-#define FASTLED_INTERNAL //remove annoying pragma messages
-#define USE_GET_MILLISECOND_TIMER
-#include "FastLED.h"
-
 #define DEFAULT_BRIGHTNESS (uint8_t)127
 #define DEFAULT_MODE       (uint8_t)0
 #define DEFAULT_SPEED      (uint8_t)128
@@ -545,7 +541,6 @@ class Segment {
     inline CRGBA getPixelColorXYRaw(unsigned x, unsigned y) const                       { return pixels[XY(x,y)]; };
   #endif
     void resetIfRequired();         // sets all SEGENV variables to 0 and clears data buffer
-    CRGBPalette16 &loadPalette(CRGBPalette16 &tgt, uint8_t pal);
 
     // transition functions
     void stopTransition();                  // ends transition mode by destroying transition structure (does nothing if not in transition)
@@ -661,6 +656,7 @@ class Segment {
     inline static unsigned vHeight()                       { return Segment::_vHeight; }
     inline static CRGBA getCurrentColor(unsigned i)        { return Segment::_currentColors[i<NUM_COLORS?i:0];}
     inline static const CRGBPalette16 &getCurrentPalette() { return Segment::_currentPalette; }
+    CRGBPalette16 &loadPalette(CRGBPalette16 &tgt, uint8_t pal);  // required public for populating palette previews in JSON
 
     inline void setDrawDimensions() const { Segment::_vWidth = virtualWidth(); Segment::_vHeight = virtualHeight(); Segment::_vLength = virtualLength(); }
 

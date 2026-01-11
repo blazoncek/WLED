@@ -133,10 +133,10 @@ class UsermodBattery : public Usermod
     {      
       StaticJsonDocument<600> doc;
       char uid[128], json_str[1024], buf[128];
-
+    
       doc["name"] = name;
       doc[F("stat_t")] = topic;
-      sprintf_P(uid, PSTR("%s_%s_%s"), escapedMac.c_str(), stringToLower(name).c_str(), type);
+      sprintf_P(uid, PSTR("%s_%s_%s"), escapedMac, stringToLower(name).c_str(), type);
       doc[F("uniq_id")] = uid;
       doc[F("dev_cla")] = deviceClass;
       doc[F("exp_aft")] = 1800;

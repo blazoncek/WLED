@@ -174,12 +174,12 @@ void ShtUsermod::publishHomeAssistantAutodiscovery() {
   json[F("stat_t")] = buf;
   json[F("dev_cla")] = F("temperature");
   json[F("stat_cla")] = F("measurement");
-  snprintf_P(buf, 127, PSTR("%s-temperature"), escapedMac.c_str());
+  snprintf_P(buf, 127, PSTR("%s-temperature"), escapedMac);
   json[F("uniq_id")] = buf;
   json[F("unit_of_meas")] = unitOfTemp ? F("°F") : F("°C");
   appendDeviceToMqttDiscoveryMessage(json);
   payload_size = serializeJson(json, json_str);
-  snprintf_P(buf, 127, PSTR("homeassistant/sensor/%s/%s-temperature/config"), escapedMac.c_str(), escapedMac.c_str());
+  snprintf_P(buf, 127, PSTR("homeassistant/sensor/%s/%s-temperature/config"), escapedMac, escapedMac);
   mqtt->publish(buf, 0, true, json_str, payload_size);
 
   json.clear();
@@ -190,12 +190,12 @@ void ShtUsermod::publishHomeAssistantAutodiscovery() {
   json[F("stat_t")] = buf;
   json[F("dev_cla")] = F("humidity");
   json[F("stat_cla")] = F("measurement");
-  snprintf_P(buf, 127, PSTR("%s-humidity"), escapedMac.c_str());
+  snprintf_P(buf, 127, PSTR("%s-humidity"), escapedMac);
   json[F("uniq_id")] = buf;
   json[F("unit_of_meas")] = F("%");
   appendDeviceToMqttDiscoveryMessage(json);
   payload_size = serializeJson(json, json_str);
-  snprintf_P(buf, 127, PSTR("homeassistant/sensor/%s/%s-humidity/config"), escapedMac.c_str(), escapedMac.c_str());
+  snprintf_P(buf, 127, PSTR("homeassistant/sensor/%s/%s-humidity/config"), escapedMac, escapedMac);
   mqtt->publish(buf, 0, true, json_str, payload_size);
 
   haMqttDiscoveryDone = true;
@@ -208,7 +208,7 @@ void ShtUsermod::publishHomeAssistantAutodiscovery() {
  */
 void ShtUsermod::appendDeviceToMqttDiscoveryMessage(JsonDocument& root) {
   JsonObject device = root.createNestedObject(F("dev"));
-  device[F("ids")] = escapedMac.c_str();
+  device[F("ids")] = escapedMac;
   device["name"] = serverDescription;
   device[F("sw")] = versionString;
   device[F("mdl")] = ESP.getChipModel();

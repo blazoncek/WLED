@@ -64,7 +64,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     }
 
     strlcpy(hostName, request->arg(F("CM")).c_str(), sizeof(hostName));
-    if (strlen(hostName) == 0) sprintf_P(hostName, PSTR("wled-%.*s"), 6, escapedMac.c_str() + 6); // hostname must not be empty
+    if (strlen(hostName) == 0) sprintf_P(hostName, PSTR("wled-%.*s"), 6, escapedMac + 6); // hostname must not be empty
 #ifdef ARDUINO_ARCH_ESP32
   #ifdef WLED_USE_ETHERNET
     ETH.setHostname(hostName);
@@ -320,7 +320,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
             DEBUG_PRINTF_P(PSTR("PIN ALLOC error: GPIO%d for touch button #%d is not an touch pin!\n"), buttons[i].pin, i);
             PinManager::deallocatePin(buttons[i].pin, PinOwner::Button);
             buttons[i].type = BTN_TYPE_NONE;
-          }          
+          }
           #ifdef SOC_TOUCH_VERSION_2 // ESP32 S2 and S3 have a fucntion to check touch state but need to attach an interrupt to do so
           else touchAttachInterrupt(buttons[i].pin, touchButtonISR, touchThreshold << 4); // threshold on Touch V2 is much higher (1500 is a value given by Espressif example, I measured changes of over 5000)
           #endif
@@ -343,12 +343,13 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
         buttons[i].type = BTN_TYPE_NONE;
       }
     }
-    // we should remove all unused buttons from the vector
+    // we should remove all unused buttons from the vector (except one)
     for (int i = buttons.size()-1; i > 0; i--) {
       if (buttons[i].pin < 0 && buttons[i].type == BTN_TYPE_NONE) {
         buttons.erase(buttons.begin() + i); // remove button from vector
       }
     }
+    buttons.shrink_to_fit();
 
     briS = request->arg(F("CA")).toInt();
 
@@ -956,7 +957,7 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
 
   pos = req.indexOf(F("NP")); //advances to next preset in a playlist
   if (pos > 0) doAdvancePlaylist = true;
-  
+
   //set brightness
   updateVal(req.c_str(), "&A=", bri);
 

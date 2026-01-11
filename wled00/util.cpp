@@ -120,7 +120,7 @@ size_t printSetIdHTML(Print& settingsScript, const char* key, const char* val) {
 void prepareHostname(char* hostname, size_t maxLen)
 {
   // create a unique hostname based on the last 6 digits of the MAC address if no mDNS name or serverDescription is set
-  snprintf_P(hostname, maxLen, PSTR("wled-%.*s"), 6, escapedMac.c_str() + 6);
+  snprintf_P(hostname, maxLen, PSTR("wled-%.*s"), 6, escapedMac + 6);
   const char *pC = hostName;    // use hostName as hostname if set
   if (strlen(pC) == 0) pC = serverDescription;  // else use serverDescription
   unsigned pos = strstr_P(pC, PSTR("wled-")) == pC ? 0 : 5; // keep "wled-" from unique name if hostName does not start with it
@@ -172,7 +172,7 @@ bool requestJSONBufferLock(uint8_t moduleID)
   }
 #else
   #error Unsupported task framework - fix requestJSONBufferLock
-#endif  
+#endif
   // If the lock is still held - by us, or by another task
   if (jsonBufferLock) {
     DEBUG_PRINTF_P(PSTR("ERROR: Locking JSON buffer (%d) failed! (still locked by %d)\n"), moduleID, jsonBufferLock);
@@ -195,7 +195,7 @@ void releaseJSONBufferLock()
   jsonBufferLock = 0;
 #ifdef ARDUINO_ARCH_ESP32
   xSemaphoreGiveRecursive(jsonBufferLockMutex);
-#endif  
+#endif
 }
 
 
