@@ -682,15 +682,9 @@ void BusNetwork::cleanup() {
 }
 
 
-#ifdef WLED_ENABLE_HUB75MATRIX
+#if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
   #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
   #include <ESP32-VirtualMatrixPanel-I2S-DMA.h>
-
-  #if !(defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
-    #error "Unsupported ESP platform for HUB75 display. Only ESP32, ESP32-S2 and ESP32-S3 are supported."
-  #else
-    #warning "HUB75 driver enabled (experimental)"
-  #endif
 
 /*
 // functions to get/set bits in an array - based on functions created by @Brandon502 for GOL
@@ -991,11 +985,17 @@ void BusHub75Matrix::cleanup() {
   if (display) {
     display->stopDMAoutput();  // terminate DMA driver (display goes black)
     DEBUGBUS_PRINTLN("HUB75 output ended.");
-    delay(30); // give some time to settle
-    if (virtualDisp) delete virtualDisp;
-    virtualDisp = nullptr;
+    delay(40); // give some time to settle
+    if (virtualDisp) {
+      delete virtualDisp;
+      virtualDisp = nullptr;
+      DEBUGBUS_PRINTLN("HUB75 virtual display destroyed.");
+      delay(15);
+    }
     delete display;
     display = nullptr;
+    DEBUGBUS_PRINTLN("HUB75 display destroyed.");
+    delay(15);
   }
   deallocatePins();
   //free(_ledsDirty); // no need to check for nullptr
@@ -1032,6 +1032,12 @@ size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
   return 5 + HUB75_PIN_COUNT;
 }
 
+size_t BusHub75Matrix::getBusSize() const {
+  return sizeof(BusHub75Matrix) + sizeof(MatrixPanel_I2S_DMA)
+    + (virtualDisp ? sizeof(VirtualMatrixPanel) : 0)
+    + (isOk() ? display->width() * display->height() * display->getCfg().getPixelColorDepthBits() / 8 : _len) * 3;
+}
+
 std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
   std::vector<LEDType> types = {
     {TYPE_HUB75MATRIX_PORTAL,  "H", PSTR("HUB75 (Adafruit Matrix Portal)")},
@@ -1056,6 +1062,18 @@ std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
 size_t BusConfig::memUsage(unsigned nr) const {
   if (Bus::isVirtual(type)) {
     return sizeof(BusNetwork) + (count * Bus::getNumberOfChannels(type));
+#if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
+  } else if (Bus::isHub75(type)) {
+    return sizeof(BusHub75Matrix) + sizeof(MatrixPanel_I2S_DMA)
+      + (pins[2] > 1 && refreshReq ? sizeof(VirtualMatrixPanel) : 0)
+      + (count * 
+    #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)// classic esp32, or esp32-s2: reduced bitdepth for large panels
+      (count > 12288 ? 3 : (count > 4096 ? 4 : 8))
+    #else
+      8
+    #endif
+      / 8) * 3; // count * bitsperchannel/8 * channels
+#endif // WLED_ENABLE_HUB75MATRIX
   } else if (Bus::isDigital(type)) {
     // if any of digital buses uses I2S, there is additional common I2S DMA buffer not accounted for here
     return sizeof(BusDigital) + PolyBus::memUsage(count + skipAmount, PolyBus::getI(type, pins, nr));
@@ -1116,7 +1134,7 @@ int BusManager::add(const BusConfig &bc) {
   }
   if (Bus::isVirtual(bc.type)) {
     busses.push_back(make_unique<BusNetwork>(bc));
-  #ifdef WLED_ENABLE_HUB75MATRIX
+  #if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
   } else if (Bus::isHub75(bc.type)) {
     if (hub75 > 0) return -1; // only one HUB75 matrix bus allowed
     busses.push_back(make_unique<BusHub75Matrix>(bc));
@@ -1164,7 +1182,7 @@ String BusManager::getLEDTypesJSONString() {
   json += LEDTypesToJson(BusDigital::getLEDTypes());
   json += LEDTypesToJson(BusOnOff::getLEDTypes());
   json += LEDTypesToJson(BusPwm::getLEDTypes());
-  #ifdef WLED_ENABLE_HUB75MATRIX
+  #if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
   json += LEDTypesToJson(BusHub75Matrix::getLEDTypes());
   #endif
   json += LEDTypesToJson(BusNetwork::getLEDTypes());

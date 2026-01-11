@@ -158,6 +158,8 @@
 					}
 				}
 				len += parseInt(gN("SL"+n).value); // skipped LEDs are allocated too
+			} else if (isHub75(t)) {
+				dbl += 2304; // approximate size of driver memory requirements (excluding buffers)
 			}
 			return len * ch * mul + dbl;
 		}

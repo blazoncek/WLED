@@ -369,7 +369,7 @@ class BusNetwork : public Bus {
 };
 
 
-#ifdef WLED_ENABLE_HUB75MATRIX
+#if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
 // forward declarations
 class MatrixPanel_I2S_DMA;
 class VirtualMatrixPanel;
@@ -383,9 +383,9 @@ class BusHub75Matrix : public Bus {
     void setBrightness(uint8_t b) override;
     uint16_t getFrequency() const override;
     size_t getPins(uint8_t* pinArray = nullptr) const override;
+    size_t getBusSize() const override;
     void deallocatePins();
     void cleanup();
-
 
     ~BusHub75Matrix() {
       cleanup();
