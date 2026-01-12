@@ -990,12 +990,12 @@ void BusHub75Matrix::cleanup() {
       delete virtualDisp;
       virtualDisp = nullptr;
       DEBUGBUS_PRINTLN("HUB75 virtual display destroyed.");
-      delay(15);
     }
+    #ifndef CONFIG_IDF_TARGET_ESP32S3 // on ESP32-S3 deleting display does not work and leads to crash (DMA issues), request reboot from user instead
     delete display;
     display = nullptr;
     DEBUGBUS_PRINTLN("HUB75 display destroyed.");
-    delay(15);
+    #endif
   }
   deallocatePins();
   //free(_ledsDirty); // no need to check for nullptr
