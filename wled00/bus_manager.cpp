@@ -714,32 +714,43 @@ static inline void setBitArray(uint8_t* byteArray, size_t numBits, bool value) {
 */
 
 static constexpr size_t HUB75_PIN_COUNT = sizeof(HUB75_I2S_CFG::gpio) / sizeof(int8_t);
-static uint8_t __forum[HUB75_PIN_COUNT]     PROGMEM = {  2, 15,  4, 16, 27, 17,  5, 18, 19, 21, 12, 26, 25, 22 };
-static uint8_t __portal[HUB75_PIN_COUNT]    PROGMEM = { 42, 41, 40, 38, 39, 37, 45, 36, 48, 35, 21, 47, 14,  2 };
-static uint8_t __moonhub[HUB75_PIN_COUNT]   PROGMEM = {  1,  5,  6,  7, 13,  9, 16, 48, 47, 21, 38,  8,  4, 18 };
-static uint8_t __trinity[HUB75_PIN_COUNT]   PROGMEM = { 25, 26, 27, 14, 12, 13, 23, 19,  5, 17, 18,  4, 15, 16 };
-static uint8_t __s3generic[HUB75_PIN_COUNT] PROGMEM = {  1,  2, 42, 41, 40, 39, 45, 48, 47, 21, 38,  8,  3, 18 };
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+static uint8_t __portal[HUB75_PIN_COUNT]    PROGMEM = { 42, 41, 40, 38, 39, 37, 45, 36, 48, 35, 21, 47, 14,  2};
+static uint8_t __moonhub[HUB75_PIN_COUNT]   PROGMEM = {  1,  5,  6,  7, 13,  9, 16, 48, 47, 21, 38,  8,  4, 18};
+static uint8_t __s3generic[HUB75_PIN_COUNT] PROGMEM = {  1,  2, 42, 41, 40, 39, 45, 48, 47, 21, 38,  8,  3, 18};
+#elif defined(CONFIG_IDF_TARGET_ESP32)
+static uint8_t __trinity[HUB75_PIN_COUNT]   PROGMEM = { 25, 26, 27, 14, 12, 13, 23, 19,  5, 17, 18,  4, 15, 16};
+static uint8_t __forum[HUB75_PIN_COUNT]     PROGMEM = {  2, 15,  4, 16, 27, 17,  5, 18, 19, 21, 12, 26, 25, 22};
+#else
+static uint8_t __s2drive[HUB75_PIN_COUNT]   PROGMEM = {  2,  6,  3,  4,  8,  5, 39, 38, 37, 36, 12, 33, 35, 34};
+#endif
 
 // known controller board pinouts
 static const uint8_t * const getHub75Pins(uint8_t type, uint8_t *dest = nullptr) {
   const uint8_t *b = nullptr;
   switch (type) {
-    default:
-    case TYPE_HUB75MATRIX_FORUM:
-      b = __forum;
-      break;
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
     case TYPE_HUB75MATRIX_PORTAL:
       b = __portal;
       break;
     case TYPE_HUB75MATRIX_MOONHUB:
       b = __moonhub;
       break;
-    case TYPE_HUB75MATRIX_TRINITY:
-      b = __trinity;
-      break;
     case TYPE_HUB75MATRIX_S3:
       b = __s3generic;
       break;
+#elif defined(CONFIG_IDF_TARGET_ESP32)
+    case TYPE_HUB75MATRIX_FORUM:
+      b = __forum;
+      break;
+    case TYPE_HUB75MATRIX_TRINITY:
+      b = __trinity;
+      break;
+#else
+    case TYPE_HUB75MATRIX_S2DRIVE:
+      b = __s2drive;
+      break;
+#endif
   }
   if (dest != nullptr) memcpy_P(dest, b, HUB75_PIN_COUNT);
   return b;
@@ -1040,11 +1051,16 @@ size_t BusHub75Matrix::getBusSize() const {
 
 std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
   std::vector<LEDType> types = {
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
     {TYPE_HUB75MATRIX_PORTAL,  "H", PSTR("HUB75 (Adafruit Matrix Portal)")},
     {TYPE_HUB75MATRIX_MOONHUB, "H", PSTR("HUB75 (Moonhub T7 S3)")},
     {TYPE_HUB75MATRIX_S3,      "H", PSTR("HUB75 (S3 with PSRAM)")},
+#elif defined(CONFIG_IDF_TARGET_ESP32)
     {TYPE_HUB75MATRIX_TRINITY, "H", PSTR("HUB75 (Trinity/ElectroDragon)")},
     {TYPE_HUB75MATRIX_FORUM,   "H", PSTR("HUB75 (ESP32 Forum Pinout)")}
+#else
+    {TYPE_HUB75MATRIX_S2DRIVE, "H", PSTR("HUB75 (S2 Drive P4)")}
+#endif
   };
   for (auto &t : types) {
     t.requiredPins.resize(HUB75_PIN_COUNT);
@@ -1067,7 +1083,7 @@ size_t BusConfig::memUsage(unsigned nr) const {
     return sizeof(BusHub75Matrix) + sizeof(MatrixPanel_I2S_DMA)
       + (pins[2] > 1 && refreshReq ? sizeof(VirtualMatrixPanel) : 0)
       + (count * 
-    #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)// classic esp32, or esp32-s2: reduced bitdepth for large panels
+    #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)  // classic esp32, or esp32-s2: reduced bitdepth for large panels
       (count > 12288 ? 3 : (count > 4096 ? 4 : 8))
     #else
       8

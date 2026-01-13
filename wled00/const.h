@@ -368,6 +368,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #define TYPE_HUB75MATRIX_FORUM   66           //ESP32 Forum/SmartMatrix board (https://github.com/rorosaurus/esp32-hub75-driver)
 #define TYPE_HUB75MATRIX_S3      67           //plain S3 Hub75 matrix board
 #define TYPE_HUB75MATRIX_TRINITY 68           //Trinity/ElectroDragon ESP32 board (https://esp32trinity.com/, https://www.electrodragon.com/product/rgb-matrix-panel-drive-interface-board-for-esp32-dma/)
+#define TYPE_HUB75MATRIX_S2DRIVE 69           //S2 drive (https://www.ledclub.net/2025/03/15/esp32-s2-drive-p4-80x40-led-matrix/)
 #define TYPE_HUB75MATRIX_MAX     71
 //Network types (master broadcast) (80-95)
 #define TYPE_VIRTUAL_MIN         80
