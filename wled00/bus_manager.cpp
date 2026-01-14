@@ -683,6 +683,15 @@ void BusNetwork::cleanup() {
 
 
 #if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
+  #ifndef NO_GFX
+    #define NO_GFX 1
+  #endif
+  #ifndef NO_FAST_FUNCTIONS
+    #define NO_FAST_FUNCTIONS 1
+  #endif
+  #ifndef NO_CIE1931
+    #define NO_CIE1931 1
+  #endif
   #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
   #include <ESP32-VirtualMatrixPanel-I2S-DMA.h>
 
@@ -1089,7 +1098,7 @@ size_t BusConfig::memUsage(unsigned nr) const {
       8
     #endif
       / 8) * 3; // count * bitsperchannel/8 * channels
-#endif // WLED_ENABLE_HUB75MATRIX
+#endif
   } else if (Bus::isDigital(type)) {
     // if any of digital buses uses I2S, there is additional common I2S DMA buffer not accounted for here
     return sizeof(BusDigital) + PolyBus::memUsage(count + skipAmount, PolyBus::getI(type, pins, nr));
