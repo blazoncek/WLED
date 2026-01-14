@@ -64,7 +64,7 @@
 			if (bquot > 100) {var msg = "Too many LEDs for me to handle!"; if (maxM < 10000) msg += "\n\rConsider using an ESP32."; alert(msg);}
 			if (!d.Sf.ABL.checked || d.Sf.PPL.checked) d.Sf.MA.value = 0; // submit 0 as ABL (PPL will handle it)
 			if (d.Sf.checkValidity()) {
-				d.querySelectorAll(".iST select[name^=LT]").forEach((s)=>{s.disabled=false;}); // just in case
+				qSA(".iST select[name^=LT]").forEach((s)=>{s.disabled=false;}); // just in case
 				d.Sf.submit(); //https://stackoverflow.com/q/37323914
 			}
 		}
@@ -88,7 +88,7 @@
 			gId("psuMA").style.display = ppl ? 'none' : 'inline';
 			gId("ppldis").style.display = ppl ? 'inline' : 'none';
 			// set PPL minimum value and clear actual PPL limit if ABL is disabled
-			d.querySelectorAll(".iST input[name^=MA]").forEach((i,x)=>{
+			qSA(".iST input[name^=MA]").forEach((i,x)=>{
 				var n = chrID(x);
 				gId("PSU"+n).style.display = ppl ? "inline" : "none";
 				const t = parseInt(gN("LT"+n).value); // LED type SELECT
@@ -112,12 +112,12 @@
 		function setABL() {
 			let en = parseInt(d.Sf.MA.value) > 0;
 			// check if ABL is enabled (max mA entered per output)
-			d.querySelectorAll(".iST input[name^=MA]").forEach((i,n)=>{
+			qSA(".iST input[name^=MA]").forEach((i,n)=>{
 				if (parseInt(i.value) > 0) en = true;
 			});
 			d.Sf.ABL.checked = en;
 			// select appropriate LED current
-			d.querySelectorAll(".iST select[name^=LL]").forEach((sel)=>{
+			qSA(".iST select[name^=LL]").forEach((sel)=>{
 				sel.value = 0; // set custom
 				var n = sel.name.substring(2); // bus number (0-Z)
 				if (en)
@@ -169,7 +169,7 @@
 
 			let dC = 0; // count of digital buses (for parallel I2S)
 			let sameType = 0;
-			let LTs = d.querySelectorAll(".iST select[name^=LT]");
+			let LTs = qSA(".iST select[name^=LT]");
 			LTs.forEach((s,i)=>{
 				var n = s.name.substring(2,3); // bus number (0-Z)
 				var t = parseInt(s.value);
@@ -198,7 +198,7 @@
 				d.Sf.CR.checked = false;
 			}
 			// update start indexes, max values, calculate current, etc
-			d.querySelectorAll("#mLC input[name^=LC]").forEach((LC,i)=>{
+			qSA("#mLC input[name^=LC]").forEach((LC,i)=>{
 				let n = LC.name.substring(2,3);         // bus number (0-Z)
 				let t = parseInt(gN("LT"+n).value);     // LED type SELECT
 				LC.max = isAna(t) ? 1 : (isDig(t) ? maxPB : maxL); // set max value
@@ -266,7 +266,7 @@
 			return isNaN(v) ? 0 : v;
 		}
 		function addLEDs(n,init=true) {
-			var o = gEBCN("iST"); // d.querySelectorAll(".iST");
+			var o = gEBCN("iST"); // qSA(".iST");
 			var i = o.length;
 			var f = gId("mLC");
 
@@ -436,7 +436,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 		}
 
 		function recalcIds() {
-			d.querySelectorAll("#mLC .iST").forEach((e,i)=>{
+			qSA("#mLC .iST").forEach((e,i)=>{
 				let sOld = e.id.substring(1);
 				let sNew = chrID(i);
 				// update all element IDs and names
@@ -558,9 +558,9 @@ Swap: <select id="xw${s}" name="XW${s}">
 		function pinDropdowns() {
 			// construct array of GPIO fields
 			let fields = ["IR","RL"]; // IR & relay
-			//d.querySelectorAll('input[type="number"]:is([name="IR"],[name="RL"])').forEach((e)=>{fields.push(e.name);}); // IR & relay
-			d.querySelectorAll('#btns input[type="number"]').forEach((e)=>{fields.push(e.name);}); // buttons
-			d.querySelectorAll('.iST input[name^=G]:not(:is([data-type^=N],[data-type^=V])):required').forEach((e)=>{fields.push(e.name);}); // LED GPIO pins
+			//qSA('input[type="number"]:is([name="IR"],[name="RL"])').forEach((e)=>{fields.push(e.name);}); // IR & relay
+			qSA('#btns input[type="number"]').forEach((e)=>{fields.push(e.name);}); // buttons
+			qSA('.iST input[name^=G]:not(:is([data-type^=N],[data-type^=V])):required').forEach((e)=>{fields.push(e.name);}); // LED GPIO pins
 			// iterate through all form's pin fields and replace with dropdowns
 			fields.forEach((n,x)=>{
 				let i = d.Sf[n];
@@ -579,7 +579,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				}
 			});
 			// update select options to reflect current usage and bus unchangeable pins
-			d.querySelectorAll("select.pin").forEach((e)=>{
+			qSA("select.pin").forEach((e)=>{
 				pinUpd(e); // update current select across all selects
 			});
 		}
@@ -589,7 +589,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 			e.dataset.val = e.value;            // update to new selected value
 			let txt = e.name;                   // select name for labeling options
 			// now update all other selects to reflect the change/value from current select
-			d.querySelectorAll("select.pin").forEach((sel)=>{
+			qSA("select.pin").forEach((sel)=>{
 				if (sel == e) return; // skip the changed select
 				sel.querySelectorAll("option").forEach((i)=>{
 					// skip options that are not relevant (not our old or new value)
@@ -660,7 +660,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 		// dynamically enforce bus type availability based on current usage
 		function updateTypeDropdowns(change=false, sel=undefined) { // change=true if called after a type change
 			const abl = d.Sf.ABL.checked;
-			let LTs = d.querySelectorAll(".iST select[name^=LT]");
+			let LTs = qSA(".iST select[name^=LT]");
 			let digitalB = 0, analogB = 0, twopinB = 0, virtB = 0;
 			let uniqueTypes = []
 			rsvdPins = [];
@@ -797,7 +797,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 			// prevent dragging input fileds but instead allow selecting content
 			// the following does not work in Firefox, see
 			// https://stackoverflow.com/questions/44855232/allow-select-text-on-a-html-5-draggable-child-element
-			d.querySelectorAll(".iST input[type=number]").forEach((e,i)=>{e.draggable=true;e.setAttribute("ondragstart","pDS(event);");})
+			qSA(".iST input[type=number]").forEach((e,i)=>{e.draggable=true;e.setAttribute("ondragstart","pDS(event);");})
 		}
 	</script>
 	<style>@import url("style.css");</style>
@@ -880,7 +880,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 		</select><span style="cursor: pointer;" onclick="off('IR')">&nbsp;&#x2715;</span><br>
 		Apply IR change to main segment only: <input type="checkbox" name="MSO"><br>
 		<div id="json" style="display:none;">JSON file: <input type="file" name="data" accept=".json"><button type="button" class="sml" onclick="uploadFile(d.Sf.data,'/ir.json')">Upload</button><br></div>
-		<a href="https://kno.wled.ge/interfaces/infrared/" target="_blank">IR info</a><br>
+		<a href="#" onclick="H('/interfaces/infrared/')">IR info</a><br>
 		<hr class="sml">
 		Relay GPIO: <input type="number" min="-1" max="48" name="RL" onchange="UI()" class="xs"><span style="cursor: pointer;" onclick="off('RL')">&nbsp;&#x2715;</span><br>
 		Invert <input type="checkbox" name="RM"> Open drain <input type="checkbox" name="RO"><br>
@@ -909,18 +909,6 @@ Swap: <select id="xw${s}" name="XW${s}">
 		<h3>White management</h3>
 		White Balance correction: <input type="checkbox" name="CCT"><br>
 		<div id="wc">
-			<!--
-			Global override for Auto-calculate white:<br>
-			<select name="AW">
-				<option value=255>Disabled</option>
-				<option value=0>None</option>
-				<option value=1>Brighter</option>
-				<option value=2>Accurate</option>
-				<option value=3>Dual</option>
-				<option value=4>Max</option>
-			</select>
-			<br>
-			-->
 			Calculate CCT from RGB: <input type="checkbox" name="CR"><br>
 			CCT IC used (Athom 15W): <input type="checkbox" name="IC"><br>
 			CCT additive blending: <input type="number" class="s" min="0" max="100" name="CB" onchange="UI()" required> %<br>

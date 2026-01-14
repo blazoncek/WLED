@@ -128,7 +128,7 @@
 
 	function SetLS()
 	{
-		var l = d.querySelectorAll('.agi');
+		var l = qSA('.agi');
 		for (var i = 0; i < l.length; i++) {
 			var e = l[i];
 			var val = e.classList.contains('cb') ? e.checked : e.value;
