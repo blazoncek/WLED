@@ -2266,9 +2266,6 @@ class AudioReactive : public Usermod {
     static const char _dynamics[];
     static const char _frequency[];
     static const char _inputLvl[];
-#if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
-    static const char _analogmic[];
-#endif
     static const char _digitalmic[];
     static const char _addPalettes[];
     static const char _soundSim[];
@@ -2466,24 +2463,10 @@ class AudioReactive : public Usermod {
       const int   AGC_preset = (soundAgc > 0)? (soundAgc-1): 0; // make sure the _compiler_ knows this value will not change while we are inside the function
 
       #ifdef WLED_DISABLE_SOUND
-        micIn = inoise8(millis(), millis());          // Simulated analog read
-        micDataReal = micIn;
+      micIn = inoise8(millis(), millis());          // Simulated analog read
+      micDataReal = micIn;
       #else
-        #ifdef ARDUINO_ARCH_ESP32
-        micIn = int(micDataReal);      // micDataSm = ((micData * 3) + micData)/4;
-        #else
-        // this is the minimal code for reading analog mic input on 8266.
-        // warning!! Absolutely experimental code. Audio on 8266 is still not working. Expects a million follow-on problems. 
-        static unsigned long lastAnalogTime = 0;
-        static float lastAnalogValue = 0.0f;
-        if (millis() - lastAnalogTime > 20) {
-            micDataReal = analogRead(A0); // read one sample with 10bit resolution. This is a dirty hack, supporting volumereactive effects only.
-            lastAnalogTime = millis();
-            lastAnalogValue = micDataReal;
-            yield();
-        } else micDataReal = lastAnalogValue;
-        micIn = int(micDataReal);
-        #endif
+      micIn = int(micDataReal);      // micDataSm = ((micData * 3) + micData)/4;
       #endif
 
       micLev += (micDataReal-micLev) / 12288.0f;
@@ -3227,11 +3210,11 @@ class AudioReactive : public Usermod {
           // Analog or I2S digital input
           if (audioSource && (audioSource->isInitialized())) {
             // audio source successfully configured
-            if (audioSource->getType() == AudioSource::Type_I2SAdc) {
-              infoArr.add(F("ADC analog"));
-            } else {
+            //if (audioSource->getType() == AudioSource::Type_I2SAdc) {
+            //  infoArr.add(F("ADC analog")); // no longer supported
+            //} else {
               infoArr.add(F("I2S digital"));
-            }
+            //}
             // input level or "silence"
             if (maxSample5sec > 1.0f) {
               float my_usage = 100.0f * (maxSample5sec / 255.0f);
@@ -3712,9 +3695,6 @@ const char AudioReactive::_config[]     PROGMEM = "config";
 const char AudioReactive::_dynamics[]   PROGMEM = "dynamics";
 const char AudioReactive::_frequency[]  PROGMEM = "frequency";
 const char AudioReactive::_inputLvl[]   PROGMEM = "inputLevel";
-#if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
-const char AudioReactive::_analogmic[]  PROGMEM = "analogmic";
-#endif
 const char AudioReactive::_digitalmic[] PROGMEM = "digitalmic";
 const char AudioReactive::_addPalettes[]       PROGMEM = "add-palettes";
 const char AudioReactive::_soundSim[]          PROGMEM = "sound-sim";

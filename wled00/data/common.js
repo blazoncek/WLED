@@ -1,12 +1,13 @@
 var d=document;
 var loc = false, locip, locproto = "http:";
 
-function H(pg="")   { window.open("https://kno.wled.ge/"+pg); }
-function GH()       { window.open("https://github.com/wled/WLED"); }
+function H(p="")    { window.open("https://kno.wled.ge"+p); }
+function GH(p="")   { window.open("https://github.com/wled/WLED"+p); }
 function gId(c)     { return d.getElementById(c); } // getElementById
 function cE(e)      { return d.createElement(e); } // createElement
 function gEBCN(c)   { return d.getElementsByClassName(c); } // getElementsByClassName
 function gN(s)      { return d.getElementsByName(s)[0]; } // getElementsByName
+function qSA(s)     { return d.querySelectorAll(s); } // querySelectorAll
 function isE(o)     { return Object.keys(o).length === 0; } // isEmpty
 function isO(i)     { return (i && typeof i === 'object' && !Array.isArray(i)); } // isObject
 function isN(n)     { return !isNaN(parseFloat(n)) && isFinite(n); } // isNumber
@@ -15,7 +16,7 @@ function isF(n)     { return n === +n && n !== (n|0); } // isFloat
 function isI(n)     { return n === +n && n === (n|0); } // isInteger
 function toggle(el) { gId(el).classList.toggle("hide"); let n = gId('No'+el); if (n) n.classList.toggle("hide"); }
 function tooltip(cont=null) {
-	d.querySelectorAll((cont?cont+" ":"")+"[title]").forEach((element)=>{
+	qSA((cont?cont+" ":"")+"[title]").forEach((element)=>{
 		element.addEventListener("mouseover", ()=>{
 			// save title
 			element.setAttribute("data-title", element.getAttribute("title"));
@@ -42,7 +43,7 @@ function tooltip(cont=null) {
 		});
 
 		element.addEventListener("mouseout", ()=>{
-			d.querySelectorAll('.tooltip').forEach((tooltip)=>{
+			qSA('.tooltip').forEach((tooltip)=>{
 				tooltip.classList.remove("visible");
 				d.body.removeChild(tooltip);
 			});

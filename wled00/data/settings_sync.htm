@@ -146,7 +146,7 @@ DMX mode:
 <option value=6>Multi RGBW</option>
 <option value=10>Preset</option>
 </select><br>
-<a href="https://kno.wled.ge/interfaces/e1.31-dmx/" target="_blank">E1.31 info</a><br>
+<a href="#" onclick="H('/interfaces/e1.31-dmx')">E1.31 info</a><br>
 Timeout: <input name="ET" type="number" min="1" max="65000" required> ms<br>
 Force max brightness: <input type="checkbox" name="FB"><br>
 Disable realtime gamma correction: <input type="checkbox" name="RG"><br>
@@ -185,7 +185,7 @@ Device Topic: <input type="text" name="MD" maxlength="32"><br>
 Group Topic: <input type="text" name="MG" maxlength="32"><br>
 Publish on button press: <input type="checkbox" name="BM"><br>
 Retain brightness & color messages: <input type="checkbox" name="RT"><br>
-<i>Reboot required to apply changes. </i><a href="https://kno.wled.ge/interfaces/mqtt/" target="_blank">MQTT info</a>
+<i>Reboot required to apply changes. </i><a href="#" onclick="H('/interfaces/mqtt')">MQTT info</a>
 </div>
 <h3>Philips Hue</h3>
 <div id="NoHue" class="hide">
