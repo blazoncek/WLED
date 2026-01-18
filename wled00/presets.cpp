@@ -23,7 +23,7 @@ const char *getPresetsFileName(bool persistent) {
 }
 
 bool presetNeedsSaving() {
-  return presetToSave;
+  return presetToSave > 0;
 }
 
 static void doSaveState() {
@@ -73,6 +73,10 @@ static void doSaveState() {
   if (persist) presetsModifiedTime = toki.second(); //unix time
   releaseJSONBufferLock();
   updateFSInfo();
+  // when saving preset/playlist, the API does not include "ps" or "pl" so we need to set those explicitly here
+  // the actual ID was stored in "psave" key
+  if (playlistSave) currentPlaylist = presetToSave;
+  else              currentPreset   = presetToSave;
 
   // clean up
   saveLedmap   = -1;
@@ -144,11 +148,10 @@ void applyPresetWithFallback(uint8_t index, uint8_t callMode, uint8_t effectID, 
 
 void handlePresets()
 {
+  // handlePreset() is called from loop(), so there is no need to suspend strip
   byte presetErrFlag = ERR_NONE;
   if (presetToSave) {
-    strip.suspend();
     doSaveState();
-    strip.resume();
     return;
   }
 
@@ -214,7 +217,7 @@ void handlePresets()
   updateInterfaces(tmpMode);
 }
 
-//called from handleSet(PS=) [network callback (sObj is empty), IR (irrational), deserializeState, UDP] and deserializeState() [network callback (filedoc!=nullptr)]
+//called from handleSet(PS=) [network callback (sObj is empty)], IR (irrational) [loop context] and deserializeState() [network callback]
 void savePreset(byte index, const char* pname, JsonObject sObj)
 {
   if (!saveName) saveName = static_cast<char*>(p_malloc(33));
@@ -242,9 +245,9 @@ void savePreset(byte index, const char* pname, JsonObject sObj)
     doSerializeConfig = true;
   }
 
-  if (sObj.size()==0 || sObj["o"].isNull()) { // no "o" means not a playlist or custom API call, saving of state is async (not immediately)
-    includeBri   = sObj["ib"].as<bool>() || sObj.size()==0 || index==255; // temporary preset needs brightness
-    segBounds    = sObj["sb"].as<bool>() || sObj.size()==0 || index==255; // temporary preset needs bounds
+  if (sObj.size() == 0 || sObj["o"].isNull()) { // no "o" means not a playlist or custom API call, saving of state is async (not immediately)
+    includeBri   = sObj["ib"].as<bool>() || sObj.size() == 0 || index==255; // temporary preset needs brightness
+    segBounds    = sObj["sb"].as<bool>() || sObj.size() == 0 || index==255; // temporary preset needs bounds
     selectedOnly = sObj[F("sc")].as<bool>();
     saveLedmap   = sObj[F("ledmap")] | -1;
   } else {
@@ -259,10 +262,14 @@ void savePreset(byte index, const char* pname, JsonObject sObj)
         sObj.remove(F("error"));
         sObj.remove(F("psave"));
         if (sObj["n"].isNull()) sObj["n"] = saveName;
+        strip.suspend();
+        strip.waitForIt();
         initPresetsFile(); // just in case if someone deleted presets.json using /edit
         writeObjectToFileUsingId(getPresetsFileName(), index, pDoc);
         presetsModifiedTime = toki.second(); //unix time
         updateFSInfo();
+        strip.resume();
+        currentPreset = index; // set current preset to the one just saved
       }
       p_free(saveName);
       p_free(quickLoad);
@@ -279,7 +286,10 @@ void savePreset(byte index, const char* pname, JsonObject sObj)
 
 void deletePreset(byte index) {
   StaticJsonDocument<24> empty;
+  strip.suspend();
+  strip.waitForIt();
   writeObjectToFileUsingId(getPresetsFileName(), index, &empty);
   presetsModifiedTime = toki.second(); //unix time
   updateFSInfo();
+  strip.resume();
 }

@@ -5,8 +5,8 @@
  * Readability defines and their associated numerical values + compile-time constants
  */
 
-constexpr size_t FASTLED_PALETTE_COUNT = 7;   // 6-12 = sizeof(fastledPalettes) / sizeof(fastledPalettes[0]);
-constexpr size_t GRADIENT_PALETTE_COUNT = 59; // 13-72 = sizeof(gGradientPalettes) / sizeof(gGradientPalettes[0]);
+constexpr size_t FASTLED_PALETTE_COUNT = 7;   // 6-12 = countof(fastledPalettes);
+constexpr size_t GRADIENT_PALETTE_COUNT = 59; // 13-72 = countof(gGradientPalettes);
 constexpr size_t DYNAMIC_PALETTE_COUNT = 6;   // 0-5 dynamic palettes (0=default(virtual),1=random,2=primary,3=primary+secondary,4=primary+secondary+tertiary,5=primary+secondary(+tertiary if not black)
 constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_COUNT + GRADIENT_PALETTE_COUNT; // total number of fixed palettes
 #ifndef WLED_MAX_CUSTOM_PALETTES
@@ -93,7 +93,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
   #endif
 #endif
 
-// NOTE: These values are also used to determine ESP type in led_settings.htm 
+// NOTE: These values are also used to determine ESP type in led_settings.htm
 #ifdef ESP8266
   #define WLED_MAX_DIGITAL_CHANNELS 3
   #define WLED_MAX_ANALOG_CHANNELS 5
@@ -359,6 +359,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #define TYPE_LPD8806             52
 #define TYPE_P9813               53
 #define TYPE_LPD6803             54
+#define TYPE_HD108               55
 #define TYPE_2PIN_MAX            63
 //Network types (master broadcast) (80-95)
 #define TYPE_VIRTUAL_MIN         80

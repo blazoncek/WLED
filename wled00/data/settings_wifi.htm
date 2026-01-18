@@ -47,7 +47,7 @@
 				scanLoops = 0;
 
 				if (networks.length > 0) {
-					let cs = d.querySelectorAll("#wifi_entries input[type=text][name^=CS]");
+					let cs = qSA("#wifi_entries input[type=text][name^=CS]");
 					for (let input of (cs||[])) {
 						let found = false;
 						let select = cE("select");
@@ -80,7 +80,7 @@
 						select.appendChild(option);
 
 						if (input.value === "" || input.value === "Your_Network" || found) input.replaceWith(select);
-						else select.remove(); 
+						else select.remove();
 					}
 				}
 
@@ -157,7 +157,7 @@ Static subnet mask:<br>
 			let id = 'RM' + rC;
 			mac = mac.replace(/:/g, '').replace(/-/g, '').toUpperCase();
 			if (!isMAC(mac)) mac = 'FFFFFFFFFFFF'; // check for valid hex string
-			let inputs = d.querySelectorAll('#rml input[type="text"]');
+			let inputs = qSA('#rml input[type="text"]');
 			for (let input of inputs||[]) {
 				if (input.value === '') return;
 				if (input.value === mac) mac = '';
@@ -175,7 +175,7 @@ Static subnet mask:<br>
 				e.target.style.color = !isMAC(e.target.value) ? 'red' : 'white';
 			};
 			r.appendChild(i);
-			let btn = d.createElement('button');
+			let btn = cE('button');
 			btn.type = 'button';
 			btn.className = 'sml';
 			btn.innerText = '-';
@@ -191,7 +191,7 @@ Static subnet mask:<br>
 		// update remote list
 		function uR() {
 			let j = 0;
-			d.querySelectorAll('#rml input[type="text"]').forEach((i) => {
+			qSA('#rml input[type="text"]').forEach((i) => {
 				i.style.color = !isMAC(i.value) ? 'red' : 'white';
 				i.value = i.value.toUpperCase();
 				i.name = 'RM' + j++;

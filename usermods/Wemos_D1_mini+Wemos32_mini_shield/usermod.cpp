@@ -188,12 +188,12 @@ void userLoop() {
   // Third row with mode name
   u8x8.setCursor(2, 2);
   char lineBuffer[17];
-  extractModeName(knownMode, JSON_mode_names, lineBuffer, 16);
+  extractModeName(knownMode, JSON_mode_names, lineBuffer, countof(lineBuffer));
   u8x8.print(lineBuffer);
 
   // Fourth row with palette name
   u8x8.setCursor(2, 3);
-  extractModeName(knownPalette, JSON_palette_names, lineBuffer, 16);
+  extractModeName(knownPalette, JSON_palette_names, lineBuffer, countof(lineBuffer));
   u8x8.print(lineBuffer);
 
   u8x8.setFont(u8x8_font_open_iconic_embedded_1x1);

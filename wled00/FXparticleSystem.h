@@ -9,7 +9,9 @@
 */
 
 #ifdef WLED_DISABLE_2D
-#define WLED_DISABLE_PARTICLESYSTEM2D
+  #ifndef WLED_DISABLE_PARTICLESYSTEM2D
+    #define WLED_DISABLE_PARTICLESYSTEM2D
+  #endif
 #endif
 
 #include <stdint.h>

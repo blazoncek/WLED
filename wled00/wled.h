@@ -3,13 +3,13 @@
 /*
    Main sketch, global variable declarations
    @title WLED project sketch
-   @version 0.15.2-b1
+   @version 0.15.3-b1
    @author 2016-2024 Christian Schwinne (@Aircookie), 2021-2026 Blaz Kristan (@blazoncek)
  */
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2512270
+#define VERSION 2601101
 #else
 #define VERSION BUILD
 #endif
@@ -166,6 +166,12 @@
 #define FASTLED_INTERNAL //remove annoying pragma messages
 #define USE_GET_MILLISECOND_TIMER
 #include "FastLED.h"
+// fastled sin16 replacement
+#ifdef sin16
+  #undef sin16
+#endif
+#define sin16(x) sin16_t(x)
+#define cos16(x) cos16_t(x)
 #include "const.h"
 #include "colors.h"
 #include "fcn_declare.h"
@@ -238,11 +244,15 @@ using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
 
 #define STRINGIFY(X) #X
 #define TOSTRING(X) STRINGIFY(X)
+#ifdef countof
+  #undef countof
+#endif
+#define countof(x) (sizeof(x)/sizeof(x[0]))
 
 // Global Variable definitions
-WLED_GLOBAL char versionString[] _INIT(TOSTRING(WLED_VERSION));
-WLED_GLOBAL unsigned build       _INIT(VERSION);
-WLED_GLOBAL char releaseString[] _INIT(WLED_RELEASE_NAME); // somehow this will not work if using "const char releaseString[]
+WLED_GLOBAL unsigned build _INIT(VERSION);
+WLED_GLOBAL char versionString[] _INIT_PROGMEM(TOSTRING(WLED_VERSION));
+WLED_GLOBAL char releaseString[] _INIT_PROGMEM(WLED_RELEASE_NAME); // somehow this will not work if using "const char releaseString[]
 #define WLED_CODENAME "Kōsen"
 
 // AP and OTA default passwords (for maximum security change them!)
@@ -251,22 +261,19 @@ WLED_GLOBAL char otaPass[33] _INIT(DEFAULT_OTA_PASS);
 
 // Hardware and pin config
 #ifndef RLYPIN
-WLED_GLOBAL int8_t rlyPin _INIT(-1);
-#else
-WLED_GLOBAL int8_t rlyPin _INIT(RLYPIN);
+  #define RLYPIN -1
 #endif
+WLED_GLOBAL int8_t rlyPin _INIT(RLYPIN);
 //Relay mode (1 = active high, 0 = active low, flipped in cfg.json)
 #ifndef RLYMDE
-WLED_GLOBAL bool rlyMde _INIT(true);
-#else
-WLED_GLOBAL bool rlyMde _INIT(RLYMDE);
+  #define RLYMDE true
 #endif
+WLED_GLOBAL bool rlyMde _INIT(RLYMDE);
 //Use open drain (floating pin) when relay should be off
 #ifndef RLYODRAIN
-WLED_GLOBAL bool rlyOpenDrain _INIT(false);
-#else
-WLED_GLOBAL bool rlyOpenDrain _INIT(RLYODRAIN);
+  #define RLYODRAIN false
 #endif
+WLED_GLOBAL bool rlyOpenDrain _INIT(RLYODRAIN);
 #ifndef IRPIN
   #define IRPIN -1
 #endif
@@ -742,6 +749,8 @@ WLED_GLOBAL bool     udpConnected _INIT(false);
 WLED_GLOBAL bool     udp2Connected _INIT(false);
 WLED_GLOBAL bool     udpRgbConnected _INIT(false);
 #endif
+WLED_GLOBAL char escapedMac[13] _INIT("");
+WLED_GLOBAL DNSServer dnsServer;
 
 // ui style
 WLED_GLOBAL bool showWelcomePage _INIT(false);
@@ -800,14 +809,10 @@ WLED_GLOBAL unsigned long lastInterfaceUpdate _INIT(0);
 WLED_GLOBAL byte interfaceUpdateCallMode _INIT(CALL_MODE_INIT);
 
 // alexa udp
-WLED_GLOBAL String escapedMac;
 #ifndef WLED_DISABLE_ALEXA
   WLED_GLOBAL Espalexa espalexa;
   WLED_GLOBAL EspalexaDevice* espalexaDevice;
 #endif
-
-// dns server
-WLED_GLOBAL DNSServer dnsServer;
 
 // network time
 #ifndef WLED_LAT
@@ -855,9 +860,9 @@ WLED_GLOBAL bool ledStatusState _INIT(false); // the current LED state
 #endif
 
 // server library objects
-WLED_GLOBAL AsyncWebServer server _INIT_N(((80)));
+WLED_GLOBAL AsyncWebServer server _INIT({{80}});
 #ifdef WLED_ENABLE_WEBSOCKETS
-WLED_GLOBAL AsyncWebSocket ws _INIT_N((("/ws")));
+WLED_GLOBAL AsyncWebSocket ws _INIT({{"/ws"}});
 #endif
 #ifndef WLED_DISABLE_HUESYNC
 WLED_GLOBAL AsyncClient     *hueClient _INIT(NULL);
@@ -867,8 +872,10 @@ WLED_GLOBAL AsyncWebHandler *editHandler _INIT(nullptr);
 // udp interface objects
 WLED_GLOBAL WiFiUDP notifierUdp, rgbUdp, notifier2Udp;
 WLED_GLOBAL WiFiUDP ntpUdp;
-WLED_GLOBAL ESPAsyncE131 e131 _INIT_N(((handleE131Packet)));
-WLED_GLOBAL ESPAsyncE131 ddp  _INIT_N(((handleE131Packet)));
+#ifndef WLED_USE_DDP_ONLY
+WLED_GLOBAL ESPAsyncE131 e131 _INIT({{handleE131Packet}});
+#endif
+WLED_GLOBAL ESPAsyncE131 ddp  _INIT({{handleE131Packet}});
 WLED_GLOBAL bool e131NewData _INIT(false);
 
 // led fx library object
@@ -974,16 +981,16 @@ WLED_GLOBAL volatile uint8_t jsonBufferLock _INIT(0);
 
 #ifndef WLED_AP_SSID_UNIQUE
   #define WLED_SET_AP_SSID() do { \
-    strcpy_P(apSSID, PSTR(WLED_AP_SSID)); \
+    strncpy_P(apSSID, sizeof(apSSID), PSTR(WLED_AP_SSID)); \
   } while(0)
 #else
   #define WLED_SET_AP_SSID() do { \
-    snprintf_P(\
+    snprintf_P( \
       apSSID, \
-      sizeof(apSSID)-1, \
+      sizeof(apSSID), \
       PSTR("%s_%s"), \
       WLED_AP_SSID, \
-      escapedMac.c_str()+6 \
+      escapedMac+6 \
     ); \
   } while(0)
 #endif

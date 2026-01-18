@@ -9,7 +9,7 @@
 // v2 usermod that provides a rotary encoder-based UI.
 //
 // This usermod allows you to control:
-// 
+//
 // * Brightness
 // * Selected Effect
 // * Effect Speed
@@ -19,7 +19,7 @@
 // Change between modes by pressing a button.
 //
 // Dependencies
-// * This Usermod works best coupled with 
+// * This Usermod works best coupled with
 //   FourLineDisplayUsermod.
 //
 // If FourLineDisplayUsermod is used the folowing options are also enabled
@@ -169,7 +169,7 @@ class RotaryEncoderUIUsermod : public Usermod {
     uint16_t currentHue1;       // default boot color
     byte currentSat1;
     uint8_t currentCCT;
-    
+
   #ifdef USERMOD_FOUR_LINE_DISPLAY
     FourLineDisplayUsermod *display;
   #else
@@ -238,7 +238,7 @@ class RotaryEncoderUIUsermod : public Usermod {
 
     /**
      * Return an array of mode or palette names from the JSON string.
-     * They don't end in '\0', they end in '"'. 
+     * They don't end in '\0', they end in '"'.
      */
     const char **re_findModeStrings(const char json[], int numModes);
 
@@ -352,7 +352,7 @@ class RotaryEncoderUIUsermod : public Usermod {
     /**
      * restore the changeable values
      * readFromConfig() is called before setup() to populate properties from values stored in cfg.json
-     * 
+     *
      * The function should return true if configuration was successfully loaded or false if there was no configuration.
      */
     bool readFromConfig(JsonObject &root) override;
@@ -425,7 +425,7 @@ byte *RotaryEncoderUIUsermod::re_initIndexArray(int numModes) {
 
 /**
  * Return an array of mode or palette names from the JSON string.
- * They don't end in '\0', they end in '"'. 
+ * They don't end in '\0', they end in '"'.
  */
 const char **RotaryEncoderUIUsermod::re_findModeStrings(const char json[], int numModes) {
   const char **modeStrings = (const char **)p_malloc(sizeof(const char *) * numModes);
@@ -540,11 +540,11 @@ void RotaryEncoderUIUsermod::setup()
 
 /*
   * loop() is called continuously. Here you can check for events, read sensors, etc.
-  * 
+  *
   * Tips:
   * 1. You can use "if (WLED_CONNECTED)" to check for a successful network connection.
   *    Additionally, "if (WLED_MQTT_CONNECTED)" is available to check for a connection to an MQTT broker.
-  * 
+  *
   * 2. Try to avoid using the delay() function. NEVER use delays longer than 10 milliseconds.
   *    Instead, use a timer check as shown here.
   */
@@ -557,7 +557,7 @@ void RotaryEncoderUIUsermod::loop()
   // Initialize effectCurrentIndex and effectPaletteIndex to
   // current state. We do it here as (at least) effectCurrent
   // is not yet initialized when setup is called.
-  
+
   if (!currentEffectAndPaletteInitialized) {
     findCurrentEffectAndPalette();
   }
@@ -600,20 +600,20 @@ void RotaryEncoderUIUsermod::loop()
         // find new state
         switch (newState) {
           case  0: strcpy_P(lineBuffer, PSTR("Brightness")); changedState = true; break;
-          case  1: if (!extractModeSlider(effectCurrent, 0, lineBuffer, 63)) newState++; else changedState = true; break; // speed
-          case  2: if (!extractModeSlider(effectCurrent, 1, lineBuffer, 63)) newState++; else changedState = true; break; // intensity
+          case  1: if (!extractModeSlider(effectCurrent, 0, lineBuffer, countof(lineBuffer))) newState++; else changedState = true; break; // speed
+          case  2: if (!extractModeSlider(effectCurrent, 1, lineBuffer, countof(lineBuffer))) newState++; else changedState = true; break; // intensity
           case  3: strcpy_P(lineBuffer, PSTR("Color Palette")); changedState = true; break;
           case  4: strcpy_P(lineBuffer, PSTR("Effect")); changedState = true; break;
           case  5: strcpy_P(lineBuffer, PSTR("Main Color")); changedState = true; break;
           case  6: strcpy_P(lineBuffer, PSTR("Saturation")); changedState = true; break;
-          case  7: 
+          case  7:
             if (!(strip.getSegment(applyToAll ? strip.getFirstSelectedSegId() : strip.getMainSegmentId()).getLightCapabilities() & 0x04)) newState++;
             else { strcpy_P(lineBuffer, PSTR("CCT")); changedState = true; }
             break;
           case  8: if (presetHigh==0 || presetLow == 0) newState++; else { strcpy_P(lineBuffer, PSTR("Preset")); changedState = true; } break;
           case  9:
           case 10:
-          case 11: if (!extractModeSlider(effectCurrent, newState-7, lineBuffer, 63)) newState++; else changedState = true; break; // custom
+          case 11: if (!extractModeSlider(effectCurrent, newState-7, lineBuffer, countof(lineBuffer))) newState++; else changedState = true; break; // custom
         }
         if (newState > LAST_UI_STATE) newState = 0;
       } while (!changedState);
@@ -922,7 +922,7 @@ void RotaryEncoderUIUsermod::changeHue(bool increase){
 #endif
   currentHue1 = max(min((increase ? currentHue1+fadeAmount : currentHue1-fadeAmount), 255), 0);
   colorHStoRGB(currentHue1*256, currentSat1, colPri);
-  stateChanged = true; 
+  stateChanged = true;
   if (applyToAll) {
     for (unsigned i=0; i<strip.getSegmentsNum(); i++) {
       Segment& seg = strip.getSegment(i);

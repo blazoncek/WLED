@@ -1362,7 +1362,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
 
   const size_t blendMode = topSegment.blendMode < (sizeof(funcs) / sizeof(FuncType)) ? topSegment.blendMode : 0;
   const auto func  = funcs[blendMode]; // blendMode % (sizeof(funcs) / sizeof(FuncType))
-  const auto blend = [&](uint32_t t, uint32_t b){ 
+  const auto blend = [&](uint32_t t, uint32_t b){
     // handle special modes first
     switch (blendMode) {
       case 0 : return t;              // top (faster than lambda)
@@ -1500,7 +1500,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     // zooming and rotation
     auto RotateAndZoom = [](const CRGBA *srcPixels, CRGBA *destPixels, int midX, int midY, int cols, int rows, int shearAngle, int zoomOffset, bool wrap, bool mirror) {
       for (int i = 0; i < cols * rows; i++) destPixels[i] = CRGBA(0,0,0); // fill black
-    
+
       constexpr uint8_t Scale_Shift = 10;
       constexpr int Fixed_Scale = (1 << Scale_Shift);
       constexpr int RoundVal = (1 << (Scale_Shift - 1));
@@ -1525,20 +1525,20 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
           // Translate destination to origin
           int dx = destX - midX;
           int dy = destY - midY;
-    
+
           // Inverse shear transformations (reverse order)
           int x1 = dx - ((shearX * dy + RoundVal) >> Scale_Shift);
           int y0 = dy - ((shearY * x1 + RoundVal) >> Scale_Shift);
           int x0 = x1 - ((shearX * y0 + RoundVal) >> Scale_Shift);
-    
+
           // Apply zoom to source coordinates
           x0 = (x0 * Fixed_Scale) / zoomScale;
           y0 = (y0 * Fixed_Scale) / zoomScale;
-    
+
           // Handle flip
           int srcX = flip ? (midX - x0) : (midX + x0);
           int srcY = flip ? (midY - y0) : (midY + y0);
-    
+
           // Bounds check or wrap
           if (wrap) { // Wrap around
             srcX = (srcX + WRAP_PAD_X); while (srcX >= cols) srcX -= cols; // modulo operation: srcX %= cols;
@@ -1552,7 +1552,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
             }
           }
           if ((unsigned)srcX >= (unsigned)cols || (unsigned)srcY >= (unsigned)rows) continue;
-          
+
           // Sample from source & write to destination
           destPixels[destX + destY * cols] = srcPixels[srcX + srcY * cols];
         }
@@ -1878,7 +1878,7 @@ void WS2812FX::addSegmentGeometryUpdate(uint8_t id, uint16_t sStart, uint16_t sS
 }
 
 void WS2812FX::applySegmentGeometryUpdates() {
-  if (segUpdates.size() == 0) return; // nothing to update
+  if (segUpdates.empty()) return; // nothing to update
   for (auto upd: segUpdates) {
     if (upd.id >= _segments.size()) continue; // invalid segment id
     Segment &seg = _segments[upd.id];
@@ -2160,7 +2160,8 @@ bool WS2812FX::deserializeMap(unsigned n) {
 
     DEBUG_PRINTF_P(PSTR("ledmap allocated: %uB @ %p\n"), sizeof(uint16_t)*getLengthTotal(), customMappingTable);
     File f = WLED_FS.open(fileName, "r");
-    if (!f.find("\"map\":[")) { // stops after the '[' of "map":[...
+    // look for "map":[ (which may include spaces/newlines in between tokens)
+    if (!f.find("\"map\"") || !f.find(':') || !f.find('[')) { // stops after the "map":[
       DEBUG_PRINTF_P(PSTR("ERROR Invalid ledmap in %s: no map found\n"), fileName);
       p_free(customMappingTable);
       customMappingTable = nullptr;
@@ -2205,7 +2206,6 @@ bool WS2812FX::deserializeMap(unsigned n) {
         if (index >= getLengthTotal()) break;
         f.find(',');  // skip to next entry
       }
-      customMappingSize = getLengthTotal();
     } else
     #endif
     while (f.available()) { // f.position() < f.size() - 1
@@ -2218,10 +2218,12 @@ bool WS2812FX::deserializeMap(unsigned n) {
     currentLedmap = n;
     f.close();
 
+    customMappingSize = max(minMappingSize, (size_t)getLengthTotal());
+
     #ifdef WLED_DEBUG
     DEBUG_PRINT(F("Loaded ledmap:"));
     for (unsigned i = 0; i < customMappingSize; i++) {
-      DEBUG_PRINTF_P(PSTR("%4d,%c"), (int)(int16_t)customMappingTable[i], i%Segment::maxWidth ? ' ' : '\n');
+      DEBUG_PRINTF_P(PSTR("%c%4d,"), i%Segment::maxWidth ? ' ' : '\n', (int)(int16_t)customMappingTable[i]);
     }
     DEBUG_PRINTLN();
     #endif

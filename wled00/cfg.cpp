@@ -48,19 +48,12 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 
   //long vid = doc[F("vid")]; // 2010020
 
-#ifdef WLED_USE_ETHERNET
-  JsonObject ethernet = doc[F("eth")];
-  CJSON(ethernetType, ethernet["type"]);
-  // NOTE: Ethernet configuration takes priority over other use of pins
-  initEthernet();
-#endif
-
   JsonObject id = doc["id"];
   // legacy behaviour
   getStringFromJson(hostName, id[F("mdns")], sizeof(hostName));
   if (strlen(hostName) == 0) {
     mDNSenabled = false; // if no host name is set, disable mDNS
-    sprintf_P(hostName, PSTR("wled-%.*s"), 6, escapedMac.c_str() + 6);
+    sprintf_P(hostName, PSTR("wled-%.*s"), 6, escapedMac + 6);
   }
 
   getStringFromJson(serverDescription, id["name"], sizeof(serverDescription));
@@ -134,6 +127,13 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       CJSON(dnsAddress[i], dns[i]);
     }
   }
+
+#ifdef WLED_USE_ETHERNET
+  JsonObject ethernet = doc[F("eth")];
+  CJSON(ethernetType, ethernet["type"]);
+  // NOTE: Ethernet configuration takes priority over other use of pins
+  initEthernet();
+#endif
 
   JsonObject ap = doc["ap"];
   getStringFromJson(apSSID, ap[F("ssid")], 33);
@@ -263,11 +263,11 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 
     DEBUG_PRINTLN(F("No busses, init default"));
     constexpr unsigned defDataTypes[] = {LED_TYPES};
-    constexpr unsigned defDataPins[] = {DATA_PINS};
-    constexpr unsigned defCounts[] = {PIXEL_COUNTS};
-    constexpr unsigned defNumTypes = (sizeof(defDataTypes) / sizeof(defDataTypes[0]));
-    constexpr unsigned defNumPins = (sizeof(defDataPins) / sizeof(defDataPins[0]));
-    constexpr unsigned defNumCounts = (sizeof(defCounts) / sizeof(defCounts[0]));
+    constexpr unsigned defDataPins[]  = {DATA_PINS};
+    constexpr unsigned defCounts[]    = {PIXEL_COUNTS};
+    constexpr unsigned defNumTypes    = countof(defDataTypes);
+    constexpr unsigned defNumPins     = countof(defDataPins);
+    constexpr unsigned defNumCounts   = countof(defCounts);
 
     static_assert(validatePinsAndTypes(defDataTypes, defNumTypes, defNumPins),
                   "The default pin list defined in DATA_PINS does not match the pin requirements for the default buses defined in LED_TYPES");
@@ -387,7 +387,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
             PinManager::deallocatePin(pin, PinOwner::Button);
             pin = -1;
             continue;
-          }          
+          }
           //if touch pin, enable the touch interrupt on ESP32 S2 & S3
           #ifdef SOC_TOUCH_VERSION_2    // ESP32 S2 and S3 have a function to check touch state but need to attach an interrupt to do so
           else touchAttachInterrupt(pin, touchButtonISR, touchThreshold << 4); // threshold on Touch V2 is much higher (1500 is a value given by Espressif example, I measured changes of over 5000)
@@ -419,8 +419,8 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     // relies upon only being called once with fromFS == true, which is currently true.
     constexpr uint8_t  defTypes[] = {BTNTYPE};
     constexpr int8_t   defPins[]  = {BTNPIN};
-    constexpr unsigned numTypes   = (sizeof(defTypes) / sizeof(defTypes[0]));
-    constexpr unsigned numPins    = (sizeof(defPins) / sizeof(defPins[0]));
+    constexpr unsigned numTypes   = countof(defTypes);
+    constexpr unsigned numPins    = countof(defPins);
     // check if the number of pins and types are valid; count of pins must be greater than or equal to types
     static_assert(numTypes <= numPins, "The default button pins defined in BTNPIN do not match the button types defined in BTNTYPE");
 
@@ -429,20 +429,46 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     for (size_t s = 0; s < WLED_MAX_BUTTONS && s < numPins; s++) {
       type = defTypes[s < numTypes ? s : numTypes - 1]; // use last known type to set current type if types less than pins
       if (type == BTN_TYPE_NONE || defPins[s] < 0 || !PinManager::allocatePin(defPins[s], false, PinOwner::Button)) {
-        if (buttons.size() == 0) buttons.emplace_back(-1, BTN_TYPE_NONE); // add disabled button to vector (so we have at least one button)
         continue; // pin not available or invalid, skip configuring this GPIO
       }
-      if (disablePullUp) {
-        pinMode(defPins[s], INPUT);
-      } else {
-        #ifdef ESP32
-        pinMode(defPins[s], type==BTN_TYPE_PUSH_ACT_HIGH ? INPUT_PULLDOWN : INPUT_PULLUP);
-        #else
-        pinMode(defPins[s], INPUT_PULLUP);
+      #ifdef ARDUINO_ARCH_ESP32
+      // ESP32 only: check that analog button pin is a valid ADC gpio
+      if ((type == BTN_TYPE_ANALOG) || (type == BTN_TYPE_ANALOG_INVERTED)) {
+        if (digitalPinToAnalogChannel(defPins[s]) < 0) {
+          // not an ADC analog pin
+          DEBUG_PRINTF_P(PSTR("PIN ALLOC error: GPIO%d for analog button #%d is not an analog pin!\n"), defPins[s], s);
+          PinManager::deallocatePin(defPins[s], PinOwner::Button);
+          continue;
+        } else {
+          analogReadResolution(12); // see #4040
+        }
+      } else if ((type == BTN_TYPE_TOUCH || type == BTN_TYPE_TOUCH_SWITCH)) {
+        if (digitalPinToTouchChannel(defPins[s]) < 0) {
+          // not a touch pin
+          DEBUG_PRINTF_P(PSTR("PIN ALLOC error: GPIO%d for touch button #%d is not a touch pin!\n"), defPins[s], s);
+          PinManager::deallocatePin(defPins[s], PinOwner::Button);
+          continue;
+        }
+        //if touch pin, enable the touch interrupt on ESP32 S2 & S3
+        #ifdef SOC_TOUCH_VERSION_2    // ESP32 S2 and S3 have a function to check touch state but need to attach an interrupt to do so
+        else touchAttachInterrupt(defPins[s], touchButtonISR, touchThreshold << 4); // threshold on Touch V2 is much higher (1500 is a value given by Espressif example, I measured changes of over 5000)
         #endif
+      } else
+      #endif
+      {
+        if (disablePullUp) {
+          pinMode(defPins[s], INPUT);
+        } else {
+          #ifdef ESP32
+          pinMode(defPins[s], type==BTN_TYPE_PUSH_ACT_HIGH ? INPUT_PULLDOWN : INPUT_PULLUP);
+          #else
+          pinMode(defPins[s], INPUT_PULLUP);
+          #endif
+        }
+        buttons.emplace_back(defPins[s], type); // add button to vector
       }
-      buttons.emplace_back(defPins[s], type); // add button to vector
     }
+    if (buttons.empty()) buttons.emplace_back(-1, BTN_TYPE_NONE); // add disabled button to vector (so we have at least one button)
   }
 
   CJSON(buttonPublishMqtt, btn_obj["mqtt"]);
@@ -522,8 +548,8 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   CJSON(strip.autoSegments, light[F("aseg")]);
 
   CJSON(gammaCorrectVal, light["gc"]["val"]); // default 2.2
-  float light_gc_bri = light["gc"]["bri"];
-  float light_gc_col = light["gc"]["col"];
+  float light_gc_bri = light["gc"]["bri"] | 1.0f;
+  float light_gc_col = light["gc"]["col"] | gammaCorrectVal;
   if (light_gc_bri > 1.0f) gammaCorrectBri = true;
   else                     gammaCorrectBri = false;
   if (light_gc_col > 1.0f) gammaCorrectCol = true;
@@ -630,9 +656,9 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   getStringFromJson(mqttUser, if_mqtt[F("user")], 41);
   getStringFromJson(mqttPass, if_mqtt["psk"], 65); //normally not present due to security
   getStringFromJson(mqttClientID, if_mqtt[F("cid")], 41);
-  if (mqttClientID[0] == 0) sprintf_P(mqttClientID, PSTR("WLED-%.*s"), 6, escapedMac.c_str() + 6);
+  if (mqttClientID[0] == 0) sprintf_P(mqttClientID, PSTR("WLED-%.*s"), 6, escapedMac + 6);
   getStringFromJson(mqttDeviceTopic, if_mqtt[F("topics")][F("device")], MQTT_MAX_TOPIC_LEN+1); // "wled/test"
-  if (mqttDeviceTopic[0] == 0) sprintf_P(mqttDeviceTopic, PSTR("wled/%.*s"), 6, escapedMac.c_str() + 6);
+  if (mqttDeviceTopic[0] == 0) sprintf_P(mqttDeviceTopic, PSTR("wled/%.*s"), 6, escapedMac + 6);
   getStringFromJson(mqttGroupTopic, if_mqtt[F("topics")][F("group")], MQTT_MAX_TOPIC_LEN+1); // ""
   CJSON(retainMqttMsg, if_mqtt[F("rtn")]);
 #endif

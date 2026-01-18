@@ -178,12 +178,12 @@ void userLoop() {
   // Third row with mode name
   tft.setCursor(1, 68);
   char lineBuffer[tftcharwidth+1];
-  extractModeName(knownMode, JSON_mode_names, lineBuffer, tftcharwidth);
+  extractModeName(knownMode, JSON_mode_names, lineBuffer, countof(lineBuffer));
   tft.print(lineBuffer);
 
   // Fourth row with palette name
   tft.setCursor(1, 90);
-  extractModeName(knownPalette, JSON_palette_names, lineBuffer, tftcharwidth);
+  extractModeName(knownPalette, JSON_palette_names, lineBuffer, countof(lineBuffer));
   tft.print(lineBuffer);
 
   // Fifth row with estimated mA usage

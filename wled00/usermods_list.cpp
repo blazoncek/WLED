@@ -470,7 +470,7 @@ void registerUsermods()
   #ifdef USERMOD_INA226
   UsermodManager::add(new UsermodINA226());
   #endif
-  
+
   #ifdef USERMOD_LD2410
   UsermodManager::add(new LD2410Usermod());
   #endif

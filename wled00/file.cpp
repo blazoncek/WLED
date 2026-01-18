@@ -195,11 +195,7 @@ static bool appendObjectToFile(const char* key, const JsonDocument* content, uin
   uint32_t pos = 0;
   if (!f) return false;
 
-  if (f.size() < 3) {
-    char init[10];
-    strcpy_P(init, PSTR("{\"0\":{}}"));
-    f.print(init);
-  }
+  if (f.size() < 3) f.print(F("{\"0\":{}}"));
 
   if (content->isNull()) {
     doCloseFile = true;
@@ -274,6 +270,8 @@ bool writeObjectToFileUsingId(const char* file, uint16_t id, const JsonDocument*
 
 bool writeObjectToFile(const char* file, const char* key, const JsonDocument* content)
 {
+  if (doCloseFile) closeFile();
+
   uint32_t s = 0; //timing
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINTF("Write to %s with key %s >>>\n", file, (key==nullptr)?"nullptr":key);

@@ -65,7 +65,7 @@ class UsermodTemperature : public Usermod {
     static const char _temperature[];
     static const char _Temperature[];
     static const char _data_fx[];
-    
+
     //Dallas sensor quick (& dirty) reading. Credit to - Author: Peter Scargill, August 17th, 2013
     float readDallas();
     void requestTemperatures();
@@ -212,11 +212,11 @@ void UsermodTemperature::publishHomeAssistantAutodiscovery() {
   strcat_P(buf, _Temperature);
   json[F("state_topic")] = buf;
   json[F("device_class")] = FPSTR(_temperature);
-  json[F("unique_id")] = escapedMac.c_str();
+  json[F("unique_id")] = escapedMac;
   json[F("unit_of_measurement")] = F("°C");
   payload_size = serializeJson(json, json_str);
 
-  sprintf_P(buf, PSTR("homeassistant/sensor/%s/config"), escapedMac.c_str());
+  sprintf_P(buf, PSTR("homeassistant/sensor/%s/config"), escapedMac);
   mqtt->publish(buf, 0, true, json_str, payload_size);
   HApublished = true;
 }
@@ -448,7 +448,7 @@ void UsermodTemperature::appendConfigData() {
   oappend(F("',1,'<i>(if no Vcc connected)</i>');"));  // 0 is field type, 1 is actual field
   oappend(F("addInfo('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":")); oappend(String(FPSTR(_parasitePin)).c_str());
   oappend(F("',1,'<i>(for external MOSFET)</i>');"));  // 0 is field type, 1 is actual field
-  oappend(F("dd=addDD('")); oappend(String(FPSTR(_name)).c_str()); 
+  oappend(F("dd=addDD('")); oappend(String(FPSTR(_name)).c_str());
   oappend(F("','")); oappend(String(FPSTR(_resolution)).c_str()); oappend(F("');"));
   oappend(F("addO(dd,'0.5 °C (9-bit)',0);"));
   oappend(F("addO(dd,'0.25°C (10-bit)',1);"));

@@ -239,7 +239,7 @@ static float fftAddAvg(int from, int to) {
 //
 // FFT main task
 //
-void FFTcode(void * parameter)
+static void FFTcode(void * parameter)
 {
   DEBUGSR_PRINT("FFT started on core: "); DEBUGSR_PRINTLN(xPortGetCoreID());
 
@@ -565,6 +565,67 @@ static void autoResetPeak(void) {
 }
 
 
+///////////////////////////////////////////////////////////////////////////////
+// Begin simulateSound (to enable audio enhanced effects to display something)
+///////////////////////////////////////////////////////////////////////////////
+typedef enum SoundSimulations {
+  UMS_BeatSin = 0,
+  UMS_WeWillRockYou,
+  UMS_10_13,
+  UMS_14_3,
+  UMS_count
+} soundSimulations_t;
+static soundSimulations_t simulationId = UMS_WeWillRockYou;
+
+static void simulateSound() {
+  uint32_t ms = millis();
+  switch (simulationId) {
+    default:
+    case UMS_BeatSin:
+      for (int i = 0; i<16; i++) fftResult[i] = beatsin8_t(120 / (i+1), 0, 255);
+      volumeSmth = fftResult[8];
+      break;
+    case UMS_WeWillRockYou:
+      if (ms%2000 < 200) {
+        volumeSmth = hw_random8();
+        for (int i = 0; i<5; i++) fftResult[i] = hw_random8();
+      } else if (ms%2000 < 400) {
+        volumeSmth = 0;
+        for (int i = 0; i<16; i++) fftResult[i] = 0;
+      } else if (ms%2000 < 600) {
+        volumeSmth = hw_random8();
+        for (int i = 5; i<11; i++) fftResult[i] = hw_random8();
+      } else if (ms%2000 < 800) {
+        volumeSmth = 0;
+        for (int i = 0; i<16; i++) fftResult[i] = 0;
+      } else if (ms%2000 < 1000) {
+        volumeSmth = hw_random8();
+        for (int i = 11; i<16; i++) fftResult[i] = hw_random8();
+      } else {
+        volumeSmth = 0;
+        for (int i = 0; i<16; i++) fftResult[i] = 0;
+      }
+      break;
+    case UMS_10_13:
+      for (int i = 0; i<16; i++) fftResult[i] = inoise8(beatsin8_t(90 / (i+1), 0, 200)*15 + (ms>>10), ms>>3);
+      volumeSmth = fftResult[8];
+      break;
+    case UMS_14_3:
+      for (int i = 0; i<16; i++) fftResult[i] = inoise8(beatsin8_t(120 / (i+1), 10, 30)*10 + (ms>>14), ms>>3);
+      volumeSmth = fftResult[8];
+      break;
+  }
+
+  samplePeak    = hw_random8() > 250;
+  FFT_MajorPeak = 21.0f + (volumeSmth*volumeSmth) / 8.0f; // walk through full range of 21hz...8200hz
+  maxVol        = 31;  // this gets feedback from UI
+  binNum        = 8;   // this gets feedback from UI
+  volumeRaw     = volumeSmth;
+  my_magnitude  = 10000.0f / 8.0f; //no idea if 10000 is a good value for FFT_Magnitude ???
+  if (volumeSmth < 1 ) my_magnitude = 0.001f;             // noise gate closed - mute
+}
+
+
 // WLED-SR effects (SR compatible IDs !!!)
 // non-audio effects moved to FX.cpp
 #define FX_MODE_PIXELS                 128
@@ -822,7 +883,7 @@ static uint16_t mode_juggles(void) {                   // Juggles. By Andrew Tul
 
   for (size_t i=0; i<SEGMENT.intensity/32+1U; i++) {
     // if SEGLEN equals 1, we will always set color to the first and only pixel, but the effect is still good looking
-    SEGMENT.setPixelColor(beatsin16(SEGMENT.speed/4+i*2,0,SEGLEN-1), SEGCOLOR(1).nblend(SEGMENT.color_from_palette(strip.now/4+i*2, false, false, 0), my_sampleAgc));
+    SEGMENT.setPixelColor(beatsin16_t(SEGMENT.speed/4+i*2,0,SEGLEN-1), SEGCOLOR(1).nblend(SEGMENT.color_from_palette(strip.now/4+i*2, false, false, 0), my_sampleAgc));
   }
 
   return FRAMETIME;
@@ -2106,37 +2167,27 @@ class AudioReactive : public Usermod {
 
 #ifdef ARDUINO_ARCH_ESP32
 
-    #ifndef AUDIOPIN
-    int8_t audioPin = -1;
-    #else
-    int8_t audioPin = AUDIOPIN;
-    #endif
     #ifndef SR_DMTYPE // I2S mic type
-    uint8_t dmType = 1; // 0=none/disabled/analog; 1=generic I2S
-    #define SR_DMTYPE 1 // default type = I2S
-    #else
-    uint8_t dmType = SR_DMTYPE;
+      #define SR_DMTYPE 0 // none/disabled
     #endif
     #ifndef I2S_SDPIN // aka DOUT
-    int8_t i2ssdPin = 32;
+      #define I2S_SDPIN I2S_PIN_NO_CHANGE //32
     #else
-    int8_t i2ssdPin = I2S_SDPIN;
     #endif
     #ifndef I2S_WSPIN // aka LRCL
-    int8_t i2swsPin = 15;
-    #else
-    int8_t i2swsPin = I2S_WSPIN;
+      #define I2S_WSPIN I2S_PIN_NO_CHANGE //15
     #endif
     #ifndef I2S_CKPIN // aka BCLK
-    int8_t i2sckPin = 14; /*PDM: set to I2S_PIN_NO_CHANGE*/
-    #else
-    int8_t i2sckPin = I2S_CKPIN;
+      #define I2S_CKPIN I2S_PIN_NO_CHANGE //14 // PDM: set to I2S_PIN_NO_CHANGE
     #endif
     #ifndef MCLK_PIN
-    int8_t mclkPin = I2S_PIN_NO_CHANGE;  /* ESP32: only -1, 0, 1, 3 allowed*/
-    #else
-    int8_t mclkPin = MCLK_PIN;
+      #define MCLK_PIN I2S_PIN_NO_CHANGE /* ESP32: only -1, 0, 1, 3 allowed*/
     #endif
+    uint8_t dmType  = SR_DMTYPE;
+    int8_t i2ssdPin = I2S_SDPIN;
+    int8_t i2swsPin = I2S_WSPIN;
+    int8_t i2sckPin = I2S_CKPIN;
+    int8_t mclkPin  = MCLK_PIN;
 #endif
 
     // new "V2" audiosync struct - 44 Bytes
@@ -2215,11 +2266,9 @@ class AudioReactive : public Usermod {
     static const char _dynamics[];
     static const char _frequency[];
     static const char _inputLvl[];
-#if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
-    static const char _analogmic[];
-#endif
     static const char _digitalmic[];
     static const char _addPalettes[];
+    static const char _soundSim[];
     static const char UDP_SYNC_HEADER[];
     static const char UDP_SYNC_HEADER_v1[];
 
@@ -2414,24 +2463,10 @@ class AudioReactive : public Usermod {
       const int   AGC_preset = (soundAgc > 0)? (soundAgc-1): 0; // make sure the _compiler_ knows this value will not change while we are inside the function
 
       #ifdef WLED_DISABLE_SOUND
-        micIn = inoise8(millis(), millis());          // Simulated analog read
-        micDataReal = micIn;
+      micIn = inoise8(millis(), millis());          // Simulated analog read
+      micDataReal = micIn;
       #else
-        #ifdef ARDUINO_ARCH_ESP32
-        micIn = int(micDataReal);      // micDataSm = ((micData * 3) + micData)/4;
-        #else
-        // this is the minimal code for reading analog mic input on 8266.
-        // warning!! Absolutely experimental code. Audio on 8266 is still not working. Expects a million follow-on problems. 
-        static unsigned long lastAnalogTime = 0;
-        static float lastAnalogValue = 0.0f;
-        if (millis() - lastAnalogTime > 20) {
-            micDataReal = analogRead(A0); // read one sample with 10bit resolution. This is a dirty hack, supporting volumereactive effects only.
-            lastAnalogTime = millis();
-            lastAnalogValue = micDataReal;
-            yield();
-        } else micDataReal = lastAnalogValue;
-        micIn = int(micDataReal);
-        #endif
+      micIn = int(micDataReal);      // micDataSm = ((micData * 3) + micData)/4;
       #endif
 
       micLev += (micDataReal-micLev) / 12288.0f;
@@ -2772,78 +2807,71 @@ class AudioReactive : public Usermod {
       #endif
 
       switch (dmType) {
-      #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)
-        // stub cases for not-yet-supported I2S modes on other ESP32 chips
-        case 0:  //ADC analog
-        #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3)
-        case 5:  //PDM Microphone
-        #endif
-      #endif
         case 1:
           DEBUGSR_PRINT(F("AR: Generic I2S Microphone - ")); DEBUGSR_PRINTLN(F(I2S_MIC_CHANNEL_TEXT));
-          audioSource = new I2SSource(SAMPLE_RATE, BLOCK_SIZE);
+          audioSource = new(std::nothrow) I2SSource(SAMPLE_RATE, BLOCK_SIZE);
           delay(100);
           if (audioSource) audioSource->initialize(i2swsPin, i2ssdPin, i2sckPin);
           break;
+
         case 2:
           DEBUGSR_PRINTLN(F("AR: ES7243 Microphone (right channel only)."));
-          audioSource = new ES7243(SAMPLE_RATE, BLOCK_SIZE);
+          audioSource = new(std::nothrow) ES7243(SAMPLE_RATE, BLOCK_SIZE);
           delay(100);
           if (audioSource) audioSource->initialize(i2swsPin, i2ssdPin, i2sckPin, mclkPin);
           break;
+
         case 3:
           DEBUGSR_PRINT(F("AR: SPH0645 Microphone - ")); DEBUGSR_PRINTLN(F(I2S_MIC_CHANNEL_TEXT));
-          audioSource = new SPH0654(SAMPLE_RATE, BLOCK_SIZE);
+          audioSource = new(std::nothrow) SPH0654(SAMPLE_RATE, BLOCK_SIZE);
           delay(100);
           audioSource->initialize(i2swsPin, i2ssdPin, i2sckPin);
           break;
+
         case 4:
           DEBUGSR_PRINT(F("AR: Generic I2S Microphone with Master Clock - ")); DEBUGSR_PRINTLN(F(I2S_MIC_CHANNEL_TEXT));
-          audioSource = new I2SSource(SAMPLE_RATE, BLOCK_SIZE, 1.0f/24.0f);
+          audioSource = new(std::nothrow) I2SSource(SAMPLE_RATE, BLOCK_SIZE, 1.0f/24.0f);
           delay(100);
           if (audioSource) audioSource->initialize(i2swsPin, i2ssdPin, i2sckPin, mclkPin);
           break;
-        #if  !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+
+        #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
         case 5:
           DEBUGSR_PRINT(F("AR: I2S PDM Microphone - ")); DEBUGSR_PRINTLN(F(I2S_PDM_MIC_CHANNEL_TEXT));
-          audioSource = new I2SSource(SAMPLE_RATE, BLOCK_SIZE, 1.0f/4.0f);
+          audioSource = new(std::nothrow) I2SSource(SAMPLE_RATE, BLOCK_SIZE, 1.0f/4.0f);
           useBandPassFilter = true;  // this reduces the noise floor on SPM1423 from 5% Vpp (~380) down to 0.05% Vpp (~5)
           delay(100);
           if (audioSource) audioSource->initialize(i2swsPin, i2ssdPin);
           break;
         #endif
+
         case 6:
           DEBUGSR_PRINTLN(F("AR: ES8388 Source"));
-          audioSource = new ES8388Source(SAMPLE_RATE, BLOCK_SIZE);
+          audioSource = new(std::nothrow) ES8388Source(SAMPLE_RATE, BLOCK_SIZE);
           delay(100);
           if (audioSource) audioSource->initialize(i2swsPin, i2ssdPin, i2sckPin, mclkPin);
           break;
 
-        #if  !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
-        // ADC over I2S is only possible on "classic" ESP32
         case 0:
         default:
-          DEBUGSR_PRINTLN(F("AR: Analog Microphone (left channel only)."));
-          audioSource = new I2SAdcSource(SAMPLE_RATE, BLOCK_SIZE);
-          delay(100);
-          useBandPassFilter = true;  // PDM bandpass filter seems to help for bad quality analog
-          if (audioSource) audioSource->initialize(audioPin);
+          DEBUGSR_PRINTLN(F("AR: Input disabled."));
+          audioSource = nullptr;
           break;
-        #endif
       }
       delay(250); // give microphone enough time to initialise
-
-      if (!audioSource) enabled = false;                 // audio failed to initialise
 #endif
+
       if (enabled) onUpdateBegin(false);                 // create FFT task, and initialize network
-      if (enabled) disableSoundProcessing = false;       // all good - enable audio processing
+
 #ifdef ARDUINO_ARCH_ESP32
       if (FFT_Task == nullptr) enabled = false;          // FFT task creation failed
-      if ((!audioSource) || (!audioSource->isInitialized())) {
+      disableSoundProcessing = !(audioSource && audioSource->isInitialized());
+      if (!(audioSource && audioSource->isInitialized())) {
         // audio source failed to initialize. Still stay "enabled", as there might be input arriving via UDP Sound Sync 
         DEBUGSR_PRINTLN(F("AR: Failed to initialize sound input driver. Please check input PIN settings."));
-        disableSoundProcessing = true;
       }
+#else
+      disableSoundProcessing = !enabled;                 // all good - enable audio processing
 #endif
       if (enabled) connectUDPSoundSync();
       if (enabled && addPalettes) createAudioPalettes();
@@ -2888,6 +2916,7 @@ class AudioReactive : public Usermod {
 
       if (!enabled) {
         disableSoundProcessing = true;   // keep processing suspended (FFT task)
+        simulateSound();
         lastUMRun = millis();            // update time keeping
         return;
       }
@@ -2922,9 +2951,9 @@ class AudioReactive : public Usermod {
 
       if (audioSyncEnabled & 0x02) disableSoundProcessing = true;   // make sure everything is disabled IF in audio Receive mode
       if (audioSyncEnabled & 0x01) disableSoundProcessing = false;  // keep running audio IF we're in audio Transmit mode
-#ifdef ARDUINO_ARCH_ESP32
-      if (!audioSource || !audioSource->isInitialized()) disableSoundProcessing = true;  // no audio source
 
+#ifdef ARDUINO_ARCH_ESP32
+      if (!(audioSource && audioSource->isInitialized())) disableSoundProcessing = true;  // no audio source
 
       // Only run the sampling code IF we're not in Receive mode or realtime mode
       if (!(audioSyncEnabled & 0x02) && !disableSoundProcessing) {
@@ -3038,7 +3067,7 @@ class AudioReactive : public Usermod {
 #ifdef ARDUINO_ARCH_ESP32
     void onUpdateBegin(bool init) override
     {
-#if defined(WLED_DEBUG_USERMODS) && defined(SR_DEBUG)
+  #if defined(WLED_DEBUG_USERMODS) && defined(SR_DEBUG)
       fftTime = sampleTime = 0;
   #endif
       // gracefully suspend FFT task (if running)
@@ -3086,7 +3115,6 @@ class AudioReactive : public Usermod {
       if (enabled) disableSoundProcessing = false;
       updateIsRunning = init;
     }
-
 #else // reduced function for 8266
     void onUpdateBegin(bool init)
     {
@@ -3109,25 +3137,6 @@ class AudioReactive : public Usermod {
     }
 #endif
 
-#ifdef ARDUINO_ARCH_ESP32
-    /**
-     * handleButton() can be used to override default button behaviour. Returning true
-     * will prevent button working in a default way.
-     */
-    bool handleButton(uint8_t b) override {
-      yield();
-      // crude way of determining if audio input is analog
-      // better would be for AudioSource to implement getType()
-      if (enabled
-          && dmType == 0 && audioPin>=0
-          && (buttons[b].type == BTN_TYPE_ANALOG || buttons[b].type == BTN_TYPE_ANALOG_INVERTED)
-         ) {
-        return true;
-      }
-      return false;
-    }
-
-#endif
     ////////////////////////////
     // Settings and Info Page //
     ////////////////////////////
@@ -3201,15 +3210,15 @@ class AudioReactive : public Usermod {
           // Analog or I2S digital input
           if (audioSource && (audioSource->isInitialized())) {
             // audio source successfully configured
-            if (audioSource->getType() == AudioSource::Type_I2SAdc) {
-              infoArr.add(F("ADC analog"));
-            } else {
+            //if (audioSource->getType() == AudioSource::Type_I2SAdc) {
+            //  infoArr.add(F("ADC analog")); // no longer supported
+            //} else {
               infoArr.add(F("I2S digital"));
-            }
+            //}
             // input level or "silence"
             if (maxSample5sec > 1.0f) {
               float my_usage = 100.0f * (maxSample5sec / 255.0f);
-              snprintf_P(myStringBuffer, 15, PSTR(" - peak %3d%%"), int(my_usage));
+              snprintf_P(myStringBuffer, sizeof(myStringBuffer), PSTR(" - peak %3d%%"), int(my_usage));
               infoArr.add(myStringBuffer);
             } else {
               infoArr.add(F(" - quiet"));
@@ -3375,13 +3384,9 @@ class AudioReactive : public Usermod {
       JsonObject top = root.createNestedObject(FPSTR(_name));
       top[FPSTR(_enabled)] = enabled;
       top[FPSTR(_addPalettes)] = addPalettes;
+      top[FPSTR(_soundSim)] = simulationId;
 
 #ifdef ARDUINO_ARCH_ESP32
-    #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
-      JsonObject amic = top.createNestedObject(FPSTR(_analogmic));
-      amic["pin"] = audioPin;
-    #endif
-
       JsonObject dmic = top.createNestedObject(FPSTR(_digitalmic));
       dmic["type"] = dmType;
       JsonArray pinArray = dmic.createNestedArray("pin");
@@ -3434,21 +3439,13 @@ class AudioReactive : public Usermod {
 
       configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled);
       configComplete &= getJsonValue(top[FPSTR(_addPalettes)], addPalettes);
+      configComplete &= getJsonValue(top[FPSTR(_soundSim)], simulationId);
 
 #ifdef ARDUINO_ARCH_ESP32
-    #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
-      configComplete &= getJsonValue(top[FPSTR(_analogmic)]["pin"], audioPin);
-    #else
-      audioPin = -1; // MCU does not support analog mic
-    #endif
-
       configComplete &= getJsonValue(top[FPSTR(_digitalmic)]["type"],   dmType);
-    #if  defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)
-      if (dmType == 0) dmType = SR_DMTYPE;   // MCU does not support analog
       #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3)
       if (dmType == 5) dmType = SR_DMTYPE;   // MCU does not support PDM
       #endif
-    #endif
 
       configComplete &= getJsonValue(top[FPSTR(_digitalmic)]["pin"][0], i2ssdPin);
       configComplete &= getJsonValue(top[FPSTR(_digitalmic)]["pin"][1], i2swsPin);
@@ -3480,20 +3477,22 @@ class AudioReactive : public Usermod {
     void appendConfigData(Print& uiScript) override
     {
       uiScript.print(F("ux='AudioReactive';"));         // ux = shortcut for Audioreactive - fingers crossed that "ux" isn't already used as JS var, html post parameter or css style
+      uiScript.print(F("dd=addDropdown(ux,'sound-sim');"));
+      uiScript.print(F("addOption(dd,'BeatSin',0);"));
+      uiScript.print(F("addOption(dd,'WeWillRockYou',1);"));
+      uiScript.print(F("addOption(dd,'10/13',2);"));
+      uiScript.print(F("addOption(dd,'14/3',3);"));
 #ifdef ARDUINO_ARCH_ESP32
-      uiScript.print(F("uxp=ux+':digitalmic:pin[]';")); // uxp = shortcut for AudioReactive:digitalmic:pin[]
       uiScript.print(F("dd=addDropdown(ux,'digitalmic:type');"));
-    #if  !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
-      uiScript.print(F("addOption(dd,'Generic Analog',0);"));
-    #endif
+      uiScript.print(F("addOption(dd,'Input disabled',0);"));
       uiScript.print(F("addOption(dd,'Generic I2S',1);"));
       uiScript.print(F("addOption(dd,'ES7243',2);"));
       uiScript.print(F("addOption(dd,'SPH0654',3);"));
       uiScript.print(F("addOption(dd,'Generic I2S with Mclk',4);"));
-    #if  !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+      #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
       uiScript.print(F("addOption(dd,'Generic I2S PDM',5);"));
-    #endif
-    uiScript.print(F("addOption(dd,'ES8388',6);"));
+      #endif
+      uiScript.print(F("addOption(dd,'ES8388',6);"));
     
       uiScript.print(F("dd=addDropdown(ux,'config:AGC');"));
       uiScript.print(F("addOption(dd,'Off',0);"));
@@ -3522,14 +3521,15 @@ class AudioReactive : public Usermod {
 #endif
       uiScript.print(F("addOption(dd,'Receive',2);"));
 #ifdef ARDUINO_ARCH_ESP32
-      uiScript.print(F("addInfo(ux+':digitalmic:type',1,'<i>requires reboot!</i>');"));  // 0 is field type, 1 is actual field
+      uiScript.print(F("addInfo(ux+':digitalmic:type',1,'<i class=\"warn\">requires reboot!</i>');"));  // 0 is field type, 1 is actual field
+      uiScript.print(F("uxp=ux+':digitalmic:pin[]';")); // uxp = shortcut for AudioReactive:digitalmic:pin[]
       uiScript.print(F("addInfo(uxp,0,'<i>sd/data/dout</i>','I2S SD');"));
       uiScript.print(F("addInfo(uxp,1,'<i>ws/clk/lrck</i>','I2S WS');"));
       uiScript.print(F("addInfo(uxp,2,'<i>sck/bclk</i>','I2S SCK');"));
       #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
-        uiScript.print(F("addInfo(uxp,3,'<i>only use -1, 0, 1 or 3</i>','I2S MCLK');"));
+      uiScript.print(F("addInfo(uxp,3,'<i>only use -1, 0, 1 or 3</i>','I2S MCLK');"));
       #else
-        uiScript.print(F("addInfo(uxp,3,'<i>master clock</i>','I2S MCLK');"));
+      uiScript.print(F("addInfo(uxp,3,'<i>master clock</i>','I2S MCLK');"));
       #endif
 #endif
     }
@@ -3695,10 +3695,8 @@ const char AudioReactive::_config[]     PROGMEM = "config";
 const char AudioReactive::_dynamics[]   PROGMEM = "dynamics";
 const char AudioReactive::_frequency[]  PROGMEM = "frequency";
 const char AudioReactive::_inputLvl[]   PROGMEM = "inputLevel";
-#if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
-const char AudioReactive::_analogmic[]  PROGMEM = "analogmic";
-#endif
 const char AudioReactive::_digitalmic[] PROGMEM = "digitalmic";
 const char AudioReactive::_addPalettes[]       PROGMEM = "add-palettes";
+const char AudioReactive::_soundSim[]          PROGMEM = "sound-sim";
 const char AudioReactive::UDP_SYNC_HEADER[]    PROGMEM = "00002"; // new sync header version, as format no longer compatible with previous structure
 const char AudioReactive::UDP_SYNC_HEADER_v1[] PROGMEM = "00001"; // old sync header version - need to add backwards-compatibility feature

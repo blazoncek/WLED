@@ -104,10 +104,10 @@ const ethernet_settings ethernetBoards[] = {
 
   // ABC! WLED Controller V43 + Ethernet Shield & compatible
   {
-    1,                    // eth_address, 
-    5,                    // eth_power, 
-    23,                   // eth_mdc, 
-    33,                   // eth_mdio, 
+    1,                    // eth_address,
+    5,                    // eth_power,
+    23,                   // eth_mdc,
+    33,                   // eth_mdio,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO17_OUT	// eth_clk_mode
   },
@@ -131,7 +131,7 @@ const ethernet_settings ethernetBoards[] = {
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO0_OUT   // eth_clk_mode
   },
-  
+
   // LILYGO T-POE Pro
   // https://github.com/Xinyuan-LilyGO/LilyGO-T-ETH-Series/blob/master/schematic/T-POE-PRO.pdf
   {
@@ -203,7 +203,7 @@ bool initEthernet()
   /*
   For LAN8720 the most correct way is to perform clean reset each time before init
   applying LOW to power or nRST pin for at least 100 us (please refer to datasheet, page 59)
-  ESP_IDF > V4 implements it (150 us, lan87xx_reset_hw(esp_eth_phy_t *phy) function in 
+  ESP_IDF > V4 implements it (150 us, lan87xx_reset_hw(esp_eth_phy_t *phy) function in
   /components/esp_eth/src/esp_eth_phy_lan87xx.c, line 280)
   but ESP_IDF < V4 does not. Lets do it:
   [not always needed, might be relevant in some EMI situations at startup and for hot resets]
@@ -226,7 +226,7 @@ bool initEthernet()
                 (eth_phy_type_t)   es.eth_type,
                 (eth_clock_mode_t) es.eth_clk_mode
                 )) {
-    DEBUG_PRINTLN(F("initC: ETH.begin() failed"));
+    DEBUG_PRINTLN(F("initE: ETH.begin() failed"));
     // de-allocate the allocated pins
     for (managed_pin_type mpt : pinsToAllocate) {
       PinManager::deallocatePin(mpt.pin, PinOwner::Ethernet);
@@ -234,8 +234,15 @@ bool initEthernet()
     return false;
   }
 
+  ETH.setHostname(hostName);
+  if (multiWiFi[0].staticIP != (uint32_t)0x00000000 && multiWiFi[0].staticGW != (uint32_t)0x00000000) {
+    ETH.config(multiWiFi[0].staticIP, multiWiFi[0].staticGW, multiWiFi[0].staticSN, dnsAddress);
+  } else {
+    ETH.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+  }
+
   successfullyConfiguredEthernet = true;
-  DEBUG_PRINTLN(F("initC: *** Ethernet successfully configured! ***"));
+  DEBUG_PRINTLN(F("initE: *** Ethernet successfully configured! ***"));
   return true;
 }
 #endif
@@ -528,12 +535,6 @@ void WiFiEvent(WiFiEvent_t event)
       break;
     case ARDUINO_EVENT_ETH_CONNECTED: {
       DEBUG_PRINTF_P(PSTR("ETH-E: Connected. @ %lus\n"), millis()/1000);
-      ETH.setHostname(hostName);
-      if (multiWiFi[0].staticIP != (uint32_t)0x00000000 && multiWiFi[0].staticGW != (uint32_t)0x00000000) {
-        ETH.config(multiWiFi[0].staticIP, multiWiFi[0].staticGW, multiWiFi[0].staticSN, dnsAddress);
-      } else {
-        ETH.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
-      }
       showWelcomePage = false;
       break;
       }

@@ -13,6 +13,7 @@
 	var presets = {};
 	var sortedPresetOptions = '';
 	var sortByName = false;
+	var zones = ["UTC"];
 	function S() {
 		getLoc();
 		loadPresets();
@@ -209,6 +210,15 @@
 			inp.parentNode.replaceChild(sel, inp);
 		}
 	}
+	function TZ()
+	{
+		zones.forEach((n,i)=>{
+			let o = cE("option");
+			o.value = i;
+			o.text = n;
+			d.Sf["TZ"].appendChild(o);
+		});
+	}
 	function Wd()
 	{
 		for (i=0; i<timerCount; i++) {
@@ -283,33 +293,7 @@
 		Get time from NTP server: <input type="checkbox" name="NT"><br>
 		<input type="text" name="NS" maxlength="32"><br>
 		Use 24h format: <input type="checkbox" name="CF"><br>
-		Time zone: 
-		<select name="TZ">
-			<option value="0" selected>GMT(UTC)</option>
-			<option value="1">GMT/BST</option>
-			<option value="2">CET/CEST</option>
-			<option value="3">EET/EEST</option>
-			<option value="4">US-EST/EDT</option>
-			<option value="5">US-CST/CDT</option>
-			<option value="6">US-MST/MDT</option>
-			<option value="7">US-AZ</option>
-			<option value="8">US-PST/PDT</option>
-			<option value="9">CST (AWST, PHST)</option>
-			<option value="10">JST (KST)</option>
-			<option value="11">AEST/AEDT</option>
-			<option value="12">NZST/NZDT</option>
-			<option value="13">North Korea</option>
-			<option value="14">IST (India)</option>
-			<option value="15">CA-Saskatchewan</option>
-			<option value="16">ACST</option>
-			<option value="17">ACST/ACDT</option>
-			<option value="18">HST (Hawaii)</option>
-			<option value="19">NOVT (Novosibirsk)</option>
-			<option value="20">AKST/AKDT (Anchorage)</option>
-			<option value="21">MX-CST</option>
-			<option value="22">PKT (Pakistan)</option>
-			<option value="23">BRT (Brasília)</option>
-		</select><br>
+		Time zone: <select name="TZ"></select><br>
 		UTC offset: <input name="UO" type="number" min="-65500" max="65500" required> seconds (max. 18 hours)<br>
 		Current local time is <span id="loct">unknown</span>.<br>
 		Latitude: <select name="LTR"><option value="N">N</option><option value="S">S</option></select><input name="LT" type="number" class="xl" min="0" max="66.6" step="0.01"><br>
@@ -341,7 +325,7 @@
 		Timed-Light-Over Presets: <input name="MN" class="m" type="number" min="0" max="250" required><br>
 		<h3>Button actions</h3>
 		<div id="macros" class="bc"></div>
-		<a href="https://kno.wled.ge/features/macros/#analog-button" target="_blank">Analog Button setup</a>
+		<a href="#" onclick="H('/features/macros/#analog-button')">Analog Button setup</a>
 		<h3>Time-controlled presets</h3>
 		<div id="TMT" class="tmc"></div>
 		<button type="button" onclick="addTimerRow()">Add Timer</button>

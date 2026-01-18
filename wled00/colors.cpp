@@ -332,7 +332,7 @@ void hsv2rgb(const CHSV32& hsv, uint32_t& rgb) // convert HSV (16bit hue) to RGB
     return;
   }
   sector = h / 10923;             // 65536 / 6 = 10923
-  f = (h - (sector * 10923)) * 6; // fraction/remainder: f = (hue % 10923) * 65536 / 10923 
+  f = (h - (sector * 10923)) * 6; // fraction/remainder: f = (hue % 10923) * 65536 / 10923
   p = (v * (255 - s)) >> 8;
   q = (v * (255 - ((s * f) >> 16))) >> 8;
   t = (v * (255 - ((s * (65535 - f)) >> 16))) >> 8;

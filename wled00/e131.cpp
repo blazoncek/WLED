@@ -8,388 +8,9 @@
  * E1.31 handler
  */
 
-//DDP protocol support, called by handleE131Packet
-//handles RGB data only
-void handleDDPPacket(e131_packet_t* p) {
-  static bool ddpSeenPush = false;  // have we seen a push yet?
-  int lastPushSeq = e131LastSequenceNumber[0];
-
-  //reject late packets belonging to previous frame (assuming 4 packets max. before push)
-  if (e131SkipOutOfSequence && lastPushSeq) {
-    int sn = p->sequenceNum & 0xF;
-    if (sn) {
-      if (lastPushSeq > 5) {
-        if (sn > (lastPushSeq -5) && sn < lastPushSeq) return;
-      } else {
-        if (sn > (10 + lastPushSeq) || sn < lastPushSeq) return;
-      }
-    }
-  }
-
-  unsigned ddpChannelsPerLed = ((p->dataType & 0b00111000)>>3 == 0b011) ? 4 : 3; // data type 0x1B (formerly 0x1A) is RGBW (type 3, 8 bit/channel)
-
-  uint32_t start =  htonl(p->channelOffset) / ddpChannelsPerLed;
-  start += DMXAddress / ddpChannelsPerLed;
-  unsigned stop = start + htons(p->dataLen) / ddpChannelsPerLed;
-  uint8_t* data = p->data;
-  unsigned c = 0;
-  if (p->flags & DDP_TIMECODE_FLAG) c = 4; //packet has timecode flag, we do not support it, but data starts 4 bytes later
-
-  if (realtimeMode != REALTIME_MODE_DDP) ddpSeenPush = false; // just starting, no push yet
-  realtimeLock(realtimeTimeoutMs, REALTIME_MODE_DDP);
-
-  if (!realtimeOverride) {
-    for (unsigned i = start; i < stop; i++, c += ddpChannelsPerLed) {
-      setRealtimePixel(i, data[c], data[c+1], data[c+2], ddpChannelsPerLed >3 ? data[c+3] : 0);
-    }
-  }
-
-  bool push = p->flags & DDP_PUSH_FLAG;
-  ddpSeenPush |= push;
-  if (!ddpSeenPush || push) { // if we've never seen a push, or this is one, render display
-    e131NewData = true;
-    int sn = p->sequenceNum & 0xF;
-    if (sn) e131LastSequenceNumber[0] = sn;
-  }
-}
-
-//E1.31 and Art-Net protocol support
-void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol){
-
-  int uni = 0, dmxChannels = 0;
-  uint8_t* e131_data = nullptr;
-  int seq = 0, mde = REALTIME_MODE_E131;
-
-  if (protocol == P_ARTNET)
-  {
-    if (p->art_opcode == ARTNET_OPCODE_OPPOLL) {
-      handleArtnetPollReply(clientIP);
-      return;
-    }
-    uni = p->art_universe;
-    dmxChannels = htons(p->art_length);
-    e131_data = p->art_data;
-    seq = p->art_sequence_number;
-    mde = REALTIME_MODE_ARTNET;
-  } else if (protocol == P_E131) {
-    // Ignore PREVIEW data (E1.31: 6.2.6)
-    if ((p->options & 0x80) != 0) return;
-    dmxChannels = htons(p->property_value_count) - 1;
-    // DMX level data is zero start code. Ignore everything else. (E1.11: 8.5)
-    if (dmxChannels == 0 || p->property_values[0] != 0) return;
-    uni = htons(p->universe);
-    e131_data = p->property_values;
-    seq = p->sequence_number;
-    if (e131Priority != 0) {
-      if (p->priority < e131Priority ) return;
-      // track highest priority & skip all lower priorities
-      if (p->priority >= highPriority.get()) highPriority.set(p->priority);
-      if (p->priority < highPriority.get()) return;
-    }
-  } else { //DDP
-    realtimeIP = clientIP;
-    handleDDPPacket(p);
-    return;
-  }
-
-  #ifdef WLED_ENABLE_DMX
-  // does not act on out-of-order packets yet
-  if (e131ProxyUniverse > 0 && uni == e131ProxyUniverse) {
-    for (uint16_t i = 1; i <= dmxChannels; i++)
-      dmx.write(i, e131_data[i]);
-    dmx.update();
-  }
-  #endif
-
-  // only listen for universes we're handling & allocated memory
-  if (uni < e131Universe || uni >= (e131Universe + E131_MAX_UNIVERSE_COUNT)) return;
-
-  unsigned previousUniverses = uni - e131Universe;
-
-  if (e131SkipOutOfSequence)
-    if (seq < e131LastSequenceNumber[previousUniverses] && seq > 20 && e131LastSequenceNumber[previousUniverses] < 250){
-      DEBUG_PRINTF_P(PSTR("skipping E1.31 frame (last seq=%d, current seq=%d, universe=%d)\n"), e131LastSequenceNumber[previousUniverses], seq, uni);
-      return;
-    }
-  e131LastSequenceNumber[previousUniverses] = seq;
-
-  // update status info
-  realtimeIP = clientIP;
-  byte wChannel = 0;
-  unsigned totalLen = strip.getLengthTotal();
-  unsigned availDMXLen = 0;
-  unsigned dataOffset = DMXAddress;
-
-  // For legacy DMX start address 0 the available DMX length offset is 0
-  const unsigned dmxLenOffset = (DMXAddress == 0) ? 0 : 1;
-
-  // Check if DMX start address fits in available channels
-  if (dmxChannels >= DMXAddress) {
-    availDMXLen = (dmxChannels - DMXAddress) + dmxLenOffset;
-  }
-
-  // DMX data in Art-Net packet starts at index 0, for E1.31 at index 1
-  if (protocol == P_ARTNET && dataOffset > 0) {
-    dataOffset--;
-  }
-
-  switch (DMXMode) {
-    case DMX_MODE_DISABLED:
-      return;  // nothing to do
-      break;
-
-    case DMX_MODE_SINGLE_RGB:   // 3 channel: [R,G,B]
-      if (uni != e131Universe) return;
-      if (availDMXLen < 3) return;
-
-      realtimeLock(realtimeTimeoutMs, mde);
-
-      if (realtimeOverride) return;
-
-      wChannel = (availDMXLen > 3) ? e131_data[dataOffset+3] : 0;
-      for (unsigned i = 0; i < totalLen; i++)
-        setRealtimePixel(i, e131_data[dataOffset+0], e131_data[dataOffset+1], e131_data[dataOffset+2], wChannel);
-      break;
-
-    case DMX_MODE_SINGLE_DRGB:  // 4 channel: [Dimmer,R,G,B]
-      if (uni != e131Universe) return;
-      if (availDMXLen < 4) return;
-
-      realtimeLock(realtimeTimeoutMs, mde);
-      if (realtimeOverride) return;
-      wChannel = (availDMXLen > 4) ? e131_data[dataOffset+4] : 0;
-
-      if (bri != e131_data[dataOffset+0]) {
-        bri = e131_data[dataOffset+0];
-        strip.setBrightness(bri, true);
-      }
-
-      for (unsigned i = 0; i < totalLen; i++)
-        setRealtimePixel(i, e131_data[dataOffset+1], e131_data[dataOffset+2], e131_data[dataOffset+3], wChannel);
-      break;
-
-    case DMX_MODE_PRESET:       // 2 channel: [Dimmer,Preset]
-      {
-        if (uni != e131Universe || availDMXLen < 2) return;
-
-        // limit max. selectable preset to 250, even though DMX max. val is 255
-        int dmxValPreset = (e131_data[dataOffset+1] > 250 ? 250 : e131_data[dataOffset+1]);
-        
-        // only apply preset if value changed 
-        if (dmxValPreset != 0 && dmxValPreset != currentPreset &&  
-            // only apply preset if not in playlist, or playlist changed
-            (currentPlaylist < 0 || dmxValPreset != currentPlaylist)) { 
-          presetCycCurr = dmxValPreset;
-          applyPreset(dmxValPreset, CALL_MODE_NOTIFICATION);
-        }
-
-        // only change brightness if value changed
-        if (bri != e131_data[dataOffset]) {                                        
-          bri = e131_data[dataOffset];
-          strip.setBrightness(bri, false);
-          stateUpdated(CALL_MODE_WS_SEND);
-        }
-        return;
-        break;
-      }
-
-    case DMX_MODE_EFFECT:           // 15 channels [bri,effectCurrent,effectSpeed,effectIntensity,effectPalette,effectOption,R,G,B,R2,G2,B2,R3,G3,B3]
-    case DMX_MODE_EFFECT_W:         // 18 channels, same as above but with extra +3 white channels [..,W,W2,W3]
-    case DMX_MODE_EFFECT_SEGMENT:   // 15 channels per segment;
-    case DMX_MODE_EFFECT_SEGMENT_W: // 18 Channels per segment;
-      {
-        if (uni != e131Universe) return;
-        bool isSegmentMode = DMXMode == DMX_MODE_EFFECT_SEGMENT || DMXMode == DMX_MODE_EFFECT_SEGMENT_W;
-        unsigned dmxEffectChannels = (DMXMode == DMX_MODE_EFFECT || DMXMode == DMX_MODE_EFFECT_SEGMENT) ? 15 : 18;
-        for (unsigned id = 0; id < strip.getSegmentsNum(); id++) {
-          Segment& seg = strip.getSegment(id);
-          if (isSegmentMode)
-            dataOffset = DMXAddress + id * (dmxEffectChannels + DMXSegmentSpacing);
-          else
-            dataOffset = DMXAddress;
-          // Modify address for Art-Net data
-          if (protocol == P_ARTNET && dataOffset > 0)
-            dataOffset--;
-          // Skip out of universe addresses
-          if (dataOffset > dmxChannels - dmxEffectChannels + 1)
-            return;
-
-          if (e131_data[dataOffset+1] < strip.getModeCount())
-            if (e131_data[dataOffset+1] != seg.mode)      seg.setMode(   e131_data[dataOffset+1]);
-          if (e131_data[dataOffset+2]   != seg.speed)     seg.speed     = e131_data[dataOffset+2];      
-          if (e131_data[dataOffset+3]   != seg.intensity) seg.intensity = e131_data[dataOffset+3];
-          if (e131_data[dataOffset+4]   != seg.palette)   seg.setPalette(e131_data[dataOffset+4]);
-
-          if (bool(e131_data[dataOffset+5] & 0b00000010) != seg.reverse_y) { seg.reverse_y = bool(e131_data[dataOffset+5] & 0b00000010); }
-          if (bool(e131_data[dataOffset+5] & 0b00000100) != seg.mirror_y)  { seg.mirror_y  = bool(e131_data[dataOffset+5] & 0b00000100); }
-          if (bool(e131_data[dataOffset+5] & 0b00001000) != seg.transpose) { seg.transpose = bool(e131_data[dataOffset+5] & 0b00001000); }
-          if ((e131_data[dataOffset+5] & 0b00110000) >> 4 != seg.map1D2D) {
-            seg.map1D2D = (e131_data[dataOffset+5] & 0b00110000) >> 4;
-          }
-          // To maintain backwards compatibility with prior e1.31 values, reverse is fixed to mask 0x01000000
-          if ((e131_data[dataOffset+5] & 0b01000000) != seg.reverse) { seg.reverse = bool(e131_data[dataOffset+5] & 0b01000000); }
-          // To maintain backwards compatibility with prior e1.31 values, mirror is fixed to mask 0x10000000
-          if ((e131_data[dataOffset+5] & 0b10000000) != seg.mirror) { seg.mirror = bool(e131_data[dataOffset+5] & 0b10000000); }
-
-          uint32_t colors[3];
-          byte whites[3] = {0,0,0};
-          if (dmxEffectChannels == 18) {
-            whites[0] = e131_data[dataOffset+15];
-            whites[1] = e131_data[dataOffset+16];
-            whites[2] = e131_data[dataOffset+17];
-          }
-          colors[0] = RGBW32(e131_data[dataOffset+ 6], e131_data[dataOffset+ 7], e131_data[dataOffset+ 8], whites[0]);
-          colors[1] = RGBW32(e131_data[dataOffset+ 9], e131_data[dataOffset+10], e131_data[dataOffset+11], whites[1]);
-          colors[2] = RGBW32(e131_data[dataOffset+12], e131_data[dataOffset+13], e131_data[dataOffset+14], whites[2]);
-          if (colors[0] != seg.colors[0]) seg.setColor(0, colors[0]);
-          if (colors[1] != seg.colors[1]) seg.setColor(1, colors[1]);
-          if (colors[2] != seg.colors[2]) seg.setColor(2, colors[2]);
-
-          // Set segment opacity or global brightness
-          if (isSegmentMode) {
-            if (e131_data[dataOffset] != seg.opacity) seg.setOpacity(e131_data[dataOffset]);
-          } else if ( id == strip.getSegmentsNum()-1U ) {
-            if (bri != e131_data[dataOffset]) {
-              bri = e131_data[dataOffset];
-              strip.setBrightness(bri, true);
-            }
-          }
-        }
-        return;
-        break;
-      }
-      
-    case DMX_MODE_MULTIPLE_DRGB:
-    case DMX_MODE_MULTIPLE_RGB:
-    case DMX_MODE_MULTIPLE_RGBW:
-      {
-        const bool is4Chan = (DMXMode == DMX_MODE_MULTIPLE_RGBW);
-        const unsigned dmxChannelsPerLed = is4Chan ? 4 : 3;
-        const unsigned ledsPerUniverse = is4Chan ? MAX_4_CH_LEDS_PER_UNIVERSE : MAX_3_CH_LEDS_PER_UNIVERSE;
-        uint8_t stripBrightness = bri;
-        unsigned previousLeds, dmxOffset, ledsTotal;
-
-        if (previousUniverses == 0) {
-          if (availDMXLen < 1) return;
-          dmxOffset = dataOffset;
-          previousLeds = 0;
-          // First DMX address is dimmer in DMX_MODE_MULTIPLE_DRGB mode.
-          if (DMXMode == DMX_MODE_MULTIPLE_DRGB) {
-            stripBrightness = e131_data[dmxOffset++];
-            ledsTotal = (availDMXLen - 1) / dmxChannelsPerLed;
-          } else {
-            ledsTotal = availDMXLen / dmxChannelsPerLed;
-          }
-        } else {
-          // All subsequent universes start at the first channel.
-          dmxOffset = (protocol == P_ARTNET) ? 0 : 1;
-          const unsigned dimmerOffset = (DMXMode == DMX_MODE_MULTIPLE_DRGB) ? 1 : 0;
-          unsigned ledsInFirstUniverse = (((MAX_CHANNELS_PER_UNIVERSE - DMXAddress) + dmxLenOffset) - dimmerOffset) / dmxChannelsPerLed;
-          previousLeds = ledsInFirstUniverse + (previousUniverses - 1) * ledsPerUniverse;
-          ledsTotal = previousLeds + (dmxChannels / dmxChannelsPerLed);
-        }
-
-        // All LEDs already have values
-        if (previousLeds >= totalLen) {
-          return;
-        }
-
-        realtimeLock(realtimeTimeoutMs, mde);
-        if (realtimeOverride) return;
-
-        if (ledsTotal > totalLen) {
-          ledsTotal = totalLen;
-        }
-
-        if (DMXMode == DMX_MODE_MULTIPLE_DRGB && previousUniverses == 0) {
-          if (bri != stripBrightness) {
-            bri = stripBrightness;
-            strip.setBrightness(bri, true);
-          }
-        }
-
-        for (unsigned i = previousLeds; i < ledsTotal; i++) {
-          setRealtimePixel(i, e131_data[dmxOffset], e131_data[dmxOffset+1], e131_data[dmxOffset+2], is4Chan ? e131_data[dmxOffset+3] : 0);
-          dmxOffset += dmxChannelsPerLed;
-        }
-        break;
-      }
-    default:
-      DEBUG_PRINTLN(F("unknown E1.31 DMX mode"));
-      return;  // nothing to do
-      break;
-  }
-
-  e131NewData = true;
-}
-
-void handleArtnetPollReply(IPAddress ipAddress) {
-  ArtPollReply artnetPollReply;
-  prepareArtnetPollReply(&artnetPollReply);
-
-  unsigned startUniverse = e131Universe;
-  unsigned endUniverse = e131Universe;
-
-  switch (DMXMode) {
-    case DMX_MODE_DISABLED:
-      break;
-
-    case DMX_MODE_SINGLE_RGB:
-    case DMX_MODE_SINGLE_DRGB:
-    case DMX_MODE_PRESET:
-    case DMX_MODE_EFFECT:
-    case DMX_MODE_EFFECT_W:
-    case DMX_MODE_EFFECT_SEGMENT:
-    case DMX_MODE_EFFECT_SEGMENT_W:
-      break;  // 1 universe is enough
-
-    case DMX_MODE_MULTIPLE_DRGB:
-    case DMX_MODE_MULTIPLE_RGB:
-    case DMX_MODE_MULTIPLE_RGBW:
-      {
-        bool is4Chan = (DMXMode == DMX_MODE_MULTIPLE_RGBW);
-        const unsigned dmxChannelsPerLed = is4Chan ? 4 : 3;
-        const unsigned dimmerOffset = (DMXMode == DMX_MODE_MULTIPLE_DRGB) ? 1 : 0;
-        const unsigned dmxLenOffset = (DMXAddress == 0) ? 0 : 1; // For legacy DMX start address 0
-        const unsigned ledsInFirstUniverse = (((MAX_CHANNELS_PER_UNIVERSE - DMXAddress) + dmxLenOffset) - dimmerOffset) / dmxChannelsPerLed;
-        const unsigned totalLen = strip.getLengthTotal();
-
-        if (totalLen > ledsInFirstUniverse) {
-          const unsigned ledsPerUniverse = is4Chan ? MAX_4_CH_LEDS_PER_UNIVERSE : MAX_3_CH_LEDS_PER_UNIVERSE;
-          const unsigned remainLED = totalLen - ledsInFirstUniverse;
-
-          endUniverse += (remainLED / ledsPerUniverse);
-
-          if ((remainLED % ledsPerUniverse) > 0) {
-            endUniverse++;
-          }
-
-          if ((endUniverse - startUniverse) > E131_MAX_UNIVERSE_COUNT) {
-            endUniverse = startUniverse + E131_MAX_UNIVERSE_COUNT - 1;
-          }
-        }
-        break;
-      }
-    default:
-      DEBUG_PRINTLN(F("unknown E1.31 DMX mode"));
-      return;  // nothing to do
-      break;
-  }
-
-  if (DMXMode != DMX_MODE_DISABLED) {
-    for (unsigned i = startUniverse; i <= endUniverse; ++i) {
-      sendArtnetPollReply(&artnetPollReply, ipAddress, i);
-    }
-  }
-
-  #ifdef WLED_ENABLE_DMX
-    if (e131ProxyUniverse > 0 && (DMXMode == DMX_MODE_DISABLED || (e131ProxyUniverse < startUniverse || e131ProxyUniverse > endUniverse))) {
-      sendArtnetPollReply(&artnetPollReply, ipAddress, e131ProxyUniverse);
-    }
-  #endif
-}
-
-void prepareArtnetPollReply(ArtPollReply *reply) {
+#ifndef WLED_USE_DDP_ONLY
+// ArtNet Poll support
+static void prepareArtnetPollReply(ArtPollReply *reply) {
   // Art-Net
   reply->reply_id[0] = 0x41;
   reply->reply_id[1] = 0x72;
@@ -507,7 +128,7 @@ void prepareArtnetPollReply(ArtPollReply *reply) {
   }
 }
 
-void sendArtnetPollReply(ArtPollReply *reply, IPAddress ipAddress, uint16_t portAddress) {
+static void sendArtnetPollReply(ArtPollReply *reply, IPAddress ipAddress, uint16_t portAddress) {
   reply->reply_net_sw = (uint8_t)((portAddress >> 8) & 0x007F);
   reply->reply_sub_sw = (uint8_t)((portAddress >> 4) & 0x000F);
   reply->reply_sw_out[0] = (uint8_t)(portAddress & 0x000F);
@@ -525,4 +146,379 @@ void sendArtnetPollReply(ArtPollReply *reply, IPAddress ipAddress, uint16_t port
   notifierUdp.endPacket();
 
   reply->reply_bind_index++;
+}
+
+static void handleArtnetPollReply(IPAddress ipAddress) {
+  ArtPollReply artnetPollReply;
+  prepareArtnetPollReply(&artnetPollReply);
+
+  unsigned startUniverse = e131Universe;
+  unsigned endUniverse = e131Universe;
+
+  switch (DMXMode) {
+    case DMX_MODE_DISABLED:
+      break;
+
+    case DMX_MODE_SINGLE_RGB:
+    case DMX_MODE_SINGLE_DRGB:
+    case DMX_MODE_PRESET:
+    case DMX_MODE_EFFECT:
+    case DMX_MODE_EFFECT_W:
+    case DMX_MODE_EFFECT_SEGMENT:
+    case DMX_MODE_EFFECT_SEGMENT_W:
+      break;  // 1 universe is enough
+
+    case DMX_MODE_MULTIPLE_DRGB:
+    case DMX_MODE_MULTIPLE_RGB:
+    case DMX_MODE_MULTIPLE_RGBW:
+      {
+        bool is4Chan = (DMXMode == DMX_MODE_MULTIPLE_RGBW);
+        const unsigned dmxChannelsPerLed = is4Chan ? 4 : 3;
+        const unsigned dimmerOffset = (DMXMode == DMX_MODE_MULTIPLE_DRGB) ? 1 : 0;
+        const unsigned dmxLenOffset = (DMXAddress == 0) ? 0 : 1; // For legacy DMX start address 0
+        const unsigned ledsInFirstUniverse = (((MAX_CHANNELS_PER_UNIVERSE - DMXAddress) + dmxLenOffset) - dimmerOffset) / dmxChannelsPerLed;
+        const unsigned totalLen = strip.getLengthTotal();
+
+        if (totalLen > ledsInFirstUniverse) {
+          const unsigned ledsPerUniverse = is4Chan ? MAX_4_CH_LEDS_PER_UNIVERSE : MAX_3_CH_LEDS_PER_UNIVERSE;
+          const unsigned remainLED = totalLen - ledsInFirstUniverse;
+
+          endUniverse += (remainLED / ledsPerUniverse);
+
+          if ((remainLED % ledsPerUniverse) > 0) {
+            endUniverse++;
+          }
+
+          if ((endUniverse - startUniverse) > E131_MAX_UNIVERSE_COUNT) {
+            endUniverse = startUniverse + E131_MAX_UNIVERSE_COUNT - 1;
+          }
+        }
+        break;
+      }
+    default:
+      DEBUG_PRINTLN(F("unknown E1.31 DMX mode"));
+      return;  // nothing to do
+      break;
+  }
+
+  if (DMXMode != DMX_MODE_DISABLED) {
+    for (unsigned i = startUniverse; i <= endUniverse; ++i) {
+      sendArtnetPollReply(&artnetPollReply, ipAddress, i);
+    }
+  }
+
+  #ifdef WLED_ENABLE_DMX
+    if (e131ProxyUniverse > 0 && (DMXMode == DMX_MODE_DISABLED || (e131ProxyUniverse < startUniverse || e131ProxyUniverse > endUniverse))) {
+      sendArtnetPollReply(&artnetPollReply, ipAddress, e131ProxyUniverse);
+    }
+  #endif
+}
+#endif
+
+//DDP protocol support
+static bool ddpSeenPush = false;  // have we seen a push yet?
+
+//E1.31 and Art-Net protocol support
+void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol) {
+#ifndef WLED_USE_DDP_ONLY
+  int uni = 0, dmxChannels = 0;
+  uint8_t* e131_data = nullptr;
+  int seq = 0, mde = REALTIME_MODE_E131;
+
+  if (protocol == P_ARTNET) {
+    if (p->art_opcode == ARTNET_OPCODE_OPPOLL) {
+      handleArtnetPollReply(clientIP);
+      return;
+    }
+    uni = p->art_universe;
+    dmxChannels = htons(p->art_length);
+    e131_data = p->art_data;
+    seq = p->art_sequence_number;
+    mde = REALTIME_MODE_ARTNET;
+  } else if (protocol == P_E131) {
+    // Ignore PREVIEW data (E1.31: 6.2.6)
+    if ((p->options & 0x80) != 0) return;
+    dmxChannels = htons(p->property_value_count) - 1;
+    // DMX level data is zero start code. Ignore everything else. (E1.11: 8.5)
+    if (dmxChannels == 0 || p->property_values[0] != 0) return;
+    uni = htons(p->universe);
+    e131_data = p->property_values;
+    seq = p->sequence_number;
+    if (e131Priority != 0) {
+      if (p->priority < e131Priority ) return;
+      // track highest priority & skip all lower priorities
+      if (p->priority >= highPriority.get()) highPriority.set(p->priority);
+      if (p->priority < highPriority.get()) return;
+    }
+  } else
+#endif
+  { //DDP
+    realtimeIP = clientIP;
+    int lastPushSeq = e131LastSequenceNumber[0];
+    //reject late packets belonging to previous frame (assuming 4 packets max. before push)
+    if (e131SkipOutOfSequence && lastPushSeq) {
+      int sn = p->sequenceNum & 0xF;
+      if (sn) {
+        if (lastPushSeq > 5) {
+          if (sn > (lastPushSeq -5) && sn < lastPushSeq) return;
+        } else {
+          if (sn > (10 + lastPushSeq) || sn < lastPushSeq) return;
+        }
+      }
+    }
+    unsigned ddpChannelsPerLed = ((p->dataType & 0b00111000)>>3 == 0b011) ? 4 : 3; // data type 0x1B (formerly 0x1A) is RGBW (type 3, 8 bit/channel)
+    uint32_t start =  htonl(p->channelOffset) / ddpChannelsPerLed;
+    start += DMXAddress / ddpChannelsPerLed;
+    unsigned stop = start + htons(p->dataLen) / ddpChannelsPerLed;
+    uint8_t* data = p->data;
+    unsigned c = 0;
+    if (p->flags & DDP_TIMECODE_FLAG) c = 4; //packet has timecode flag, we do not support it, but data starts 4 bytes later
+    if (realtimeMode != REALTIME_MODE_DDP) ddpSeenPush = false; // just starting, no push yet
+    realtimeLock(realtimeTimeoutMs, REALTIME_MODE_DDP);
+    if (!realtimeOverride) {
+      for (unsigned i = start; i < stop; i++, c += ddpChannelsPerLed) {
+        setRealtimePixel(i, data[c], data[c+1], data[c+2], ddpChannelsPerLed >3 ? data[c+3] : 0);
+      }
+    }
+    bool push = p->flags & DDP_PUSH_FLAG;
+    ddpSeenPush |= push;
+    if (!ddpSeenPush || push) { // if we've never seen a push, or this is one, render display
+      e131NewData = true;
+      int sn = p->sequenceNum & 0xF;
+      if (sn) e131LastSequenceNumber[0] = sn;
+    }
+    return;
+  }
+
+#ifndef WLED_USE_DDP_ONLY
+  #ifdef WLED_ENABLE_DMX
+  // does not act on out-of-order packets yet
+  if (e131ProxyUniverse > 0 && uni == e131ProxyUniverse) {
+    for (uint16_t i = 1; i <= dmxChannels; i++)
+      dmx.write(i, e131_data[i]);
+    dmx.update();
+  }
+  #endif
+
+  // only listen for universes we're handling & allocated memory
+  if (uni < e131Universe || uni >= (e131Universe + E131_MAX_UNIVERSE_COUNT)) return;
+
+  unsigned previousUniverses = uni - e131Universe;
+
+  if (e131SkipOutOfSequence)
+    if (seq < e131LastSequenceNumber[previousUniverses] && seq > 20 && e131LastSequenceNumber[previousUniverses] < 250){
+      DEBUG_PRINTF_P(PSTR("skipping E1.31 frame (last seq=%d, current seq=%d, universe=%d)\n"), e131LastSequenceNumber[previousUniverses], seq, uni);
+      return;
+    }
+  e131LastSequenceNumber[previousUniverses] = seq;
+
+  // update status info
+  realtimeIP = clientIP;
+  byte wChannel = 0;
+  unsigned totalLen = strip.getLengthTotal();
+  unsigned availDMXLen = 0;
+  unsigned dataOffset = DMXAddress;
+
+  // For legacy DMX start address 0 the available DMX length offset is 0
+  const unsigned dmxLenOffset = (DMXAddress == 0) ? 0 : 1;
+
+  // Check if DMX start address fits in available channels
+  if (dmxChannels >= DMXAddress) {
+    availDMXLen = (dmxChannels - DMXAddress) + dmxLenOffset;
+  }
+
+  // DMX data in Art-Net packet starts at index 0, for E1.31 at index 1
+  if (protocol == P_ARTNET && dataOffset > 0) {
+    dataOffset--;
+  }
+
+  switch (DMXMode) {
+    case DMX_MODE_DISABLED:
+      return;  // nothing to do
+      break;
+
+    case DMX_MODE_SINGLE_RGB:   // 3 channel: [R,G,B]
+      if (uni != e131Universe) return;
+      if (availDMXLen < 3) return;
+
+      realtimeLock(realtimeTimeoutMs, mde);
+
+      if (realtimeOverride) return;
+
+      wChannel = (availDMXLen > 3) ? e131_data[dataOffset+3] : 0;
+      for (unsigned i = 0; i < totalLen; i++)
+        setRealtimePixel(i, e131_data[dataOffset+0], e131_data[dataOffset+1], e131_data[dataOffset+2], wChannel);
+      break;
+
+    case DMX_MODE_SINGLE_DRGB:  // 4 channel: [Dimmer,R,G,B]
+      if (uni != e131Universe) return;
+      if (availDMXLen < 4) return;
+
+      realtimeLock(realtimeTimeoutMs, mde);
+      if (realtimeOverride) return;
+      wChannel = (availDMXLen > 4) ? e131_data[dataOffset+4] : 0;
+
+      if (bri != e131_data[dataOffset+0]) {
+        bri = e131_data[dataOffset+0];
+        strip.setBrightness(bri, true);
+      }
+
+      for (unsigned i = 0; i < totalLen; i++)
+        setRealtimePixel(i, e131_data[dataOffset+1], e131_data[dataOffset+2], e131_data[dataOffset+3], wChannel);
+      break;
+
+    case DMX_MODE_PRESET:       // 2 channel: [Dimmer,Preset]
+      {
+        if (uni != e131Universe || availDMXLen < 2) return;
+
+        // limit max. selectable preset to 250, even though DMX max. val is 255
+        int dmxValPreset = (e131_data[dataOffset+1] > 250 ? 250 : e131_data[dataOffset+1]);
+
+        // only apply preset if value changed
+        if (dmxValPreset != 0 && dmxValPreset != currentPreset &&
+            // only apply preset if not in playlist, or playlist changed
+            (currentPlaylist < 0 || dmxValPreset != currentPlaylist)) {
+          presetCycCurr = dmxValPreset;
+          applyPreset(dmxValPreset, CALL_MODE_NOTIFICATION);
+        }
+
+        // only change brightness if value changed
+        if (bri != e131_data[dataOffset]) {
+          bri = e131_data[dataOffset];
+          strip.setBrightness(bri, false);
+          stateUpdated(CALL_MODE_WS_SEND);
+        }
+        return;
+        break;
+      }
+
+    case DMX_MODE_EFFECT:           // 15 channels [bri,effectCurrent,effectSpeed,effectIntensity,effectPalette,effectOption,R,G,B,R2,G2,B2,R3,G3,B3]
+    case DMX_MODE_EFFECT_W:         // 18 channels, same as above but with extra +3 white channels [..,W,W2,W3]
+    case DMX_MODE_EFFECT_SEGMENT:   // 15 channels per segment;
+    case DMX_MODE_EFFECT_SEGMENT_W: // 18 Channels per segment;
+      {
+        if (uni != e131Universe) return;
+        bool isSegmentMode = DMXMode == DMX_MODE_EFFECT_SEGMENT || DMXMode == DMX_MODE_EFFECT_SEGMENT_W;
+        unsigned dmxEffectChannels = (DMXMode == DMX_MODE_EFFECT || DMXMode == DMX_MODE_EFFECT_SEGMENT) ? 15 : 18;
+        for (unsigned id = 0; id < strip.getSegmentsNum(); id++) {
+          Segment& seg = strip.getSegment(id);
+          if (isSegmentMode)
+            dataOffset = DMXAddress + id * (dmxEffectChannels + DMXSegmentSpacing);
+          else
+            dataOffset = DMXAddress;
+          // Modify address for Art-Net data
+          if (protocol == P_ARTNET && dataOffset > 0)
+            dataOffset--;
+          // Skip out of universe addresses
+          if (dataOffset > dmxChannels - dmxEffectChannels + 1)
+            return;
+
+          if (e131_data[dataOffset+1] < strip.getModeCount())
+            if (e131_data[dataOffset+1] != seg.mode)      seg.setMode(   e131_data[dataOffset+1]);
+          if (e131_data[dataOffset+2]   != seg.speed)     seg.speed     = e131_data[dataOffset+2];
+          if (e131_data[dataOffset+3]   != seg.intensity) seg.intensity = e131_data[dataOffset+3];
+          if (e131_data[dataOffset+4]   != seg.palette)   seg.setPalette(e131_data[dataOffset+4]);
+
+          if (bool(e131_data[dataOffset+5] & 0b00000010) != seg.reverse_y) { seg.reverse_y = bool(e131_data[dataOffset+5] & 0b00000010); }
+          if (bool(e131_data[dataOffset+5] & 0b00000100) != seg.mirror_y)  { seg.mirror_y  = bool(e131_data[dataOffset+5] & 0b00000100); }
+          if (bool(e131_data[dataOffset+5] & 0b00001000) != seg.transpose) { seg.transpose = bool(e131_data[dataOffset+5] & 0b00001000); }
+          if ((e131_data[dataOffset+5] & 0b00110000) >> 4 != seg.map1D2D) {
+            seg.map1D2D = (e131_data[dataOffset+5] & 0b00110000) >> 4;
+          }
+          // To maintain backwards compatibility with prior e1.31 values, reverse is fixed to mask 0x01000000
+          if ((e131_data[dataOffset+5] & 0b01000000) != seg.reverse) { seg.reverse = bool(e131_data[dataOffset+5] & 0b01000000); }
+          // To maintain backwards compatibility with prior e1.31 values, mirror is fixed to mask 0x10000000
+          if ((e131_data[dataOffset+5] & 0b10000000) != seg.mirror) { seg.mirror = bool(e131_data[dataOffset+5] & 0b10000000); }
+
+          uint32_t colors[3];
+          byte whites[3] = {0,0,0};
+          if (dmxEffectChannels == 18) {
+            whites[0] = e131_data[dataOffset+15];
+            whites[1] = e131_data[dataOffset+16];
+            whites[2] = e131_data[dataOffset+17];
+          }
+          colors[0] = RGBW32(e131_data[dataOffset+ 6], e131_data[dataOffset+ 7], e131_data[dataOffset+ 8], whites[0]);
+          colors[1] = RGBW32(e131_data[dataOffset+ 9], e131_data[dataOffset+10], e131_data[dataOffset+11], whites[1]);
+          colors[2] = RGBW32(e131_data[dataOffset+12], e131_data[dataOffset+13], e131_data[dataOffset+14], whites[2]);
+          if (colors[0] != seg.colors[0]) seg.setColor(0, colors[0]);
+          if (colors[1] != seg.colors[1]) seg.setColor(1, colors[1]);
+          if (colors[2] != seg.colors[2]) seg.setColor(2, colors[2]);
+
+          // Set segment opacity or global brightness
+          if (isSegmentMode) {
+            if (e131_data[dataOffset] != seg.opacity) seg.setOpacity(e131_data[dataOffset]);
+          } else if ( id == strip.getSegmentsNum()-1U ) {
+            if (bri != e131_data[dataOffset]) {
+              bri = e131_data[dataOffset];
+              strip.setBrightness(bri, true);
+            }
+          }
+        }
+        return;
+        break;
+      }
+
+    case DMX_MODE_MULTIPLE_DRGB:
+    case DMX_MODE_MULTIPLE_RGB:
+    case DMX_MODE_MULTIPLE_RGBW:
+      {
+        const bool is4Chan = (DMXMode == DMX_MODE_MULTIPLE_RGBW);
+        const unsigned dmxChannelsPerLed = is4Chan ? 4 : 3;
+        const unsigned ledsPerUniverse = is4Chan ? MAX_4_CH_LEDS_PER_UNIVERSE : MAX_3_CH_LEDS_PER_UNIVERSE;
+        uint8_t stripBrightness = bri;
+        unsigned previousLeds, dmxOffset, ledsTotal;
+
+        if (previousUniverses == 0) {
+          if (availDMXLen < 1) return;
+          dmxOffset = dataOffset;
+          previousLeds = 0;
+          // First DMX address is dimmer in DMX_MODE_MULTIPLE_DRGB mode.
+          if (DMXMode == DMX_MODE_MULTIPLE_DRGB) {
+            stripBrightness = e131_data[dmxOffset++];
+            ledsTotal = (availDMXLen - 1) / dmxChannelsPerLed;
+          } else {
+            ledsTotal = availDMXLen / dmxChannelsPerLed;
+          }
+        } else {
+          // All subsequent universes start at the first channel.
+          dmxOffset = (protocol == P_ARTNET) ? 0 : 1;
+          const unsigned dimmerOffset = (DMXMode == DMX_MODE_MULTIPLE_DRGB) ? 1 : 0;
+          unsigned ledsInFirstUniverse = (((MAX_CHANNELS_PER_UNIVERSE - DMXAddress) + dmxLenOffset) - dimmerOffset) / dmxChannelsPerLed;
+          previousLeds = ledsInFirstUniverse + (previousUniverses - 1) * ledsPerUniverse;
+          ledsTotal = previousLeds + (dmxChannels / dmxChannelsPerLed);
+        }
+
+        // All LEDs already have values
+        if (previousLeds >= totalLen) {
+          return;
+        }
+
+        realtimeLock(realtimeTimeoutMs, mde);
+        if (realtimeOverride) return;
+
+        if (ledsTotal > totalLen) {
+          ledsTotal = totalLen;
+        }
+
+        if (DMXMode == DMX_MODE_MULTIPLE_DRGB && previousUniverses == 0) {
+          if (bri != stripBrightness) {
+            bri = stripBrightness;
+            strip.setBrightness(bri, true);
+          }
+        }
+
+        for (unsigned i = previousLeds; i < ledsTotal; i++) {
+          setRealtimePixel(i, e131_data[dmxOffset], e131_data[dmxOffset+1], e131_data[dmxOffset+2], is4Chan ? e131_data[dmxOffset+3] : 0);
+          dmxOffset += dmxChannelsPerLed;
+        }
+        break;
+      }
+    default:
+      DEBUG_PRINTLN(F("unknown E1.31 DMX mode"));
+      return;  // nothing to do
+      break;
+  }
+
+  e131NewData = true;
+#endif
 }

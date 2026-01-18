@@ -25,7 +25,7 @@
 
 static const uint8_t switchPins[] = { MQTTSWITCHPINS };
 //This is a hack to get the number of pins defined by the user
-#define NUM_SWITCH_PINS (sizeof(switchPins))
+#define NUM_SWITCH_PINS (countof(switchPins))
 static const bool switchInvert[NUM_SWITCH_PINS] = { MQTTSWITCHINVERT};
 //Make settings in config file more readable
 #define ON 1
@@ -110,7 +110,7 @@ inline void UsermodMqttSwitch::onMqttConnect(bool sessionPresent)
         json[F("pl_on")] = F("ON");
 
         char uid[16];
-        sprintf(uid, "%s_sw%d", escapedMac.c_str(), pinNr);
+        sprintf(uid, "%s_sw%d", escapedMac, pinNr);
         json[F("unique_id")] = uid;
 
         strcpy(buf, mqttDeviceTopic);

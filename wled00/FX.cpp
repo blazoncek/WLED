@@ -452,7 +452,7 @@ uint16_t mode_running_lights(void) {
       }
       a = 255 - a;
     }
-    unsigned palIdx = moving ? (i+counter)%SEGLEN : i;
+    unsigned palIdx = moving ? (i+(counter>>1))%SEGLEN : i;
     uint8_t s = dual ? sin_gap(a) : sin8_t(a);
     CRGBA ca = SEGCOLOR(1).nblend(SEGMENT.color_from_palette(palIdx, true, moving, 0), s);
     if (dual) {
@@ -790,16 +790,16 @@ static const char _data_FX_MODE_CHASE[] PROGMEM = "Chase@!,Width,,,,Rainbow Bg,R
  */
 uint16_t mode_colorful(void) {
   unsigned numColors = 4; //3, 4, or 5
-  CRGBA cols[5]{{0xFF,0,0},{0xEE,0xBB,0},{0,0xEE,0},{0,0x77,0xCC}}; //{0x00FF0000,0x00EEBB00,0x0000EE00,0x000077CC};
+  CRGBA cols[9]{{0xFF,0,0},{0xEE,0xBB,0},{0,0xEE,0},{0,0x77,0xCC}}; //{0x00FF0000,0x00EEBB00,0x0000EE00,0x000077CC};
   if (SEGMENT.intensity > 160 || SEGMENT.palette) { //palette or color
     if (!SEGMENT.palette) {
       numColors = 3;
-      for (size_t i = 0; i < 3; i++) cols[i] = SEGCOLOR(i);
+      for (size_t i = 0; i < numColors; i++) cols[i] = SEGCOLOR(i);
     } else {
       unsigned fac = 80;
       if (SEGMENT.palette == 52) {numColors = 5; fac = 61;} //C9 2 has 5 colors
       for (size_t i = 0; i < numColors; i++) {
-        cols[i] = SEGMENT.color_from_palette(i*fac, false, PALETTE_MOVING, 255);
+        cols[i] = SEGMENT.color_from_palette(i*fac, false, PALETTE_FIXED, 255);
       }
     }
   } else if (SEGMENT.intensity < 80) //pastel (easter) colors
@@ -978,17 +978,20 @@ static const char _data_FX_MODE_RUNNING_RANDOM[] PROGMEM = "Stream@!,Zone size;;
 uint16_t mode_larson_scanner(void) {
   if (SEGLEN <= 1) return mode_static();
 
-  const unsigned speed  = FRAMETIME * map(SEGMENT.speed, 0, 255, 96, 2); // map into useful range
-  const unsigned pixels = SEGLEN / speed; // how many pixels to advance per frame
+  // we need to perform a scan in a matter of seconds (1-30s) so we need to calculate how many pixels to draw per frame
+  // we will do that by mapping speed (0-255) to a scan time (30s - 1s) and calculating pixels per frame from there
+  const unsigned scanTime = map(SEGMENT.speed, 0, 255, 30000, 1000); // in milliseconds
+  // now map that to pixels per frame
+  const unsigned pixelsPerFrame = (SEGLEN * FRAMETIME) / scanTime;
 
   SEGMENT.fade_out(255-SEGMENT.intensity);
 
   if (SEGENV.step > strip.now) return FRAMETIME;  // we have a pause
 
-  unsigned index = SEGENV.aux1 + pixels;
+  unsigned index = SEGENV.aux1 + pixelsPerFrame;
   // are we slow enough to use frames per pixel?
-  if (pixels == 0) {
-    const unsigned frames = speed / SEGLEN; // how many frames per 1 pixel
+  if (pixelsPerFrame == 0) {
+    const unsigned frames = scanTime / (SEGLEN * FRAMETIME); // how many frames per 1 pixel
     if (SEGENV.step++ < frames) return FRAMETIME;
     SEGENV.step = 0;
     index++;
@@ -1004,7 +1007,7 @@ uint16_t mode_larson_scanner(void) {
 
   } else {
 
-    uint32_t cycleTime = 10 + (255 - SEGMENT.speed)*2;
+    uint32_t cycleTime = map(SEGMENT.speed, 0, 255, 10000, 500);
     uint32_t it = strip.now / cycleTime;
     const bool moving = SEGMENT.check1;
     // paint as many pixels as needed
@@ -1685,19 +1688,19 @@ static const char _data_FX_MODE_LIGHTNING[] PROGMEM = "Lightning@!,!;!,!;!";
 // combined function from original pride and colorwaves by @dedehai
 uint16_t mode_colorwaves_pride_base(bool isPride2015) {
   unsigned duration = 10 + SEGMENT.speed;
-  unsigned sPseudotime = SEGENV.step;
-  unsigned sHue16 = SEGENV.aux0;
+  uint32_t &sPseudotime = SEGENV.step;  // alias
+  uint16_t &sHue16 = SEGENV.aux0;       // alias
 
   uint8_t sat8 = isPride2015 ? beatsin88_t(87, 220, 250) : 255;             // 0.34 BPM [220, 250] : 255
   unsigned brightdepth = beatsin88_t(341, 96, 224);                         // 1.226 BPM [96, 224]
   unsigned brightnessthetainc16 = beatsin88_t(203, (25 * 256), (40 * 256)); // 0.79 BPM [6400, 10240] (~17°, ~28°)
   unsigned msmultiplier = beatsin88_t(147, 23, 60);                         // 0.54 BPM [23, 60]
 
-  unsigned hue16 = sHue16;
+  uint16_t hue16 = sHue16;
   unsigned hueinc16 = isPride2015 ? beatsin88_t(113, 1, 3000) :
                                     beatsin88_t(113, 60, 300) * SEGMENT.intensity * 10 / 255;
 
-  sPseudotime += duration * msmultiplier;
+  sPseudotime += duration * msmultiplier >> 4;  // time speed
   sHue16 += duration * beatsin88_t(400, 5, 9);  // 1.56 BPM [5, 9] * duration
   uint16_t brightnesstheta16 = sPseudotime;
 
@@ -1708,27 +1711,22 @@ uint16_t mode_colorwaves_pride_base(bool isPride2015) {
     if (isPride2015) {
       hue8 = hue16 >> 8;
     } else {
-      unsigned h16_128 = hue16 >> 7;
+      const unsigned h16_128 = hue16 >> 7;
       hue8 = (h16_128 & 0x100) ? (255 - (h16_128 >> 1)) : (h16_128 >> 1);
     }
 
     brightnesstheta16 += brightnessthetainc16;
     unsigned b16 = sin16_t(brightnesstheta16) + 32768;
-    b16 = (b16 * b16) / 65535; // square the sine wave to get a more pronounced effect
-    uint8_t bri8 = (b16 * brightdepth) / 65535; // bri8 in range of [0, 96-224]
+    b16 = (b16 * b16) >> 16; // square the sine wave to get a more pronounced effect
+    uint8_t bri8 = (b16 * brightdepth) >> 16; // bri8 in range of [0, 96-224]
     bri8 += (255 - brightdepth);
 
     if (isPride2015) {
-      SEGMENT.blendPixelColor(i, CRGBA(CHSV32(hue8, sat8, gamma8inv(bri8))), 64); // gamma8inv() to correct for new gamma introduced with segment blending
-      //SEGMENT.setPixelColor(i, CRGBA(CHSV32(hue8, sat8, bri8)));
+      SEGMENT.blendPixelColor(i, CRGBA(CHSV32(hue8, sat8, bri8)), 64);
     } else {
       SEGMENT.blendPixelColor(i, SEGMENT.color_from_palette(hue8, false, PALETTE_MOVING, 0, bri8), 128);
-      //SEGMENT.setPixelColor(i, SEGMENT.color_from_palette(hue8, false, PALETTE_MOVING, 0, bri8));
     }
   }
-
-  SEGENV.step = sPseudotime;
-  SEGENV.aux0 = sHue16;
 
   return FRAMETIME;
 }
@@ -1772,8 +1770,8 @@ uint16_t mode_palette() {
   constexpr mathType maxAngle                = 0x8000;
   constexpr mathType staticRotationScale     = 256;
   constexpr mathType animatedRotationScale   = 1;
-  constexpr int16_t (*sinFunction)(uint16_t) = &sin16;
-  constexpr int16_t (*cosFunction)(uint16_t) = &cos16;
+  constexpr int16_t (*sinFunction)(uint16_t) = &sin16_t;
+  constexpr int16_t (*cosFunction)(uint16_t) = &cos16_t;
 #else
   using mathType = float;
   using wideMathType = float;
@@ -1792,7 +1790,7 @@ uint16_t mode_palette() {
   const int  inputShift           = SEGMENT.speed;
   const int  inputSize            = SEGMENT.intensity;
   const int  inputRotation        = SEGMENT.custom1;
-  const bool inputAnimateShift    = SEGMENT.check1;
+  const bool inputAnimateShift    = !SEGMENT.check1;
   const bool inputAnimateRotation = SEGMENT.check2;
   const bool inputAssumeSquare    = SEGMENT.check3;
 
@@ -1858,11 +1856,10 @@ uint16_t mode_palette() {
   }
   return FRAMETIME;
 }
-static const char _data_FX_MODE_PALETTE[] PROGMEM = "Palette@Shift,Size,Rotation,,,Animate Shift,Animate Rotation,Anamorphic;;!;12;c1=128,c2=128,c3=128,o1=1,o2=0,o3=0";
+static const char _data_FX_MODE_PALETTE[] PROGMEM = "Palette@Shift,Size,Rotation,,,Stop Shift,Animate Rotation,Anamorphic;;!;12;c1=128,c2=128,c3=128,o1=0,o2=0,o3=0";
 
 
 #if !defined(WLED_PS_REPLACE_FX) || defined(WLED_DISABLE_PARTICLESYSTEM1D)
-// WLED limitation: Analog Clock overlay will NOT work when Fire2012 is active
 // Fire2012 by Mark Kriegsman, July 2012
 // as part of "Five Elements" shown here: http://youtu.be/knWiGsmgycY
 ////
@@ -1890,6 +1887,7 @@ static const char _data_FX_MODE_PALETTE[] PROGMEM = "Palette@Shift,Size,Rotation
 // There are two main parameters you can play with to control the look and
 // feel of your fire: COOLING (used in step 1 above) (Speed = COOLING), and SPARKING (used
 // in step 3 above) (Effect Intensity = Sparking).
+// WLED adds a third parameter: Boost (custom3) which increases the intensity of the sparks.
 uint16_t mode_fire_2012() {
   if (SEGLEN <= 1) return mode_static();
   const unsigned strips = SEGMENT.nrOfVStrips();
@@ -4740,19 +4738,20 @@ uint16_t mode_2DDrift() {              // By: Stepko   https://editor.soulmateli
   const int cols = SEG_W;
   const int rows = SEG_H;
 
-  const int colsCenter = (cols>>1) + (cols%2);
-  const int rowsCenter = (rows>>1) + (rows%2);
+  const int colsCenter = (cols>>1);
+  const int rowsCenter = (rows>>1);
+  const int maxDim = MAX(cols, rows)*2; // 4 times half the biggest dimension
 
   SEGMENT.fadeToBlackBy(128);
-  const float maxDim = MAX(cols, rows)/2;
-  unsigned long t = strip.now / (32 - (SEGMENT.speed>>3));
-  unsigned long t_20 = t/20; // softhack007: pre-calculating this gives about 10% speedup
-  for (float i = 1.0f; i < maxDim; i += 0.25f) {
-    float angle = radians(t * (maxDim - i));
-    int mySin = sin_t(angle) * i;
-    int myCos = cos_t(angle) * i;
-    SEGMENT.setPixelColorXY(colsCenter + mySin, rowsCenter + myCos, SEGMENT.color_from_palette((i * 20) + t_20, false, true, 255));
-    if (SEGMENT.check1) SEGMENT.setPixelColorXY(colsCenter + myCos, rowsCenter + mySin, SEGMENT.color_from_palette((i * 20) + t_20, false, true, 255));
+
+  const unsigned long t = strip.now / (128 + (128 - (SEGMENT.speed>>1)));
+  const unsigned long t_20 = t/20; // softhack007: pre-calculating this gives about 10% speedup
+  for (int i = 4; i < maxDim; i++) {
+    int16_t angle = (t * (maxDim - i)) * 182; // converted to 16-bit angle
+    const int mySin = sin16_t(angle) * i / 131072;  // i needs to be /4 and sin16_t returns -32768..32767, so total division by 131072
+    const int myCos = cos16_t(angle) * i / 131072;
+    SEGMENT.setPixelColorXY(colsCenter + mySin, rowsCenter + myCos, SEGMENT.color_from_palette((i * 5) + t_20, false, true, 255));
+    if (SEGMENT.check1) SEGMENT.setPixelColorXY(colsCenter + myCos, rowsCenter + mySin, SEGMENT.color_from_palette((i * 5) + t_20, false, true, 255));
   }
   SEGMENT.blur(SEGMENT.intensity>>3);
 
@@ -5095,7 +5094,7 @@ uint16_t mode_2DJulia(void) {                           // An animated Julia set
         }
 
        // This operation corresponds to z -> z^2+c where z=a+ib c=(x,y). Remember to use 'foil'.
-        b = 2*a*b + imAg;
+        b = 2 * a * b + imAg;
         a = aa - bb + reAl;
         iter++;
       } // while
@@ -5694,11 +5693,11 @@ uint16_t mode_2Dghostrider(void) {
   typedef struct Lighter {
     int16_t  gPosX;
     int16_t  gPosY;
-    uint16_t gAngle;
+    uint16_t gAngle; // in degrees
     int8_t   angleSpeed;
     uint16_t lightersPosX[LIGHTERS_AM];
     uint16_t lightersPosY[LIGHTERS_AM];
-    uint16_t Angle[LIGHTERS_AM];
+    uint16_t Angle[LIGHTERS_AM]; // in degrees
     uint16_t time[LIGHTERS_AM];
     bool     reg[LIGHTERS_AM];
     int8_t   Vspeed;
@@ -5733,8 +5732,9 @@ uint16_t mode_2Dghostrider(void) {
     CRGBA color = ULTRAWHITE;
     SEGMENT.setWuPixelColor(lighter->gPosX * 256 / 10, lighter->gPosY * 256 / 10, color);
 
-    lighter->gPosX += lighter->Vspeed * sin_t(radians(lighter->gAngle));
-    lighter->gPosY += lighter->Vspeed * cos_t(radians(lighter->gAngle));
+    const uint16_t gAngle = lighter->gAngle * 182; // converted to 16-bit angle
+    lighter->gPosX += lighter->Vspeed * sin16_t(gAngle) / 32768;
+    lighter->gPosY += lighter->Vspeed * cos16_t(gAngle) / 32768;
     lighter->gAngle += lighter->angleSpeed;
     if (lighter->gPosX < 0)               lighter->gPosX = (cols - 1) * 10;
     if (lighter->gPosX > (cols - 1) * 10) lighter->gPosX = 0;
@@ -5756,8 +5756,9 @@ uint16_t mode_2Dghostrider(void) {
         lighter->time[i] = 0;
         lighter->reg[i] = false;
       } else {
-        lighter->lightersPosX[i] += -7 * sin_t(radians(lighter->Angle[i]));
-        lighter->lightersPosY[i] += -7 * cos_t(radians(lighter->Angle[i]));
+        const uint16_t angle = lighter->Angle[i] * 182; // converted to 16-bit angle
+        lighter->lightersPosX[i] += -7 * sin16_t(angle) / 32768;
+        lighter->lightersPosY[i] += -7 * cos16_t(angle) / 32768;
       }
       SEGMENT.setWuPixelColor(lighter->lightersPosX[i] * 256 / 10, lighter->lightersPosY[i] * 256 / 10, SEGMENT.color_from_palette((256 - lighter->time[i]), false, false, 255));
     }
@@ -6035,13 +6036,14 @@ uint16_t mode_2Ddriftrose(void) {
 
   const float CX = (cols-cols%2)/2.f - .5f;
   const float CY = (rows-rows%2)/2.f - .5f;
-  const float L = min(cols, rows) / 2.f;
+  const int   L  = min(cols, rows)/2;
 
   SEGMENT.fadeToBlackBy(32+(SEGMENT.speed>>3));
   for (size_t i = 1; i < 37; i++) {
-    float angle = radians(i * 10);
-    uint32_t x = (CX + (sin_t(angle) * (beatsin8_t(i, 0, L*2)-L))) * 255.f;
-    uint32_t y = (CY + (cos_t(angle) * (beatsin8_t(i, 0, L*2)-L))) * 255.f;
+    const float angle = radians(i * 10);
+    const float range = beatsin8_t(i, 0, L*2) - L;
+    const uint32_t x = (CX + (sin_t(angle) * range)) * 255.f;
+    const uint32_t y = (CY + (cos_t(angle) * range)) * 255.f;
     SEGMENT.setWuPixelColor(x, y, SEGMENT.color_wheel(map(i, 1,37, 0,255)));
   }
   if (SEGMENT.intensity>>4) SEGMENT.blur(SEGMENT.intensity>>4);
@@ -6059,42 +6061,43 @@ uint16_t mode_2Dplasmarotozoom() {
 
   const int cols = SEG_W;
   const int rows = SEG_H;
+  const auto abs =[](int x) { return x<0 ? -x : x; };
 
-  unsigned dataSize = SEGMENT.length() + sizeof(float);
+  unsigned dataSize = SEGMENT.length();
   if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
-  float *a = reinterpret_cast<float*>(SEGENV.data);
-  byte *plasma = reinterpret_cast<byte*>(SEGENV.data+sizeof(float));
+  byte *plasma = reinterpret_cast<byte*>(SEGENV.data);
+  uint16_t &angle = SEGENV.aux1;
 
-  unsigned ms = strip.now/15;
+  const unsigned ms = strip.now/15;
 
   // plasma
   for (int j = 0; j < rows; j++) {
-    int index = j*cols;
+    const int index = j*cols;
     for (int i = 0; i < cols; i++) {
-      if (SEGMENT.check1) plasma[index+i] = (i * 4 ^ j * 4) + ms / 6;
-      else                plasma[index+i] = inoise8(i * 40, j * 40, ms);
+      plasma[index+i] = SEGMENT.check1 ? (i * 4 ^ j * 4) + ms / 6 : inoise8(i * 40, j * 40, ms);
     }
   }
 
   // rotozoom
-  float f       = (sin_t(*a/2)+((128-SEGMENT.intensity)/128.0f)+1.1f)/1.5f;  // scale factor
-  float kosinus = cos_t(*a) * f;
-  float sinus   = sin_t(*a) * f;
+  const float a       = radians(angle/128.0f);
+  const float f       = (float)(SEGMENT.intensity + 64) * (sin_t(a/2.0f) + 1.1f) / 288.f;  // scale factor
+  const float kosinus = cos_t(a) * f;
+  const float sinus   = sin_t(a) * f;
   for (int i = 0; i < cols; i++) {
-    float u1 = i * kosinus;
-    float v1 = i * sinus;
+    const float u1 = i * kosinus;
+    const float v1 = i * sinus;
     for (int j = 0; j < rows; j++) {
-        byte u = abs8(u1 - j * sinus) % cols;
-        byte v = abs8(v1 + j * kosinus) % rows;
+        const int u = abs(u1 - j * sinus) % cols;
+        const int v = abs(v1 + j * kosinus) % rows;
         SEGMENT.setPixelColorXY(i, j, SEGMENT.color_from_palette(plasma[v*cols+u], false, PALETTE_FIXED, 255));
     }
   }
-  *a -= 0.03f + float(SEGENV.speed-128)*0.0002f;  // rotation speed
-  if(*a < -6283.18530718f) *a += 6283.18530718f; // 1000*2*PI, protect sin/cos from very large input float values (will give wrong results)
+  angle += (SEGENV.speed+1) * (SEGMENT.custom3 ? beatsin8_t(SEGMENT.custom3) - 128 : 128) / 128;  // rotation speed (1deg per frame at speed = 128)
+  if (angle >= 46080) angle -= 46080; // prevent overflow
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DPLASMAROTOZOOM[] PROGMEM = "Rotozoomer@!,Scale,,,,Alt;;!;2;pal=54";
+static const char _data_FX_MODE_2DPLASMAROTOZOOM[] PROGMEM = "Rotozoomer@!,Scale,,,Sway,Alt;;!;2;pal=54,c3=0";
 
 
 // Distortion waves - ldirko

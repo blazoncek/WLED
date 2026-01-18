@@ -154,7 +154,7 @@ class St7789DisplayUsermod : public Usermod {
         tft.setTextDatum(MC_DATUM);
         tft.setTextSize(2);
         tft.print("Loading...");
-        if (TFT_BL >= 0) 
+        if (TFT_BL >= 0)
         {
             pinMode(TFT_BL, OUTPUT); // Set backlight pin to output mode
             digitalWrite(TFT_BL, HIGH); // Turn backlight on.
@@ -188,13 +188,13 @@ class St7789DisplayUsermod : public Usermod {
             return;
         }
         lastUpdate = millis();
-  
+
         // Turn off display after 5 minutes with no change.
         if (!displayTurnedOff && millis() - lastRedraw > 5*60*1000)
         {
-            if (TFT_BL >= 0) digitalWrite(TFT_BL, LOW); // Turn backlight off. 
+            if (TFT_BL >= 0) digitalWrite(TFT_BL, LOW); // Turn backlight off.
             displayTurnedOff = true;
-        } 
+        }
 
         // Check if values which are shown on display changed from the last time.
         if ((((apActive) ? String(apSSID) : WiFi.SSID()) != knownSsid) ||
@@ -213,7 +213,7 @@ class St7789DisplayUsermod : public Usermod {
             return;
         }
         needRedraw = false;
-    
+
         if (displayTurnedOff)
         {
             digitalWrite(TFT_BL, HIGH); // Turn backlight on.
@@ -290,18 +290,18 @@ class St7789DisplayUsermod : public Usermod {
         tft.setTextColor(TFT_CYAN);
         tft.setCursor(0, 144);
         char lineBuffer[tftcharwidth+1];
-        extractModeName(knownMode, JSON_mode_names, lineBuffer, tftcharwidth);
+        extractModeName(knownMode, JSON_mode_names, lineBuffer, countof(lineBuffer));
         tft.print(lineBuffer);
 
         // palette name
         tft.setTextColor(TFT_YELLOW);
         tft.setCursor(0, 168);
-        extractModeName(knownPalette, JSON_palette_names, lineBuffer, tftcharwidth);
+        extractModeName(knownPalette, JSON_palette_names, lineBuffer, countof(lineBuffer));
         tft.print(lineBuffer);
 
         tft.setCursor(0, 192);
         tft.setTextColor(TFT_SILVER);
-        sprintf_P(buff, PSTR("FX  Spd:%3d Int:%3d"), effectSpeed, effectIntensity);
+        snprintf_P(buff, countof(buff), PSTR("FX  Spd:%3d Int:%3d"), effectSpeed, effectIntensity);
         tft.print(buff);
 
         // Fifth row with estimated mA usage

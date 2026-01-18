@@ -36,8 +36,8 @@ var cfg = {
 var hol = [
 	[0, 11, 24, 4, "https://aircoookie.github.io/xmas.png"],		// christmas
 	[0, 2, 17, 1, "https://images.alphacoders.com/491/491123.jpg"], // st. Patrick's day
-	[2025, 3, 20, 2, "https://aircoookie.github.io/easter.png"],	// easter 2025
-	[2024, 2, 31, 2, "https://aircoookie.github.io/easter.png"],	// easter 2024
+	[2026, 3, 5, 2, "https://aircoookie.github.io/easter.png"],		// easter 2025
+	[2027, 2, 28, 2, "https://aircoookie.github.io/easter.png"],	// easter 2027
 	[0, 6, 4, 1, "https://images.alphacoders.com/516/516792.jpg"],	// 4th of July
 	[0, 0, 1, 1, "https://images.alphacoders.com/119/1198800.jpg"]	// new year
 ];
@@ -57,6 +57,7 @@ function handleVisibilityChange() {if (!d.hidden && new Date () - lastUpdate > 3
 function sCol(na, col) {d.documentElement.style.setProperty(na, col);}
 function gId(c) {return d.getElementById(c);}
 function gEBCN(c) {return d.getElementsByClassName(c);}
+function qSA(s) { return d.querySelectorAll(s); }
 function isEmpty(o) {for (const i in o) return false; return true;}
 function isObj(i) {return (i && typeof i === 'object' && !Array.isArray(i));}
 function isNumeric(n) {return !isNaN(parseFloat(n)) && isFinite(n);}
@@ -65,7 +66,7 @@ function isNumeric(n) {return !isNaN(parseFloat(n)) && isFinite(n);}
 function isRgbBlack(a) {return (parseInt(a.r) == 0 && parseInt(a.g) == 0 && parseInt(a.b) == 0);}
 
 // returns RGB color from a given dataset
-function rgbStr(a) {return "rgb(" + a.r + "," + a.g + "," + a.b + ")";}
+function rgbStr(a) {return `rgb(${a.r},${a.g},${a.b})`;}
 
 // brightness approximation for selecting white as text color if background bri < 127, and black if higher
 function rgbBri(a) {return 0.2126*parseInt(a.r) + 0.7152*parseInt(a.g) + 0.0722*parseInt(a.b);}
@@ -296,7 +297,7 @@ function onLoad()
 	d.addEventListener("visibilitychange", handleVisibilityChange, false);
 	//size();
 	gId("cv").style.opacity=0;
-	d.querySelectorAll('input[type="range"]').forEach((sl)=>{
+	qSA('input[type="range"]').forEach((sl)=>{
 		sl.addEventListener('touchstart', toggleBubble);
 		sl.addEventListener('touchend', toggleBubble);
 	});
@@ -404,14 +405,14 @@ function checkUsed(i)
 function pName(i)
 {
 	var n = "Preset " + i;
-	if (pJson && pJson[i] && pJson[i].n) n = pJson[i].n;
+	if (pJson?.[i]?.n) n = pJson[i].n;
 	return n;
 }
 
 function isPlaylist(i)
 {
-	if (isNumeric(i)) return pJson[i].playlist && pJson[i].playlist.ps;
-	if (isObj(i)) return i.playlist && i.playlist.ps;
+	if (isNumeric(i)) return !!pJson?.[i]?.playlist?.ps;
+	if (isObj(i)) return !!i?.playlist?.ps;
 	return false;
 }
 
@@ -448,7 +449,7 @@ function presetError(empty)
 		if (bckstr.length > 10) hasBackup = true;
 	} catch (e) {}
 
-	var cn = `<div class="pres c" style="padding:8px;margin-bottom:8px;${empty?'':'cursor:pointer;'}" ${empty?'':'onclick="pmtLast=0;loadPresets();"'}>`;
+	var cn = `<div class="pres c" style="padding:8px;margin-bottom:8px;${empty?'':'cursor:pointer;'}" ${empty?'':'onclick="pmtLast=0;loadPresets();"'} title=";${empty?'':'Reload'}">`;
 	if (empty)
 		cn += `You have no presets yet!`;
 	else
@@ -493,7 +494,7 @@ function loadPresets(callback = null)
 	}
 
 	// afterwards
-	if (!callback && pmt == pmtLast) return;
+	if (!callback && pmtLast > 0 && pmt == pmtLast) return;
 
 	fetch(getURL('/presets.json'), {
 		method: 'get'
@@ -678,10 +679,10 @@ function parseInfo(i) {
 	isM = mw>0 && mh>0;
 	if (!isM) {
 		gId("filter2D").classList.add('hide');
-		d.querySelectorAll('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='none';});
+		qSA('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='none';});
 	} else {
 		gId("filter2D").classList.remove('hide');
-		d.querySelectorAll('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='';});
+		qSA('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='';});
 	}
 	gId("updBt").style.display = (i.opt & 1) ? '':'none';
 }
@@ -735,12 +736,13 @@ ${inforow("Average FPS",i.leds.fps)}
 ${inforow("MAC address",i.mac)}
 ${inforow("CPU clock",i.clock," MHz")}
 ${inforow("Flash size",i.flash," MB")}
+${inforow("Flash mode",`(${i.fmode?i.fmode:'N/A'}) ${i.fspeed}`," MHz")}
 ${inforow("Filesystem",i.fs.u + "/" + i.fs.t + " kB (" +Math.round(i.fs.u*100/i.fs.t) + "%)")}
 ${inforow("Environment",i.arch + " " + i.core + " (" + i.lwip + ")")}
 </table>`;
 	gId('kv').innerHTML = cn;
 	//  update all sliders in Info
-	d.querySelectorAll('#kv .sliderdisplay').forEach((sd,i) => {
+	qSA('#kv .sliderdisplay').forEach((sd,i) => {
 		let s = sd.previousElementSibling;
 		if (s) updateTrail(s);
 	});
@@ -927,7 +929,7 @@ function populateSegments(s)
 	if (!isM && !noNewSegs && (cfg.comp.seglen?parseInt(gId(`seg${lSeg}s`).value):0)+parseInt(gId(`seg${lSeg}e`).value)<ledCount) gId(`segr${lSeg}`).classList.remove("hide");
 	gId('segutil2').style.display = (segCount > 1) ? "block":"none"; // rsbtn parent
 
-	if (Array.isArray(li.maps) && li.maps.length>1) {
+	if (li?.maps?.length>1) {
 		let cont = `Ledmap:&nbsp;<select class="sel-sg" onchange="requestJson({'ledmap':parseInt(this.value)})">`;
 		for (const k of li.maps) cont += `<option ${s.ledmap===k.id?"selected":""} value="${k.id}">${k.id==0?'Default':(k.n?k.n:'ledmap'+k.id+'.json')}</option>`;
 		cont += "</select></div>";
@@ -962,7 +964,7 @@ function populateEffects(effects)
 		let nm = ef.name+" ";
 		let fd = "";
 		if (ef.name.indexOf("RSVD") < 0) {
-			if (Array.isArray(fxdata) && fxdata.length>id) {
+			if (fxdata?.length>id) {
 				if (fxdata[id].length==0) fd = ";;!;1"
 				else fd = fxdata[id];
 				let eP = (fd == '')?[]:fd.split(";"); // effect parameters
@@ -1006,7 +1008,7 @@ function populatePalettes(lJson)
 
 function redrawPalPrev()
 {
-	d.querySelectorAll('#pallist .lstI').forEach((pal,i) =>{
+	qSA('#pallist .lstI').forEach((pal,i) =>{
 		let lP = pal.querySelector('.prev');
 		if (lP) {
 			lP.style = genPalPrevCss(pal.dataset.id);
@@ -1035,15 +1037,18 @@ function genPalPrevCss(id)
 		let r, g, b;
 		let index = false;
 		if (Array.isArray(e)) {
+			// handle actual color entry [index, r, g, b]
 			index = Math.round(e[0]/255*100);
 			r = e[1];
 			g = e[2];
 			b = e[3];
 		} else if (e == 'r') {
+			// handle "r" entry for random colors
 			r = Math.random() * 255;
 			g = Math.random() * 255;
 			b = Math.random() * 255;
 		} else {
+			// handle "c1", "c2", ... color references (since palettesData is only filled once and then used from local storage)
 			let i = e[1] - 1;
 			var cd = gId('csl').children;
 			r = parseInt(cd[i].dataset.r);
@@ -1364,18 +1369,18 @@ function updateSelectedFx()
 		var selectedName = selectedEffect.querySelector(".name").innerText;
 
 		// Display selected effect name on button in simplified UI
-		let selectedNameOnlyAscii = selectedName.replace(/[^\x00-\x7F]/g, "");
+		let selectedNameOnlyAscii = selectedName.replace(/[^\x20-\x7F]/g, "");
 		if (simplifiedUI) {
 			gId("fxbtn").innerText = "Effect: " + selectedNameOnlyAscii;
 		}
 
 		// hide 2D mapping and/or sound simulation options
-		d.querySelectorAll(`#segcont div[data-map="map2D"]`).forEach((seg)=>{
+		qSA(`#segcont div[data-map="map2D"]`).forEach((seg)=>{
 			let not2Dfx = d.querySelector(`#fxlist div[data-id="${seg.dataset.fx}"] .name`).innerText.indexOf("\u25A6") < 0;
 			if (not2Dfx) seg.classList.remove('hide');
 			else seg.classList.add('hide');
 		});
-		d.querySelectorAll(`#segcont div[data-snd="si"]`).forEach((seg)=>{
+		qSA(`#segcont div[data-snd="si"]`).forEach((seg)=>{
 			if (selectedName.indexOf("\u266A")<0 && selectedName.indexOf("\u266B")<0) seg.classList.add('hide'); else seg.classList.remove('hide'); // also "♫ "?
 		});
 	}
@@ -1444,6 +1449,43 @@ function readState(s,command=false)
 {
 	if (!s) return false;
 	if (s.success) return true; // no data to process
+	if (s.error && s.error != 0) {
+		var errstr = "";
+		switch (s.error) {
+			case  1:
+				errstr = "Denied!";
+				break;
+			case  3:
+				errstr = "Buffer locked!";
+				break;
+			case  7:
+				errstr = "Buffer allocation failed!";
+				break;
+			case  8:
+				errstr = "Effect RAM depleted!";
+				break;
+			case  9:
+				errstr = "JSON parsing error!";
+				break;
+			case 10:
+				errstr = "Could not mount filesystem!";
+				break;
+			case 11:
+				errstr = "Not enough space to save preset!";
+				break;
+			case 12:
+				errstr = "Preset not found.";
+				break;
+			case 13:
+				errstr = "Missing ir.json.";
+				break;
+			case 19:
+				errstr = "A filesystem error has occured.";
+				break;
+		}
+		showToast('Error ' + s.error + ": " + errstr, true);
+		return s.error != 3;
+	}
 
 	isOn = s.on;
 	gId('sliderBri').value = s.bri;
@@ -1491,7 +1533,7 @@ function readState(s,command=false)
 		has2D    |= (i.stop - i.start) > 1 && (i.stopY ? (i.stopY - i.startY) : 1) > 1;
 	}
 	// update color selectors with values from first selected segment (or mainseg)
-	d.querySelectorAll("#csl button").forEach((e,j) => {
+	qSA("#csl button").forEach((e,j) => {
 		e.dataset.r = i.col[j][0];
 		e.dataset.g = i.col[j][1];
 		e.dataset.b = i.col[j][2];
@@ -1509,43 +1551,6 @@ function readState(s,command=false)
 	gId('checkO1').checked = !(!i.o1);
 	gId('checkO2').checked = !(!i.o2);
 	gId('checkO3').checked = !(!i.o3);
-
-	if (s.error && s.error != 0) {
-		var errstr = "";
-		switch (s.error) {
-			case  1:
-				errstr = "Denied!";
-				break;
-			case  3:
-				errstr = "Buffer locked!";
-				break;
-			case  7:
-				errstr = "Buffer allocation failed!";
-				break;
-			case  8:
-				errstr = "Effect RAM depleted!";
-				break;
-			case  9:
-				errstr = "JSON parsing error!";
-				break;
-			case 10:
-				errstr = "Could not mount filesystem!";
-				break;
-			case 11:
-				errstr = "Not enough space to save preset!";
-				break;
-			case 12:
-				errstr = "Preset not found.";
-				break;
-			case 13:
-				errstr = "Missing ir.json.";
-				break;
-			case 19:
-				errstr = "A filesystem error has occured.";
-				break;
-		}
-		showToast('Error ' + s.error + ": " + errstr, true);
-	}
 
 	selectedPal = i.pal;
 	selectedFx = i.fx;
@@ -1577,7 +1582,7 @@ function readState(s,command=false)
 //       - Defining SEGCOL(<i>) can override a specific palette using these values (e.g. Color Gradient)
 function setEffectParameters(idx)
 {
-	if (!(Array.isArray(fxdata) && fxdata.length>idx)) return;
+	if (!(fxdata?.length>idx)) return;
 	var controlDefined = fxdata[idx].length;
 	var effectPar = fxdata[idx];
 	var effectPars = (effectPar == '')?[]:effectPar.split(";");
@@ -1586,7 +1591,7 @@ function setEffectParameters(idx)
 	var paOnOff = (effectPars.length<3  || effectPars[2]=='')?[]:effectPars[2].split(","); // palette on/off control
 
 	// set html slider items on/off
-	d.querySelectorAll("#sliders .sliderwrap").forEach((slider, i)=>{
+	qSA("#sliders .sliderwrap").forEach((slider, i)=>{
 		let text = slider.getAttribute("title");
 		if ((!controlDefined && i<((idx<128)?2:nSliders)) || (slOnOff.length>i && slOnOff[i]!="")) {
 			if (slOnOff.length>i && slOnOff[i]!="!") text = slOnOff[i];
@@ -1600,7 +1605,7 @@ function setEffectParameters(idx)
 
 	if (slOnOff.length > 5) { // up to 3 checkboxes
 		gId('fxopt').classList.remove('fade');
-		d.querySelectorAll("#sliders .ochkl").forEach((check, i)=>{
+		qSA("#sliders .ochkl").forEach((check, i)=>{
 			let text = check.getAttribute("title");
 			if (5+i<slOnOff.length && slOnOff[5+i]!=='') {
 				if (slOnOff.length>5+i && slOnOff[5+i]!="!") text = slOnOff[5+i];
@@ -1626,7 +1631,7 @@ function setEffectParameters(idx)
 	var cslLabel = '';
 	var sep = '';
 	var cslCnt = 0, oCsel = csel;
-	d.querySelectorAll("#csl button").forEach((btn,i)=>{
+	qSA("#csl button").forEach((btn,i)=>{
 		// if no controlDefined or coOnOff has a value
 		btn.dataset.hide = 0;
 		btn.classList.remove('hide');
@@ -1709,7 +1714,7 @@ function requestJson(command=null)
 		//command.bs = parseInt(gId('bs').value);
 		req = JSON.stringify(command);
 		if (req.length > 1340) useWs = false; // do not send very long requests over websocket
-		if (req.length >  500 && lastinfo && lastinfo.arch == "esp8266") useWs = false; // esp8266 can only handle 500 bytes
+		if (req.length >  500 && lastinfo?.arch == "esp8266") useWs = false; // esp8266 can only handle 500 bytes
 	};
 
 	if (useWs) {
@@ -1760,13 +1765,16 @@ function requestJson(command=null)
 			if (simplifiedUI) simplifyUI();
 		}
 		var s = json.state ? json.state : json;
-		readState(s);
+		if (!readState(s)) {
+			setTimeout(requestJson,250);
+			return;
+		}
 
 		//load presets and open websocket sequentially
 		if (!pJson || isEmpty(pJson)) setTimeout(()=>{
 			loadPresets(()=>{
 				wsRpt = 0;
-				if (!(ws && ws.readyState === WebSocket.OPEN)) makeWS();
+				if (!(ws?.readyState === WebSocket.OPEN)) makeWS();
 			});
 		},25);
 		reqsLegal = true;
@@ -1785,7 +1793,7 @@ function togglePower()
 {
 	isOn = !isOn;
 	var obj = {"on": isOn};
-	if (isOn && lastinfo && lastinfo.live && lastinfo.liveseg>=0) {
+	if (isOn && lastinfo?.live && lastinfo?.liveseg>=0) {
 		obj.live = false;
 		obj.seg = [];
 		obj.seg[0] = {"id": lastinfo.liveseg, "frz": false};
@@ -1823,7 +1831,7 @@ function toggleLiveview()
 	if (isInfo && isM) toggleInfo();
 	if (isNodes && isM) toggleNodes();
 	isLv = !isLv;
-	let wsOn = ws && ws.readyState === WebSocket.OPEN;
+	let wsOn = ws?.readyState === WebSocket.OPEN;
 
 	var lvID = "liveview";
 	if (isM && wsOn) {
@@ -1917,7 +1925,7 @@ function resetUtil(off=false)
 		if (!gId(`seg${i}`)) continue;
 		if (!gId(`seg${i}sel`).checked) gId('selall').checked = false; // uncheck if at least one is unselected.
 	}
-	if (lSeg>2) d.querySelectorAll("#Segments .pop").forEach((e)=>{e.classList.remove("hide");});
+	if (lSeg>2) qSA("#Segments .pop").forEach((e)=>{e.classList.remove("hide");});
 }
 
 function makePlSel(p, el)
@@ -1946,7 +1954,7 @@ function refreshPlE(p)
 	var dels = plEDiv.getElementsByClassName("btn-pl-del");
 	if (dels.length < 2) dels[0].style.display = "none";
 
-	d.querySelectorAll(`#seg${p+100} .sel`).forEach((i)=>{
+	qSA(`#seg${p+100} .sel`).forEach((i)=>{
 		if (i.dataset.val) {
 			if (parseInt(i.dataset.val) > 0) i.value = i.dataset.val;
 			else plJson[p].ps[i.dataset.index] = parseInt(i.value);
@@ -2019,7 +2027,7 @@ function plM(p)
 	plJson[p].dur.forEach((e,i)=>{
 		const d = gId(`pl${p}du${i}`);
 		plJson[p].dur[i] = e = man ? 0 : 100;
-		d.value = e/10; // 10s default 
+		d.value = e/10; // 10s default
 		d.readOnly = man;
 	});
 }
@@ -2079,7 +2087,7 @@ ${makePlSel(i, plJson[i].end?plJson[i].end:0)}
 	<input type="checkbox" id="p${i}sbchk">
 	<span class="checkmark"></span>
 </label>`;
-		if (Array.isArray(lastinfo.maps) && lastinfo.maps.length>1) {
+		if (lastinfo?.maps?.length>1) {
 			content += `<div class="lbl-l">Ledmap:&nbsp;<div class="sel-p"><select class="sel-p" id="p${i}lmp"><option value="">Unchanged</option>`;
 			for (const k of lastinfo.maps) content += `<option value="${k.id}"${(i>0 && pJson[i].ledmap==k.id)?" selected":""}>${k.id==0?'Default':(k.n?k.n:'ledmap'+k.id+'.json')}</option>`;
 			content += "</select></div></div>";
@@ -2120,7 +2128,7 @@ function makePUtil()
 	p.innerHTML = `<div class="presin expanded">${makeP(0)}</div>`;
 	let pTx = gId('p0txt');
 	pTx.focus();
-	pTx.value = d.querySelector(`#fxlist div[data-id="${selectedFx}"] .name`).innerText;
+	pTx.value = d.querySelector(`#fxlist div[data-id="${selectedFx}"] .name`).innerText.replace(/[^\x20-\x7F]/g, "").trim(); // remove non-ascii chars
 	pTx.select();
 	p.scrollIntoView({
 		behavior: 'smooth',
@@ -2232,7 +2240,7 @@ function selGrp(g)
 	event.stopPropagation();
 	var obj = {"seg":[]};
 	for (let i=0; i<=lSeg; i++) if (gId(`seg${i}`)) obj.seg.push({"id":i,"sel":false});
-	d.querySelectorAll(`#segcont div[data-set="${g}"]`).forEach((s)=>{
+	qSA(`#segcont div[data-set="${g}"]`).forEach((s)=>{
 		let i = parseInt(s.id.substring(3));
 		obj.seg[i] = {"id":i,"sel":true};
 	});
@@ -2413,7 +2421,7 @@ function tglFreeze(s=null)
 	if (s!==null) {
 		obj.seg.id = s;
 		// if live segment, enter live override (which also unfreezes)
-		if (lastinfo && s==lastinfo.liveseg && lastinfo.live) obj = {"lor":1};
+		if (s==lastinfo?.liveseg && lastinfo?.live) obj = {"lor":1};
 	}
 	requestJson(obj);
 }
@@ -2500,7 +2508,9 @@ function setLor(i)
 function setPreset(i)
 {
 	var obj = {"ps":i};
-	if (!isPlaylist(i) && pJson && pJson[i] && (!pJson[i].win || pJson[i].win.indexOf("Please") <= 0)) {
+	if (isPlaylist(i)) {
+		obj.on = true; // force on
+	} else if (pJson?.[i] && (!pJson[i]?.win?.indexOf("Please") > 0)) { // must use ! check here as undefined is possible in optional chaining (?.)
 		// we will send the complete preset content as to avoid delay introduced by
 		// async nature of applyPreset() and having to read the preset from file system.
 		obj = {"pd":i}; // use "pd" instead of "ps" to indicate that we are sending the preset content directly
@@ -2508,8 +2518,7 @@ function setPreset(i)
 		delete obj.ql; // no need for quick load
 		delete obj.n;  // no need for name
 	}
-	if (isPlaylist(i)) obj.on = true; // force on
-	showToast("Loading preset " + pName(i) +" (" + i + ")");
+	showToast(`Loading preset ${pName(i)} (${i})`);
 	requestJson(obj);
 }
 
@@ -2557,7 +2566,7 @@ function saveP(i,pl)
 	var pQN = gId(`p${i}ql`).value;
 	if (pQN.length > 0) obj.ql = pQN;
 
-	showToast("Saving " + pN +" (" + pI + ")");
+	showToast(`Saving ${pN} (${pI})`);
 	requestJson(obj);
 	if (obj.o) {
 		pJson[pI] = obj;
@@ -2847,7 +2856,7 @@ function loadPalettesData(callback = null)
 	if (lsPalData) {
 		try {
 			var dp = JSON.parse(lsPalData);
-			if (dp && isObj(dp.p)) {
+			if (isObj(dp?.p)) {
 				palettesData = dp.p;
 				if (callback) callback();
 				return;
@@ -2891,7 +2900,7 @@ function getPalettesData(page, callback)
 /*
 function hideModes(txt)
 {
-	for (let e of (d.querySelectorAll('#fxlist .lstI')||[])) {
+	for (let e of (qSA('#fxlist .lstI')||[])) {
 		let iT = e.querySelector('.name').innerText;
 		let f = false;
 		if (txt==="2D") f = iT.indexOf("\u25A6") >= 0 && iT.indexOf("\u22EE") < 0; // 2D && !1D
@@ -2908,17 +2917,17 @@ function search(field, listId = null) {
 
 	// clear filter if searching in fxlist
 	if (listId === 'fxlist' && search) {
-		d.querySelectorAll("#filters input[type=checkbox]").forEach((e) => { e.checked = false; });
+		qSA("#filters input[type=checkbox]").forEach((e) => { e.checked = false; });
 	}
 
 	// do not search if filter is active
-	if (d.querySelectorAll("#filters input[type=checkbox]:checked").length) return;
+	if (qSA("#filters input[type=checkbox]:checked").length) return;
 
 	// filter list items but leave (Default & Solid) always visible
 	const listItems = gId(listId).querySelectorAll('.lstI');
 	listItems.forEach((listItem, i) => {
 		if (listId !== 'pcont' && i === 0) return;
-		const listItemName = listItem.querySelector('.name').innerText.toUpperCase().replace(/[^\x00-\x7F]/g, ""); // ASCII only
+		const listItemName = listItem.querySelector('.name').innerText.toUpperCase().replace(/[^\x20-\x7F]/g, ""); // ASCII only
 		const searchIndex = listItemName.indexOf(field.value.toUpperCase());
 		listItem.dataset.searchIndex = searchIndex < 0 ? Number.MAX_SAFE_INTEGER : searchIndex;
 		if ((searchIndex < 0) && !listItem.classList.contains("selected")) {
@@ -2967,7 +2976,7 @@ function clean(clearButton) {
 }
 
 function initFilters() {
-	d.querySelectorAll("#filters input[type=checkbox]").forEach((e) => { e.checked = false; });
+	qSA("#filters input[type=checkbox]").forEach((e) => { e.checked = false; });
 }
 
 function filterFocus(e) {
@@ -2979,18 +2988,16 @@ function filterFocus(e) {
 		// compute sticky top (with delay for transition)
 		if (!h) setTimeout(() => {
 			sCol('--sti', (sti+f.offsetHeight) + "px"); // has an unpleasant consequence on palette offset
-			//console.log(sti + " -> " + (sti+f.offsetHeight));
 		}, 255);
 		f.classList.remove('fade');	// immediately show (still has transition)
 	}
 	if (e.type === "blur") {
 		setTimeout(() => {
-			if (e.target === document.activeElement && document.hasFocus()) return;
+			if (e.target === d.activeElement && d.hasFocus()) return;
 			// do not hide if filter is active
 			if (!c) {
 				// compute sticky top
 				sCol('--sti', (sti-h) + "px"); // has an unpleasant consequence on palette offset
-				//console.log(sti + " -> " + (sti-h));
 				f.classList.add('fade');
 			}
 		}, 255);	// wait with hiding
@@ -3002,10 +3009,10 @@ function filterFx() {
 	inputField.value = '';
 	inputField.focus();
 	clean(inputField.nextElementSibling);
-	d.querySelectorAll('#fxlist .lstI').forEach((listItem, i) => {
+	qSA('#fxlist .lstI').forEach((listItem, i) => {
 		const listItemName = listItem.querySelector('.name').innerText;
 		let hide = false;
-		d.querySelectorAll("#filters input[type=checkbox]").forEach((e) => { if (e.checked && !listItemName.includes(e.dataset.flt)) hide = i > 0 /*true*/; });
+		qSA("#filters input[type=checkbox]").forEach((e) => { if (e.checked && !listItemName.includes(e.dataset.flt)) hide = i > 0 /*true*/; });
 		listItem.style.display = hide && !listItem.classList.contains("selected") ? 'none' : '';
 	});
 }
@@ -3156,7 +3163,7 @@ function size()
 
 function togglePcMode(fromB = false)
 {
-	let ap = (fromB && !lastinfo) || (lastinfo && lastinfo.wifi && lastinfo.wifi.ap);
+	let ap = (fromB && !lastinfo) || (lastinfo?.wifi?.ap);
 	if (fromB) {
 		pcModeA = !pcModeA;
 		localStorage.setItem('pcm', pcModeA);
@@ -3192,7 +3199,7 @@ function mergeDeep(target, ...sources)
 
 function tooltip(cont=null)
 {
-	d.querySelectorAll((cont?cont+" ":"")+"[title]").forEach((element)=>{
+	qSA((cont?cont+" ":"")+"[title]").forEach((element)=>{
 		element.addEventListener("pointerover", ()=>{
 			// save title
 			element.setAttribute("data-title", element.getAttribute("title"));
@@ -3219,7 +3226,7 @@ function tooltip(cont=null)
 		});
 
 		element.addEventListener("pointerout", ()=>{
-			d.querySelectorAll('.tooltip').forEach((tooltip)=>{
+			qSA('.tooltip').forEach((tooltip)=>{
 				tooltip.classList.remove("visible");
 				d.body.removeChild(tooltip);
 			});
@@ -3305,7 +3312,7 @@ function simplifyUI() {
 	gId("buttonSr").style.display = "none";
 	gId("buttonPcm").style.display = "none";
 
-	// Hide bottom bar 
+	// Hide bottom bar
 	gId("bot").style.display = "none";
 	document.documentElement.style.setProperty('--bh', '0px');
 

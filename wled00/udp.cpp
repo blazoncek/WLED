@@ -149,7 +149,7 @@ void notify(byte callMode, bool followUp)
     // send global data
     DEBUG_PRINTLN(F("ESP-NOW sending first packet."));
     constexpr size_t headerSize = sizeof(EspNowPartialPacket) - sizeof(EspNowPartialPacket::data);
-    constexpr size_t bufferSize = sizeof(buffer.data)/sizeof(uint8_t);
+    constexpr size_t bufferSize = sizeof(buffer.data);
     size_t packetSize = 41; // size of static UDP data (excluding segments)
     size_t s0 = 0;          // number of already prepared/sent segments
     memcpy(buffer.data, udpOut, packetSize);
@@ -188,7 +188,7 @@ void notify(byte callMode, bool followUp)
       DEBUG_PRINTLN(F("ESP-NOW sending packet failed."));
     }
   }
-  if (udpConnected) 
+  if (udpConnected)
 #endif
   {
     DEBUG_PRINTLN(F("UDP sending packet."));
@@ -330,8 +330,8 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
           selseg.custom2 = udpIn[30+ofs];
           selseg.custom3 = udpIn[31+ofs] & 0x1F;
           selseg.check1  = (udpIn[31+ofs]>>5) & 0x1;
-          selseg.check1  = (udpIn[31+ofs]>>6) & 0x1;
-          selseg.check1  = (udpIn[31+ofs]>>7) & 0x1;
+          selseg.check2  = (udpIn[31+ofs]>>6) & 0x1;
+          selseg.check3  = (udpIn[31+ofs]>>7) & 0x1;
         }
       }
       if (receiveSegmentBounds) {
@@ -867,7 +867,7 @@ uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const
       const size_t ARTNET_CHANNELS_PER_PACKET = isRGBW?512:510; // 512/4=128 RGBW LEDs, 510/3=170 RGB LEDs
       const size_t packetCount = ((channelCount-1)/ARTNET_CHANNELS_PER_PACKET)+1;
 
-      uint32_t channel = 0; 
+      uint32_t channel = 0;
       size_t bufferOffset = 0;
 
       sequenceNumber++;

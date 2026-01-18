@@ -64,7 +64,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     }
 
     strlcpy(hostName, request->arg(F("CM")).c_str(), sizeof(hostName));
-    if (strlen(hostName) == 0) sprintf_P(hostName, PSTR("wled-%.*s"), 6, escapedMac.c_str() + 6); // hostname must not be empty
+    if (strlen(hostName) == 0) sprintf_P(hostName, PSTR("wled-%.*s"), 6, escapedMac + 6); // hostname must not be empty
 #ifdef ARDUINO_ARCH_ESP32
   #ifdef WLED_USE_ETHERNET
     ETH.setHostname(hostName);
@@ -334,12 +334,13 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
         buttons[i].type = BTN_TYPE_NONE;
       }
     }
-    // we should remove all unused buttons from the vector
+    // we should remove all unused buttons from the vector (except one)
     for (int i = buttons.size()-1; i > 0; i--) {
       if (buttons[i].pin < 0 && buttons[i].type == BTN_TYPE_NONE) {
         buttons.erase(buttons.begin() + i); // remove button from vector
       }
     }
+    buttons.shrink_to_fit();
 
     briS = request->arg(F("CA")).toInt();
 

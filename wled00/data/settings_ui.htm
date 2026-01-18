@@ -103,7 +103,7 @@
 		var str = "";
 		str = addRec(s,"",l);
 		oldUrl = "";
-		
+
 		gId('gen').innerHTML = str;
 		if (gId('theme_bg_rnd').checked) {
 			toggle("Image");
@@ -128,7 +128,7 @@
 
 	function SetLS()
 	{
-		var l = d.querySelectorAll('.agi');
+		var l = qSA('.agi');
 		for (var i = 0; i < l.length; i++) {
 			var e = l[i];
 			var val = e.classList.contains('cb') ? e.checked : e.value;
@@ -152,12 +152,12 @@
 		localStorage.removeItem('wledPalx');
 		showToast("Cleared.");
 	}
-	
+
 	function Save() {
 		SetLS();
 		if (d.Sf.DS.value != initial_ds || d.Sf.SU.checked != initial_su) d.Sf.submit();
 	}
-	
+
 	function S() {
 		getLoc();
 		loadJS(getURL('/settings/s.js?p=3'), false, undefined, ()=>{
@@ -223,9 +223,9 @@
 		<i class="warn">The following UI customization settings are unique both to the WLED device and this browser.<br>
 		You will need to set them again if using a different browser, device or WLED IP address.<br>
 		Refresh the main UI to apply changes.</i><br>
-		
+
 		<div id="gen">Loading settings...</div>
-		
+
 		<h3>UI Appearance</h3>
 		<span class="l"></span>: <input type="checkbox" id="comp_labels" class="agi cb"><br>
 		<span class="l"></span>: <input type="checkbox" id="comp_pcmbot" class="agi cb"><br>
