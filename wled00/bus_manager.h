@@ -267,14 +267,15 @@ class BusDigital : public Bus {
   private:
     void    *_busPtr;
     uint32_t _busPowerSum;
-    uint8_t  _skip;
-    uint8_t  _colorOrder;
-    uint8_t  _pins[2];
-    uint8_t  _iType;
     uint16_t _frequencykHz;
-    uint8_t  _milliAmpsPerLed;
     uint16_t _milliAmpsMax;
     uint16_t _milliAmpsLimit;
+    uint8_t  _pins[2];
+    uint8_t  _skip;
+    uint8_t  _colorOrder;
+    uint8_t  _iType;
+    uint8_t  _milliAmpsPerLed;
+    bool     _consistent; // RMT bus needs consistent buffers otherwise skipped LEDs or gaps may show random colors
 
     static uint16_t _milliAmpsTotal; // is overwitten/recalculated on each show()
 
@@ -308,13 +309,13 @@ class BusPwm : public Bus {
     static std::vector<LEDType> getLEDTypes();
 
   private:
+    uint16_t _frequency;
     uint8_t _pins[5]; // must be less or equal to OUTPUT_MAX_PINS
     uint8_t _data[5]; // must be less or equal to OUTPUT_MAX_PINS
     #ifdef ARDUINO_ARCH_ESP32
     uint8_t _ledcStart;
     #endif
     uint8_t _depth;
-    uint16_t _frequency;
 
     void deallocatePins();
 };
@@ -358,14 +359,14 @@ class BusNetwork : public Bus {
     static std::vector<LEDType> getLEDTypes();
 
   private:
-    IPAddress _client;
-    uint8_t   _UDPtype;
-    uint8_t   _UDPchannels;
-    bool      _broadcastLock;
     uint8_t   *_data;
+    IPAddress _client;
     #ifdef ARDUINO_ARCH_ESP32
     String    _hostname;
     #endif
+    uint8_t   _UDPtype;
+    uint8_t   _UDPchannels;
+    bool      _broadcastLock;
 };
 
 
@@ -387,6 +388,8 @@ class BusHub75Matrix : public Bus {
     void deallocatePins();
     void cleanup();
 
+    static inline uint8_t *getCustomPinsArray() { return _customPins; }
+
     ~BusHub75Matrix() {
       cleanup();
     }
@@ -398,6 +401,7 @@ class BusHub75Matrix : public Bus {
     //byte *_ledsDirty;
     MatrixPanel_I2S_DMA *display;
     VirtualMatrixPanel  *virtualDisp;
+    static uint8_t _customPins[14];
 };
 #endif
 
@@ -475,9 +479,11 @@ namespace BusManager {
     return j;
   }
 
+  #ifdef WLED_DEBUG // used only in general debug
   size_t          memUsage();
+  #endif
   inline uint16_t currentMilliamps()     { return _gMilliAmpsUsed; }
-  void            initializeABL(unsigned gMilliAmpsMax);  // setup per output ABL parameters, call once after buses are initialized
+  void initializeABL(unsigned gMilliAmpsMax);  // setup per output ABL parameters, call once after buses are initialized
 
   void useParallelOutput(); // workaround for inaccessible PolyBus
   bool hasParallelOutput(); // workaround for inaccessible PolyBus

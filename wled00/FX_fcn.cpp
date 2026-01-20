@@ -1128,54 +1128,39 @@ void WS2812FX::finalizeInit() {
   BusManager::removeAll();
 
   unsigned digitalCount = 0;
-  #if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+  unsigned maxI2S = 0;
+#if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
   // determine if it is sensible to use parallel I2S outputs on ESP32 (i.e. more than 5 outputs = 1 I2S + 4 RMT)
-  unsigned maxLedsOnBus = 0;
+  bool needsParallelI2S = useParallelI2S;
   unsigned busType = 0;
   for (const auto &bus : busConfigs) {
     if (Bus::isDigital(bus.type) && !Bus::is2Pin(bus.type)) {
-      digitalCount++;
-      if (busType == 0) busType = bus.type; // remember first bus type
-      if (busType != bus.type) {
-        DEBUG_PRINTF_P(PSTR("Mixed digital bus types detected! Forcing single I2S output.\n"));
-        useParallelI2S = false; // mixed bus types, no parallel I2S
+      const unsigned memB = bus.memUsage(digitalCount++);   // does not include DMA/RMT buffer
+      if (digitalCount <= WLED_MAX_RMT_CHANNELS) continue;  // no restrictions for RMT buses
+      if (busType == 0) busType = bus.type;                 // remember first I2S bus type
+      if (busType != bus.type || bus.count > MAX_I2S_LEDS) {
+        DEBUG_PRINTF_P(PSTR("Mixed digital I2S bus types detected or too many LEDs! Forcing single I2S output.\n"));
+        needsParallelI2S = false; // mixed bus types, no parallel I2S
       }
-      if (bus.count > maxLedsOnBus) maxLedsOnBus = bus.count;
+      if (memB > maxI2S) maxI2S = memB;
     }
   }
-  DEBUG_PRINTF_P(PSTR("Maximum LEDs on a bus: %u\nDigital buses: %u\n"), maxLedsOnBus, digitalCount);
-  // we may remove 600 LEDs per bus limit when NeoPixelBus is updated beyond 2.8.3
-  if (digitalCount > 1 && maxLedsOnBus <= 600 && useParallelI2S) BusManager::useParallelOutput(); // must call before creating buses
-  else useParallelI2S = false; // enforce single I2S
-  digitalCount = 0;
-  #endif
+  // we may remove 600 LEDs per bus limit if there is more than 60kB free DMA memory (S3 or plain ESP32 without usermods)
+  if (needsParallelI2S && digitalCount > WLED_MAX_RMT_CHANNELS+1) {
+    BusManager::useParallelOutput(); // must call before creating buses
+    maxI2S *= 8;
+  }
+  DEBUG_PRINTF_P(PSTR("Maximum I2S memory: %uB\nDigital buses: %u\n"), maxI2S, digitalCount);
+  digitalCount = 0; // reset for actual bus creation
+#endif
 
   DEBUG_PRINTF_P(PSTR("Heap before buses: %d\n"), getFreeHeapSize());
   // create buses/outputs
   unsigned mem = 0;
-  unsigned maxI2S = 0;
   for (const auto &bus : busConfigs) {
-    unsigned memB = bus.memUsage(Bus::isDigital(bus.type) && !Bus::is2Pin(bus.type) ? digitalCount++ : 0); // does not include DMA/RMT buffer
-    mem += memB;
-    // estimate maximum I2S memory usage (only relevant for digital non-2pin busses)
-    #if !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(ESP8266)
-      #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3)
-    const bool usesI2S = ((useParallelI2S && digitalCount <= 8) || (!useParallelI2S && digitalCount == 1));
-      #elif defined(CONFIG_IDF_TARGET_ESP32S2)
-    const bool usesI2S = (useParallelI2S && digitalCount <= 8);
-      #else
-    const bool usesI2S = false;
-      #endif
-    if (Bus::isDigital(bus.type) && !Bus::is2Pin(bus.type) && usesI2S) {
-      #ifdef NPB_CONF_4STEP_CADENCE
-      constexpr unsigned stepFactor = 4; // 4 step cadence (4 bits per pixel bit)
-      #else
-      constexpr unsigned stepFactor = 3; // 3 step cadence (3 bits per pixel bit)
-      #endif
-      unsigned i2sCommonSize = stepFactor * bus.count * (3*Bus::hasRGB(bus.type)+Bus::hasWhite(bus.type)+Bus::hasCCT(bus.type)) * (Bus::is16bit(bus.type)+1);
-      if (i2sCommonSize > maxI2S) maxI2S = i2sCommonSize;
-    }
-    #endif
+    const bool isDigitalNon2Pin = Bus::isDigital(bus.type) && !Bus::is2Pin(bus.type);
+    unsigned memB = bus.memUsage(isDigitalNon2Pin ? digitalCount++ : 0); // does not include DMA/RMT buffer
+    if (!isDigitalNon2Pin || digitalCount <= WLED_MAX_RMT_CHANNELS) mem += memB;
     if (mem + maxI2S <= MAX_LED_MEMORY) {
       if (BusManager::add(bus) < 0) {
         DEBUG_PRINTF_P(PSTR("Bus %d (%d) #%u not created or not valid!\n"), (int)bus.type, (int)bus.count, digitalCount);

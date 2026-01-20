@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2601101
+#define VERSION 2601201
 #else
 #define VERSION BUILD
 #endif
@@ -87,6 +87,7 @@
   #include <ESP8266mDNS.h>
   #include <ESPAsyncTCP.h>
   #include <LittleFS.h>
+  #define WLED_FS LittleFS
   extern "C"
   {
   #include <user_interface.h>
@@ -110,8 +111,10 @@
       #define CONFIG_LITTLEFS_FOR_IDF_3_2
     #endif
     #include <LITTLEFS.h>
+    #define WLED_FS LITTLEFS
   #else
     #include <LittleFS.h>
+    #define WLED_FS LittleFS
   #endif
   #include "esp_task_wdt.h"
 
@@ -209,17 +212,6 @@ using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
   #include <IRremoteESP8266.h>
   #include <IRrecv.h>
   #include <IRutils.h>
-#endif
-
-//Filesystem to use for preset and config files. SPIFFS or LittleFS on ESP8266, SPIFFS only on ESP32 (now using LITTLEFS port by lorol)
-#ifdef ESP8266
-  #define WLED_FS LittleFS
-#else
-  #if LOROL_LITTLEFS
-    #define WLED_FS LITTLEFS
-  #else
-    #define WLED_FS LittleFS
-  #endif
 #endif
 
 // GLOBAL VARIABLES

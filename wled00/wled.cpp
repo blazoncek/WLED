@@ -542,6 +542,25 @@ void WLED::setup()
 
 void WLED::beginStrip()
 {
+  // experimental: load custom HUB75 pins from file
+  // move to a better location later (see also bus manager BusHub75Matrix class)
+  char fileName[32]; strcpy_P(fileName, PSTR("/hub75pins.json"));
+  File f = WLED_FS.open(fileName, "r");
+  if (f) {
+    DEBUG_PRINTLN(F("Reading custom HUB75 pins."));
+    StaticJsonDocument<256> doc; // enough for 14 pins
+    // read the array into JSON buffer
+    if (f.size() > 0 && deserializeJson(doc, f) == DeserializationError::Ok) {
+      JsonArray pins = doc.as<JsonArray>();
+      if (!pins.isNull() && pins.size() == 14) {
+        uint8_t *pinMem = BusHub75Matrix::getCustomPinsArray();
+        for (size_t i = 0; i < pins.size(); i++) pinMem[i] = pins[i].as<int>() < 0 ? 255 : min(pins[i].as<int>(), 255);
+        DEBUG_PRINTLN(F("Custom Hub75 pins loaded."));
+      }
+    }
+    f.close();
+  }
+
   // Initialize NeoPixel Strip and button
   strip.setTransition(0); // temporarily prevent transitions to reduce segment copies
   strip.finalizeInit(); // busses created during deserializeConfig() if config existed

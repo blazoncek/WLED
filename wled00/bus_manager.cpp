@@ -9,14 +9,14 @@
 #include <ESPmDNS.h>
 #include "driver/ledc.h"
 #include "soc/ledc_struct.h"
-  #if !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
-    #define LEDC_MUTEX_LOCK()    do {} while (xSemaphoreTake(_ledc_sys_lock, portMAX_DELAY) != pdPASS)
-    #define LEDC_MUTEX_UNLOCK()  xSemaphoreGive(_ledc_sys_lock)
-    extern xSemaphoreHandle _ledc_sys_lock;
-  #else
-    #define LEDC_MUTEX_LOCK()
-    #define LEDC_MUTEX_UNLOCK()
-  #endif
+#if !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
+  #define LEDC_MUTEX_LOCK()    do {} while (xSemaphoreTake(_ledc_sys_lock, portMAX_DELAY) != pdPASS)
+  #define LEDC_MUTEX_UNLOCK()  xSemaphoreGive(_ledc_sys_lock)
+  extern xSemaphoreHandle _ledc_sys_lock;
+#else
+  #define LEDC_MUTEX_LOCK()
+  #define LEDC_MUTEX_UNLOCK()
+#endif
 #endif
 #include "bus_manager.h"
 #include "bus_wrapper.h"
@@ -27,17 +27,13 @@
 
 extern char hostName[];
 extern bool cctICused;
-extern bool useParallelI2S;
-
-inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
-inline size_t getContiguousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest contiguous free block
 
 //udp.cpp
 uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const byte *buffer, uint8_t bri=255, bool isRGBW=false);
 
 //util.cpp (contraproductive!!)
 // PSRAM allocation wrappers
-#if defined(ARDUINO_ARCH_ESP32) && !defined(ARDUINO_ARCH_ESP32C3)
+#if defined(BOARD_HAS_PSRAM) && defined(ARDUINO_ARCH_ESP32) && !defined(ARDUINO_ARCH_ESP32C3)
 extern "C" {
   void *p_malloc(size_t);           // prefer PSRAM over DRAM
   void *p_calloc(size_t, size_t);   // prefer PSRAM over DRAM
@@ -137,16 +133,16 @@ uint32_t Bus::autoWhiteCalc(uint32_t c) const {
 BusDigital::BusDigital(const BusConfig &bc, uint8_t nr)
 : Bus(bc.type, bc.start, bc.autoWhite, bc.count, bc.reversed, (bc.refreshReq || bc.type == TYPE_TM1814))
 , _busPowerSum(0)
+, _frequencykHz(0)
+, _milliAmpsMax(bc.milliAmpsMax)
+, _milliAmpsLimit(0)
 , _skip(bc.skipAmount) //sacrificial pixels
 , _colorOrder(bc.colorOrder)
 , _milliAmpsPerLed(bc.milliAmpsPerLed)
-, _milliAmpsMax(bc.milliAmpsMax)
-, _milliAmpsLimit(0)
 {
   DEBUGBUS_PRINTLN(F("Bus: Creating digital bus."));
   if (!isDigital(bc.type) || !bc.count) { DEBUGBUS_PRINTLN(F("Not digial or empty bus!")); return; }
   if (!PinManager::allocatePin(bc.pins[0], true, PinOwner::BusDigital)) { DEBUGBUS_PRINTLN(F("Pin 0 allocated!")); return; }
-  _frequencykHz = 0U;
   _pins[0] = bc.pins[0];
   if (is2Pin(bc.type)) {
     if (!PinManager::allocatePin(bc.pins[1], true, PinOwner::BusDigital)) {
@@ -157,6 +153,7 @@ BusDigital::BusDigital(const BusConfig &bc, uint8_t nr)
     _pins[1] = bc.pins[1];
     _frequencykHz = bc.frequency ? bc.frequency : 2000U; // 2MHz clock if undefined
   }
+  _consistent = nr < WLED_MAX_RMT_CHANNELS || _skip > 0;
   _iType = PolyBus::getI(bc.type, _pins, nr);
   if (_iType == I_NONE) { DEBUGBUS_PRINTLN(F("Incorrect iType!")); return; }
   _hasRgb = hasRGB(bc.type);
@@ -227,7 +224,7 @@ void BusDigital::show() {
   if (!_valid) return;
   // per-port ABL (will not work well with CCT LEDs)
   estimateCurrentAndLimitBri();  // will also fill _milliAmpsTotal
-  PolyBus::show(_busPtr, _iType, _skip); // faster if buffer consistency is not important (no skipped LEDs)
+  PolyBus::show(_busPtr, _iType, _consistent); // faster if buffer consistency is not important (no skipped LEDs)
   clearPixelsCurrent(); // reset for next show
 }
 
@@ -695,6 +692,9 @@ void BusNetwork::cleanup() {
   #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
   #include <ESP32-VirtualMatrixPanel-I2S-DMA.h>
 
+  static inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
+  static inline size_t getContiguousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest contiguous free block
+  
 /*
 // functions to get/set bits in an array - based on functions created by @Brandon502 for GOL
 // used for tracking dirty LEDs in HUB75 matrix
@@ -760,8 +760,11 @@ static const uint8_t * const getHub75Pins(uint8_t type, uint8_t *dest = nullptr)
       b = __s2drive;
       break;
 #endif
+    case TYPE_HUB75MATRIX_CUSTOM:
+      b = BusHub75Matrix::getCustomPinsArray();
+      break;
   }
-  if (dest != nullptr) memcpy_P(dest, b, HUB75_PIN_COUNT);
+  if (dest != nullptr && b != nullptr) memcpy_P(dest, b, HUB75_PIN_COUNT);
   return b;
 }
 
@@ -1066,11 +1069,12 @@ std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
     {TYPE_HUB75MATRIX_S3,      "H", PSTR("HUB75 (S3 with PSRAM)")},
 #elif defined(CONFIG_IDF_TARGET_ESP32)
     {TYPE_HUB75MATRIX_TRINITY, "H", PSTR("HUB75 (Trinity/ElectroDragon)")},
-    {TYPE_HUB75MATRIX_FORUM,   "H", PSTR("HUB75 (ESP32 Forum Pinout)")}
+    {TYPE_HUB75MATRIX_FORUM,   "H", PSTR("HUB75 (ESP32 Forum Pinout)")},
 #else
-    {TYPE_HUB75MATRIX_S2DRIVE, "H", PSTR("HUB75 (S2 Drive P4)")}
+    {TYPE_HUB75MATRIX_S2DRIVE, "H", PSTR("HUB75 (S2 Drive P4)")},
 #endif
-  };
+    {TYPE_HUB75MATRIX_CUSTOM,  "H", PSTR("HUB75 (custom pins)")}
+};
   for (auto &t : types) {
     t.requiredPins.resize(HUB75_PIN_COUNT);
     getHub75Pins(t.id, &t.requiredPins[0]);  // vector behaves like an array
@@ -1080,8 +1084,16 @@ std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
   }
   return types;
 }
+
+uint8_t BusHub75Matrix::_customPins[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // placeholder for custom pin configuration
 #endif // WLED_ENABLE_HUB75MATRIX
 
+
+#ifdef NPB_CONF_4STEP_CADENCE
+constexpr size_t stepFactor = 4; // 4 step cadence (4 bits per pixel bit)
+#else
+constexpr size_t stepFactor = 3; // 3 step cadence (3 bits per pixel bit)
+#endif
 
 //utility to get the approx. memory usage of a given BusConfig
 size_t BusConfig::memUsage(unsigned nr) const {
@@ -1101,7 +1113,9 @@ size_t BusConfig::memUsage(unsigned nr) const {
 #endif
   } else if (Bus::isDigital(type)) {
     // if any of digital buses uses I2S, there is additional common I2S DMA buffer not accounted for here
-    return sizeof(BusDigital) + PolyBus::memUsage(count + skipAmount, PolyBus::getI(type, pins, nr));
+    size_t mem = PolyBus::memUsage(count + skipAmount, PolyBus::getI(type, pins, nr));
+    if (!Bus::is2Pin(type) && nr >= WLED_MAX_RMT_CHANNELS) mem *= stepFactor;
+    return sizeof(BusDigital) + sizeof(PolyBus) + mem;
   } else if (Bus::isOnOff(type)) {
     return sizeof(BusOnOff);
   } else {
@@ -1109,7 +1123,7 @@ size_t BusConfig::memUsage(unsigned nr) const {
   }
 }
 
-
+#ifdef WLED_DEBUG // used only in general debug
 size_t BusManager::memUsage() {
   // when ESP32, S2 & S3 use parallel I2S only the largest bus determines the total memory requirements for back buffers
   // front buffers are always allocated per bus
@@ -1123,20 +1137,16 @@ size_t BusManager::memUsage() {
     #if !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(ESP8266)
     if (bus->isDigital() && !bus->is2Pin()) {
       digitalCount++;
-      if ((PolyBus::isParallelI2S1Output() && digitalCount <= 8) || (!PolyBus::isParallelI2S1Output() && digitalCount == 1)) {
-        #ifdef NPB_CONF_4STEP_CADENCE
-        constexpr unsigned stepFactor = 4; // 4 step cadence (4 bits per pixel bit)
-        #else
-        constexpr unsigned stepFactor = 3; // 3 step cadence (3 bits per pixel bit)
-        #endif
-        unsigned i2sCommonSize = stepFactor * bus->getLength() * bus->getNumberOfChannels() * (bus->is16bit()+1);
-        if (i2sCommonSize > maxI2S) maxI2S = i2sCommonSize;
+      if (digitalCount >= WLED_MAX_RMT_CHANNELS) {
+        unsigned i2sSize = stepFactor * bus->getLength() * bus->getNumberOfChannels() * (bus->is16bit()+1);
+        if (i2sSize > maxI2S) maxI2S = i2sSize;
       }
     }
     #endif
   }
   return size + maxI2S;
 }
+#endif
 
 int BusManager::add(const BusConfig &bc) {
   DEBUGBUS_PRINTF_P(PSTR("Bus: Adding bus (p:%d v:%d)\n"), getNumBusses(), getNumVirtualBusses());

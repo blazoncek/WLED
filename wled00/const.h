@@ -104,7 +104,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
     #include "driver/ledc.h"
   #endif
   #define WLED_MAX_ANALOG_CHANNELS (LEDC_CHANNEL_MAX*LEDC_SPEED_MODE_MAX)
-  #define WLED_MAX_RMT_CHANNELS ((uint8_t)RMT_CHANNEL_MAX)
+  #define WLED_MAX_RMT_CHANNELS ((size_t)RMT_CHANNEL_MAX)
   #if defined(CONFIG_IDF_TARGET_ESP32C3)    // 2 RMT, 6 LEDC, only has 1 I2S but NPB does not support it ATM
     #define WLED_MAX_DIGITAL_CHANNELS 2
     //#define WLED_MAX_ANALOG_CHANNELS 6
@@ -114,15 +114,18 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
     #define WLED_MAX_DIGITAL_CHANNELS 12    // x4 RMT + x1/x8 I2S0
     //#define WLED_MAX_ANALOG_CHANNELS 8
     #define WLED_MIN_VIRTUAL_BUSSES 4       // no longer used for bus creation but used to distinguish S2/S3 in UI
+    #define MAX_I2S_LEDS 300
   #elif defined(CONFIG_IDF_TARGET_ESP32S3)  // 4 RMT, 8 LEDC, has 2 I2S but NPB supports parallel x8 LCD on I2S1
     #define WLED_MAX_DIGITAL_CHANNELS 12    // x4 RMT + x8 I2S-LCD
     //#define WLED_MAX_ANALOG_CHANNELS 8
     #define WLED_MIN_VIRTUAL_BUSSES 6       // no longer used for bus creation but used to distinguish S2/S3 in UI
-  #else
+    #define MAX_I2S_LEDS 1000
+    #else
     // the last digital bus (I2S0) will prevent Audioreactive usermod from functioning
     #define WLED_MAX_DIGITAL_CHANNELS 16    // x1/x8 I2S1 + x8 RMT
     //#define WLED_MAX_ANALOG_CHANNELS 16
     #define WLED_MIN_VIRTUAL_BUSSES 6       // no longer used for bus creation but used to distinguish S2/S3 in UI
+    #define MAX_I2S_LEDS 600
   #endif
 #endif
 // WLED_MAX_BUSSES was used to define the size of busses[] array which is no longer needed
@@ -369,6 +372,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #define TYPE_HUB75MATRIX_S3      67           //plain S3 Hub75 matrix board
 #define TYPE_HUB75MATRIX_TRINITY 68           //Trinity/ElectroDragon ESP32 board (https://esp32trinity.com/, https://www.electrodragon.com/product/rgb-matrix-panel-drive-interface-board-for-esp32-dma/)
 #define TYPE_HUB75MATRIX_S2DRIVE 69           //S2 drive (https://www.ledclub.net/2025/03/15/esp32-s2-drive-p4-80x40-led-matrix/)
+#define TYPE_HUB75MATRIX_CUSTOM  71           //custom pins defined in hub75pin.json file (manually uploaded, contains JSON array of pin numbers)
 #define TYPE_HUB75MATRIX_MAX     71
 //Network types (master broadcast) (80-95)
 #define TYPE_VIRTUAL_MIN         80

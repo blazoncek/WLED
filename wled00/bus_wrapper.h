@@ -331,6 +331,9 @@ class PolyBus {
   static void* create(uint8_t busType, uint8_t* pins, uint16_t len, uint8_t channel) {
   #if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
     // NOTE: "channel" is only used on ESP32 (and its variants) for RMT channel allocation
+    // since 0.15.3-b1 we reverted to prefer RMT (HighPriority IRQ) followed by I2S (either x1 or x8 if more than 5/9 buses are needed)
+    // use of parallel I2S (x8) is determined in WS2812FX::finalizeInit() and set using BusManager wrapper
+    /*
     // since 0.15.0-b3 I2S1 is favoured for classic ESP32 and moved to position 0 (channel 0) so we need to subtract 1 for correct RMT allocation
     #if defined(CONFIG_IDF_TARGET_ESP32)
     if (channel > 0) {
@@ -342,6 +345,7 @@ class PolyBus {
     #elif defined(CONFIG_IDF_TARGET_ESP32S3)
     if (_useParallelI2S && channel > 7) channel -= 8; // accommodate I2S1 which is used as 1st bus
     #endif
+    */
   #endif
     void* busPtr = nullptr;
     switch (busType) {
@@ -1159,37 +1163,35 @@ class PolyBus {
           return I_8266_U0_NEODUAL_4 + offset;
       }
       #else //ESP32
-      uint8_t offset = 0; // 0 = RMT (num 1-8), 1 = I2S1 [I2S0 is used by Audioreactive]
-      #if defined(CONFIG_IDF_TARGET_ESP32S2)
-      // ESP32-S2 only has 4 RMT channels
-      if (_useParallelI2S) {
-        if (num > 11) return I_NONE;
-        if (num < 8) offset = 1;  // use x8 parallel I2S0 channels then RMT
-      } else {
-        if (num > 4) return I_NONE;
-        if (num > 3) offset = 1;  // only one I2S0 (use last to allow Audioreactive)
-      }
-      #elif defined(CONFIG_IDF_TARGET_ESP32C3)
+      uint8_t offset = 0; // 0 = RMT (num 0-7 or 0-3), 1 = I2S1 [I2S0 is used by Audioreactive]
+      #if defined(CONFIG_IDF_TARGET_ESP32C3)
       // On ESP32-C3 only the first 2 RMT channels are usable for transmitting
       if (num > 1) return I_NONE;
       //if (num > 1) offset = 1; // I2S not supported yet (only 1 I2S)
+      #elif defined(CONFIG_IDF_TARGET_ESP32S2)
+      // ESP32-S2 only has 4 RMT channels
+      if (_useParallelI2S) {
+        if (num > 11) return I_NONE;
+      } else {
+        if (num > 4) return I_NONE;
+      }
+      if (num > 3) offset = 1;  // only one I2S0 (use last to allow Audioreactive)
       #elif defined(CONFIG_IDF_TARGET_ESP32S3)
       // On ESP32-S3 only the first 4 RMT channels are usable for transmitting
       if (_useParallelI2S) {
         if (num > 11) return I_NONE;
-        if (num < 8) offset = 1;    // use x8 parallel I2S LCD channels
       } else {
-        if (num > 3) return I_NONE; // do not use single I2S (as it is not supported)
+        if (num > 4) return I_NONE;
       }
+      if (num > 3) offset = 1; // use I2S in x8 LCD mode (for one bus only)
       #else
-      // standard ESP32 has 8 RMT and x1/x8 I2S1 channels
+      // standard ESP32 has 8 RMT and x1/x8 I2S1 channels (I2S0 is used by Audioreactive)
       if (_useParallelI2S) {
         if (num > 15) return I_NONE;
-        if (num < 8) offset = 1;  // 8 I2S followed by 8 RMT
       } else {
-        if (num > 9) return I_NONE;
-        if (num == 0) offset = 1; // prefer I2S1 for 1st bus (less flickering but more RAM needed)
+        if (num > 8) return I_NONE;
       }
+      if (num > 7) offset = 1;  // 8 RMT followed by 8 I2S (x1/x8 channels)
       #endif
       switch (busType) {
         case TYPE_WS2812_1CH_X3:

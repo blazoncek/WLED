@@ -324,8 +324,8 @@
 					if (type.t != undefined && type.t != "") {
 						opt.setAttribute('data-type', type.t);
 					}
-					if (type.p != undefined && Array.isArray(type.p) && type.p.length > 0) {
-						opt.setAttribute('data-pins', type.p.join(','));
+					if (type.p != undefined && Array.isArray(type.p)) {
+						if ([...new Set(type.p)].length > 1) opt.setAttribute('data-pins', type.p.join(','));
 					}
 					sel.appendChild(opt);
 				}
@@ -850,6 +850,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 					if (ut === s[s.selectedIndex].dataset.type) continue; // skip own type
 					disable(`option[data-type="${ut}"]`); // disable already used unique type
 				}
+				disable('option[value="71"][data-type^="H"]:not([data-pins])');	            // disable custom Hub75 if pins are not defined
 				// determine available analog pins
 				disable(`option[data-type^="${'A'.repeat(maxA - analogB + (isPWM(t) ? numPins(t) : 0) + 1)}"]`);
 				// update UI elements
