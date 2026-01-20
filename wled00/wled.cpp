@@ -542,6 +542,7 @@ void WLED::setup()
 
 void WLED::beginStrip()
 {
+#if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
   // experimental: load custom HUB75 pins from file
   // move to a better location later (see also bus manager BusHub75Matrix class)
   char fileName[32]; strcpy_P(fileName, PSTR("/hub75pins.json"));
@@ -560,6 +561,7 @@ void WLED::beginStrip()
     }
     f.close();
   }
+#endif
 
   // Initialize NeoPixel Strip and button
   strip.setTransition(0); // temporarily prevent transitions to reduce segment copies
