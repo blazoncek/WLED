@@ -185,7 +185,11 @@ class Bus {
     static constexpr bool  isOnOff(uint8_t type)      { return (type == TYPE_ONOFF); }
     static constexpr bool  isPWM(uint8_t type)        { return (type >= TYPE_ANALOG_MIN && type <= TYPE_ANALOG_MAX); }
     static constexpr bool  isVirtual(uint8_t type)    { return (type >= TYPE_VIRTUAL_MIN && type <= TYPE_VIRTUAL_MAX); }
+#if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
     static constexpr bool  isHub75(uint8_t type)      { return (type >= TYPE_HUB75MATRIX_MIN && type <= TYPE_HUB75MATRIX_MAX); }
+#else
+    static constexpr bool  isHub75(uint8_t type)      { return false; }
+#endif
     static constexpr bool  isUsermod(uint8_t type)    { return type == TYPE_USERMOD; }
     static constexpr bool  is16bit(uint8_t type)      { return type == TYPE_UCS8903 || type == TYPE_UCS8904 || type == TYPE_SM16825; }
     static constexpr bool  mustRefresh(uint8_t type)  { return type == TYPE_TM1814; }
