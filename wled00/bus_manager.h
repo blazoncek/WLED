@@ -370,6 +370,7 @@ class BusNetwork : public Bus {
 };
 
 
+// Hub75 driver will eat about 12kB of flash and about 3kB of RAM so it is conditionally included for the moment
 #if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
 // forward declarations
 class MatrixPanel_I2S_DMA;
@@ -401,7 +402,7 @@ class BusHub75Matrix : public Bus {
     //byte *_ledsDirty;
     MatrixPanel_I2S_DMA *display;
     VirtualMatrixPanel  *virtualDisp;
-    static uint8_t _customPins[14];
+    static uint8_t _customPins[14]; // another option would be to allocate memory dynamically (if needed), but this is simpler for now
 };
 #endif
 

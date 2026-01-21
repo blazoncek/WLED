@@ -365,22 +365,28 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #define TYPE_HD108               55
 #define TYPE_2PIN_MAX            63
 //Digital types (Hub75 matrix) (64-71)
+#if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
 #define TYPE_HUB75MATRIX_MIN     64
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
 #define TYPE_HUB75MATRIX_PORTAL  64           //Adafruit Matrix Portal S3 board (https://www.adafruit.com/product/5778)
 #define TYPE_HUB75MATRIX_MOONHUB 65           //MoonHub75 board
-#define TYPE_HUB75MATRIX_FORUM   66           //ESP32 Forum/SmartMatrix board (https://github.com/rorosaurus/esp32-hub75-driver)
-#define TYPE_HUB75MATRIX_S3      67           //plain S3 Hub75 matrix board
-#define TYPE_HUB75MATRIX_TRINITY 68           //Trinity/ElectroDragon ESP32 board (https://esp32trinity.com/, https://www.electrodragon.com/product/rgb-matrix-panel-drive-interface-board-for-esp32-dma/)
-#define TYPE_HUB75MATRIX_S2DRIVE 69           //S2 drive (https://www.ledclub.net/2025/03/15/esp32-s2-drive-p4-80x40-led-matrix/)
-#define TYPE_HUB75MATRIX_CUSTOM  71           //custom pins defined in hub75pin.json file (manually uploaded, contains JSON array of pin numbers)
+#define TYPE_HUB75MATRIX_S3      66           //plain S3 Hub75 matrix board
+#elif defined(CONFIG_IDF_TARGET_ESP32S2)
+#define TYPE_HUB75MATRIX_S2DRIVE 64           //S2 drive (https://www.ledclub.net/2025/03/15/esp32-s2-drive-p4-80x40-led-matrix/)
+#elif defined(CONFIG_IDF_TARGET_ESP32)
+#define TYPE_HUB75MATRIX_TRINITY 64           //Trinity/ElectroDragon ESP32 board (https://esp32trinity.com/, https://www.electrodragon.com/product/rgb-matrix-panel-drive-interface-board-for-esp32-dma/)
+#define TYPE_HUB75MATRIX_FORUM   65           //ESP32 Forum/SmartMatrix board (https://github.com/rorosaurus/esp32-hub75-driver)
+#endif
+#define TYPE_HUB75MATRIX_CUSTOM  71           //custom pins defined in hub75pin.json file (manually uploaded, contains JSON array of pin numbers; no validation performed)
 #define TYPE_HUB75MATRIX_MAX     71
+#endif
 //Network types (master broadcast) (80-95)
 #define TYPE_VIRTUAL_MIN         80
-#define TYPE_NET_DDP_RGB         80            //network DDP RGB bus (master broadcast bus)
-#define TYPE_NET_E131_RGB        81            //network E131 RGB bus (master broadcast bus, unused)
-#define TYPE_NET_ARTNET_RGB      82            //network ArtNet RGB bus (master broadcast bus, unused)
-#define TYPE_NET_DDP_RGBW        88            //network DDP RGBW bus (master broadcast bus)
-#define TYPE_NET_ARTNET_RGBW     89            //network ArtNet RGB bus (master broadcast bus, unused)
+#define TYPE_NET_DDP_RGB         80           //network DDP RGB bus (master broadcast bus)
+#define TYPE_NET_E131_RGB        81           //network E131 RGB bus (master broadcast bus, unused)
+#define TYPE_NET_ARTNET_RGB      82           //network ArtNet RGB bus (master broadcast bus, unused)
+#define TYPE_NET_DDP_RGBW        88           //network DDP RGBW bus (master broadcast bus)
+#define TYPE_NET_ARTNET_RGBW     89           //network ArtNet RGB bus (master broadcast bus, unused)
 #define TYPE_VIRTUAL_MAX         95
 //Special usermod type
 #define TYPE_USERMOD            127           //Usermod defined bus type
