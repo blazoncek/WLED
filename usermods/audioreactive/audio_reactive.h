@@ -6,7 +6,7 @@
   #include "FXparticleSystem.h"
   #ifdef ESP8266
     #if !(defined(WLED_DISABLE_PARTICLESYSTEM2D) || defined(WLED_DISABLE_PARTICLESYSTEM1D))
-    #error ESP8266 does not support 1D and 2D particle systems simultaneously. Please disable one of them.
+      #define WLED_DISABLE_PARTICLESYSTEM1D
     #endif
   #endif
 #endif
