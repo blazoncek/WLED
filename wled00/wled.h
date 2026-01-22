@@ -990,7 +990,7 @@ WLED_GLOBAL volatile uint8_t jsonBufferLock _INIT(0);
 
 #ifndef WLED_AP_SSID_UNIQUE
   #define WLED_SET_AP_SSID() do { \
-    strncpy_P(apSSID, sizeof(apSSID), PSTR(WLED_AP_SSID)); \
+    strncpy_P(apSSID, PSTR(WLED_AP_SSID), sizeof(apSSID)); \
   } while(0)
 #else
   #define WLED_SET_AP_SSID() do { \
