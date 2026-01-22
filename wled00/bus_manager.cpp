@@ -153,7 +153,7 @@ BusDigital::BusDigital(const BusConfig &bc, uint8_t nr)
     _pins[1] = bc.pins[1];
     _frequencykHz = bc.frequency ? bc.frequency : 2000U; // 2MHz clock if undefined
   }
-  _consistent = nr < WLED_MAX_RMT_CHANNELS || _skip > 0;
+  _consistent = nr < WLED_MAX_RMT_CHANNELS || _skip > 0;  // no longer needed once neopixelbus#905 (or similar) is merged
   _iType = PolyBus::getI(bc.type, _pins, nr);
   if (_iType == I_NONE) { DEBUGBUS_PRINTLN(F("Incorrect iType!")); return; }
   _hasRgb = hasRGB(bc.type);
@@ -286,7 +286,7 @@ size_t BusDigital::getPins(uint8_t* pinArray) const {
 }
 
 size_t BusDigital::getBusSize() const {
-  return sizeof(BusDigital) + (isOk() ? PolyBus::getDataSize(_busPtr, _iType) : 0); // does not include common I2S DMA buffer
+  return sizeof(BusDigital) + sizeof(PolyBus) + (isOk() ? PolyBus::getDataSize(_busPtr, _iType) : 0); // does not include common I2S DMA buffer when using parallel output
 }
 
 void BusDigital::setColorOrder(uint8_t colorOrder) {
@@ -1124,9 +1124,8 @@ size_t BusConfig::memUsage(unsigned nr) const {
       / 8) * 3; // count * bitsperchannel/8 * channels
 #endif
   } else if (Bus::isDigital(type)) {
-    // if any of digital buses uses I2S, there is additional common I2S DMA buffer not accounted for here
+    // if any of digital buses uses I2S, there is additional common I2S DMA buffer
     size_t mem = PolyBus::memUsage(count + skipAmount, PolyBus::getI(type, pins, nr));
-    if (!Bus::is2Pin(type) && nr >= WLED_MAX_RMT_CHANNELS) mem *= stepFactor;
     return sizeof(BusDigital) + sizeof(PolyBus) + mem;
   } else if (Bus::isOnOff(type)) {
     return sizeof(BusOnOff);
@@ -1147,10 +1146,11 @@ size_t BusManager::memUsage() {
   for (const auto &bus : busses) {
     size += bus->getBusSize();
     #if !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(ESP8266)
+    // account for common DMA I2S buffer used by all digital buses when parallel I2S output is enabled
     if (bus->isDigital() && !bus->is2Pin()) {
       digitalCount++;
-      if (digitalCount >= WLED_MAX_RMT_CHANNELS) {
-        unsigned i2sSize = stepFactor * bus->getLength() * bus->getNumberOfChannels() * (bus->is16bit()+1);
+      if (hasParallelOutput() && digitalCount >= WLED_MAX_RMT_CHANNELS) {
+        unsigned i2sSize = stepFactor * bus->getLength() * bus->getNumberOfChannels() * (bus->is16bit()+1); // buffer actuall has also some overhead
         if (i2sSize > maxI2S) maxI2S = i2sSize;
       }
     }
