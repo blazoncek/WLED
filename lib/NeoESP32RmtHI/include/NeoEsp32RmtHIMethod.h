@@ -156,6 +156,15 @@ public:
         return _sizeData;
     }
 
+    size_t MemorySize(size_t pixelCount, size_t pixelSize, size_t settingsSize = 0) const
+    {
+        size_t dataSize = 2 * _sizeData;
+        if (pixelCount > 0) {
+            dataSize = 2 * (pixelCount * pixelSize + settingsSize);
+        }
+        return dataSize + sizeof(NeoEsp32RmtHIMethodBase<T_SPEED, T_CHANNEL>);
+    };
+
     void applySettings([[maybe_unused]] const SettingsObject& settings)
     {
     }
