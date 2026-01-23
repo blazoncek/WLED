@@ -948,6 +948,7 @@ class PolyBus {
     #define STEP_MULTIPLIER 3
   #endif
 
+  #ifdef WLED_DEBUG // used only in general debug
   static unsigned getDataSize(void* busPtr, uint8_t busType) {
     unsigned size = 0;
     switch (busType) {
@@ -1040,6 +1041,7 @@ class PolyBus {
     }
     return size;
   }
+  #endif
 
   static unsigned memUsage(unsigned count, unsigned busType) {
     // we can get memory usage by creating a temporary bus with only 1 pixel and then use its MemorySize() method with adjusted count
@@ -1047,75 +1049,95 @@ class PolyBus {
     // NeoBus(Grb, Esp8266, Uart0, Ws2813) tmpBus(1);
     // return tmpBus.MemorySize(count);
     // this will be skewed for shared DMA buffers, unfortunately
-    unsigned size = count*3;  // let's assume 3 channels, we will add count or 2*count below for 4 channels or 5 channels
     switch (busType) {
-      case I_NONE: size = 0; break;
     #ifdef ESP8266
       // UART methods have front + small UART
-      case I_8266_U0_NEO_4    : // fallthrough
-      case I_8266_U1_NEO_4    : // fallthrough
-      case I_8266_U0_TM1_4    : // fallthrough
-      case I_8266_U1_TM1_4    : size = (size + count);       break; // 4 channels
-      case I_8266_U0_NEODUAL_4: // fallthrough; 4 channels, dual 3-ch chip
-      case I_8266_U1_NEODUAL_4: // fallthrough; 4 channels, dual 3-ch chip
-      case I_8266_U0_UCS_3    : // fallthrough
-      case I_8266_U1_UCS_3    : size *= 2;                   break; // 16 bit
-      case I_8266_U0_UCS_4    : // fallthrough
-      case I_8266_U1_UCS_4    : size = (size + count)*2;     break; // 16 bit 4 channels
-      case I_8266_U0_FW6_5    : // fallthrough
-      case I_8266_U1_FW6_5    : // fallthrough
-      case I_8266_U0_2805_5   : // fallthrough
-      case I_8266_U1_2805_5   : size = (size + 2*count);     break; // 5 channels
-      case I_8266_U0_SM16825_5: // fallthrough
-      case I_8266_U1_SM16825_5: size = (size + 2*count)*2;   break; // 16 bit 5 channels
-      // DMA methods have front + DMA buffer
-      case I_8266_DM_NEO_3    : // fallthrough
-      case I_8266_DM_400_3    : // fallthrough
-      case I_8266_DM_TM2_3    : // fallthrough
-      case I_8266_DM_APA106_3 : // fallthrough
-      case I_8266_DM_TM1914_3 : size = size * (1+STEP_MULTIPLIER);               break;
-      case I_8266_DM_NEO_4    : // fallthrough
-      case I_8266_DM_TM1_4    : size = (size + count) * (1+STEP_MULTIPLIER);     break;
-      case I_8266_DM_NEODUAL_4: // fallthrough; 4 channels, dual 3-ch chip
-      case I_8266_DM_UCS_3    : size *= 2 * (1+STEP_MULTIPLIER);                 break;
-      case I_8266_DM_UCS_4    : size = (size + count)*2 * (1+STEP_MULTIPLIER);   break;
-      case I_8266_DM_FW6_5    : // fallthrough
-      case I_8266_DM_2805_5   : size = (size + 2*count) * (1+STEP_MULTIPLIER);   break;
-      case I_8266_DM_SM16825_5: size = (size + 2*count)*2 * (1+STEP_MULTIPLIER); break;
-    #else
-      // RMT buses (1x front and 1x back buffer, does not include small RMT buffer)
-      case I_32_RN_NEO_3    : // fallthrough
-      case I_32_RN_400_3    : // fallthrough
-      case I_32_RN_TM2_3    : // fallthrough
-      case I_32_RN_APA106_3 : size *= 2;                   break;
-      case I_32_RN_NEO_4    : // fallthrough
-      case I_32_RN_TM1_4    : size = (size + count)*2;     break; // 4 channels
-      case I_32_RN_NEODUAL_4: // fallthrough; 4 channels, dual 3-ch chip
-      case I_32_RN_UCS_3    : size *= 2*2;                 break; // 16bit
-      case I_32_RN_UCS_4    : size = (size + count)*2*2;   break; // 16bit, 4 channels
-      case I_32_RN_FW6_5    : // fallthrough
-      case I_32_RN_2805_5   : size = (size + 2*count)*2;   break; // 5 channels
-      case I_32_RN_SM16825_5: size = (size + 2*count)*2*2; break; // 16bit, 5 channels
-      // I2S1 bus or paralell I2S1 buses (front + DMA)
+      case I_8266_U0_NEO_3: { NeoBus(Grb, Esp8266, Uart0, Ws2813) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U1_NEO_3: { NeoBus(Grb, Esp8266, Uart1, Ws2813) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_DM_NEO_3: { NeoBus(Grb, Esp8266, Dma, 800Kbps) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U0_NEO_4: { NeoBus(Grbw, Esp8266, Uart0, Ws2813) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U1_NEO_4: { NeoBus(Grbw, Esp8266, Uart1, Ws2813) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_DM_NEO_4: { NeoBus(Grbw, Esp8266, Dma, 800Kbps) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U0_400_3: { NeoBus(Grb, Esp8266, Uart0, 400Kbps) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U1_400_3: { NeoBus(Grb, Esp8266, Uart1, 400Kbps) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_DM_400_3: { NeoBus(Grb, Esp8266, Dma, 400Kbps) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U0_TM1_4: { NeoBus(WrgbTm1814, Esp8266, Uart0, Tm1814) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U1_TM1_4: { NeoBus(WrgbTm1814, Esp8266, Uart1, Tm1814) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_DM_TM1_4: { NeoBus(WrgbTm1814, Esp8266, Dma, Tm1814) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U0_TM2_3: { NeoBus(Brg, Esp8266, Uart0, Tm1829) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U1_TM2_3: { NeoBus(Brg, Esp8266, Uart1, Tm1829) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_DM_TM2_3: { NeoBus(Brg, Esp8266, Dma, Tm1829) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U0_UCS_3: { NeoBus(RgbUcs8903, Esp8266, Uart0, Ws2813) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U1_UCS_3: { NeoBus(RgbUcs8903, Esp8266, Uart1, Ws2813) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_DM_UCS_3: { NeoBus(RgbUcs8903, Esp8266, Dma, 800Kbps) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U0_UCS_4: { NeoBus(RgbwUcs8904, Esp8266, Uart0, Ws2813) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U1_UCS_4: { NeoBus(RgbwUcs8904, Esp8266, Uart1, Ws2813) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_DM_UCS_4: { NeoBus(RgbwUcs8904, Esp8266, Dma, 800Kbps) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U0_APA106_3: { NeoBus(Rbg, Esp8266, Uart0, Apa106) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U1_APA106_3: { NeoBus(Rbg, Esp8266, Uart1, Apa106) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_DM_APA106_3: { NeoBus(Rbg, Esp8266, Dma, Apa106) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U0_FW6_5: { NeoBus(Grbcwx, Esp8266, Uart0, Ws2813) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U1_FW6_5: { NeoBus(Grbcwx, Esp8266, Uart1, Ws2813) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_DM_FW6_5: { NeoBus(Grbcwx, Esp8266, Dma, 800Kbps) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U0_2805_5: { NeoBus(Grbww, Esp8266, Uart0, Ws2805) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U1_2805_5: { NeoBus(Grbww, Esp8266, Uart1, Ws2805) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_DM_2805_5: { NeoBus(Grbww, Esp8266, Dma, Ws2805) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U0_TM1914_3: { NeoBus(RgbTm1914, Esp8266, Uart0, Tm1914) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U1_TM1914_3: { NeoBus(RgbTm1914, Esp8266, Uart1, Tm1914) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_DM_TM1914_3: { NeoBus(RgbTm1914, Esp8266, Dma, Tm1914) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U0_SM16825_5: { NeoBus(RgbwcSm16825e, Esp8266, Uart0, Ws2813) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U1_SM16825_5: { NeoBus(RgbwcSm16825e, Esp8266, Uart1, Ws2813) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_DM_SM16825_5: { NeoBus(RgbwcSm16825e, Esp8266, Dma, 800Kbps) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U0_NEODUAL_4: { NeoBus(Rgbwxx, Esp8266, Uart0, Ws2813) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_U1_NEODUAL_4: { NeoBus(Rgbwxx, Esp8266, Uart1, Ws2813) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_8266_DM_NEODUAL_4: { NeoBus(Rgbwxx, Esp8266, Dma, 800Kbps) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+    #endif
+    #ifdef ARDUINO_ARCH_ESP32
+      // RMT buses (front + back + small system managed RMT)
+      case I_32_RN_NEO_3: { NeoBus(Grb, Esp32, RmtN, Ws2812x) tmpBus(1, 255, (NeoBusChannel)0); return tmpBus.MemorySize(count); }
+      case I_32_RN_NEO_4: { NeoBus(Grbw, Esp32, RmtN, Sk6812) tmpBus(1, 255, (NeoBusChannel)0); return tmpBus.MemorySize(count); }
+      case I_32_RN_400_3: { NeoBus(Grb, Esp32, RmtN, 400Kbps) tmpBus(1, 255, (NeoBusChannel)0); return tmpBus.MemorySize(count); }
+      case I_32_RN_TM1_4: { NeoBus(WrgbTm1814, Esp32, RmtN, Tm1814) tmpBus(1, 255, (NeoBusChannel)0); return tmpBus.MemorySize(count); }
+      case I_32_RN_TM2_3: { NeoBus(Brg, Esp32, RmtN, Tm1829) tmpBus(1, 255, (NeoBusChannel)0); return tmpBus.MemorySize(count); }
+      case I_32_RN_UCS_3: { NeoBus(RgbUcs8903, Esp32, RmtN, Ws2812x) tmpBus(1, 255, (NeoBusChannel)0); return tmpBus.MemorySize(count); }
+      case I_32_RN_UCS_4: { NeoBus(RgbwUcs8904, Esp32, RmtN, Ws2812x) tmpBus(1, 255, (NeoBusChannel)0); return tmpBus.MemorySize(count); }
+      case I_32_RN_APA106_3: { NeoBus(Grb, Esp32, RmtN, Apa106) tmpBus(1, 255, (NeoBusChannel)0); return tmpBus.MemorySize(count); }
+      case I_32_RN_FW6_5: { NeoBus(Grbcwx, Esp32, RmtN, Ws2812x) tmpBus(1, 255, (NeoBusChannel)0); return tmpBus.MemorySize(count); }
+      case I_32_RN_2805_5: { NeoBus(Grbww, Esp32, RmtN, Ws2805) tmpBus(1, 255, (NeoBusChannel)0); return tmpBus.MemorySize(count); }
+      case I_32_RN_TM1914_3: { NeoBus(GrbTm1914, Esp32, RmtN, Tm1914) tmpBus(1, 255, (NeoBusChannel)0); return tmpBus.MemorySize(count); }
+      case I_32_RN_SM16825_5: { NeoBus(RgbcwSm16825e, Esp32, RmtN, Ws2812x) tmpBus(1, 255, (NeoBusChannel)0); return tmpBus.MemorySize(count); }
+      case I_32_RN_NEODUAL_4: { NeoBus(Rgbwxx, Esp32, RmtN, Ws2812x) tmpBus(1, 255, (NeoBusChannel)0); return tmpBus.MemorySize(count); }
+      // I2S1 bus or paralell buses (front + DMA; DMA = front * cadence, aligned to 4 bytes)
       #ifndef CONFIG_IDF_TARGET_ESP32C3
-      case I_32_I2_NEO_3    : // fallthrough
-      case I_32_I2_400_3    : // fallthrough
-      case I_32_I2_TM2_3    : // fallthrough
-      case I_32_I2_APA106_3 : size = size * (1+STEP_MULTIPLIER);                 break;
-      case I_32_I2_NEO_4    : // fallthrough
-      case I_32_I2_TM1_4    : size = (size + count) * (1+STEP_MULTIPLIER);       break; // 4 channels
-      case I_32_I2_NEODUAL_4: // fallthrough; 4 channels, dual 3-ch chip
-      case I_32_I2_UCS_3    : size *= 2 * (1+STEP_MULTIPLIER);                   break; // 16 bit
-      case I_32_I2_UCS_4    : size = (size + count)*2 * (1+STEP_MULTIPLIER);     break; // 16 bit, 4 channels
-      case I_32_I2_FW6_5    : // fallthrough
-      case I_32_I2_2805_5   : size = (size + 2*count) * (1+STEP_MULTIPLIER);     break; // 5 channels
-      case I_32_I2_SM16825_5: size = (size + 2*count)*2 * (1+STEP_MULTIPLIER);   break; // 16 bit, 5 channels
+      case I_32_I2_NEO_3: if (_useParallelI2S) { NeoBus(Grb, Esp32, I2s1X8, Ws2812x) tmpBus(1, 255); return tmpBus.MemorySize(); } else { NeoBus(Grb, Esp32, I2s1, Ws2812x) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_32_I2_NEO_4: if (_useParallelI2S) { NeoBus(Grbw, Esp32, I2s1X8, Sk6812) tmpBus(1, 255); return tmpBus.MemorySize(); } else { NeoBus(Grbw, Esp32, I2s1, Sk6812) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_32_I2_400_3: if (_useParallelI2S) { NeoBus(Grb, Esp32, I2s1X8, 400Kbps) tmpBus(1, 255); return tmpBus.MemorySize(); } else { NeoBus(Grb, Esp32, I2s1, 400Kbps) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_32_I2_TM1_4: if (_useParallelI2S) { NeoBus(WrgbTm1814, Esp32, I2s1X8, Tm1814) tmpBus(1, 255); return tmpBus.MemorySize(); } else { NeoBus(WrgbTm1814, Esp32, I2s1, Tm1814) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_32_I2_TM2_3: if (_useParallelI2S) { NeoBus(Brg, Esp32, I2s1X8, Tm1829) tmpBus(1, 255); return tmpBus.MemorySize(); } else { NeoBus(Brg, Esp32, I2s1, Tm1829) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_32_I2_UCS_3: if (_useParallelI2S) { NeoBus(RgbUcs8903, Esp32, I2s1X8, 800Kbps) tmpBus(1, 255); return tmpBus.MemorySize(); } else { NeoBus(RgbUcs8903, Esp32, I2s1, 800Kbps) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_32_I2_UCS_4: if (_useParallelI2S) { NeoBus(RgbwUcs8904, Esp32, I2s1X8, 800Kbps) tmpBus(1, 255); return tmpBus.MemorySize(); } else { NeoBus(RgbwUcs8904, Esp32, I2s1, 800Kbps) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_32_I2_APA106_3: if (_useParallelI2S) { NeoBus(Grb, Esp32, I2s1X8, Apa106) tmpBus(1, 255); return tmpBus.MemorySize(); } else { NeoBus(Grb, Esp32, I2s1, Apa106) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_32_I2_FW6_5: if (_useParallelI2S) { NeoBus(Grbcwx, Esp32, I2s1X8, 800Kbps) tmpBus(1, 255); return tmpBus.MemorySize(); } else { NeoBus(Grbcwx, Esp32, I2s1, 800Kbps) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_32_I2_2805_5: if (_useParallelI2S) { NeoBus(Grbww, Esp32, I2s1X8, Ws2805) tmpBus(1, 255); return tmpBus.MemorySize(); } else { NeoBus(Grbww, Esp32, I2s1, Ws2805) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_32_I2_TM1914_3: if (_useParallelI2S) { NeoBus(GrbTm1914, Esp32, I2s1X8, Tm1914) tmpBus(1, 255); return tmpBus.MemorySize(); } else { NeoBus(GrbTm1914, Esp32, I2s1, Tm1914) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_32_I2_SM16825_5: if (_useParallelI2S) { NeoBus(RgbcwSm16825e, Esp32, I2s1X8, Ws2812x) tmpBus(1, 255); return tmpBus.MemorySize(); } else { NeoBus(RgbcwSm16825e, Esp32, I2s1, Ws2812x) tmpBus(1, 255); return tmpBus.MemorySize(count); }
+      case I_32_I2_NEODUAL_4: if (_useParallelI2S) { NeoBus(Rgbwxx, Esp32, I2s1X8, Ws2812x) tmpBus(1, 255); return tmpBus.MemorySize(); } else { NeoBus(Rgbwxx, Esp32, I2s1, Ws2812x) tmpBus(1, 255); return tmpBus.MemorySize(count); }
       #endif
     #endif
-      case I_HS_HD1_3       : // fallthrough; 16 bit
-      case I_SS_HD1_3       : size *= 2; break;
+      case I_HS_DOT_3: { TwoPinBus(DotStarBgr, DotStarSpiHz) tmpBus(1, 255, 255); return tmpBus.MemorySize(count); }
+      case I_SS_DOT_3: { TwoPinBus(DotStarBgr, DotStar) tmpBus(1, 255, 255); return tmpBus.MemorySize(count); }
+      case I_HS_LPD_3: { TwoPinBus(Lpd8806Grb, Lpd8806SpiHz) tmpBus(1, 255, 255); return tmpBus.MemorySize(count); }
+      case I_SS_LPD_3: { TwoPinBus(Lpd8806Grb, Lpd8806) tmpBus(1, 255, 255); return tmpBus.MemorySize(count); }
+      case I_HS_LPO_3: { TwoPinBus(Lpd6803Grb, Lpd6803SpiHz) tmpBus(1, 255, 255); return tmpBus.MemorySize(count); }
+      case I_SS_LPO_3: { TwoPinBus(Lpd6803Grb, Lpd6803) tmpBus(1, 255, 255); return tmpBus.MemorySize(count); }
+      case I_HS_WS1_3: { TwoPinBus(NeoRbg, Ws2801SpiHz) tmpBus(1, 255, 255); return tmpBus.MemorySize(count); }
+      case I_SS_WS1_3: { TwoPinBus(NeoRbg, Ws2801) tmpBus(1, 255, 255); return tmpBus.MemorySize(count); }
+      case I_HS_P98_3: { TwoPinBus(P9813Bgr, P9813SpiHz) tmpBus(1, 255, 255); return tmpBus.MemorySize(count); }
+      case I_SS_P98_3: { TwoPinBus(P9813Bgr, P9813) tmpBus(1, 255, 255); return tmpBus.MemorySize(count); }
+      case I_HS_HD1_3: { TwoPinBus(NeoBgr48, Hd108SpiHz) tmpBus(1, 255, 255); return tmpBus.MemorySize(count); }
+      case I_SS_HD1_3: { TwoPinBus(NeoBgr48, Hd108) tmpBus(1, 255, 255); return tmpBus.MemorySize(count); }
     }
-    return size;
+    return 0;
   }
 
   //gives back the internal type index (I_XX_XXX_X above) for the input

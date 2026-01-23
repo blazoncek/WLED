@@ -285,9 +285,11 @@ size_t BusDigital::getPins(uint8_t* pinArray) const {
   return numPins;
 }
 
+#ifdef WLED_DEBUG // used only in general debug
 size_t BusDigital::getBusSize() const {
   return sizeof(BusDigital) + sizeof(PolyBus) + (isOk() ? PolyBus::getDataSize(_busPtr, _iType) : 0); // does not include common I2S DMA buffer when using parallel output
 }
+#endif
 
 void BusDigital::setColorOrder(uint8_t colorOrder) {
   // upper nibble contains W swap information
@@ -1067,11 +1069,13 @@ size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
   return 5 + HUB75_PIN_COUNT;
 }
 
+#ifdef WLED_DEBUG // used only in general debug
 size_t BusHub75Matrix::getBusSize() const {
   return sizeof(BusHub75Matrix) + sizeof(MatrixPanel_I2S_DMA)
     + (virtualDisp ? sizeof(VirtualMatrixPanel) : 0)
     + (isOk() ? display->width() * display->height() * display->getCfg().getPixelColorDepthBits() / 8 : _len) * 3;
 }
+#endif
 
 std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
   std::vector<LEDType> types = {

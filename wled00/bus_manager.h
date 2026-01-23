@@ -133,7 +133,9 @@ class Bus {
     virtual uint16_t getLEDCurrent() const                      { return 0; }
     virtual uint16_t getUsedCurrent() const                     { return 0; }
     virtual uint16_t getMaxCurrent() const                      { return 0; }
+    #ifdef WLED_DEBUG // used only in general debug
     virtual size_t   getBusSize() const                         { return sizeof(Bus); }
+    #endif
     virtual const String getCustomText() const                  { return String(); }
 
     inline  bool     hasRGB() const                             { return _hasRgb; }
@@ -257,7 +259,9 @@ class BusDigital : public Bus {
     uint16_t getLEDCurrent() const override  { return _milliAmpsPerLed; }
     uint16_t getUsedCurrent() const override { return _milliAmpsTotal; }
     uint16_t getMaxCurrent() const override  { return _milliAmpsMax; }
+    #ifdef WLED_DEBUG // used only in general debug
     size_t   getBusSize() const override;
+    #endif
 
     inline void setCurrentLimit(uint16_t milliAmps) { _milliAmpsLimit = milliAmps; DEBUGBUS_PRINTF_P(PSTR("Bus: Set current limit to %d mA\n"), (int)milliAmps); }
     inline void addPixelCurrent(int sum)            { _busPowerSum += sum; }
@@ -306,7 +310,9 @@ class BusPwm : public Bus {
     void setPixelColor(unsigned pix, uint32_t c) override;
     size_t   getPins(uint8_t* pinArray = nullptr) const override;
     uint16_t getFrequency() const override { return _frequency; }
+    #ifdef WLED_DEBUG // used only in general debug
     size_t   getBusSize() const override   { return sizeof(BusPwm); }
+    #endif
     void show() override;
     inline void cleanup() { deallocatePins(); }
 
@@ -332,7 +338,9 @@ class BusOnOff : public Bus {
 
     void setPixelColor(unsigned pix, uint32_t c) override;
     size_t   getPins(uint8_t* pinArray) const override;
+    #ifdef WLED_DEBUG // used only in general debug
     size_t   getBusSize() const override { return sizeof(BusOnOff); }
+    #endif
     void show() override;
     inline void cleanup() { PinManager::deallocatePin(_pin, PinOwner::BusOnOff); }
 
@@ -352,7 +360,9 @@ class BusNetwork : public Bus {
     bool canShow() const override  { return !_broadcastLock; } // this should be a return value from UDP routine if it is still sending data out
     [[gnu::hot]] void setPixelColor(unsigned pix, uint32_t c) override;
     size_t getPins(uint8_t* pinArray = nullptr) const override;
+    #ifdef WLED_DEBUG // used only in general debug
     size_t getBusSize() const override  { return sizeof(BusNetwork) + (isOk() ? _len * _UDPchannels : 0); }
+    #endif
     void   show() override;
     void   cleanup();
     #ifdef ARDUINO_ARCH_ESP32
@@ -389,7 +399,9 @@ class BusHub75Matrix : public Bus {
     void setBrightness(uint8_t b) override;
     uint16_t getFrequency() const override;
     size_t getPins(uint8_t* pinArray = nullptr) const override;
+    #ifdef WLED_DEBUG // used only in general debug
     size_t getBusSize() const override;
+    #endif
     void deallocatePins();
     void cleanup();
 
