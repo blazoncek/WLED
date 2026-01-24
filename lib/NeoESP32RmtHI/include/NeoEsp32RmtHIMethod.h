@@ -58,7 +58,6 @@ public:
         _sizeData(pixelCount * elementSize + settingsSize),
         _pin(pin)
     {
-        construct();
     }
 
     NeoEsp32RmtHIMethodBase(uint8_t pin, uint16_t pixelCount, size_t elementSize, size_t settingsSize, NeoBusChannel channel) :
@@ -66,7 +65,6 @@ public:
         _pin(pin),
         _channel(channel)
     {
-        construct();
     }
 
     ~NeoEsp32RmtHIMethodBase()
@@ -89,8 +87,13 @@ public:
         return (ESP_OK == ESP_ERROR_CHECK_WITHOUT_ABORT_SILENT_TIMEOUT(NeoEsp32RmtHiMethodDriver::WaitForTxDone(_channel.RmtChannelNumber, 0)));
     }
 
-    void Initialize()
+    bool Initialize()
     {
+        if (!construct())
+        {
+            return false;
+        }
+
         rmt_config_t config = {};
 
         config.rmt_mode = RMT_MODE_TX;
@@ -109,6 +112,7 @@ public:
 
         ESP_ERROR_CHECK(rmt_config(&config));   // Uses ESP library
         ESP_ERROR_CHECK(NeoEsp32RmtHiMethodDriver::Install(_channel.RmtChannelNumber, T_SPEED::RmtBit0, T_SPEED::RmtBit1, T_SPEED::RmtDurationReset));
+        return true;
     }
 
     void Update(bool maintainBufferConsistency)
@@ -156,13 +160,16 @@ public:
         return _sizeData;
     }
 
-    size_t MemorySize(size_t pixelCount, size_t pixelSize, size_t settingsSize = 0) const
+    size_t MemorySize() const
     {
-        size_t dataSize = 2 * _sizeData;
-        if (pixelCount > 0) {
-            dataSize = 2 * (pixelCount * pixelSize + settingsSize);
-        }
-        return dataSize + sizeof(NeoEsp32RmtHIMethodBase<T_SPEED, T_CHANNEL>);
+        size_t dataSize = _sizeData;
+        return 2 * dataSize + sizeof(NeoEsp32RmtHIMethodBase<T_SPEED, T_CHANNEL>);
+    };
+
+    static size_t MemorySize(size_t pixelCount, size_t pixelSize, size_t settingsSize = 0)
+    {
+        size_t dataSize = pixelCount * pixelSize + settingsSize;
+        return 2 * dataSize + sizeof(NeoEsp32RmtHIMethodBase<T_SPEED, T_CHANNEL>);
     };
 
     void applySettings([[maybe_unused]] const SettingsObject& settings)
@@ -179,13 +186,22 @@ private:
     uint8_t*  _dataSending;   // used for async send using RMT
 
 
-    void construct()
+    bool construct()
     {
         _dataEditing = static_cast<uint8_t*>(malloc(_sizeData));
-        // data cleared later in Begin()
+        if (!_dataEditing)
+        {
+            return false;
+        }
 
         _dataSending = static_cast<uint8_t*>(malloc(_sizeData));
-        // no need to initialize it, it gets overwritten on every send
+        if (!_dataSending)
+        {
+            free(_dataEditing);
+            _dataEditing = nullptr;
+            return false;
+        }
+        return true;
     }
 };
 
