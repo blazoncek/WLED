@@ -27,8 +27,8 @@ void WLED::reset()
   #ifdef WLED_ENABLE_WEBSOCKETS
   ws.closeAll(1012);
   #endif
-  unsigned long dly = millis();
-  while (millis() - dly < 450) {
+  unsigned long dly = millis() + 450;
+  while (millis() < dly) {
     yield();        // enough time to send response to client
   }
   applyBri();
@@ -65,7 +65,7 @@ void WLED::loop()
   #endif
   handleImprovWifiScan();
   handleNotifications(); // handles UDP packets
-  handleTransitions();
+  handleBrightness();
   #ifdef WLED_ENABLE_DMX
   handleDMX();
   #endif
@@ -81,7 +81,8 @@ void WLED::loop()
   #endif
 
   yield();
-  handleIO();
+  handleButton();
+  handleOnOff();
   #ifndef WLED_DISABLE_INFRARED
   handleIR();
   #endif
@@ -551,8 +552,7 @@ void WLED::beginStrip()
   doInit = 0;
 
   if (turnOnAtBoot) {
-    if (briS > 0) bri = briS;
-    else if (bri == 0) bri = 128;
+    bri = briS > 0 ? briS : 128;  // briS set in cfg.cpp (from cfg.json); but if user set boot brightness to 0 and enabled "Turn on at boot", override with default
   } else {
     // fix for #3196
     if (bootPreset > 0) {
@@ -565,8 +565,10 @@ void WLED::beginStrip()
     }
     briLast = briS; bri = 0;
     strip.fill(BLACK);
-    strip.show();
+    strip.show(); // needed to clear all outputs (On/Off in particular)
   }
+  offMode = !bri;
+
   colorUpdated(CALL_MODE_INIT); // will not send notification but will initiate transition
   if (bootPreset > 0) {
     applyPreset(bootPreset, CALL_MODE_INIT);
@@ -574,11 +576,7 @@ void WLED::beginStrip()
 
   strip.setTransition(transitionDelayDefault);  // restore transitions
 
-  // init relay pin
-  if (rlyPin >= 0) {
-    pinMode(rlyPin, rlyOpenDrain ? OUTPUT_OPEN_DRAIN : OUTPUT);
-    digitalWrite(rlyPin, (rlyMde ? bri : !bri));
-  }
+  toggleRelay(!offMode);
 }
 
 // stop AP (optionally also stop ESP-NOW)

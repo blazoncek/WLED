@@ -151,7 +151,7 @@ void updateInterfaces(uint8_t callMode) {
 }
 
 
-void handleTransitions() {
+void handleBrightness() {
   //handle still pending interface update
   updateInterfaces(interfaceUpdateCallMode);
 
