@@ -357,35 +357,40 @@ void handleButton()
   }
 }
 
-// handleIO() happens *after* handleTransitions() (see wled.cpp) which may change bri/briT but *before* strip.service()
+// handleOnOff() happens *after* handleBrightness() (see wled.cpp) which may change bri/briT but *before* strip.service()
 // where actual LED painting occurrs
 // this is important for relay control and in the event of turning off on-board LED
-void handleIO()
+void handleOnOff()
 {
-  handleButton();
-
   // if we want to control on-board LED (ESP8266) or relay we have to do it here as the final show() may not happen until
   // next loop() cycle
   if (strip.getBrightness()) {
+    // we want to be on
     lastOnTime = millis();
     if (offMode) {
+      // but we are off
       BusManager::on();
-      if (rlyPin>=0) {
-        pinMode(rlyPin, rlyOpenDrain ? OUTPUT_OPEN_DRAIN : OUTPUT);
-        digitalWrite(rlyPin, rlyMde);
-      }
       offMode = false;
+      toggleRelay(!offMode);  // switch on
     }
-  } else if (millis() - lastOnTime > 600 && !strip.needsUpdate()) {
+  } else if (millis() - lastOnTime > max(600, strip.getTransition() + 2*strip.getFrameTime()) && !strip.needsUpdate()) {
     // for turning LED or relay off we need to wait until strip no longer needs updates (strip.trigger())
+    // we want to be off
     if (!offMode) {
+      // but we are on
       BusManager::off();
-      if (rlyPin>=0) {
-        pinMode(rlyPin, rlyOpenDrain ? OUTPUT_OPEN_DRAIN : OUTPUT);
-        digitalWrite(rlyPin, !rlyMde);
-      }
       offMode = true;
+      toggleRelay(!offMode);  // switch off
     }
+  }
+}
+
+// relay control
+void toggleRelay(bool on) {
+  // init relay pin and switch
+  if (rlyPin >= 0) {
+    pinMode(rlyPin, rlyOpenDrain ? OUTPUT_OPEN_DRAIN : OUTPUT);
+    digitalWrite(rlyPin, !(rlyMde ^ on)); // !XOR: 00=0, 01=1, 10=1, 11=0; we need inverse of that
   }
 }
 

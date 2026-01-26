@@ -20,7 +20,8 @@ void longPressAction(uint8_t b=0);
 void doublePressAction(uint8_t b=0);
 bool isButtonPressed(uint8_t b=0);
 void handleButton();
-void handleIO();
+void handleOnOff();
+void toggleRelay(bool on);
 void touchButtonISR();
 
 //cfg.cpp
@@ -113,7 +114,7 @@ void applyValuesToSelectedSegs();
 void colorUpdated(byte callMode);
 void stateUpdated(byte callMode);
 void updateInterfaces(uint8_t callMode);
-void handleTransitions();
+void handleBrightness();
 void handleNightlight();
 
 #ifdef WLED_ENABLE_LOXONE
