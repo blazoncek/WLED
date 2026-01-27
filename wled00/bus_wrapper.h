@@ -950,96 +950,94 @@ class PolyBus {
 
   #ifdef WLED_DEBUG // used only in general debug
   static unsigned getDataSize(void* busPtr, uint8_t busType) {
-    unsigned size = 0;
     switch (busType) {
-      case I_NONE: break;
     #ifdef ESP8266
-      case I_8266_U0_NEO_3: size = (static_cast<NeoBus(Grb, Esp8266, Uart0, Ws2813)*>(busPtr))->MemorySize(); break;
-      case I_8266_U1_NEO_3: size = (static_cast<NeoBus(Grb, Esp8266, Uart1, Ws2813)*>(busPtr))->MemorySize(); break;
-      case I_8266_DM_NEO_3: size = (static_cast<NeoBus(Grb, Esp8266, Dma, 800Kbps)*>(busPtr))->MemorySize(); break;
-      case I_8266_U0_NEO_4: size = (static_cast<NeoBus(Grbw, Esp8266, Uart0, Ws2813)*>(busPtr))->MemorySize(); break;
-      case I_8266_U1_NEO_4: size = (static_cast<NeoBus(Grbw, Esp8266, Uart1, Ws2813)*>(busPtr))->MemorySize(); break;
-      case I_8266_DM_NEO_4: size = (static_cast<NeoBus(Grbw, Esp8266, Dma, 800Kbps)*>(busPtr))->MemorySize(); break;
-      case I_8266_U0_400_3: size = (static_cast<NeoBus(Grb, Esp8266, Uart0, 400Kbps)*>(busPtr))->MemorySize(); break;
-      case I_8266_U1_400_3: size = (static_cast<NeoBus(Grb, Esp8266, Uart1, 400Kbps)*>(busPtr))->MemorySize(); break;
-      case I_8266_DM_400_3: size = (static_cast<NeoBus(Grb, Esp8266, Dma, 400Kbps)*>(busPtr))->MemorySize(); break;
-      case I_8266_U0_TM1_4: size = (static_cast<NeoBus(WrgbTm1814, Esp8266, Uart0, Tm1814)*>(busPtr))->MemorySize(); break;
-      case I_8266_U1_TM1_4: size = (static_cast<NeoBus(WrgbTm1814, Esp8266, Uart1, Tm1814)*>(busPtr))->MemorySize(); break;
-      case I_8266_DM_TM1_4: size = (static_cast<NeoBus(WrgbTm1814, Esp8266, Dma, Tm1814)*>(busPtr))->MemorySize(); break;
-      case I_8266_U0_TM2_3: size = (static_cast<NeoBus(Brg, Esp8266, Uart0, Tm1829)*>(busPtr))->MemorySize(); break;
-      case I_8266_U1_TM2_3: size = (static_cast<NeoBus(Brg, Esp8266, Uart1, Tm1829)*>(busPtr))->MemorySize(); break;
-      case I_8266_DM_TM2_3: size = (static_cast<NeoBus(Brg, Esp8266, Dma, Tm1829)*>(busPtr))->MemorySize(); break;
-      case I_8266_U0_UCS_3: size = (static_cast<NeoBus(RgbUcs8903, Esp8266, Uart0, Ws2813)*>(busPtr))->MemorySize(); break;
-      case I_8266_U1_UCS_3: size = (static_cast<NeoBus(RgbUcs8903, Esp8266, Uart1, Ws2813)*>(busPtr))->MemorySize(); break;
-      case I_8266_DM_UCS_3: size = (static_cast<NeoBus(RgbUcs8903, Esp8266, Dma, 800Kbps)*>(busPtr))->MemorySize(); break;
-      case I_8266_U0_UCS_4: size = (static_cast<NeoBus(RgbwUcs8904, Esp8266, Uart0, Ws2813)*>(busPtr))->MemorySize(); break;
-      case I_8266_U1_UCS_4: size = (static_cast<NeoBus(RgbwUcs8904, Esp8266, Uart1, Ws2813)*>(busPtr))->MemorySize(); break;
-      case I_8266_DM_UCS_4: size = (static_cast<NeoBus(RgbwUcs8904, Esp8266, Dma, 800Kbps)*>(busPtr))->MemorySize(); break;
-      case I_8266_U0_APA106_3: size = (static_cast<NeoBus(Rbg, Esp8266, Uart0, Apa106)*>(busPtr))->MemorySize(); break;
-      case I_8266_U1_APA106_3: size = (static_cast<NeoBus(Rbg, Esp8266, Uart1, Apa106)*>(busPtr))->MemorySize(); break;
-      case I_8266_DM_APA106_3: size = (static_cast<NeoBus(Rbg, Esp8266, Dma, Apa106)*>(busPtr))->MemorySize(); break;
-      case I_8266_U0_FW6_5: size = (static_cast<NeoBus(Grbcwx, Esp8266, Uart0, Ws2813)*>(busPtr))->MemorySize(); break;
-      case I_8266_U1_FW6_5: size = (static_cast<NeoBus(Grbcwx, Esp8266, Uart1, Ws2813)*>(busPtr))->MemorySize(); break;
-      case I_8266_DM_FW6_5: size = (static_cast<NeoBus(Grbcwx, Esp8266, Dma, 800Kbps)*>(busPtr))->MemorySize(); break;
-      case I_8266_U0_2805_5: size = (static_cast<NeoBus(Grbww, Esp8266, Uart0, Ws2805)*>(busPtr))->MemorySize(); break;
-      case I_8266_U1_2805_5: size = (static_cast<NeoBus(Grbww, Esp8266, Uart1, Ws2805)*>(busPtr))->MemorySize(); break;
-      case I_8266_DM_2805_5: size = (static_cast<NeoBus(Grbww, Esp8266, Dma, Ws2805)*>(busPtr))->MemorySize(); break;
-      case I_8266_U0_TM1914_3: size = (static_cast<NeoBus(RgbTm1914, Esp8266, Uart0, Tm1914)*>(busPtr))->MemorySize(); break;
-      case I_8266_U1_TM1914_3: size = (static_cast<NeoBus(RgbTm1914, Esp8266, Uart1, Tm1914)*>(busPtr))->MemorySize(); break;
-      case I_8266_DM_TM1914_3: size = (static_cast<NeoBus(RgbTm1914, Esp8266, Dma, Tm1914)*>(busPtr))->MemorySize(); break;
-      case I_8266_U0_SM16825_5: size = (static_cast<NeoBus(RgbwcSm16825e, Esp8266, Uart0, Ws2813)*>(busPtr))->MemorySize(); break;
-      case I_8266_U1_SM16825_5: size = (static_cast<NeoBus(RgbwcSm16825e, Esp8266, Uart1, Ws2813)*>(busPtr))->MemorySize(); break;
-      case I_8266_DM_SM16825_5: size = (static_cast<NeoBus(RgbwcSm16825e, Esp8266, Dma, 800Kbps)*>(busPtr))->MemorySize(); break;
-      case I_8266_U0_NEODUAL_4: size = (static_cast<NeoBus(Rgbwxx, Esp8266, Uart0, Ws2813)*>(busPtr))->MemorySize(); break;
-      case I_8266_U1_NEODUAL_4: size = (static_cast<NeoBus(Rgbwxx, Esp8266, Uart1, Ws2813)*>(busPtr))->MemorySize(); break;
-      case I_8266_DM_NEODUAL_4: size = (static_cast<NeoBus(Rgbwxx, Esp8266, Dma, 800Kbps)*>(busPtr))->MemorySize(); break;
+      case I_8266_U0_NEO_3: return (static_cast<NeoBus(Grb, Esp8266, Uart0, Ws2813)*>(busPtr))->MemorySize();
+      case I_8266_U1_NEO_3: return (static_cast<NeoBus(Grb, Esp8266, Uart1, Ws2813)*>(busPtr))->MemorySize();
+      case I_8266_DM_NEO_3: return (static_cast<NeoBus(Grb, Esp8266, Dma, 800Kbps)*>(busPtr))->MemorySize();
+      case I_8266_U0_NEO_4: return (static_cast<NeoBus(Grbw, Esp8266, Uart0, Ws2813)*>(busPtr))->MemorySize();
+      case I_8266_U1_NEO_4: return (static_cast<NeoBus(Grbw, Esp8266, Uart1, Ws2813)*>(busPtr))->MemorySize();
+      case I_8266_DM_NEO_4: return (static_cast<NeoBus(Grbw, Esp8266, Dma, 800Kbps)*>(busPtr))->MemorySize();
+      case I_8266_U0_400_3: return (static_cast<NeoBus(Grb, Esp8266, Uart0, 400Kbps)*>(busPtr))->MemorySize();
+      case I_8266_U1_400_3: return (static_cast<NeoBus(Grb, Esp8266, Uart1, 400Kbps)*>(busPtr))->MemorySize();
+      case I_8266_DM_400_3: return (static_cast<NeoBus(Grb, Esp8266, Dma, 400Kbps)*>(busPtr))->MemorySize();
+      case I_8266_U0_TM1_4: return (static_cast<NeoBus(WrgbTm1814, Esp8266, Uart0, Tm1814)*>(busPtr))->MemorySize();
+      case I_8266_U1_TM1_4: return (static_cast<NeoBus(WrgbTm1814, Esp8266, Uart1, Tm1814)*>(busPtr))->MemorySize();
+      case I_8266_DM_TM1_4: return (static_cast<NeoBus(WrgbTm1814, Esp8266, Dma, Tm1814)*>(busPtr))->MemorySize();
+      case I_8266_U0_TM2_3: return (static_cast<NeoBus(Brg, Esp8266, Uart0, Tm1829)*>(busPtr))->MemorySize();
+      case I_8266_U1_TM2_3: return (static_cast<NeoBus(Brg, Esp8266, Uart1, Tm1829)*>(busPtr))->MemorySize();
+      case I_8266_DM_TM2_3: return (static_cast<NeoBus(Brg, Esp8266, Dma, Tm1829)*>(busPtr))->MemorySize();
+      case I_8266_U0_UCS_3: return (static_cast<NeoBus(RgbUcs8903, Esp8266, Uart0, Ws2813)*>(busPtr))->MemorySize();
+      case I_8266_U1_UCS_3: return (static_cast<NeoBus(RgbUcs8903, Esp8266, Uart1, Ws2813)*>(busPtr))->MemorySize();
+      case I_8266_DM_UCS_3: return (static_cast<NeoBus(RgbUcs8903, Esp8266, Dma, 800Kbps)*>(busPtr))->MemorySize();
+      case I_8266_U0_UCS_4: return (static_cast<NeoBus(RgbwUcs8904, Esp8266, Uart0, Ws2813)*>(busPtr))->MemorySize();
+      case I_8266_U1_UCS_4: return (static_cast<NeoBus(RgbwUcs8904, Esp8266, Uart1, Ws2813)*>(busPtr))->MemorySize();
+      case I_8266_DM_UCS_4: return (static_cast<NeoBus(RgbwUcs8904, Esp8266, Dma, 800Kbps)*>(busPtr))->MemorySize();
+      case I_8266_U0_APA106_3: return (static_cast<NeoBus(Rbg, Esp8266, Uart0, Apa106)*>(busPtr))->MemorySize();
+      case I_8266_U1_APA106_3: return (static_cast<NeoBus(Rbg, Esp8266, Uart1, Apa106)*>(busPtr))->MemorySize();
+      case I_8266_DM_APA106_3: return (static_cast<NeoBus(Rbg, Esp8266, Dma, Apa106)*>(busPtr))->MemorySize();
+      case I_8266_U0_FW6_5: return (static_cast<NeoBus(Grbcwx, Esp8266, Uart0, Ws2813)*>(busPtr))->MemorySize();
+      case I_8266_U1_FW6_5: return (static_cast<NeoBus(Grbcwx, Esp8266, Uart1, Ws2813)*>(busPtr))->MemorySize();
+      case I_8266_DM_FW6_5: return (static_cast<NeoBus(Grbcwx, Esp8266, Dma, 800Kbps)*>(busPtr))->MemorySize();
+      case I_8266_U0_2805_5: return (static_cast<NeoBus(Grbww, Esp8266, Uart0, Ws2805)*>(busPtr))->MemorySize();
+      case I_8266_U1_2805_5: return (static_cast<NeoBus(Grbww, Esp8266, Uart1, Ws2805)*>(busPtr))->MemorySize();
+      case I_8266_DM_2805_5: return (static_cast<NeoBus(Grbww, Esp8266, Dma, Ws2805)*>(busPtr))->MemorySize();
+      case I_8266_U0_TM1914_3: return (static_cast<NeoBus(RgbTm1914, Esp8266, Uart0, Tm1914)*>(busPtr))->MemorySize();
+      case I_8266_U1_TM1914_3: return (static_cast<NeoBus(RgbTm1914, Esp8266, Uart1, Tm1914)*>(busPtr))->MemorySize();
+      case I_8266_DM_TM1914_3: return (static_cast<NeoBus(RgbTm1914, Esp8266, Dma, Tm1914)*>(busPtr))->MemorySize();
+      case I_8266_U0_SM16825_5: return (static_cast<NeoBus(RgbwcSm16825e, Esp8266, Uart0, Ws2813)*>(busPtr))->MemorySize();
+      case I_8266_U1_SM16825_5: return (static_cast<NeoBus(RgbwcSm16825e, Esp8266, Uart1, Ws2813)*>(busPtr))->MemorySize();
+      case I_8266_DM_SM16825_5: return (static_cast<NeoBus(RgbwcSm16825e, Esp8266, Dma, 800Kbps)*>(busPtr))->MemorySize();
+      case I_8266_U0_NEODUAL_4: return (static_cast<NeoBus(Rgbwxx, Esp8266, Uart0, Ws2813)*>(busPtr))->MemorySize();
+      case I_8266_U1_NEODUAL_4: return (static_cast<NeoBus(Rgbwxx, Esp8266, Uart1, Ws2813)*>(busPtr))->MemorySize();
+      case I_8266_DM_NEODUAL_4: return (static_cast<NeoBus(Rgbwxx, Esp8266, Dma, 800Kbps)*>(busPtr))->MemorySize();
     #endif
     #ifdef ARDUINO_ARCH_ESP32
       // RMT buses (front + back + small system managed RMT)
-      case I_32_RN_NEO_3: size = (static_cast<NeoBus(Grb, Esp32, RmtN, Ws2812x)*>(busPtr))->MemorySize(); break;
-      case I_32_RN_NEO_4: size = (static_cast<NeoBus(Grbw, Esp32, RmtN, Sk6812)*>(busPtr))->MemorySize(); break;
-      case I_32_RN_400_3: size = (static_cast<NeoBus(Grb, Esp32, RmtN, 400Kbps)*>(busPtr))->MemorySize(); break;
-      case I_32_RN_TM1_4: size = (static_cast<NeoBus(WrgbTm1814, Esp32, RmtN, Tm1814)*>(busPtr))->MemorySize(); break;
-      case I_32_RN_TM2_3: size = (static_cast<NeoBus(Brg, Esp32, RmtN, Tm1829)*>(busPtr))->MemorySize(); break;
-      case I_32_RN_UCS_3: size = (static_cast<NeoBus(RgbUcs8903, Esp32, RmtN, Ws2812x)*>(busPtr))->MemorySize(); break;
-      case I_32_RN_UCS_4: size = (static_cast<NeoBus(RgbwUcs8904, Esp32, RmtN, Ws2812x)*>(busPtr))->MemorySize(); break;
-      case I_32_RN_APA106_3: size = (static_cast<NeoBus(Grb, Esp32, RmtN, Apa106)*>(busPtr))->MemorySize(); break;
-      case I_32_RN_FW6_5: size = (static_cast<NeoBus(Grbcwx, Esp32, RmtN, Ws2812x)*>(busPtr))->MemorySize(); break;
-      case I_32_RN_2805_5: size = (static_cast<NeoBus(Grbww, Esp32, RmtN, Ws2805)*>(busPtr))->MemorySize(); break;
-      case I_32_RN_TM1914_3: size = (static_cast<NeoBus(GrbTm1914, Esp32, RmtN, Tm1914)*>(busPtr))->MemorySize(); break;
-      case I_32_RN_SM16825_5: size = (static_cast<NeoBus(RgbcwSm16825e, Esp32, RmtN, Ws2812x)*>(busPtr))->MemorySize(); break;
-      case I_32_RN_NEODUAL_4: size = (static_cast<NeoBus(Rgbwxx, Esp32, RmtN, Ws2812x)*>(busPtr))->MemorySize(); break;
+      case I_32_RN_NEO_3: return (static_cast<NeoBus(Grb, Esp32, RmtN, Ws2812x)*>(busPtr))->MemorySize();
+      case I_32_RN_NEO_4: return (static_cast<NeoBus(Grbw, Esp32, RmtN, Sk6812)*>(busPtr))->MemorySize();
+      case I_32_RN_400_3: return (static_cast<NeoBus(Grb, Esp32, RmtN, 400Kbps)*>(busPtr))->MemorySize();
+      case I_32_RN_TM1_4: return (static_cast<NeoBus(WrgbTm1814, Esp32, RmtN, Tm1814)*>(busPtr))->MemorySize();
+      case I_32_RN_TM2_3: return (static_cast<NeoBus(Brg, Esp32, RmtN, Tm1829)*>(busPtr))->MemorySize();
+      case I_32_RN_UCS_3: return (static_cast<NeoBus(RgbUcs8903, Esp32, RmtN, Ws2812x)*>(busPtr))->MemorySize();
+      case I_32_RN_UCS_4: return (static_cast<NeoBus(RgbwUcs8904, Esp32, RmtN, Ws2812x)*>(busPtr))->MemorySize();
+      case I_32_RN_APA106_3: return (static_cast<NeoBus(Grb, Esp32, RmtN, Apa106)*>(busPtr))->MemorySize();
+      case I_32_RN_FW6_5: return (static_cast<NeoBus(Grbcwx, Esp32, RmtN, Ws2812x)*>(busPtr))->MemorySize();
+      case I_32_RN_2805_5: return (static_cast<NeoBus(Grbww, Esp32, RmtN, Ws2805)*>(busPtr))->MemorySize();
+      case I_32_RN_TM1914_3: return (static_cast<NeoBus(GrbTm1914, Esp32, RmtN, Tm1914)*>(busPtr))->MemorySize();
+      case I_32_RN_SM16825_5: return (static_cast<NeoBus(RgbcwSm16825e, Esp32, RmtN, Ws2812x)*>(busPtr))->MemorySize();
+      case I_32_RN_NEODUAL_4: return (static_cast<NeoBus(Rgbwxx, Esp32, RmtN, Ws2812x)*>(busPtr))->MemorySize();
       // I2S1 bus or paralell buses (front + DMA; DMA = front * cadence, aligned to 4 bytes)
       #ifndef CONFIG_IDF_TARGET_ESP32C3
-      case I_32_I2_NEO_3: size = (_useParallelI2S) ? (static_cast<NeoBus(Grb, Esp32, I2s1X8, Ws2812x)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Grb, Esp32, I2s1, Ws2812x)*>(busPtr))->MemorySize(); break;
-      case I_32_I2_NEO_4: size = (_useParallelI2S) ? (static_cast<NeoBus(Grbw, Esp32, I2s1X8, Sk6812)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Grbw, Esp32, I2s1, Sk6812)*>(busPtr))->MemorySize(); break;
-      case I_32_I2_400_3: size = (_useParallelI2S) ? (static_cast<NeoBus(Grb, Esp32, I2s1X8, 400Kbps)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Grb, Esp32, I2s1, 400Kbps)*>(busPtr))->MemorySize(); break;
-      case I_32_I2_TM1_4: size = (_useParallelI2S) ? (static_cast<NeoBus(WrgbTm1814, Esp32, I2s1X8, Tm1814)*>(busPtr))->MemorySize() : (static_cast<NeoBus(WrgbTm1814, Esp32, I2s1, Tm1814)*>(busPtr))->MemorySize(); break;
-      case I_32_I2_TM2_3: size = (_useParallelI2S) ? (static_cast<NeoBus(Brg, Esp32, I2s1X8, Tm1829)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Brg, Esp32, I2s1, Tm1829)*>(busPtr))->MemorySize(); break;
-      case I_32_I2_UCS_3: size = (_useParallelI2S) ? (static_cast<NeoBus(RgbUcs8903, Esp32, I2s1X8, 800Kbps)*>(busPtr))->MemorySize() : (static_cast<NeoBus(RgbUcs8903, Esp32, I2s1, 800Kbps)*>(busPtr))->MemorySize(); break;
-      case I_32_I2_UCS_4: size = (_useParallelI2S) ? (static_cast<NeoBus(RgbwUcs8904, Esp32, I2s1X8, 800Kbps)*>(busPtr))->MemorySize() : (static_cast<NeoBus(RgbwUcs8904, Esp32, I2s1, 800Kbps)*>(busPtr))->MemorySize(); break;
-      case I_32_I2_APA106_3: size = (_useParallelI2S) ? (static_cast<NeoBus(Grb, Esp32, I2s1X8, Apa106)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Grb, Esp32, I2s1, Apa106)*>(busPtr))->MemorySize(); break;
-      case I_32_I2_FW6_5: size = (_useParallelI2S) ? (static_cast<NeoBus(Grbcwx, Esp32, I2s1X8, 800Kbps)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Grbcwx, Esp32, I2s1, 800Kbps)*>(busPtr))->MemorySize(); break;
-      case I_32_I2_2805_5: size = (_useParallelI2S) ? (static_cast<NeoBus(Grbww, Esp32, I2s1X8, Ws2805)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Grbww, Esp32, I2s1, Ws2805)*>(busPtr))->MemorySize(); break;
-      case I_32_I2_TM1914_3: size = (_useParallelI2S) ? (static_cast<NeoBus(GrbTm1914, Esp32, I2s1X8, Tm1914)*>(busPtr))->MemorySize() : (static_cast<NeoBus(GrbTm1914, Esp32, I2s1, Tm1914)*>(busPtr))->MemorySize(); break;
-      case I_32_I2_SM16825_5: size = (_useParallelI2S) ? (static_cast<NeoBus(RgbcwSm16825e, Esp32, I2s1X8, Ws2812x)*>(busPtr))->MemorySize() : (static_cast<NeoBus(RgbcwSm16825e, Esp32, I2s1, Ws2812x)*>(busPtr))->MemorySize(); break;
-      case I_32_I2_NEODUAL_4: size = (_useParallelI2S) ? (static_cast<NeoBus(Rgbwxx, Esp32, I2s1X8, Ws2812x)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Rgbwxx, Esp32, I2s1, Ws2812x)*>(busPtr))->MemorySize(); break;
+      case I_32_I2_NEO_3: return (_useParallelI2S) ? (static_cast<NeoBus(Grb, Esp32, I2s1X8, Ws2812x)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Grb, Esp32, I2s1, Ws2812x)*>(busPtr))->MemorySize();
+      case I_32_I2_NEO_4: return (_useParallelI2S) ? (static_cast<NeoBus(Grbw, Esp32, I2s1X8, Sk6812)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Grbw, Esp32, I2s1, Sk6812)*>(busPtr))->MemorySize();
+      case I_32_I2_400_3: return (_useParallelI2S) ? (static_cast<NeoBus(Grb, Esp32, I2s1X8, 400Kbps)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Grb, Esp32, I2s1, 400Kbps)*>(busPtr))->MemorySize();
+      case I_32_I2_TM1_4: return (_useParallelI2S) ? (static_cast<NeoBus(WrgbTm1814, Esp32, I2s1X8, Tm1814)*>(busPtr))->MemorySize() : (static_cast<NeoBus(WrgbTm1814, Esp32, I2s1, Tm1814)*>(busPtr))->MemorySize();
+      case I_32_I2_TM2_3: return (_useParallelI2S) ? (static_cast<NeoBus(Brg, Esp32, I2s1X8, Tm1829)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Brg, Esp32, I2s1, Tm1829)*>(busPtr))->MemorySize();
+      case I_32_I2_UCS_3: return (_useParallelI2S) ? (static_cast<NeoBus(RgbUcs8903, Esp32, I2s1X8, 800Kbps)*>(busPtr))->MemorySize() : (static_cast<NeoBus(RgbUcs8903, Esp32, I2s1, 800Kbps)*>(busPtr))->MemorySize();
+      case I_32_I2_UCS_4: return (_useParallelI2S) ? (static_cast<NeoBus(RgbwUcs8904, Esp32, I2s1X8, 800Kbps)*>(busPtr))->MemorySize() : (static_cast<NeoBus(RgbwUcs8904, Esp32, I2s1, 800Kbps)*>(busPtr))->MemorySize();
+      case I_32_I2_APA106_3: return (_useParallelI2S) ? (static_cast<NeoBus(Grb, Esp32, I2s1X8, Apa106)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Grb, Esp32, I2s1, Apa106)*>(busPtr))->MemorySize();
+      case I_32_I2_FW6_5: return (_useParallelI2S) ? (static_cast<NeoBus(Grbcwx, Esp32, I2s1X8, 800Kbps)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Grbcwx, Esp32, I2s1, 800Kbps)*>(busPtr))->MemorySize();
+      case I_32_I2_2805_5: return (_useParallelI2S) ? (static_cast<NeoBus(Grbww, Esp32, I2s1X8, Ws2805)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Grbww, Esp32, I2s1, Ws2805)*>(busPtr))->MemorySize();
+      case I_32_I2_TM1914_3: return (_useParallelI2S) ? (static_cast<NeoBus(GrbTm1914, Esp32, I2s1X8, Tm1914)*>(busPtr))->MemorySize() : (static_cast<NeoBus(GrbTm1914, Esp32, I2s1, Tm1914)*>(busPtr))->MemorySize();
+      case I_32_I2_SM16825_5: return (_useParallelI2S) ? (static_cast<NeoBus(RgbcwSm16825e, Esp32, I2s1X8, Ws2812x)*>(busPtr))->MemorySize() : (static_cast<NeoBus(RgbcwSm16825e, Esp32, I2s1, Ws2812x)*>(busPtr))->MemorySize();
+      case I_32_I2_NEODUAL_4: return (_useParallelI2S) ? (static_cast<NeoBus(Rgbwxx, Esp32, I2s1X8, Ws2812x)*>(busPtr))->MemorySize() : (static_cast<NeoBus(Rgbwxx, Esp32, I2s1, Ws2812x)*>(busPtr))->MemorySize();
       #endif
     #endif
-      case I_HS_DOT_3: size = (static_cast<TwoPinBus(DotStarBgr, DotStarSpiHz)*>(busPtr))->MemorySize(); break;
-      case I_SS_DOT_3: size = (static_cast<TwoPinBus(DotStarBgr, DotStar)*>(busPtr))->MemorySize(); break;
-      case I_HS_LPD_3: size = (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806SpiHz)*>(busPtr))->MemorySize(); break;
-      case I_SS_LPD_3: size = (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806)*>(busPtr))->MemorySize(); break;
-      case I_HS_LPO_3: size = (static_cast<TwoPinBus(Lpd6803Grb, Lpd6803SpiHz)*>(busPtr))->MemorySize(); break;
-      case I_SS_LPO_3: size = (static_cast<TwoPinBus(Lpd6803Grb, Lpd6803)*>(busPtr))->MemorySize(); break;
-      case I_HS_WS1_3: size = (static_cast<TwoPinBus(NeoRbg, Ws2801SpiHz)*>(busPtr))->MemorySize(); break;
-      case I_SS_WS1_3: size = (static_cast<TwoPinBus(NeoRbg, Ws2801)*>(busPtr))->MemorySize(); break;
-      case I_HS_P98_3: size = (static_cast<TwoPinBus(P9813Bgr, P9813SpiHz)*>(busPtr))->MemorySize(); break;
-      case I_SS_P98_3: size = (static_cast<TwoPinBus(P9813Bgr, P9813)*>(busPtr))->MemorySize(); break;
-      case I_HS_HD1_3: size = (static_cast<TwoPinBus(NeoBgr48, Hd108SpiHz)*>(busPtr))->MemorySize(); break;
-      case I_SS_HD1_3: size = (static_cast<TwoPinBus(NeoBgr48, Hd108)*>(busPtr))->MemorySize(); break;
+      case I_HS_DOT_3: return (static_cast<TwoPinBus(DotStarBgr, DotStarSpiHz)*>(busPtr))->MemorySize();
+      case I_SS_DOT_3: return (static_cast<TwoPinBus(DotStarBgr, DotStar)*>(busPtr))->MemorySize();
+      case I_HS_LPD_3: return (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806SpiHz)*>(busPtr))->MemorySize();
+      case I_SS_LPD_3: return (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806)*>(busPtr))->MemorySize();
+      case I_HS_LPO_3: return (static_cast<TwoPinBus(Lpd6803Grb, Lpd6803SpiHz)*>(busPtr))->MemorySize();
+      case I_SS_LPO_3: return (static_cast<TwoPinBus(Lpd6803Grb, Lpd6803)*>(busPtr))->MemorySize();
+      case I_HS_WS1_3: return (static_cast<TwoPinBus(NeoRbg, Ws2801SpiHz)*>(busPtr))->MemorySize();
+      case I_SS_WS1_3: return (static_cast<TwoPinBus(NeoRbg, Ws2801)*>(busPtr))->MemorySize();
+      case I_HS_P98_3: return (static_cast<TwoPinBus(P9813Bgr, P9813SpiHz)*>(busPtr))->MemorySize();
+      case I_SS_P98_3: return (static_cast<TwoPinBus(P9813Bgr, P9813)*>(busPtr))->MemorySize();
+      case I_HS_HD1_3: return (static_cast<TwoPinBus(NeoBgr48, Hd108SpiHz)*>(busPtr))->MemorySize();
+      case I_SS_HD1_3: return (static_cast<TwoPinBus(NeoBgr48, Hd108)*>(busPtr))->MemorySize();
     }
-    return size;
+    return 0;
   }
   #endif
 
