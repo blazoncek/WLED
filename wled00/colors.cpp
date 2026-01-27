@@ -646,3 +646,7 @@ uint32_t NeoGammaWLEDMethod::inverseGamma32(uint32_t color)
   uint8_t b = B(color);
   return RGBW32(gammaT_inv[r], gammaT_inv[g], gammaT_inv[b], gammaT_inv[w]);
 }
+
+uint32_t nullGamma32(uint32_t c) {
+  return c;
+}

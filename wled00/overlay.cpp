@@ -25,11 +25,11 @@ void _overlayAnalogClock()
   {
     if (secondPixel < analogClock12pixel)
     {
-      strip.setRange(analogClock12pixel, overlayMax, color_fade(0xFF0000, bri));
-      strip.setRange(overlayMin, secondPixel, color_fade(0xFF0000, bri));
+      strip.setRange(analogClock12pixel, overlayMax, 0xFF0000);
+      strip.setRange(overlayMin, secondPixel, 0xFF0000);
     } else
     {
-      strip.setRange(analogClock12pixel, secondPixel, color_fade(0xFF0000, bri));
+      strip.setRange(analogClock12pixel, secondPixel, 0xFF0000);
     }
   }
   if (analogClock5MinuteMarks)
@@ -38,12 +38,12 @@ void _overlayAnalogClock()
     {
       unsigned pix = analogClock12pixel + roundf((overlaySize / 12.0f) *i);
       if (pix > overlayMax) pix -= overlaySize;
-      strip.setPixelColor(pix, color_fade(0x00FFAA, bri));
+      strip.setPixelColor(pix, 0x00FFAA);
     }
   }
-  if (!analogClockSecondsTrail) strip.setPixelColor(secondPixel, color_fade(0xFF0000, bri));
-  strip.setPixelColor(minutePixel, color_fade(0x00FF00, bri));
-  strip.setPixelColor(hourPixel, color_fade(0x0000FF, bri));
+  if (!analogClockSecondsTrail) strip.setPixelColor(secondPixel, 0xFF0000);
+  strip.setPixelColor(minutePixel, 0x00FF00);
+  strip.setPixelColor(hourPixel, 0x0000FF);
 }
 
 
@@ -100,7 +100,3 @@ void handleOverlayDraw() {
   }
   if (overlayCurrent == 1) _overlayAnalogClock();
 }
-
-/*
- * Support for the Cronixie clock has moved to a usermod, compile with "-D USERMOD_CRONIXIE" to enable
- */

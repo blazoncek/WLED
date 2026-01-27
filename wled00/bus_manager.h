@@ -60,6 +60,9 @@ uint16_t approximateKelvinFromRGB(uint32_t rgb);
 #define IC_INDEX_WS2812_2CH_3X(i)  ((i)*2/3)
 #define WS2812_2CH_3X_SPANS_2_ICS(i) ((i)&0x01)    // every other LED zone is on two different ICs
 
+extern byte briMultiplier;
+static inline uint8_t scaleBri(uint8_t bri) { unsigned b = ((unsigned)bri*briMultiplier)/100; return b > 255 ? 255 : b; }
+
 struct BusConfig; // forward declaration
 
 // Defines an LED Strip and its color ordering.
@@ -121,7 +124,7 @@ class Bus {
     virtual bool     canShow() const                            { return true; }
     virtual void     setStatusPixel(uint32_t c)                 {}
     virtual void     setPixelColor(unsigned pix, uint32_t c)    = 0;
-    virtual void     setBrightness(uint8_t b)                   { _bri = b; };
+    virtual void     setBrightness(uint8_t b)                   { _bri = scaleBri(b); };
     virtual void     setColorOrder(uint8_t co)                  {}
     virtual uint8_t  getBrightness() const                      { return _bri; }
     virtual size_t   getPins(uint8_t* pinArray = nullptr) const { return 0; }

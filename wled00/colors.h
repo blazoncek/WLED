@@ -31,6 +31,7 @@ class NeoGammaWLEDMethod {
 #define gamma8(c)  NeoGammaWLEDMethod::rawGamma8(c)
 #define gamma32inv(c) NeoGammaWLEDMethod::inverseGamma32(c)
 #define gamma8inv(c)  NeoGammaWLEDMethod::rawInverseGamma8(c)
+uint32_t nullGamma32(uint32_t);
 
 // addidion, blending & scaling
 [[gnu::hot, gnu::pure]] uint32_t color_blend(uint32_t c1, uint32_t c2 , uint8_t blend);

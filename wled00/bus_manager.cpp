@@ -29,6 +29,7 @@ extern bool useParallelI2S;
 //colors.cpp
 uint32_t color_fade(uint32_t c, uint8_t bri, bool video = false);
 uint32_t colorBalanceFromKelvin(uint16_t kelvin, uint32_t rgb);
+extern uint32_t (*gamma32Func)(uint32_t);
 
 //network.cpp
 IPAddress resolveHostname(const String& hostname, bool useMDNS = false);
@@ -234,7 +235,7 @@ bool BusDigital::canShow() const {
 //TODO only show if no new show due in the next 50ms
 void BusDigital::setStatusPixel(uint32_t c) {
   if (_valid && _skip) {
-    PolyBus::setPixelColor(_busPtr, _iType, 0, c, _colorOrderMap.getPixelColorOrder(_start, _colorOrder));
+    PolyBus::setPixelColor(_busPtr, _iType, 0, gamma32Func(c), _colorOrderMap.getPixelColorOrder(_start, _colorOrder));
     if (canShow()) PolyBus::show(_busPtr, _iType);
   }
 }
@@ -243,7 +244,7 @@ void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
   if (!_valid) return;
   if (hasWhite()) c = autoWhiteCalc(c);
   if (Bus::_cct >= 1900) c = colorBalanceFromKelvin(Bus::_cct, c); //color correction from CCT
-  c = color_fade(c, _bri, true);
+  c = gamma32Func(color_fade(c, _bri, true));
 
   // pre-calcualte power usage for per-output ABL (a single bus should never have over 2000 LEDs so uint32_t is enough for _busPowerSum)
   // WARNING: assumes pixel is not modified agin until show() is called
@@ -417,6 +418,7 @@ void BusPwm::setPixelColor(unsigned pix, uint32_t c) {
   if (Bus::_cct >= 1900 && (_type == TYPE_ANALOG_3CH || _type == TYPE_ANALOG_4CH)) {
     c = colorBalanceFromKelvin(Bus::_cct, c); //color correction from CCT
   }
+  c = gamma32Func(c);
   uint8_t r = R(c);
   uint8_t g = G(c);
   uint8_t b = B(c);
@@ -622,6 +624,7 @@ void BusNetwork::setPixelColor(unsigned pix, uint32_t c) {
   if (!_valid || pix >= _len) return;
   if (_hasWhite) c = autoWhiteCalc(c);
   if (Bus::_cct >= 1900) c = colorBalanceFromKelvin(Bus::_cct, c); //color correction from CCT
+  // we do not apply gamma on network buses
   unsigned offset = pix * _UDPchannels;
   _data[offset]   = R(c);
   _data[offset+1] = G(c);

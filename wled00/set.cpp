@@ -356,6 +356,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       gammaCorrectCol = false;
     }
     NeoGammaWLEDMethod::calcGammaTable(gammaCorrectVal); // fill look-up tables
+    if (!realtimeMode) gamma32Func = gammaCorrectCol ? NeoGammaWLEDMethod::Correct32 : nullGamma32;
 
     t = request->arg(F("TD")).toInt();
     if (t >= 0) transitionDelayDefault = t;

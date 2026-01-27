@@ -431,12 +431,14 @@ void realtimeLock(uint32_t timeoutMs, byte md)
 
   if (realtimeOverride) return;
   if (arlsForceMaxBri) strip.setBrightness(255, true);
+  if (arlsDisableGammaCorrection) gamma32Func = nullGamma32; // no gamma correction from live sources (have gamma applied)
   if (briT > 0 && md == REALTIME_MODE_GENERIC) strip.show();
 }
 
 void exitRealtime() {
   if (!realtimeMode) return;
   if (realtimeOverride == REALTIME_OVERRIDE_ONCE) realtimeOverride = REALTIME_OVERRIDE_NONE;
+  if (arlsDisableGammaCorrection) gamma32Func = gammaCorrectCol ? NeoGammaWLEDMethod::Correct32 : nullGamma32; // restore gamma correction function
   strip.setBrightness(bri, true);
   realtimeTimeout = 0; // cancel realtime mode immediately
   realtimeMode = REALTIME_MODE_INACTIVE; // inform UI immediately

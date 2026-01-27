@@ -1259,9 +1259,9 @@ bool serveLiveLeds(AsyncWebServerRequest* request, uint32_t wsClient)
     uint8_t g = G(c);
     uint8_t b = B(c);
     uint8_t w = W(c);
-    r = scale8(qadd8(w, r), strip.getBrightness()); //R, add white channel to RGB channels as a simple RGBW -> RGB map
-    g = scale8(qadd8(w, g), strip.getBrightness()); //G
-    b = scale8(qadd8(w, b), strip.getBrightness()); //B
+    r = bri ? qadd8(w, r) : 0; //R, add white channel to RGB channels as a simple RGBW -> RGB map
+    g = bri ? qadd8(w, g) : 0; //G
+    b = bri ? qadd8(w, b) : 0; //B
     buf += sprintf_P(buf, PSTR("\"%06X\","), RGBW32(r,g,b,0));
   }
   buf--;  // remove last comma

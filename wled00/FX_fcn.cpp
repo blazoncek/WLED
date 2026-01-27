@@ -1106,13 +1106,6 @@ CRGBA Segment::color_from_palette(uint16_t i, bool mapping, bool moving, uint8_t
 // WS2812FX class implementation
 ///////////////////////////////////////////////////////////////////////////////
 
-//scales the brightness with the briMultiplier factor
-static uint8_t scaledBri(uint8_t in) {
-  unsigned val = ((unsigned)in*briMultiplier)/100;
-  if (val > 255) val = 255;
-  return val;
-}
-
 //do not call this method from system context (network callback)
 void WS2812FX::finalizeInit() {
   //reset segment runtimes
@@ -1205,7 +1198,7 @@ void WS2812FX::finalizeInit() {
     if (busEnd > _length) _length = busEnd;
     // This must be done after all buses have been created, as some kinds (parallel I2S) interact
     bus->begin();
-    bus->setBrightness(scaledBri(bri));
+    bus->setBrightness(bri);
   }
 
   // if no valid bus was added, add a dummy one
@@ -1221,7 +1214,7 @@ void WS2812FX::finalizeInit() {
       _hasWhiteChannel = _hasCCT = _isOffRefreshRequired = false;
       _hasRGB = true;
       BusManager::getBus(0)->begin();
-      BusManager::getBus(0)->setBrightness(scaledBri(bri));
+      BusManager::getBus(0)->setBrightness(bri);
       DEBUG_PRINTLN(F("Added fallback bus."));
     }
   }
@@ -1753,9 +1746,6 @@ void WS2812FX::show() {
 
   // paint actuall pixels
   int oldCCT = Bus::getCCT(); // store original CCT value (since it is global)
-  // using lambda functionn moves if statement out of loop
-  // this is used to apply gamma correction if enabled and not disabled in realtime mode
-  auto applyGamma = gammaCorrectCol && !(realtimeMode && arlsDisableGammaCorrection) ? [](uint32_t c){return gamma32(c);} : [](uint32_t c){return c;}; // use gamma correction if not disabled
   // when cctFromRgb is true we implicitly calculate WW and CW from RGB values (cct==-1)
   if (cctFromRgb) BusManager::setSegmentCCT(-1);
   for (size_t i = 0; i < totalLen; i++) {
@@ -1766,7 +1756,7 @@ void WS2812FX::show() {
     }
     // WARNING: BusDigital::setPixelColor() will pre-calculate sum of all channels for per-output ABL
     // this means we cannot modify bus pixel values after this point and need to call BusManager::show() immediately after this loop
-    BusManager::setPixelColor(getMappedPixelIndex(i), applyGamma(_pixels[i]));
+    BusManager::setPixelColor(getMappedPixelIndex(i), _pixels[i]); // gamma has been moved to BusManager to get around incorrect application before ABL kicks in
   }
   Bus::setCCT(oldCCT);  // restore old CCT for ABL adjustments
 
@@ -1852,7 +1842,7 @@ void WS2812FX::setBrightness(uint8_t b, bool direct) {
   if (_brightness == 0) { //unfreeze all segments on power off
     for (const Segment &seg : _segments) seg.freeze = false; // freeze is mutable
   }
-  BusManager::setBrightness(scaledBri(b));
+  BusManager::setBrightness(b);
   if (!direct) {
     unsigned long t = millis();
     if (_segments[0].next_time > t + 22 && t - _lastShow > MIN_SHOW_DELAY) trigger(); //apply brightness change immediately if no refresh soon
