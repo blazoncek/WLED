@@ -210,11 +210,13 @@ void handleAnalog(uint8_t b)
     if (buttons[b].macroDoublePress >= 250) {
       // global brightness
       if (aRead == 0) {
-        briLast = bri;
-        bri = 0;
+        if (bri > 0) toggleOnOff();
       } else {
-        if (bri == 0) strip.restartRuntime();
-        bri = aRead;
+        if (bri == 0) {
+          strip.restartRuntime();
+          toggleOnOff(); // needed for switching on relay
+        }
+        bri = aRead;  // override briLast from toggleOnOff()
       }
     } else if (buttons[b].macroDoublePress == 249) {
       // effect speed
@@ -241,8 +243,6 @@ void handleAnalog(uint8_t b)
         //seg.setOpacity(aRead);
         //seg.setOption(SEG_OPTION_ON, true); // on (use transition)
       }
-      // this will notify clients of update (websockets,mqtt,etc)
-      updateInterfaces(CALL_MODE_BUTTON);
     }
   } else {
     DEBUG_PRINTLN(F("Analog: No action"));
@@ -250,6 +250,7 @@ void handleAnalog(uint8_t b)
     // we can either trigger a preset depending on the level (between short and long entries)
     // or use it for RGBW direct control
   }
+  // this will notify clients of update (websockets,mqtt,etc)
   colorUpdated(CALL_MODE_BUTTON);
 }
 
@@ -357,23 +358,51 @@ void handleButton()
   }
 }
 
-// handleOnOff() happens *after* handleBrightness() (see wled.cpp) which may change bri/briT but *before* strip.service()
-// where actual LED painting occurrs
-// this is important for relay control and in the event of turning off on-board LED
 void handleOnOff()
 {
+  unsigned long now = millis();
+  if (rlyStartTime && now - rlyStartTime < rlyDelay*10) return; // don't do anything if we are waiting for relay delay
+
+  // perform fade global brightness transition
+  if (transitionActive) {
+    // we need to start segment transitions after relay delay passed 
+    if (rlyStartTime) {
+      strip.setTransitionMode(true);    // force all segments to transition mode
+      rlyStartTime = 0;                 // reset relay status
+      transitionStartTime = now;        // start counting transition from the moment when relay delay finished
+    }
+    int ti = now - transitionStartTime;
+    int tr = strip.getTransition() + 1; // ensure non-zero just in case
+    if (ti/tr > 0) {
+      strip.setTransitionMode(false);   // stop all transitions
+      // restore (global) transition time if not called from UDP notifier or single/temporary transition from JSON (also playlist)
+      if (jsonTransitionOnce) strip.setTransition(transitionDelay);
+      transitionActive = false;
+      jsonTransitionOnce = false;
+      applyFinalBri();
+    } else {
+      byte briTO = briT;
+      int deltaBri = (int)bri - (int)briOld;
+      // if we have non-fade transition set final brightness immediately
+      //if (transitionStyle != TRANSITION_FADE) briT = bri;
+      //else                                    
+      briT = briOld + (deltaBri * ti / tr);
+      if (briTO != briT) applyBri();
+    }
+  }
+
   // if we want to control on-board LED (ESP8266) or relay we have to do it here as the final show() may not happen until
   // next loop() cycle
   if (strip.getBrightness()) {
     // we want to be on
-    lastOnTime = millis();
+    lastOnTime = now;
     if (offMode) {
       // but we are off
       BusManager::on();
       offMode = false;
-      toggleRelay(!offMode);  // switch on
+      // relay was switched on in toggleOnOff() or similar on/off action (deserializeState()); here, it would be too late
     }
-  } else if (millis() - lastOnTime > max(600, strip.getTransition() + 2*strip.getFrameTime()) && !strip.needsUpdate()) {
+  } else if (now - lastOnTime > 600 && !strip.needsUpdate()) {
     // for turning LED or relay off we need to wait until strip no longer needs updates (strip.trigger())
     // we want to be off
     if (!offMode) {
@@ -392,6 +421,7 @@ void toggleRelay(bool on) {
     pinMode(rlyPin, rlyOpenDrain ? OUTPUT_OPEN_DRAIN : OUTPUT);
     digitalWrite(rlyPin, !(rlyMde ^ on)); // !XOR: 00=0, 01=1, 10=1, 11=0; we need inverse of that
   }
+  rlyStartTime = on ? millis() : 0;
 }
 
 void IRAM_ATTR touchButtonISR()

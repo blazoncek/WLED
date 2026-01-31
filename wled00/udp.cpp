@@ -254,7 +254,7 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
     // are we syncing bounds and slave has more active segments than master?
     if (receiveSegmentBounds && numSrcSegs < strip.getActiveSegmentsNum()) {
       DEBUG_PRINTLN(F("Removing excessive segments."));
-      strip.suspend(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
+      strip.suspend().waitForIt(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
       for (size_t i=strip.getSegmentsNum(); i>numSrcSegs && i>0; i--) {
         Segment &seg = strip.getSegment(i-1);
         if (seg.isActive()) seg.deactivate(); // delete segment
@@ -294,7 +294,7 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
       uint16_t offset = (udpIn[7+ofs] << 8 | udpIn[8+ofs]);
       if (!receiveSegmentOptions) {
         DEBUG_PRINTF_P(PSTR("Set segment w/o options: %d [%d,%d;%d,%d]\n"), id, (int)start, (int)stop, (int)startY, (int)stopY);
-        strip.suspend(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
+        strip.suspend().waitForIt(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
         selseg.setGeometry(start, stop, selseg.grouping, selseg.spacing, offset, startY, stopY, selseg.map1D2D);
         strip.resume();
         continue; // we do receive bounds, but not options
@@ -336,12 +336,12 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
       }
       if (receiveSegmentBounds) {
         DEBUG_PRINTF_P(PSTR("Set segment w/ options: %d [%d,%d;%d,%d]\n"), id, (int)start, (int)stop, (int)startY, (int)stopY);
-        strip.suspend(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
+        strip.suspend().waitForIt(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
         selseg.setGeometry(start, stop, udpIn[5+ofs], udpIn[6+ofs], offset, startY, stopY, selseg.map1D2D);
         strip.resume();
       } else {
         DEBUG_PRINTF_P(PSTR("Set segment grouping: %d [%d,%d]\n"), id, (int)udpIn[5+ofs], (int)udpIn[6+ofs]);
-        strip.suspend(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
+        strip.suspend().waitForIt(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
         selseg.setGeometry(selseg.start, selseg.stop, udpIn[5+ofs], udpIn[6+ofs], selseg.offset, selseg.startY, selseg.stopY, selseg.map1D2D);
         strip.resume();
       }
@@ -421,11 +421,12 @@ void realtimeLock(uint32_t timeoutMs, byte md)
     // if strip is off (bri==0) and not already in RTM
     if (briT == 0) {
       strip.setBrightness(briLast, true);
+      toggleRelay(true); // switch relay on (needs to be done here)
     }
   }
 
   if (realtimeTimeout != UINT32_MAX) {
-    realtimeTimeout = (timeoutMs == 255001 || timeoutMs == 65000) ? UINT32_MAX : millis() + timeoutMs;
+    realtimeTimeout = (timeoutMs == UINT32_MAX) ? UINT32_MAX : millis() + timeoutMs;
   }
   realtimeMode = md;
 
@@ -609,7 +610,7 @@ void handleNotifications()
       realtimeTimeout = 0; // cancel realtime mode immediately
       return;
     } else {
-      realtimeLock(udpIn[1]*1000 +1, REALTIME_MODE_UDP);
+      realtimeLock(udpIn[1]==255 ? UINT32_MAX : udpIn[1]*1000, REALTIME_MODE_UDP); // 255 == infinite lock
     }
     if (realtimeOverride) return;
 
@@ -672,8 +673,13 @@ void handleNotifications()
 
 void setRealtimePixel(uint16_t i, byte r, byte g, byte b, byte w)
 {
-  unsigned pix = i + arlsOffset;
-  strip.setRealtimePixelColor(pix, RGBW32(r,g,b,w));
+  if (realtimeMode == REALTIME_MODE_INACTIVE) return;
+  i += arlsOffset;
+  if (useMainSegmentOnly) {
+    strip.getMainSegment().setPixelColor(i, CRGBA(r,g,b,w));
+  } else {
+    strip.setPixelColor(i, RGBW32(r,g,b,w));
+  }
 }
 
 /*********************************************************************************************\

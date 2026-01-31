@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2601101
+#define VERSION 2601310
 #else
 #define VERSION BUILD
 #endif
@@ -87,6 +87,7 @@
   #include <ESP8266mDNS.h>
   #include <ESPAsyncTCP.h>
   #include <LittleFS.h>
+  #define WLED_FS LittleFS
   extern "C"
   {
   #include <user_interface.h>
@@ -110,8 +111,10 @@
       #define CONFIG_LITTLEFS_FOR_IDF_3_2
     #endif
     #include <LITTLEFS.h>
+    #define WLED_FS LITTLEFS
   #else
     #include <LittleFS.h>
+    #define WLED_FS LittleFS
   #endif
   #include "esp_task_wdt.h"
 
@@ -211,17 +214,6 @@ using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
   #include <IRutils.h>
 #endif
 
-//Filesystem to use for preset and config files. SPIFFS or LittleFS on ESP8266, SPIFFS only on ESP32 (now using LITTLEFS port by lorol)
-#ifdef ESP8266
-  #define WLED_FS LittleFS
-#else
-  #if LOROL_LITTLEFS
-    #define WLED_FS LITTLEFS
-  #else
-    #define WLED_FS LittleFS
-  #endif
-#endif
-
 // GLOBAL VARIABLES
 // both declared and defined in header (solution from http://www.keil.com/support/docs/1868.htm)
 //
@@ -259,27 +251,11 @@ WLED_GLOBAL char releaseString[] _INIT_PROGMEM(WLED_RELEASE_NAME); // somehow th
 WLED_GLOBAL char apPass[65]  _INIT(WLED_AP_PASS);
 WLED_GLOBAL char otaPass[33] _INIT(DEFAULT_OTA_PASS);
 
-// Hardware and pin config
-#ifndef RLYPIN
-  #define RLYPIN -1
-#endif
-WLED_GLOBAL int8_t rlyPin _INIT(RLYPIN);
-//Relay mode (1 = active high, 0 = active low, flipped in cfg.json)
-#ifndef RLYMDE
-  #define RLYMDE true
-#endif
-WLED_GLOBAL bool rlyMde _INIT(RLYMDE);
-//Use open drain (floating pin) when relay should be off
-#ifndef RLYODRAIN
-  #define RLYODRAIN false
-#endif
-WLED_GLOBAL bool rlyOpenDrain _INIT(RLYODRAIN);
-#ifndef IRPIN
-  #define IRPIN -1
-#endif
-#ifndef IRTYPE
-  #define IRTYPE 0
-#endif
+WLED_GLOBAL int8_t rlyPin       _INIT(RLYPIN);
+WLED_GLOBAL bool   rlyMde       _INIT(RLYMDE);      // Relay mode (1 = active high, 0 = active low, flipped in cfg.json)
+WLED_GLOBAL bool   rlyOpenDrain _INIT(RLYODRAIN);   // Use open drain (floating pin) when relay should be off
+WLED_GLOBAL uint8_t       rlyDelay     _INIT(0);    // delay after switching relay (in 1/100 seconds)
+WLED_GLOBAL unsigned long rlyStartTime _INIT(0UL);  // needed for power-on delay (only set during delay itself)
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2) || (defined(RX) && defined(TX))
   // use RX/TX as set by the framework - these boards do _not_ have RX=3 and TX=1
@@ -561,11 +537,11 @@ WLED_GLOBAL std::vector<CRGBPalette16> customPalettes;  // custom palettes
 WLED_GLOBAL uint8_t paletteBlend _INIT(0);        // determines bending and wrapping of palette: 0: blend, wrap if moving (SEGMENT.speed>0); 1: blend, always wrap; 2: blend, never wrap; 3: don't blend or wrap
 
 // transitions
-WLED_GLOBAL uint8_t       blendingStyle            _INIT(0);      // effect blending/transitionig style
+WLED_GLOBAL uint8_t       transitionStyle          _INIT(0);      // effect/on-off transitionig style
 WLED_GLOBAL bool          transitionActive         _INIT(false);
 WLED_GLOBAL uint16_t      transitionDelay          _INIT(750);    // global transition duration
 WLED_GLOBAL uint16_t      transitionDelayDefault   _INIT(750);    // default transition time (stored in cfg.json)
-WLED_GLOBAL unsigned long transitionStartTime;
+WLED_GLOBAL unsigned long transitionStartTime      _INIT(0UL);
 WLED_GLOBAL bool          jsonTransitionOnce       _INIT(false);  // flag to override transitionDelay (playlist, JSON API: "live" & "seg":{"i"} & "tt")
 WLED_GLOBAL uint8_t       randomPaletteChangeTime  _INIT(5);      // amount of time [s] between random palette changes (min: 1s, max: 255s)
 WLED_GLOBAL bool          useHarmonicRandomPalette _INIT(true);   // use *harmonic* random palette generation (nicer looking) or truly random
@@ -586,7 +562,7 @@ WLED_GLOBAL bool offMode             _INIT(false);         // correctly initiali
 WLED_GLOBAL byte briS                _INIT(128);           // default brightness
 WLED_GLOBAL byte bri                 _INIT(128);           // global brightness (set)
 WLED_GLOBAL byte briOld              _INIT(0);             // global brightness while in transition loop (previous iteration)
-WLED_GLOBAL byte briT                _INIT(0);             // global brightness during transition
+WLED_GLOBAL byte briT                _INIT(0);             // global brightness during transition (if > 0 WLED is still on)
 WLED_GLOBAL byte briLast             _INIT(128);           // brightness before turned off. Used for toggle function
 WLED_GLOBAL byte whiteLast           _INIT(128);           // white channel before turned off. Used for toggle function in ir.cpp
 

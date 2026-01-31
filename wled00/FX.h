@@ -358,33 +358,33 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define MODE_COUNT                     187  // includes audioreactive modes
 
 
-#define BLEND_STYLE_FADE            0x00  // universal
-#define BLEND_STYLE_FAIRY_DUST      0x01  // universal
-#define BLEND_STYLE_SWIPE_RIGHT     0x02  // 1D or 2D
-#define BLEND_STYLE_SWIPE_LEFT      0x03  // 1D or 2D
-#define BLEND_STYLE_OUTSIDE_IN      0x04  // 1D or 2D
-#define BLEND_STYLE_INSIDE_OUT      0x05  // 1D or 2D
-#define BLEND_STYLE_SWIPE_UP        0x06  // 2D
-#define BLEND_STYLE_SWIPE_DOWN      0x07  // 2D
-#define BLEND_STYLE_OPEN_H          0x08  // 2D
-#define BLEND_STYLE_OPEN_V          0x09  // 2D
-#define BLEND_STYLE_SWIPE_TL        0x0A  // 2D
-#define BLEND_STYLE_SWIPE_TR        0x0B  // 2D
-#define BLEND_STYLE_SWIPE_BR        0x0C  // 2D
-#define BLEND_STYLE_SWIPE_BL        0x0D  // 2D
-#define BLEND_STYLE_CIRCULAR_OUT    0x0E  // 2D
-#define BLEND_STYLE_CIRCULAR_IN     0x0F  // 2D
+#define TRANSITION_FADE            0x00  // universal
+#define TRANSITION_FAIRY_DUST      0x01  // universal
+#define TRANSITION_SWIPE_RIGHT     0x02  // 1D or 2D
+#define TRANSITION_SWIPE_LEFT      0x03  // 1D or 2D
+#define TRANSITION_OUTSIDE_IN      0x04  // 1D or 2D
+#define TRANSITION_INSIDE_OUT      0x05  // 1D or 2D
+#define TRANSITION_SWIPE_UP        0x06  // 2D
+#define TRANSITION_SWIPE_DOWN      0x07  // 2D
+#define TRANSITION_OPEN_H          0x08  // 2D
+#define TRANSITION_OPEN_V          0x09  // 2D
+#define TRANSITION_SWIPE_TL        0x0A  // 2D
+#define TRANSITION_SWIPE_TR        0x0B  // 2D
+#define TRANSITION_SWIPE_BR        0x0C  // 2D
+#define TRANSITION_SWIPE_BL        0x0D  // 2D
+#define TRANSITION_CIRCULAR_OUT    0x0E  // 2D
+#define TRANSITION_CIRCULAR_IN     0x0F  // 2D
 // as there are many push variants to optimise if statements they are groupped together
-#define BLEND_STYLE_PUSH_RIGHT      0x10  // 1D or 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_LEFT       0x11  // 1D or 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_UP         0x12  // 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_DOWN       0x13  // 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_TL         0x14  // 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_TR         0x15  // 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_BR         0x16  // 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_BL         0x17  // 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_MASK       0x10
-#define BLEND_STYLE_COUNT           18
+#define TRANSITION_PUSH_RIGHT      0x10  // 1D or 2D (& 0b00010000)
+#define TRANSITION_PUSH_LEFT       0x11  // 1D or 2D (& 0b00010000)
+#define TRANSITION_PUSH_UP         0x12  // 2D (& 0b00010000)
+#define TRANSITION_PUSH_DOWN       0x13  // 2D (& 0b00010000)
+#define TRANSITION_PUSH_TL         0x14  // 2D (& 0b00010000)
+#define TRANSITION_PUSH_TR         0x15  // 2D (& 0b00010000)
+#define TRANSITION_PUSH_BR         0x16  // 2D (& 0b00010000)
+#define TRANSITION_PUSH_BL         0x17  // 2D (& 0b00010000)
+#define TRANSITION_PUSH_MASK       0x10
+#define TRANSITION_COUNT           18
 
 #define BLEND_MODE_COUNT            20    // number of blending modes (see Segment::blendMode)
 
@@ -886,7 +886,6 @@ class WS2812FX {
       setupEffectData(),                          // add default effects to the list; defined in FX.cpp
       waitForIt();                                // wait until frame is over (service() has finished or time for 1 frame has passed)
 
-    void setRealtimePixelColor(unsigned i, uint32_t c);
     inline void setPixelColor(unsigned n, uint32_t c) const   { if (n < getLengthTotal()) _pixels[n] = c; }  // paints absolute strip pixel with index n and color c
     inline void resetTimebase()                               { timebase = 0UL - millis(); }
     inline void setPixelColor(unsigned n, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0) const
@@ -898,8 +897,8 @@ class WS2812FX {
     inline void setTransition(uint16_t t)                     { _transitionDur = t; } // sets transition time (in ms)
     inline void appendSegment(uint16_t start=0, uint16_t stop=DEFAULT_LED_COUNT, uint16_t startY = 0, uint16_t stopY = 1)
                                                               { if (_segments.size() < getMaxSegments()) _segments.emplace_back(start,stop,startY,stopY); }
-    inline void suspend()                                     { _suspend = true; }    // will suspend (and canacel) strip.service() execution
-    inline void resume()                                      { _suspend = false; }   // will resume strip.service() execution
+    inline WS2812FX& suspend()                                { _suspend = true; return *this; }  // will suspend (and canacel) strip.service() execution
+    inline void      resume()                                 { _suspend = false; }               // will resume strip.service() execution
 
     void calcMilliAmpsAvg();
     void restartRuntime();

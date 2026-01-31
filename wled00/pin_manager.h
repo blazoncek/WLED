@@ -57,6 +57,7 @@ enum struct PinOwner : uint8_t {
   DMX           = 0x8A,   // 'DMX'  == hard-coded to IO2
   HW_I2C        = 0x8B,   // 'I2C'  == hardware I2C pins (4&5 on ESP8266, 21&22 on ESP32)
   HW_SPI        = 0x8C,   // 'SPI'  == hardware (V)SPI pins (13,14&15 on ESP8266, 5,18&23 on ESP32)
+  HUB75         = 0x8E,   // 'Hub75' == Hub75 driver
   // Use UserMod IDs from const.h here
   UM_Unspecified       = USERMOD_ID_UNSPECIFIED,        // 0x01
   UM_Example           = USERMOD_ID_EXAMPLE,            // 0x02 // Usermod "usermod_v2_example.h"
@@ -102,7 +103,8 @@ namespace PinManager {
   // Provided to simplify error condition handling in clients
   // using more than one pin, such as I2C, SPI, rotary encoders,
   // ethernet, etc..
-  bool allocateMultiplePins(const managed_pin_type * mptArray, byte arrayElementCount, PinOwner tag );
+  bool allocateMultiplePins(const managed_pin_type * mptArray, byte arrayElementCount, PinOwner tag);
+  bool allocateMultiplePins(const int8_t * mptArray, byte arrayElementCount, PinOwner tag, bool output);
 
   [[deprecated("Replaced by three-parameter allocatePin(gpio, output, ownerTag), for improved debugging")]]
   inline bool allocatePin(byte gpio, bool output = true) { return allocatePin(gpio, output, PinOwner::None); }

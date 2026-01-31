@@ -99,6 +99,7 @@ typedef struct {
   uint8_t id;
   const char *type;
   const char *name;
+  std::vector<uint8_t> requiredPins;
 } LEDType;
 
 
@@ -146,6 +147,8 @@ class Bus {
     inline  bool     isOnOff() const                            { return isOnOff(_type); }
     inline  bool     isPWM() const                              { return isPWM(_type); }
     inline  bool     isVirtual() const                          { return isVirtual(_type); }
+    inline  bool     isHub75() const                            { return isHub75(_type); }
+    inline  bool     isUsermod() const                          { return isUsermod(_type); }
     inline  bool     is16bit() const                            { return is16bit(_type); }
     inline  bool     mustRefresh() const                        { return mustRefresh(_type); }
     inline  void     setReversed(bool reversed)                 { _reversed = reversed; }
@@ -161,7 +164,7 @@ class Bus {
     inline  bool     containsPixel(uint16_t pix) const          { return pix >= _start && pix < _start + _len; }
 
     static inline std::vector<LEDType> getLEDTypes()            { return {{TYPE_NONE, "", PSTR("None")}}; } // not used. just for reference for derived classes
-    static constexpr size_t   getNumberOfPins(uint8_t type)     { return isVirtual(type) ? 4 : isPWM(type) ? numPWMPins(type) : is2Pin(type) + 1; } // credit @PaoloTK
+    static constexpr size_t   getNumberOfPins(uint8_t type)     { return isUsermod(type) || isHub75(type) ? 5 : isVirtual(type) ? 4 : isPWM(type) ? numPWMPins(type) : is2Pin(type) + 1; } // credit @PaoloTK
     static constexpr size_t   getNumberOfChannels(uint8_t type) { return hasWhite(type) + 3*hasRGB(type) + hasCCT(type); }
     static constexpr bool hasRGB(uint8_t type) {
       return !((type >= TYPE_WS2812_1CH && type <= TYPE_WS2812_WWA) || type == TYPE_ANALOG_1CH || type == TYPE_ANALOG_2CH || type == TYPE_ONOFF);
@@ -185,6 +188,12 @@ class Bus {
     static constexpr bool  isOnOff(uint8_t type)      { return (type == TYPE_ONOFF); }
     static constexpr bool  isPWM(uint8_t type)        { return (type >= TYPE_ANALOG_MIN && type <= TYPE_ANALOG_MAX); }
     static constexpr bool  isVirtual(uint8_t type)    { return (type >= TYPE_VIRTUAL_MIN && type <= TYPE_VIRTUAL_MAX); }
+#if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
+    static constexpr bool  isHub75(uint8_t type)      { return (type >= TYPE_HUB75MATRIX_MIN && type <= TYPE_HUB75MATRIX_MAX); }
+#else
+    static constexpr bool  isHub75(uint8_t type)      { return false; }
+#endif
+    static constexpr bool  isUsermod(uint8_t type)    { return type == TYPE_USERMOD; }
     static constexpr bool  is16bit(uint8_t type)      { return type == TYPE_UCS8903 || type == TYPE_UCS8904 || type == TYPE_SM16825; }
     static constexpr bool  mustRefresh(uint8_t type)  { return type == TYPE_TM1814; }
     static constexpr int   numPWMPins(uint8_t type)   { return (type - 40); }
@@ -208,7 +217,7 @@ class Bus {
     uint8_t  _bri;
     uint16_t _start;
     uint16_t _len;
-    //struct { //using bitfield struct adds abour 250 bytes to binary size
+    //struct { //using bitfield struct adds about 250 bytes to binary size
       bool _reversed;//     : 1;
       bool _valid;//        : 1;
       bool _needsRefresh;// : 1;
@@ -265,14 +274,15 @@ class BusDigital : public Bus {
   private:
     void    *_busPtr;
     uint32_t _busPowerSum;
-    uint8_t  _skip;
-    uint8_t  _colorOrder;
-    uint8_t  _pins[2];
-    uint8_t  _iType;
     uint16_t _frequencykHz;
-    uint8_t  _milliAmpsPerLed;
     uint16_t _milliAmpsMax;
     uint16_t _milliAmpsLimit;
+    uint8_t  _pins[2];
+    uint8_t  _skip;
+    uint8_t  _colorOrder;
+    uint8_t  _iType;
+    uint8_t  _milliAmpsPerLed;
+    bool     _consistent; // RMT bus needs consistent buffers otherwise skipped LEDs or gaps may show random colors
 
     static uint16_t _milliAmpsTotal; // is overwitten/recalculated on each show()
 
@@ -306,13 +316,13 @@ class BusPwm : public Bus {
     static std::vector<LEDType> getLEDTypes();
 
   private:
-    uint8_t _pins[OUTPUT_MAX_PINS];
-    uint8_t _data[OUTPUT_MAX_PINS];
+    uint16_t _frequency;
+    uint8_t _pins[5]; // must be less or equal to OUTPUT_MAX_PINS
+    uint8_t _data[5]; // must be less or equal to OUTPUT_MAX_PINS
     #ifdef ARDUINO_ARCH_ESP32
     uint8_t _ledcStart;
     #endif
     uint8_t _depth;
-    uint16_t _frequency;
 
     void deallocatePins();
 };
@@ -356,15 +366,52 @@ class BusNetwork : public Bus {
     static std::vector<LEDType> getLEDTypes();
 
   private:
-    IPAddress _client;
-    uint8_t   _UDPtype;
-    uint8_t   _UDPchannels;
-    bool      _broadcastLock;
     uint8_t   *_data;
+    IPAddress _client;
     #ifdef ARDUINO_ARCH_ESP32
     String    _hostname;
     #endif
+    uint8_t   _UDPtype;
+    uint8_t   _UDPchannels;
+    bool      _broadcastLock;
 };
+
+
+// Hub75 driver will eat about 12kB of flash and about 3kB of RAM so it is conditionally included for the moment
+#if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
+// forward declarations
+class MatrixPanel_I2S_DMA;
+class VirtualMatrixPanel;
+class HUB75_I2S_CFG;
+
+class BusHub75Matrix : public Bus {
+  public:
+    BusHub75Matrix(const BusConfig &bc);
+    [[gnu::hot]] void setPixelColor(unsigned pix, uint32_t c) override;
+    void show() override;
+    void setBrightness(uint8_t b) override;
+    uint16_t getFrequency() const override;
+    size_t getPins(uint8_t* pinArray = nullptr) const override;
+    size_t getBusSize() const override;
+    void deallocatePins();
+    void cleanup();
+
+    static inline uint8_t *getCustomPinsArray() { return _customPins; }
+
+    ~BusHub75Matrix() {
+      cleanup();
+    }
+
+    static std::vector<LEDType> getLEDTypes(void);
+
+  private:
+    unsigned _matrixWidth;
+    //byte *_ledsDirty;
+    MatrixPanel_I2S_DMA *display;
+    VirtualMatrixPanel  *virtualDisp;
+    static uint8_t _customPins[14]; // another option would be to allocate memory dynamically (if needed), but this is simpler for now
+};
+#endif
 
 
 //temporary struct for passing bus configuration to bus
@@ -377,7 +424,7 @@ struct BusConfig {
   uint8_t skipAmount;
   bool refreshReq;
   uint8_t autoWhite;
-  uint8_t pins[5] = {255, 255, 255, 255, 255};
+  uint8_t pins[OUTPUT_MAX_PINS] = {255, 255, 255, 255, 255};
   uint16_t frequency;
   uint8_t milliAmpsPerLed;
   uint16_t milliAmpsMax;
@@ -440,9 +487,11 @@ namespace BusManager {
     return j;
   }
 
+  #ifdef WLED_DEBUG // used only in general debug
   size_t          memUsage();
+  #endif
   inline uint16_t currentMilliamps()     { return _gMilliAmpsUsed; }
-  void            initializeABL(unsigned gMilliAmpsMax);  // setup per output ABL parameters, call once after buses are initialized
+  void initializeABL(unsigned gMilliAmpsMax);  // setup per output ABL parameters, call once after buses are initialized
 
   void useParallelOutput(); // workaround for inaccessible PolyBus
   bool hasParallelOutput(); // workaround for inaccessible PolyBus

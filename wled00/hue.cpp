@@ -182,8 +182,7 @@ void onHueData(void* arg, AsyncClient* client, void *data, size_t len)
   {
     if (hueApplyOnOff)
     {
-      if (hueBri==0) {bri = 0;}
-      else if (bri==0 && hueBri>0) bri = briLast;
+      if ((bri > 0 && hueBri == 0) || (bri == 0 && hueBri > 0)) toggleOnOff();
     }
     if (hueApplyBri)
     {

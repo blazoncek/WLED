@@ -14,16 +14,15 @@
 static const char* sTopicFormat PROGMEM = "%.*s/%s";
 
 // parse payload for brightness, ON/OFF or toggle
-// briLast is used to remember last brightness value in case of ON/OFF or toggle
 // bri is set to 0 if payload is "0" or "OFF" or "false"
 static void parseMQTTBriPayload(char* payload)
 {
-  if      (strstr(payload, "ON") || strstr(payload, "on") || strstr(payload, "true")) {bri = briLast; stateUpdated(CALL_MODE_DIRECT_CHANGE);}
-  else if (strstr(payload, "T" ) || strstr(payload, "t" )) {toggleOnOff(); stateUpdated(CALL_MODE_DIRECT_CHANGE);}
+  if      (strstr(payload, "ON") || strstr(payload, "on") || strstr(payload, "true")) { if (bri == 0) toggleOnOff(); stateUpdated(CALL_MODE_DIRECT_CHANGE); }
+  else if (strstr(payload, "T" ) || strstr(payload, "t" )) { toggleOnOff(); stateUpdated(CALL_MODE_DIRECT_CHANGE); }
   else {
     uint8_t in = strtoul(payload, NULL, 10);
-    if (in == 0 && bri > 0) briLast = bri;
-    bri = in;
+    if (in == 0 && bri > 0) toggleOnOff();
+    else                    bri = in;
     stateUpdated(CALL_MODE_DIRECT_CHANGE);
   }
 }

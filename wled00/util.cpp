@@ -51,7 +51,7 @@ void parseNumber(const char* str, byte& val, byte minv, byte maxv)
 }
 
 //getVal supports inc/decrementing and random ("X~Y(r|[w]~[-][Z])" form)
-bool getVal(JsonVariant elem, byte& val, byte vmin, byte vmax) {
+bool getVal(const JsonVariant &elem, byte& val, byte vmin, byte vmax) {
   if (elem.is<int>()) {
 		if (elem < 0) return false; //ignore e.g. {"ps":-1}
     val = elem;
@@ -72,7 +72,7 @@ bool getVal(JsonVariant elem, byte& val, byte vmin, byte vmax) {
 
 
 bool getBoolVal(const JsonVariant &elem, bool dflt) {
-  if (elem.is<const char*>() && elem.as<const char*>()[0] == 't') {
+  if (elem.is<const char*>() && tolower(elem.as<const char*>()[0]) == 't') {
     return !dflt;
   } else {
     return elem | dflt;

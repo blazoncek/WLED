@@ -404,9 +404,10 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   bool on = root["on"] | (bri > 0);
   if (!on != !bri) toggleOnOff();
 
-  if (root["on"].is<const char*>() && root["on"].as<const char*>()[0] == 't') {
+  if (root["on"].is<const char*>() && tolower(root["on"].as<const char*>()[0]) == 't') {
     if (onBefore || !bri) toggleOnOff(); // do not toggle off again if just turned on by bri (makes e.g. "{"on":"t","bri":32}" work)
   }
+  if (!onBefore && on) toggleRelay(on);  // must toggle relay manually
 
   if (bri && !onBefore) { // unfreeze all segments when turning on
     for (size_t s=0; s < strip.getSegmentsNum(); s++) {
@@ -426,8 +427,8 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     }
   }
 
-  blendingStyle = root[F("bs")] | blendingStyle;
-  blendingStyle &= 0x1F;
+  transitionStyle = root[F("bs")] | transitionStyle;
+  transitionStyle &= 0x1F;
 
   // temporary transition (applies only once)
   tr = root[F("tt")] | -1;
@@ -477,7 +478,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     if (root["live"].as<bool>()) {
       jsonTransitionOnce = true;
       strip.setTransition(0);
-      realtimeLock(65000);
+      realtimeLock(); // infinite lock
     } else {
       exitRealtime();
       strip.setTransition(transitionDelay);
@@ -488,8 +489,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   JsonVariant segVar = root["seg"];
   if (!segVar.isNull()) {
     // we may be called during strip.service() so we must not modify segments while effects are executing
-    strip.suspend();
-    strip.waitForIt();
+    strip.suspend().waitForIt();
     if (segVar.is<JsonObject>()) {
       int id = segVar["id"] | -1;
       //if "seg" is not an array and ID not specified, apply to all selected/checked segments
@@ -676,9 +676,9 @@ void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segme
 {
   if (includeBri) {
     root["on"] = (bri > 0);
-    root["bri"] = briLast;
+    root["bri"] = bri > 0 ? bri : briLast;
     root[F("transition")] = transitionDelay/100; //in 100ms
-    root[F("bs")] = blendingStyle;
+    root[F("bs")] = transitionStyle;
   }
 
   if (!forPreset) {

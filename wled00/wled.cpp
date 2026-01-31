@@ -65,7 +65,6 @@ void WLED::loop()
   #endif
   handleImprovWifiScan();
   handleNotifications(); // handles UDP packets
-  handleBrightness();
   #ifdef WLED_ENABLE_DMX
   handleDMX();
   #endif
@@ -92,6 +91,9 @@ void WLED::loop()
   #ifndef WLED_DISABLE_ALEXA
   handleAlexa();
   #endif
+
+  //handle still pending interface update
+  updateInterfaces(interfaceUpdateCallMode);
 
   if (doCloseFile) {
     closeFile();
@@ -543,6 +545,27 @@ void WLED::setup()
 
 void WLED::beginStrip()
 {
+#if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
+  // experimental: load custom HUB75 pins from file
+  // move to a better location later (see also bus manager BusHub75Matrix class)
+  char fileName[32]; strcpy_P(fileName, PSTR("/hub75pins.json"));
+  File f = WLED_FS.open(fileName, "r");
+  if (f) {
+    DEBUG_PRINTLN(F("Reading custom HUB75 pins."));
+    StaticJsonDocument<256> doc; // enough for 14 pins
+    // read the array into JSON buffer
+    if (f.size() > 0 && deserializeJson(doc, f) == DeserializationError::Ok) {
+      JsonArray pins = doc.as<JsonArray>();
+      if (!pins.isNull() && pins.size() == 14) {
+        uint8_t *pinMem = BusHub75Matrix::getCustomPinsArray();
+        for (size_t i = 0; i < pins.size(); i++) pinMem[i] = pins[i].as<int>() < 0 ? 255 : min(pins[i].as<int>(), 255);
+        DEBUG_PRINTLN(F("Custom Hub75 pins loaded."));
+      }
+    }
+    f.close();
+  }
+#endif
+
   // Initialize NeoPixel Strip and button
   strip.setTransition(0); // temporarily prevent transitions to reduce segment copies
   strip.finalizeInit(); // busses created during deserializeConfig() if config existed
@@ -568,15 +591,14 @@ void WLED::beginStrip()
     strip.show(); // needed to clear all outputs (On/Off in particular)
   }
   offMode = !bri;
+  toggleRelay(!offMode);
 
-  colorUpdated(CALL_MODE_INIT); // will not send notification but will initiate transition
+  colorUpdated(CALL_MODE_INIT); // will not send notification
   if (bootPreset > 0) {
     applyPreset(bootPreset, CALL_MODE_INIT);
   }
 
   strip.setTransition(transitionDelayDefault);  // restore transitions
-
-  toggleRelay(!offMode);
 }
 
 // stop AP (optionally also stop ESP-NOW)

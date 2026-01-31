@@ -39,16 +39,20 @@ void applyValuesToSelectedSegs() {
 }
 
 
+// starts on/off transition
 void toggleOnOff()
 {
   if (bri == 0)
   {
     bri = briLast;
     strip.restartRuntime();
+    // we need to switch relay on immediately for delay to work properly
+    toggleRelay(true);
   } else
   {
     briLast = bri;
     bri = 0;
+    // we will switch off relay in handleOnOff() when transition finishes
   }
   stateChanged = true;
 }
@@ -113,18 +117,25 @@ void stateUpdated(byte callMode) {
   // notify usermods of state change
   UsermodManager::onStateChange(callMode);
 
+  // state was updated, notifications were sent, determine if we need to set segments into transition mode and fade brightness
   if (strip.getTransition() == 0) {
+    // no transition, just apply desitred brightness immediately (even if not changed)
+    //if (rlyStartTime) rlyStartTime = 0;
     jsonTransitionOnce = false;
     transitionActive = false;
     applyFinalBri();
     strip.trigger();
   } else {
     if (transitionActive) {
+      // already active, just update briOld to reflect current state (no further notifications sent during on/off fade)
       briOld = briT;
-    } else if (bri != briOld || stateChanged)
-      strip.setTransitionMode(true); // force all segments to transition mode
-    transitionActive = true;
-    transitionStartTime = now;
+    } else {
+      // since not all effects are updated each frame we will need to force all segments into transtiton mode
+      // but we will do that after relay delay has passed
+      if (!rlyStartTime && (bri != briOld || stateChanged)) strip.setTransitionMode(true); // force all segments to transition mode
+      transitionActive = true;
+      transitionStartTime = now;
+    }
   }
   stateChanged = false;
 }
@@ -151,30 +162,6 @@ void updateInterfaces(uint8_t callMode) {
 }
 
 
-void handleBrightness() {
-  //handle still pending interface update
-  updateInterfaces(interfaceUpdateCallMode);
-
-  if (transitionActive && strip.getTransition() > 0) {
-    int ti = millis() - transitionStartTime;
-    int tr = strip.getTransition();
-    if (ti/tr) {
-      strip.setTransitionMode(false); // stop all transitions
-      // restore (global) transition time if not called from UDP notifier or single/temporary transition from JSON (also playlist)
-      if (jsonTransitionOnce) strip.setTransition(transitionDelay);
-      transitionActive = false;
-      jsonTransitionOnce = false;
-      applyFinalBri();
-      return;
-    }
-    byte briTO = briT;
-    int deltaBri = (int)bri - (int)briOld;
-    briT = briOld + (deltaBri * ti / tr);
-    if (briTO != briT) applyBri();
-  }
-}
-
-
 // legacy method, applies values from col, effectCurrent, ... to selected segments
 void colorUpdated(byte callMode) {
   applyValuesToSelectedSegs();
@@ -192,7 +179,7 @@ void handleNightlight() {
   {
     if (!nightlightActiveOld) //init
     {
-      nightlightStartTime = millis();
+      nightlightStartTime = now;
       nightlightDelayMs = (unsigned)(nightlightDelayMins*60000);
       nightlightActiveOld = true;
       briNlT = bri;
@@ -215,7 +202,7 @@ void handleNightlight() {
         colorUpdated(CALL_MODE_NO_NOTIFY);
       }
     }
-    float nper = (millis() - nightlightStartTime)/((float)nightlightDelayMs);
+    float nper = (now - nightlightStartTime)/((float)nightlightDelayMs);
     if (nightlightMode == NL_MODE_FADE || nightlightMode == NL_MODE_COLORFADE)
     {
       bri = briNlT + ((nightlightTargetBri - briNlT)*nper);

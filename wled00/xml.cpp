@@ -339,9 +339,9 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       settingsScript.print(F("addLEDs(1);"));
       uint8_t pins[5];
       int nPins = bus->getPins(pins);
-      for (int i = 0; i < nPins; i++) {
+      for (int i = 0; i < std::min(nPins,OUTPUT_MAX_PINS); i++) { // max 5 pins supported (Hub75 will report more)
         lp[1] = '0'+i;
-        if (PinManager::isPinOk(pins[i]) || bus->isVirtual()) printSetFormValue(settingsScript,lp,pins[i]);
+        if (PinManager::isPinOk(pins[i]) || bus->isVirtual() || bus->isUsermod() || bus->isHub75()) printSetFormValue(settingsScript,lp,pins[i]);
       }
       printSetFormValue(settingsScript,lc,bus->getLength());
       printSetFormValue(settingsScript,lt,bus->getType());
@@ -369,6 +369,13 @@ void getSettingsJS(byte subPage, Print& settingsScript)
           default:
           case  5000 : speed = 2; break;
           case 10000 : speed = 3; break;
+          case 20000 : speed = 4; break;
+        }
+      } else if (bus->isHub75()) {
+        switch (speed) {
+          default:
+          case  8000 : speed = 0; break;
+          case 16000 : speed = 2; break;
           case 20000 : speed = 4; break;
         }
       }
@@ -411,6 +418,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormValue(settingsScript,PSTR("RL"),rlyPin);
     printSetFormCheckbox(settingsScript,PSTR("RM"),rlyMde);
     printSetFormCheckbox(settingsScript,PSTR("RO"),rlyOpenDrain);
+    printSetFormValue(settingsScript,PSTR("RD"),rlyDelay*10);
     for (const auto &button : buttons) {
       settingsScript.printf_P(PSTR("addBtn(%d,%d);"), button.pin, button.type);
     }

@@ -53,7 +53,7 @@ void onAlexaChange(EspalexaDevice* dev)
       {
         if (bri == 0)
         {
-          bri = briLast;
+          toggleOnOff();
           stateUpdated(CALL_MODE_ALEXA);
         }
       } else
@@ -78,8 +78,7 @@ void onAlexaChange(EspalexaDevice* dev)
     {
       if (bri > 0)
       {
-        briLast = bri;
-        bri = 0;
+        toggleOnOff();
         stateUpdated(CALL_MODE_ALEXA);
       }
     } else

@@ -323,8 +323,7 @@ void Segment::updateTransitionProgress() const {
 uint8_t Segment::currentCCT() const {
   unsigned prog = progress();
   if (prog < 0xFFFFU) {
-    if (blendingStyle == BLEND_STYLE_FADE) return (cct * prog + (_t->_cct * (0xFFFFU - prog))) / 0xFFFFU;
-    //else                                   return Segment::isPreviousMode() ? _t->_cct : cct;
+    if (transitionStyle == TRANSITION_FADE) return (cct * prog + (_t->_cct * (0xFFFFU - prog))) / 0xFFFFU;
   }
   return cct;
 }
@@ -335,8 +334,8 @@ uint8_t Segment::currentBri() const {
   unsigned curBri = on ? opacity : 0;
   if (prog < 0xFFFFU) {
     // this will blend opacity in new mode if style is FADE (single effect call)
-    if (blendingStyle == BLEND_STYLE_FADE) curBri = (prog * curBri + _t->_bri * (0xFFFFU - prog)) / 0xFFFFU;
-    else                                   curBri = Segment::isPreviousMode() ? _t->_bri : curBri;
+    if (transitionStyle == TRANSITION_FADE) curBri = (prog * curBri + _t->_bri * (0xFFFFU - prog)) / 0xFFFFU;
+    else                                    curBri = Segment::isPreviousMode() ? _t->_bri : curBri;
   }
   return curBri;
 }
@@ -351,7 +350,7 @@ void Segment::beginDraw(uint16_t prog) {
   for (unsigned i = 0; i < NUM_COLORS; i++) _currentColors[i] = colors[i];
   // load palette into _currentPalette
   loadPalette(Segment::_currentPalette, palette);
-  if (isInTransition() && prog < 0xFFFFU && blendingStyle == BLEND_STYLE_FADE) {
+  if (isInTransition() && prog < 0xFFFFU && transitionStyle == TRANSITION_FADE) {
     // blend colors
     for (unsigned i = 0; i < NUM_COLORS; i++) _currentColors[i] = _t->_colors[i].blend(colors[i], prog);
     // blend palettes
@@ -483,7 +482,7 @@ Segment &Segment::setColor(uint8_t slot, CRGBA c) {
     if (slot == 1 && c != BLACK) return *this; // on/off segment cannot have secondary color non black
   }
   //DEBUGFX_PRINTF_P(PSTR("- Starting color transition: %d [0x%X]\n"), slot, c);
-  startTransition(strip.getTransition(), blendingStyle != BLEND_STYLE_FADE); // start transition prior to change
+  startTransition(strip.getTransition(), transitionStyle != TRANSITION_FADE); // start transition prior to change
   colors[slot] = c;
   stateChanged = true; // send UDP/WS broadcast
   return *this;
@@ -507,7 +506,7 @@ Segment &Segment::setCCT(uint16_t k) {
 Segment &Segment::setOpacity(uint8_t o) {
   if (opacity != o) {
     //DEBUGFX_PRINTF_P(PSTR("- Starting opacity transition: %d\n"), o);
-    startTransition(strip.getTransition(), blendingStyle != BLEND_STYLE_FADE); // start transition prior to change
+    startTransition(strip.getTransition(), transitionStyle != TRANSITION_FADE); // start transition prior to change
     opacity = o;
     stateChanged = true; // send UDP/WS broadcast
   }
@@ -518,7 +517,7 @@ Segment &Segment::setOption(uint8_t n, bool val) {
   bool prev = (options >> n) & 0x01;
   if (val == prev) return *this;
   //DEBUGFX_PRINTF_P(PSTR("- Starting option transition: %d\n"), n);
-  if (n == SEG_OPTION_ON) startTransition(strip.getTransition(), blendingStyle != BLEND_STYLE_FADE); // start transition prior to change
+  if (n == SEG_OPTION_ON) startTransition(strip.getTransition(), transitionStyle != TRANSITION_FADE); // start transition prior to change
   if (val) options |=   0x01 << n;
   else     options &= ~(0x01 << n);
   stateChanged = true; // send UDP/WS broadcast
@@ -568,7 +567,7 @@ Segment &Segment::setPalette(uint8_t pal) {
   if (pal <= 255-customPalettes.size() && pal > FIXED_PALETTE_COUNT) pal = 0; // not built in palette or custom palette
   if (pal != palette) {
     //DEBUGFX_PRINTF_P(PSTR("- Starting palette transition: %d\n"), pal);
-    startTransition(strip.getTransition(), blendingStyle != BLEND_STYLE_FADE); // start transition prior to change (no need to copy segment)
+    startTransition(strip.getTransition(), transitionStyle != TRANSITION_FADE); // start transition prior to change (no need to copy segment)
     palette = pal;
     stateChanged = true; // send UDP/WS broadcast
   }
@@ -674,11 +673,11 @@ uint16_t Segment::maxMappingLength() const {
 // pixel is clipped if it falls outside clipping range
 // if clipping start > stop the clipping range is inverted
 bool Segment::isPixelClipped(int i) const {
-  if (blendingStyle != BLEND_STYLE_FADE && isInTransition() && _clipStart != _clipStop) {
+  if (transitionStyle != TRANSITION_FADE && isInTransition() && _clipStart != _clipStop) {
     bool invert = _clipStart > _clipStop;  // ineverted start & stop
     int start = invert ? _clipStop : _clipStart;
     int stop  = invert ? _clipStart : _clipStop;
-    if (blendingStyle == BLEND_STYLE_FAIRY_DUST) {
+    if (transitionStyle == TRANSITION_FAIRY_DUST) {
       unsigned len = stop - start;
       if (len < 2) return false;
       unsigned shuffled = hashInt(i) % len;
@@ -1121,57 +1120,42 @@ void WS2812FX::finalizeInit() {
   BusManager::removeAll();
 
   unsigned digitalCount = 0;
-  #if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+  unsigned maxI2S = 0;
+#if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
   // determine if it is sensible to use parallel I2S outputs on ESP32 (i.e. more than 5 outputs = 1 I2S + 4 RMT)
-  unsigned maxLedsOnBus = 0;
+  bool needsParallelI2S = useParallelI2S;
   unsigned busType = 0;
   for (const auto &bus : busConfigs) {
     if (Bus::isDigital(bus.type) && !Bus::is2Pin(bus.type)) {
-      digitalCount++;
-      if (busType == 0) busType = bus.type; // remember first bus type
-      if (busType != bus.type) {
-        DEBUG_PRINTF_P(PSTR("Mixed digital bus types detected! Forcing single I2S output.\n"));
-        useParallelI2S = false; // mixed bus types, no parallel I2S
+      const unsigned memB = bus.memUsage(digitalCount++);   // does not include DMA/RMT buffer
+      if (digitalCount <= WLED_MAX_RMT_CHANNELS) continue;  // no restrictions for RMT buses
+      if (busType == 0) busType = bus.type;                 // remember first I2S bus type
+      if (busType != bus.type || bus.count > MAX_I2S_LEDS) {
+        DEBUG_PRINTF_P(PSTR("Mixed digital I2S bus types detected or too many LEDs! Forcing single I2S output.\n"));
+        needsParallelI2S = false; // mixed bus types, no parallel I2S
       }
-      if (bus.count > maxLedsOnBus) maxLedsOnBus = bus.count;
+      if (memB > maxI2S) maxI2S = memB;
     }
   }
-  DEBUG_PRINTF_P(PSTR("Maximum LEDs on a bus: %u\nDigital buses: %u\n"), maxLedsOnBus, digitalCount);
-  // we may remove 600 LEDs per bus limit when NeoPixelBus is updated beyond 2.8.3
-  if (digitalCount > 1 && maxLedsOnBus <= 600 && useParallelI2S) BusManager::useParallelOutput(); // must call before creating buses
-  else useParallelI2S = false; // enforce single I2S
-  digitalCount = 0;
-  #endif
+  // we may remove 600 LEDs per bus limit if there is more than 60kB free DMA memory (S3 or plain ESP32 without usermods)
+  if (needsParallelI2S && digitalCount > WLED_MAX_RMT_CHANNELS+1) {
+    BusManager::useParallelOutput(); // must call before creating buses
+    maxI2S *= 8;
+  }
+  DEBUG_PRINTF_P(PSTR("Maximum I2S memory: %uB\nDigital buses: %u\n"), maxI2S, digitalCount);
+  digitalCount = 0; // reset for actual bus creation
+#endif
 
   DEBUG_PRINTF_P(PSTR("Heap before buses: %d\n"), getFreeHeapSize());
   // create buses/outputs
   unsigned mem = 0;
-  unsigned maxI2S = 0;
   for (const auto &bus : busConfigs) {
-    unsigned memB = bus.memUsage(Bus::isDigital(bus.type) && !Bus::is2Pin(bus.type) ? digitalCount++ : 0); // does not include DMA/RMT buffer
-    mem += memB;
-    // estimate maximum I2S memory usage (only relevant for digital non-2pin busses)
-    #if !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(ESP8266)
-      #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3)
-    const bool usesI2S = ((useParallelI2S && digitalCount <= 8) || (!useParallelI2S && digitalCount == 1));
-      #elif defined(CONFIG_IDF_TARGET_ESP32S2)
-    const bool usesI2S = (useParallelI2S && digitalCount <= 8);
-      #else
-    const bool usesI2S = false;
-      #endif
-    if (Bus::isDigital(bus.type) && !Bus::is2Pin(bus.type) && usesI2S) {
-      #ifdef NPB_CONF_4STEP_CADENCE
-      constexpr unsigned stepFactor = 4; // 4 step cadence (4 bits per pixel bit)
-      #else
-      constexpr unsigned stepFactor = 3; // 3 step cadence (3 bits per pixel bit)
-      #endif
-      unsigned i2sCommonSize = stepFactor * bus.count * (3*Bus::hasRGB(bus.type)+Bus::hasWhite(bus.type)+Bus::hasCCT(bus.type)) * (Bus::is16bit(bus.type)+1);
-      if (i2sCommonSize > maxI2S) maxI2S = i2sCommonSize;
-    }
-    #endif
+    const bool isDigitalNon2Pin = Bus::isDigital(bus.type) && !Bus::is2Pin(bus.type);
+    unsigned memB = bus.memUsage(isDigitalNon2Pin ? digitalCount++ : 0); // does not include DMA/RMT buffer
+    if (!isDigitalNon2Pin || digitalCount <= WLED_MAX_RMT_CHANNELS) mem += memB;
     if (mem + maxI2S <= MAX_LED_MEMORY) {
       if (BusManager::add(bus) < 0) {
-        DEBUG_PRINTF_P(PSTR("Bus %d (%d) #%u created but not valid!\n"), (int)bus.type, (int)bus.count, digitalCount);
+        DEBUG_PRINTF_P(PSTR("Bus %d (%d) #%u not created or not valid!\n"), (int)bus.type, (int)bus.count, digitalCount);
         break;
       }
     } else {
@@ -1277,7 +1261,7 @@ void WS2812FX::service() {
         // if segment is in transition and no old segment exists we don't need to run the old mode
         // (blendSegments() takes care of On/Off transitions and clipping)
         Segment *segO = seg.getOldSegment();
-        if (segO && segO->isActive() && (seg.mode != segO->mode || blendingStyle != BLEND_STYLE_FADE ||
+        if (segO && segO->isActive() && (seg.mode != segO->mode || transitionStyle != TRANSITION_FADE ||
             (segO->name != seg.name && segO->name && seg.name && strncmp(segO->name, seg.name, WLED_MAX_SEGNAME_LEN) != 0))) {
           Segment::modeBlend(true);         // set semaphore for beginDraw() to blend colors and palette
           segO->beginDraw(prog);            // set up palette & colors (also sets draw dimensions), parent segment has transition progress
@@ -1399,61 +1383,61 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
   const uint8_t  opacity   = topSegment.currentBri(); // returns transitioned opacity for style FADE
   const uint8_t  cct       = topSegment.currentCCT();
   const bool     hasWhite  = topSegment.hasWhite();
-  const unsigned orgBS     = blendingStyle;
-  if (width*height == 1) blendingStyle = BLEND_STYLE_FADE; // disable style for single pixel segments (use fade instead)
+  const unsigned orgTS     = transitionStyle;
+  if (width*height == 1) transitionStyle = TRANSITION_FADE; // disable style for single pixel segments (use fade instead)
 
   Segment::setClippingRect(0, 0);             // disable clipping by default
 
-  const unsigned dw = (blendingStyle==BLEND_STYLE_OUTSIDE_IN ? progInv : progress) * width / 0xFFFFU + 1;
-  const unsigned dh = (blendingStyle==BLEND_STYLE_OUTSIDE_IN ? progInv : progress) * height / 0xFFFFU + 1;
-  switch (blendingStyle) {
-    case BLEND_STYLE_CIRCULAR_IN: // (must set entire segment, see isPixelXYClipped())
-    case BLEND_STYLE_CIRCULAR_OUT:// (must set entire segment, see isPixelXYClipped())
-    case BLEND_STYLE_FAIRY_DUST:  // fairy dust (must set entire segment, see isPixelXYClipped())
+  const unsigned dw = (transitionStyle == TRANSITION_OUTSIDE_IN ? progInv : progress) * width / 0xFFFFU + 1;
+  const unsigned dh = (transitionStyle == TRANSITION_OUTSIDE_IN ? progInv : progress) * height / 0xFFFFU + 1;
+  switch (transitionStyle) {
+    case TRANSITION_CIRCULAR_IN:  // (must set entire segment, see isPixelXYClipped())
+    case TRANSITION_CIRCULAR_OUT: // (must set entire segment, see isPixelXYClipped())
+    case TRANSITION_FAIRY_DUST:   // fairy dust (must set entire segment, see isPixelXYClipped())
       Segment::setClippingRect(0, width, 0, height);
       break;
-    case BLEND_STYLE_SWIPE_RIGHT: // left-to-right
-    case BLEND_STYLE_PUSH_RIGHT:  // left-to-right
+    case TRANSITION_SWIPE_RIGHT:  // left-to-right
+    case TRANSITION_PUSH_RIGHT:   // left-to-right
       Segment::setClippingRect(0, dw, 0, height);
       break;
-    case BLEND_STYLE_SWIPE_LEFT:  // right-to-left
-    case BLEND_STYLE_PUSH_LEFT:   // right-to-left
+    case TRANSITION_SWIPE_LEFT:   // right-to-left
+    case TRANSITION_PUSH_LEFT:    // right-to-left
       Segment::setClippingRect(width - dw, width, 0, height);
       break;
-    case BLEND_STYLE_OUTSIDE_IN:   // corners
+    case TRANSITION_OUTSIDE_IN:   // corners
       Segment::setClippingRect((width + dw)/2, (width - dw)/2, (height + dh)/2, (height - dh)/2); // inverted!!
       break;
-    case BLEND_STYLE_INSIDE_OUT:  // outward
+    case TRANSITION_INSIDE_OUT:   // outward
       Segment::setClippingRect((width - dw)/2, (width + dw)/2, (height - dh)/2, (height + dh)/2);
       break;
-    case BLEND_STYLE_SWIPE_DOWN:  // top-to-bottom (2D)
-    case BLEND_STYLE_PUSH_DOWN:   // top-to-bottom (2D)
+    case TRANSITION_SWIPE_DOWN:   // top-to-bottom (2D)
+    case TRANSITION_PUSH_DOWN:    // top-to-bottom (2D)
       Segment::setClippingRect(0, width, 0, dh);
       break;
-    case BLEND_STYLE_SWIPE_UP:    // bottom-to-top (2D)
-    case BLEND_STYLE_PUSH_UP:     // bottom-to-top (2D)
+    case TRANSITION_SWIPE_UP:     // bottom-to-top (2D)
+    case TRANSITION_PUSH_UP:      // bottom-to-top (2D)
       Segment::setClippingRect(0, width, height - dh, height);
       break;
-    case BLEND_STYLE_OPEN_H:      // horizontal-outward (2D) same look as INSIDE_OUT on 1D
+    case TRANSITION_OPEN_H:       // horizontal-outward (2D) same look as INSIDE_OUT on 1D
       Segment::setClippingRect((width - dw)/2, (width + dw)/2, 0, height);
       break;
-    case BLEND_STYLE_OPEN_V:      // vertical-outward (2D)
+    case TRANSITION_OPEN_V:       // vertical-outward (2D)
       Segment::setClippingRect(0, width, (height - dh)/2, (height + dh)/2);
       break;
-    case BLEND_STYLE_SWIPE_TL:    // TL-to-BR (2D)
-    case BLEND_STYLE_PUSH_TL:     // TL-to-BR (2D)
+    case TRANSITION_SWIPE_TL:     // TL-to-BR (2D)
+    case TRANSITION_PUSH_TL:      // TL-to-BR (2D)
       Segment::setClippingRect(0, dw, 0, dh);
       break;
-    case BLEND_STYLE_SWIPE_TR:    // TR-to-BL (2D)
-    case BLEND_STYLE_PUSH_TR:     // TR-to-BL (2D)
+    case TRANSITION_SWIPE_TR:     // TR-to-BL (2D)
+    case TRANSITION_PUSH_TR:      // TR-to-BL (2D)
       Segment::setClippingRect(width - dw, width, 0, dh);
       break;
-    case BLEND_STYLE_SWIPE_BR:    // BR-to-TL (2D)
-    case BLEND_STYLE_PUSH_BR:     // BR-to-TL (2D)
+    case TRANSITION_SWIPE_BR:     // BR-to-TL (2D)
+    case TRANSITION_PUSH_BR:      // BR-to-TL (2D)
       Segment::setClippingRect(width - dw, width, height - dh, height);
       break;
-    case BLEND_STYLE_SWIPE_BL:    // BL-to-TR (2D)
-    case BLEND_STYLE_PUSH_BL:     // BL-to-TR (2D)
+    case TRANSITION_SWIPE_BL:     // BL-to-TR (2D)
+    case TRANSITION_PUSH_BL:      // BL-to-TR (2D)
       Segment::setClippingRect(0, dw, height - dh, height);
       break;
   }
@@ -1584,10 +1568,10 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     }
 
     // if we blend using "push" style we need to "shift" canvas to left/right/up/down
-    int offsetX = (blendingStyle == BLEND_STYLE_PUSH_UP   || blendingStyle == BLEND_STYLE_PUSH_DOWN)  ? 0 : progInv * nCols / 0xFFFFU;
-    int offsetY = (blendingStyle == BLEND_STYLE_PUSH_LEFT || blendingStyle == BLEND_STYLE_PUSH_RIGHT) ? 0 : progInv * nRows / 0xFFFFU;
-    if (blendingStyle == BLEND_STYLE_PUSH_RIGHT) offsetX = nCols - offsetX;
-    if (blendingStyle == BLEND_STYLE_PUSH_UP)    offsetY = nRows - offsetY;
+    int offsetX = (transitionStyle == TRANSITION_PUSH_UP   || transitionStyle == TRANSITION_PUSH_DOWN)  ? 0 : progInv * nCols / 0xFFFFU;
+    int offsetY = (transitionStyle == TRANSITION_PUSH_LEFT || transitionStyle == TRANSITION_PUSH_RIGHT) ? 0 : progInv * nRows / 0xFFFFU;
+    if (transitionStyle == TRANSITION_PUSH_RIGHT) offsetX = nCols - offsetX;
+    if (transitionStyle == TRANSITION_PUSH_UP)    offsetY = nRows - offsetY;
 
     // we only traverse new segment, not old one
     for (int r = 0; r < nRows; r++) for (int c = 0; c < nCols; c++) {
@@ -1604,12 +1588,12 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       if (offsetY != 0) { y = (y + offsetY); while (y >= nRows) y -= nRows; }
       CRGBA c_a = BLACK;
       if (x < vCols && y < vRows) c_a = _pixelsR[x + y*vCols]; // will get clipped pixel from old segment or unclipped pixel from new segment
-      if (segO && blendingStyle == BLEND_STYLE_FADE
+      if (segO && transitionStyle == TRANSITION_FADE
         && (topSegment.mode != segO->mode || (segO->name != topSegment.name && segO->name && topSegment.name && strncmp(segO->name, topSegment.name, WLED_MAX_SEGNAME_LEN) != 0))
         && x < oCols && y < oRows) {
         // we need to blend old segment using fade as pixels are not clipped
         c_a.nblend(_pixelsO[x + y*oCols], (uint16_t)progInv);
-      } else if (blendingStyle != BLEND_STYLE_FADE) {
+      } else if (transitionStyle != TRANSITION_FADE) {
         // if we have global brightness change (not On/Off change) we will ignore transition style and just fade brightness (see led.cpp)
         // workaround for On/Off transition
         // (bri != briT) && !bri => from On to Off
@@ -1677,17 +1661,17 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       const int vLen = seg == segO ? oLen : nLen;
       int i = k;
       // if we blend using "push" style we need to "shift" canvas to left or right
-      switch (blendingStyle) {
-        case BLEND_STYLE_PUSH_RIGHT: i = (i + offsetI);        break;
-        case BLEND_STYLE_PUSH_LEFT:  i = (i - offsetI + nLen); break;
+      switch (transitionStyle) {
+        case TRANSITION_PUSH_RIGHT: i = (i + offsetI);        break;
+        case TRANSITION_PUSH_LEFT:  i = (i - offsetI + nLen); break;
       }
       while (i >= nLen) i -= nLen;
       CRGBA c_a = BLACK;
       if (i < vLen) c_a = seg->getPixelColorRaw(i); // will get clipped pixel from old segment or unclipped pixel from new segment
-      if (segO && blendingStyle == BLEND_STYLE_FADE && topSegment.mode != segO->mode && i < oLen) {
+      if (segO && transitionStyle == TRANSITION_FADE && topSegment.mode != segO->mode && i < oLen) {
         // we need to blend old segment using fade as pixels are not clipped
         c_a.nblend(segO->getPixelColorRaw(i), (uint16_t)progInv);
-      } else if (blendingStyle != BLEND_STYLE_FADE) {
+      } else if (transitionStyle != TRANSITION_FADE) {
         // if we have global brightness change (not On/Off change) we will ignore transition style and just fade brightness (see led.cpp)
         // workaround for On/Off transition
         // (bri != briT) && !bri => from On to Off
@@ -1708,7 +1692,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     }
   }
 
-  blendingStyle = orgBS;
+  transitionStyle = orgTS;
   Segment::setClippingRect(0, 0);             // disable clipping for overlays
 }
 
@@ -1742,7 +1726,7 @@ void WS2812FX::show() {
 
   // avoid race condition, capture _callback value
   show_callback callback = _callback;
-  if (callback) callback(); // will call strip.setPixelColor or strip.setRealtimePixelColor
+  if (callback) callback(); // should call strip.setPixelColor
 
   // paint actuall pixels
   int oldCCT = Bus::getCCT(); // store original CCT value (since it is global)
@@ -1782,27 +1766,16 @@ uint16_t WS2812FX::getMappedPixelIndex(uint16_t index) const {
   return index;
 };
 
-void WS2812FX::setRealtimePixelColor(unsigned i, uint32_t c) {
-  if (useMainSegmentOnly) {
-    const Segment &seg = getMainSegment();
-    if (seg.isActive() && i < seg.length()) seg.setPixelColorRaw(i, c);
-  } else {
-    setPixelColor(i, c);
-  }
-}
-
 // reset all segments
 void WS2812FX::restartRuntime() {
-  suspend();
-  waitForIt();
+  suspend().waitForIt();
   for (Segment &seg : _segments) seg.markForReset().resetIfRequired();
   resume();
 }
 
 // start or stop transition for all segments
 void WS2812FX::setTransitionMode(bool t) {
-  suspend();
-  waitForIt();
+  suspend().waitForIt();
   for (Segment &seg : _segments) seg.startTransition(t ? _transitionDur : 0);
   resume();
 }

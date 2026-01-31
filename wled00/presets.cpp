@@ -213,8 +213,7 @@ void handlePresets()
 
   releaseJSONBufferLock();
   if (changePreset) notify(tmpMode); // force UDP notification
-  stateUpdated(tmpMode);  // was colorUpdated() if anything breaks
-  updateInterfaces(tmpMode);
+  stateUpdated(tmpMode);  // was colorUpdated() if anything breaks (also schedules updateInterfaces())
 }
 
 //called from handleSet(PS=) [network callback (sObj is empty)], IR (irrational) [loop context] and deserializeState() [network callback]
@@ -262,8 +261,7 @@ void savePreset(byte index, const char* pname, JsonObject sObj)
         sObj.remove(F("error"));
         sObj.remove(F("psave"));
         if (sObj["n"].isNull()) sObj["n"] = saveName;
-        strip.suspend();
-        strip.waitForIt();
+        strip.suspend().waitForIt();
         initPresetsFile(); // just in case if someone deleted presets.json using /edit
         writeObjectToFileUsingId(getPresetsFileName(), index, pDoc);
         presetsModifiedTime = toki.second(); //unix time
@@ -286,8 +284,7 @@ void savePreset(byte index, const char* pname, JsonObject sObj)
 
 void deletePreset(byte index) {
   StaticJsonDocument<24> empty;
-  strip.suspend();
-  strip.waitForIt();
+  strip.suspend().waitForIt();
   writeObjectToFileUsingId(getPresetsFileName(), index, &empty);
   presetsModifiedTime = toki.second(); //unix time
   updateFSInfo();

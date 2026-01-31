@@ -220,6 +220,15 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
           case 3 : freq = 10000; break;
           case 4 : freq = 20000; break;
         }
+      } else if (Bus::isHub75(type)) {
+        switch (freq) {
+          default:
+          case 0 : // fallthrough
+          case 1 : freq =  8000; break; // 8 MHz see HUB75_I2S_CFG::clk_speed
+          case 2 : // fallthrough
+          case 3 : freq = 16000; break;
+          case 4 : freq = 20000; break;
+        }
       } else {
         freq = 0;
       }
@@ -279,6 +288,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     }
     rlyMde = (bool)request->hasArg(F("RM"));
     rlyOpenDrain = (bool)request->hasArg(F("RO"));
+    rlyDelay = max(min(request->arg(F("RD")).toInt() / 10, 250L), 0L);
 
     disablePullUp = (bool)request->hasArg(F("IP"));
     touchThreshold = request->arg(F("TT")).toInt();
@@ -814,8 +824,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     strip.panel.shrink_to_fit();  // release unused memory
     // we are changing matrix/ledmap geometry which *will* affect existing segments
     // since we are not in loop() context we must make sure that effects are not running
-    strip.suspend();
-    strip.waitForIt();
+    strip.suspend().waitForIt();
     strip.deserializeMap(); // (re)load default ledmap (will also setUpMatrix() if ledmap does not exist)
     strip.makeAutoSegments(true); // force re-creation of segments
     strip.resume();
@@ -905,7 +914,7 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
   if (pos > 0) {
     spcI = std::max(0,getNumVal(req, pos));
   }
-  strip.suspend(); // must suspend strip operations before changing geometry
+  strip.suspend().waitForIt(); // must suspend strip operations before changing geometry
   selseg.setGeometry(startI, stopI, grpI, spcI, UINT16_MAX, startY, stopY, selseg.map1D2D);
   strip.resume();
 
@@ -1127,8 +1136,8 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
     nightlightActive = false; //always disable nightlight when toggling
     switch (getNumVal(req, pos))
     {
-      case 0: if (bri != 0){briLast = bri; bri = 0;} break; //off, only if it was previously on
-      case 1: if (bri == 0) bri = briLast; break; //on, only if it was previously off
+      case 0: if (bri != 0) toggleOnOff(); break; //off, only if it was previously on
+      case 1: if (bri == 0) toggleOnOff(); break; //on, only if it was previously off
       default: toggleOnOff(); //toggle
     }
   }

@@ -73,11 +73,27 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
   #define WLED_PIN ""
 #endif
 
+// Hardware and pin config
 #ifndef BTNPIN
   #define BTNPIN 0
 #endif
 #ifndef BTNTYPE
   #define BTNTYPE BTN_TYPE_PUSH
+#endif
+#ifndef RLYPIN
+  #define RLYPIN -1
+#endif
+#ifndef RLYMDE
+  #define RLYMDE true
+#endif
+#ifndef RLYODRAIN
+  #define RLYODRAIN false
+#endif
+#ifndef IRPIN
+  #define IRPIN -1
+#endif
+#ifndef IRTYPE
+  #define IRTYPE 0
 #endif
 
 //increase if you need more
@@ -97,12 +113,14 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #ifdef ESP8266
   #define WLED_MAX_DIGITAL_CHANNELS 3
   #define WLED_MAX_ANALOG_CHANNELS 5
+  #define WLED_MAX_RMT_CHANNELS 0
   #define WLED_MIN_VIRTUAL_BUSSES 3         // no longer used for bus creation but used to distinguish S2/S3 in UI
 #else
   #if !defined(LEDC_CHANNEL_MAX) || !defined(LEDC_SPEED_MODE_MAX)
     #include "driver/ledc.h"
   #endif
   #define WLED_MAX_ANALOG_CHANNELS (LEDC_CHANNEL_MAX*LEDC_SPEED_MODE_MAX)
+  #define WLED_MAX_RMT_CHANNELS ((size_t)RMT_CHANNEL_MAX)
   #if defined(CONFIG_IDF_TARGET_ESP32C3)    // 2 RMT, 6 LEDC, only has 1 I2S but NPB does not support it ATM
     #define WLED_MAX_DIGITAL_CHANNELS 2
     //#define WLED_MAX_ANALOG_CHANNELS 6
@@ -112,15 +130,18 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
     #define WLED_MAX_DIGITAL_CHANNELS 12    // x4 RMT + x1/x8 I2S0
     //#define WLED_MAX_ANALOG_CHANNELS 8
     #define WLED_MIN_VIRTUAL_BUSSES 4       // no longer used for bus creation but used to distinguish S2/S3 in UI
+    #define MAX_I2S_LEDS 300
   #elif defined(CONFIG_IDF_TARGET_ESP32S3)  // 4 RMT, 8 LEDC, has 2 I2S but NPB supports parallel x8 LCD on I2S1
     #define WLED_MAX_DIGITAL_CHANNELS 12    // x4 RMT + x8 I2S-LCD
     //#define WLED_MAX_ANALOG_CHANNELS 8
     #define WLED_MIN_VIRTUAL_BUSSES 6       // no longer used for bus creation but used to distinguish S2/S3 in UI
-  #else
+    #define MAX_I2S_LEDS 1000
+    #else
     // the last digital bus (I2S0) will prevent Audioreactive usermod from functioning
     #define WLED_MAX_DIGITAL_CHANNELS 16    // x1/x8 I2S1 + x8 RMT
     //#define WLED_MAX_ANALOG_CHANNELS 16
     #define WLED_MIN_VIRTUAL_BUSSES 6       // no longer used for bus creation but used to distinguish S2/S3 in UI
+    #define MAX_I2S_LEDS 600
   #endif
 #endif
 // WLED_MAX_BUSSES was used to define the size of busses[] array which is no longer needed
@@ -359,14 +380,32 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #define TYPE_LPD6803             54
 #define TYPE_HD108               55
 #define TYPE_2PIN_MAX            63
+//Digital types (Hub75 matrix) (64-71)
+#if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
+#define TYPE_HUB75MATRIX_MIN     64
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#define TYPE_HUB75MATRIX_PORTAL  64           //Adafruit Matrix Portal S3 board (https://www.adafruit.com/product/5778)
+#define TYPE_HUB75MATRIX_MOONHUB 65           //MoonHub75 board
+#define TYPE_HUB75MATRIX_S3      66           //plain S3 Hub75 matrix board
+#elif defined(CONFIG_IDF_TARGET_ESP32S2)
+#define TYPE_HUB75MATRIX_S2DRIVE 64           //S2 drive (https://www.ledclub.net/2025/03/15/esp32-s2-drive-p4-80x40-led-matrix/)
+#elif defined(CONFIG_IDF_TARGET_ESP32)
+#define TYPE_HUB75MATRIX_TRINITY 64           //Trinity/ElectroDragon ESP32 board (https://esp32trinity.com/, https://www.electrodragon.com/product/rgb-matrix-panel-drive-interface-board-for-esp32-dma/)
+#define TYPE_HUB75MATRIX_FORUM   65           //ESP32 Forum/SmartMatrix board (https://github.com/rorosaurus/esp32-hub75-driver)
+#endif
+#define TYPE_HUB75MATRIX_CUSTOM  71           //custom pins defined in hub75pin.json file (manually uploaded, contains JSON array of pin numbers; no validation performed)
+#define TYPE_HUB75MATRIX_MAX     71
+#endif
 //Network types (master broadcast) (80-95)
 #define TYPE_VIRTUAL_MIN         80
-#define TYPE_NET_DDP_RGB         80            //network DDP RGB bus (master broadcast bus)
-#define TYPE_NET_E131_RGB        81            //network E131 RGB bus (master broadcast bus, unused)
-#define TYPE_NET_ARTNET_RGB      82            //network ArtNet RGB bus (master broadcast bus, unused)
-#define TYPE_NET_DDP_RGBW        88            //network DDP RGBW bus (master broadcast bus)
-#define TYPE_NET_ARTNET_RGBW     89            //network ArtNet RGB bus (master broadcast bus, unused)
+#define TYPE_NET_DDP_RGB         80           //network DDP RGB bus (master broadcast bus)
+#define TYPE_NET_E131_RGB        81           //network E131 RGB bus (master broadcast bus, unused)
+#define TYPE_NET_ARTNET_RGB      82           //network ArtNet RGB bus (master broadcast bus, unused)
+#define TYPE_NET_DDP_RGBW        88           //network DDP RGBW bus (master broadcast bus)
+#define TYPE_NET_ARTNET_RGBW     89           //network ArtNet RGB bus (master broadcast bus, unused)
 #define TYPE_VIRTUAL_MAX         95
+//Special usermod type
+#define TYPE_USERMOD            127           //Usermod defined bus type
 
 //Color orders
 #define COL_ORDER_GRB             0           //GRB(w),defaut
@@ -507,19 +546,23 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
     #define MAX_LEDS 2048 //due to memory constraints S2
   #elif defined(CONFIG_IDF_TARGET_ESP32C3)
     #define MAX_LEDS 4096
-  #else
+  #elif defined(CONFIG_IDF_TARGET_ESP32S3)
     #define MAX_LEDS 16384
+  #else
+    #define MAX_LEDS 8192
   #endif
 #endif
 
 #ifndef MAX_LED_MEMORY
   #ifdef ESP8266
-    #define MAX_LED_MEMORY 4096
+    #define MAX_LED_MEMORY 5120
   #else
     #if defined(ARDUINO_ARCH_ESP32S2)
       #define MAX_LED_MEMORY 16384
     #elif defined(ARDUINO_ARCH_ESP32C3)
       #define MAX_LED_MEMORY 32768
+    #elif defined(ARDUINO_ARCH_ESP32S3)
+      #define MAX_LED_MEMORY 131072
     #else
       #define MAX_LED_MEMORY 65536
     #endif
