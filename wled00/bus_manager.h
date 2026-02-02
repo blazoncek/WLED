@@ -503,11 +503,12 @@ namespace BusManager {
   void on();
   void off();
 
-  [[gnu::hot]] void     setPixelColor(unsigned pix, uint32_t c);
-  void        show();
-  bool        canAllShow();
-  inline void setStatusPixel(uint32_t c) { for (auto &bus : busses) bus->setStatusPixel(c);}
-  inline void setBrightness(uint8_t b)   { for (auto &bus : busses) bus->setBrightness(b); }
+  void  show();
+  bool canAllShow();
+
+  inline void    setStatusPixel(uint32_t c) { for (auto &bus : busses) bus->setStatusPixel(c);}
+  inline void    setBrightness(uint8_t b)   { for (auto &bus : busses) bus->setBrightness(b); }
+  inline void    setPixelColor(unsigned pix, uint32_t c) { for (auto &bus : busses) bus->setPixelColor(pix - bus->getStart(), c); } // rely on unsigned underflow
   // for setSegmentCCT(), cct can only be in [-1,255] range; allowWBCorrection will convert it to K
   // WARNING: setSegmentCCT() is a misleading name!!! much better would be setGlobalCCT() or just setCCT()
   void           setSegmentCCT(int16_t cct, bool allowWBCorrection = false);

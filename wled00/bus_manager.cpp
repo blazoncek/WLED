@@ -244,7 +244,7 @@ void BusDigital::setStatusPixel(uint32_t c) {
 }
 
 void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
-  if (!_valid) return;
+  if (!_valid || pix >= _len) return;
   if (hasWhite()) c = autoWhiteCalc(c);
   if (Bus::_cct >= 1900) c = colorBalanceFromKelvin(Bus::_cct, c); //color correction from CCT
   c = gamma32Func(color_fade(c, _bri, true));
@@ -988,7 +988,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 }
 
 void BusHub75Matrix::setPixelColor(unsigned pix, uint32_t c) {
-  if (!_valid) return;
+  if (!_valid || pix >= _len) return;
   if (_cct >= 1900) c = colorBalanceFromKelvin(_cct, c);  //color correction from CCT
   c = gamma32Func(c);
 
@@ -1349,12 +1349,6 @@ void BusManager::show() {
     _gMilliAmpsUsed += bus->getUsedCurrent();
   }
   //DEBUGBUS_PRINTF_P(PSTR("Bus: Total current used: %u mA\n"), (unsigned)_gMilliAmpsUsed);
-}
-
-void BusManager::setPixelColor(unsigned pix, uint32_t c) {
-  for (auto &bus : busses) {
-    if (bus->containsPixel(pix)) bus->setPixelColor(pix - bus->getStart(), c);
-  }
 }
 
 void BusManager::setSegmentCCT(int16_t cct, bool allowWBCorrection) {
