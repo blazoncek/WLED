@@ -340,6 +340,12 @@ uint8_t Segment::currentBri() const {
   return curBri;
 }
 
+bool Segment::needsUpdate(unsigned long time) const {
+  if (time > next_time) return true;
+  if (isInTransition() && _t->_oldSegment && time > _t->_oldSegment->next_time) return true;
+  return false;
+}
+
 // pre-calculate drawing parameters for faster access (based on the idea from @softhack007 from MM fork)
 // and blends colors and palettes if necessary
 // prog is the progress of the transition (0-65535) and is passed to the function as it may be called in the context of old segment
@@ -1244,34 +1250,39 @@ void WS2812FX::service() {
 
     if (!seg.isActive()) continue;
 
+    const bool mustUpdate = _triggered || (doShow && seg.mode == FX_MODE_STATIC);
     // last condition ensures all solid segments are updated at the same time
-    if (nowUp > seg.next_time || _triggered || (doShow && seg.mode == FX_MODE_STATIC))
-    {
+    if (mustUpdate || seg.needsUpdate(nowUp)) {
       doShow = true;
       unsigned frameDelay = FRAMETIME;
 
       if (!seg.freeze) { //only run effect function if not frozen
         // Effect blending
         uint16_t prog = seg.progress();
-        seg.beginDraw(prog);                // set up parameters for get/setPixelColor() (will also blend colors and palette if blend style is FADE)
-        _currentSegment = &seg;             // set current segment for effect functions (SEGMENT & SEGENV)
-        // workaround for on/off transition to respect blending style
-        frameDelay = (*_mode[seg.mode])();  // run new/current mode (needed for bri workaround)
-        seg.call++;
+        // rely on segment's pixel buffer to maintain pixel values if effect function is not called
+        if (mustUpdate || nowUp > seg.next_time) {
+          seg.beginDraw(prog);                // set up parameters for get/setPixelColor() (will also blend colors and palette if blend style is FADE)
+          _currentSegment = &seg;             // set current segment for effect functions (SEGMENT & SEGENV)
+          // workaround for on/off transition to respect blending style
+          frameDelay = (*_mode[seg.mode])();  // run new/current mode (needed for bri workaround)
+          seg.call++;
+        }
         // if segment is in transition and no old segment exists we don't need to run the old mode
         // (blendSegments() takes care of On/Off transitions and clipping)
         Segment *segO = seg.getOldSegment();
         if (segO && segO->isActive() && (seg.mode != segO->mode || transitionStyle != TRANSITION_FADE ||
             (segO->name != seg.name && segO->name && seg.name && strncmp(segO->name, seg.name, WLED_MAX_SEGNAME_LEN) != 0))) {
-          Segment::modeBlend(true);         // set semaphore for beginDraw() to blend colors and palette
-          segO->beginDraw(prog);            // set up palette & colors (also sets draw dimensions), parent segment has transition progress
-          _currentSegment = segO;           // set current segment
-          // workaround for on/off transition to respect blending style
-          frameDelay = min(frameDelay, (unsigned)(*_mode[segO->mode])());  // run old mode (needed for bri workaround; semaphore!!)
-          segO->call++;                     // increment old mode run counter
-          Segment::modeBlend(false);        // unset semaphore
+          // rely on old segment's pixel buffer to maintain pixel values if effect function is not called
+          if (mustUpdate || nowUp > segO->next_time) {
+            Segment::modeBlend(true);         // set semaphore for beginDraw() to blend colors and palette
+            segO->beginDraw(prog);            // set up palette & colors (also sets draw dimensions), parent segment has transition progress
+            _currentSegment = segO;           // set current segment
+            // workaround for on/off transition to respect blending style
+            frameDelay = min(frameDelay, (unsigned)(*_mode[segO->mode])());  // run old mode (needed for bri workaround; semaphore!!)
+            segO->call++;                     // increment old mode run counter
+            Segment::modeBlend(false);        // unset semaphore
+          }
         }
-        if (seg.isInTransition() && frameDelay > FRAMETIME) frameDelay = FRAMETIME; // force faster updates during transition
       }
 
       seg.next_time = nowUp + frameDelay;

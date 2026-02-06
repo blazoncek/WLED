@@ -684,9 +684,10 @@ class Segment {
       */
     inline Segment &markForReset() { reset = true; return *this; }  // setOption(SEG_OPTION_RESET, true)
 
-    void startTransition(uint16_t dur, bool segmentCopy = true);    // transition has to start before actual segment values change
-    uint8_t  currentCCT() const; // current segment's CCT (blended while in transition)
-    uint8_t  currentBri() const; // current segment's opacity/brightness (blended while in transition)
+    void    startTransition(uint16_t dur, bool segmentCopy = true); // transition has to start before actual segment values change
+    uint8_t currentCCT() const; // current segment's CCT (blended while in transition)
+    uint8_t currentBri() const; // current segment's opacity/brightness (blended while in transition)
+    bool    needsUpdate(unsigned long time) const;  // is it time for segment to be updated?
 
     // 1D strip
     uint16_t virtualLength() const;
