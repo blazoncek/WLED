@@ -61,7 +61,6 @@ uint16_t approximateKelvinFromRGB(uint32_t rgb);
 #define WS2812_2CH_3X_SPANS_2_ICS(i) ((i)&0x01)    // every other LED zone is on two different ICs
 
 extern byte briMultiplier;
-static inline uint8_t scaleBri(uint8_t bri) { unsigned b = ((unsigned)bri*briMultiplier)/100; return b > 255 ? 255 : b; }
 
 struct BusConfig; // forward declaration
 
@@ -114,6 +113,7 @@ class Bus {
     , _reversed(reversed)
     , _valid(false)
     , _needsRefresh(refresh)
+    , _scale(100)
     {
       _autoWhiteMode = Bus::hasWhite(type) ? aw : RGBW_MODE_MANUAL_ONLY;
     };
@@ -125,7 +125,7 @@ class Bus {
     virtual bool     canShow() const                            { return true; }
     virtual void     setStatusPixel(uint32_t c)                 {}
     virtual void     setPixelColor(unsigned pix, uint32_t c)    = 0;
-    virtual void     setBrightness(uint8_t b)                   { _bri = scaleBri(b); };
+    virtual void     setBrightness(uint8_t b)                   { _bri = scaleBri(b, briMultiplier); }; // use global modifier
     virtual void     setColorOrder(uint8_t co)                  {}
     virtual uint8_t  getBrightness() const                      { return _bri; }
     virtual size_t   getPins(uint8_t* pinArray = nullptr) const { return 0; }
@@ -162,6 +162,7 @@ class Bus {
     inline  bool     isReversed() const                         { return _reversed; }
     inline  bool     isOffRefreshRequired() const               { return _needsRefresh; }
     inline  bool     containsPixel(uint16_t pix) const          { return pix >= _start && pix < _start + _len; }
+    inline  uint8_t  getBrightnessFactor() const                { return _scale; }
 
     static inline std::vector<LEDType> getLEDTypes()            { return {{TYPE_NONE, "", PSTR("None")}}; } // not used. just for reference for derived classes
     static constexpr size_t   getNumberOfPins(uint8_t type)     { return isUsermod(type) || isHub75(type) ? 5 : isVirtual(type) ? 4 : isPWM(type) ? numPWMPins(type) : is2Pin(type) + 1; } // credit @PaoloTK
@@ -225,6 +226,7 @@ class Bus {
       bool _hasWhite;//     : 1;
       bool _hasCCT;//       : 1;
     //} __attribute__ ((packed));
+    uint8_t  _scale;  // used to scale output in % (i.e. <100 reduce brightness, >100 increase brightness)
     uint8_t  _autoWhiteMode;
     // global Auto White Calculation override
     static uint8_t _gAWM;
@@ -240,6 +242,7 @@ class Bus {
     static uint8_t _cctBlend;
 
     uint32_t autoWhiteCalc(uint32_t c) const;
+    static inline uint8_t scaleBri(uint8_t bri, uint8_t multiplier) { unsigned b = ((unsigned)bri*multiplier)/100; return b > 255 ? 255 : b; }
 };
 
 
@@ -429,8 +432,9 @@ struct BusConfig {
   uint8_t milliAmpsPerLed;
   uint16_t milliAmpsMax;
   String text;
+  uint8_t scale;
 
-  BusConfig(uint8_t busType, uint8_t* ppins, uint16_t pstart = 0, uint16_t len = DEFAULT_LED_COUNT, uint8_t pcolorOrder = COL_ORDER_GRB, bool rev = false, uint8_t skip = 0, byte aw=RGBW_MODE_MANUAL_ONLY, uint16_t clock_kHz=0U, uint8_t maPerLed=LED_MILLIAMPS_DEFAULT, uint16_t maMax=ABL_MILLIAMPS_DEFAULT, String sometext = "")
+  BusConfig(uint8_t busType, uint8_t* ppins, uint16_t pstart = 0, uint16_t len = DEFAULT_LED_COUNT, uint8_t pcolorOrder = COL_ORDER_GRB, bool rev = false, uint8_t skip = 0, byte aw=RGBW_MODE_MANUAL_ONLY, uint16_t clock_kHz=0U, uint8_t maPerLed=LED_MILLIAMPS_DEFAULT, uint16_t maMax=ABL_MILLIAMPS_DEFAULT, String sometext = "", uint8_t pscale = 100)
   : count(std::max(len,(uint16_t)1))
   , start(pstart)
   , colorOrder(pcolorOrder)
@@ -441,6 +445,7 @@ struct BusConfig {
   , milliAmpsPerLed(maPerLed)
   , milliAmpsMax(maMax)
   , text(sometext)
+  , scale(std::max(1,(int)pscale))
   {
     refreshReq = (bool) GET_BIT(busType,7);
     type = busType & 0x7F;  // bit 7 may be/is hacked to include refresh info (1=refresh in off state, 0=no refresh)

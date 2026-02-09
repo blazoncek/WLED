@@ -243,6 +243,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       bool refresh = elm["ref"] | false;
       uint16_t freqkHz = elm[F("freq")] | 0;  // will be in kHz for DotStar and Hz for PWM
       uint8_t AWmode = elm[F("rgbwm")] | (Bus::getGlobalAWMode() == AW_GLOBAL_DISABLED ? RGBW_MODE_MANUAL_ONLY : Bus::getGlobalAWMode());
+      uint8_t scale = elm[F("bf")] | 100;
       uint8_t maPerLed = elm[F("ledma")] | LED_MILLIAMPS_DEFAULT;
       uint16_t maMax = elm[F("maxpwr")] | 0; // maMax > 0 means per bus PP-ABL is enabled (bus has its own maximum allowable current)
       // To disable brightness limiter we either set output max current to 0 or single LED current to 0
@@ -252,7 +253,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       }
       ledType |= refresh << 7; // hack bit 7 to indicate strip requires off refresh
       String host = elm[F("text")] | String();
-      busConfigs.emplace_back(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz, maPerLed, maMax, host);
+      busConfigs.emplace_back(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz, maPerLed, maMax, host, scale);
       doInit |= INIT_BUS;  // finalization done in beginStrip()
       if (!Bus::isVirtual(ledType)) s++; // have as many virtual buses as you want
     }
@@ -978,6 +979,7 @@ void serializeConfig() {
     ins["type"]      = bus->getType() & 0x7F;
     ins["ref"]       = bus->isOffRefreshRequired();
     ins[F("rgbwm")]  = bus->getAutoWhiteMode();
+    ins[F("bf")]     = bus->getBrightnessFactor();
     ins[F("freq")]   = bus->getFrequency();
     ins[F("maxpwr")] = bus->getMaxCurrent();
     ins[F("ledma")]  = bus->getLEDCurrent();

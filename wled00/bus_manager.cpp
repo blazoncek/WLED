@@ -157,6 +157,7 @@ BusDigital::BusDigital(const BusConfig &bc, uint8_t nr)
   _consistent = nr < WLED_MAX_RMT_CHANNELS || _skip > 0;  // TODO: no longer needed once neopixelbus#905 (or similar) is merged or use https://github.com/blazoncek/NeoPixelBus.git#clearto-buffers
   _iType = PolyBus::getI(bc.type, _pins, nr);
   if (_iType == I_NONE) { DEBUGBUS_PRINTLN(F("Incorrect iType!")); return; }
+  _scale = bc.scale;
   _hasRgb = hasRGB(bc.type);
   _hasWhite = hasWhite(bc.type);
   _hasCCT = hasCCT(bc.type);
@@ -247,7 +248,8 @@ void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
   if (!_valid || pix >= _len) return;
   if (hasWhite()) c = autoWhiteCalc(c);
   if (Bus::_cct >= 1900) c = colorBalanceFromKelvin(Bus::_cct, c); //color correction from CCT
-  c = gamma32Func(color_fade(c, _bri, true));
+  uint8_t adjBri = _scale != 100 ? scaleBri(_bri, _scale) : _bri;
+  c = gamma32Func(color_fade(c, adjBri, true));
 
   // pre-calcualte power usage for per-output ABL (a single bus should never have over 2000 LEDs so uint32_t is enough for _busPowerSum)
   // WARNING: assumes pixel is not modified agin until show() is called
@@ -407,6 +409,7 @@ BusPwm::BusPwm(const BusConfig &bc)
       ledc_timer_rst((ledc_mode_t)group, (ledc_timer_t)timer); // reset timer so all timers are almost in sync (for phase shift)
       #endif
     }
+    _scale = bc.scale;
     _hasRgb = hasRGB(bc.type);
     _hasWhite = hasWhite(bc.type);
     _hasCCT = hasCCT(bc.type);
@@ -463,7 +466,7 @@ void BusPwm::show() {
 
   // use CIE brightness formula (linear + cubic) to approximate human eye perceived brightness
   // see: https://en.wikipedia.org/wiki/Lightness
-  unsigned pwmBri = _bri;
+  unsigned pwmBri = _scale != 100 ? scaleBri(_bri, _scale) : _bri;
   if (pwmBri < 21) {                                   // linear response for values [0-20]
     pwmBri = (pwmBri * maxBri + 2300 / 2) / 2300 ;     // adding '0.5' before division for correct rounding, 2300 gives a good match to CIE curve
   } else {                                             // cubic response for values [21-255]
@@ -609,6 +612,7 @@ BusNetwork::BusNetwork(const BusConfig &bc)
       _UDPtype = 0;
       break;
   }
+  _scale = bc.scale;
   _hasRgb = hasRGB(bc.type);
   _hasWhite = hasWhite(bc.type);
   _hasCCT = false;
@@ -638,7 +642,8 @@ void BusNetwork::setPixelColor(unsigned pix, uint32_t c) {
 void BusNetwork::show() {
   if (!_valid || !canShow()) return;
   _broadcastLock = true;
-  realtimeBroadcast(_UDPtype, _client, _len, _data, _bri, hasWhite());
+  uint8_t adjBri = _scale != 100 ? scaleBri(_bri, _scale) : _bri;
+  realtimeBroadcast(_UDPtype, _client, _len, _data, adjBri, hasWhite());
   _broadcastLock = false;
 }
 
@@ -782,7 +787,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   #ifdef WLED_DEBUG_BUS
   size_t lastHeap = getFreeHeapSize();
   #endif
-  //_valid = false; // not needed as Bus constructor already set it to false
+  _scale = bc.scale;
   _hasRgb = true;
   _hasWhite = false;
   _hasCCT = false;
@@ -1006,9 +1011,10 @@ void BusHub75Matrix::setPixelColor(unsigned pix, uint32_t c) {
 }
 
 void BusHub75Matrix::setBrightness(uint8_t b) {
-  _bri = scaleBri(b);
+  Bus::setBrightness(b);
   if (!_valid) return;
-  display->setBrightness(_bri);
+  uint8_t adjBri = _scale != 100 ? scaleBri(_bri, _scale) : _bri;
+  display->setBrightness(adjBri);
 }
 
 void BusHub75Matrix::show(void) {

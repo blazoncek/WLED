@@ -336,6 +336,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       char la[4] = "LA"; la[2] = offset+s; la[3] = 0; //LED current
       char ma[4] = "MA"; ma[2] = offset+s; ma[3] = 0; //max per-port PSU current
       char hs[4] = "HS"; hs[2] = offset+s; hs[3] = 0; //hostname (for network types, custom text for others)
+      char bf[4] = "BF"; bf[2] = offset+s; bf[3] = 0; //brightness factor
       settingsScript.print(F("addLEDs(1);"));
       uint8_t pins[5];
       int nPins = bus->getPins(pins);
@@ -383,6 +384,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       printSetFormValue(settingsScript,la,bus->getLEDCurrent());
       printSetFormValue(settingsScript,ma,bus->getMaxCurrent());
       printSetFormValue(settingsScript,hs,bus->getCustomText().c_str());
+      printSetFormValue(settingsScript,bf,bus->getBrightnessFactor());
       sumMa += bus->getMaxCurrent();
     }
     // strip.milliAmpsMax > 0 means per strip ABL is enabled
