@@ -615,7 +615,7 @@ void *d_calloc(size_t count, size_t size) {
 // ensures that a contiguous block of MIN_HEAP_SIZE remains to keep the UI working, otherwise returns nullptr
 void *allocate_buffer(size_t size, uint32_t type) {
   void *buffer = nullptr;
-  #if defined(ESP8266) // ESP8266 does not support PSRAM
+  #if defined(ESP8266) || defined(CONFIG_IDF_TARGET_ESP32C3) // ESP8266 & C3 do not support PSRAM
   if (getContiguousFreeHeap() > MIN_HEAP_SIZE + size) buffer = malloc(size); // use malloc for ESP8266 and ESP32-C3
   #else
   if (type & BFRALLOC_ENFORCE_DRAM) {

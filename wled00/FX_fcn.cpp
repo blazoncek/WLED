@@ -1345,14 +1345,14 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     _stencil,    _hue,       _sat,      _val
   };
 
-  const size_t blendMode = topSegment.blendMode < (sizeof(funcs) / sizeof(FuncType)) ? topSegment.blendMode : 0;
+  const size_t blendMode = topSegment.blendMode < countof(funcs) ? topSegment.blendMode : 0;
   const auto func  = funcs[blendMode]; // blendMode % (sizeof(funcs) / sizeof(FuncType))
   const auto blend = [&](uint32_t t, uint32_t b){
     // handle special modes first
     switch (blendMode) {
-      case 0 : return t;              // top (faster than lambda)
-      case 1 : return b;              // bottom (faster than lambda)
-      case 2 : return color_add(t,b); // add (faster than lambda)
+      case 0 : return t;              // top (faster than channel lambda)
+      case 1 : return b;              // bottom (faster than channel lambda)
+      case 2 : return color_add(t,b); // add (faster than channel lambda)
       case 16: return t ? t : b;      // stencil (use top layer if not black, else bottom)
       case 17: { // hue (uses top hue, bottom saturation & value)
         CHSV32 ht = CHSV32(t), hb = CHSV32(b);
