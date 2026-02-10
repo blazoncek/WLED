@@ -248,8 +248,7 @@ void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
   if (!_valid || pix >= _len) return;
   if (hasWhite()) c = autoWhiteCalc(c);
   if (Bus::_cct >= 1900) c = colorBalanceFromKelvin(Bus::_cct, c); //color correction from CCT
-  uint8_t adjBri = _scale != 100 ? scaleBri(_bri, _scale) : _bri;
-  c = gamma32Func(color_fade(c, adjBri, true));
+  c = gamma32Func(color_fade(c, scaleBri(_bri, _scale), true));
 
   // pre-calcualte power usage for per-output ABL (a single bus should never have over 2000 LEDs so uint32_t is enough for _busPowerSum)
   // WARNING: assumes pixel is not modified agin until show() is called
@@ -466,7 +465,7 @@ void BusPwm::show() {
 
   // use CIE brightness formula (linear + cubic) to approximate human eye perceived brightness
   // see: https://en.wikipedia.org/wiki/Lightness
-  unsigned pwmBri = _scale != 100 ? scaleBri(_bri, _scale) : _bri;
+  unsigned pwmBri = scaleBri(_bri, _scale);
   if (pwmBri < 21) {                                   // linear response for values [0-20]
     pwmBri = (pwmBri * maxBri + 2300 / 2) / 2300 ;     // adding '0.5' before division for correct rounding, 2300 gives a good match to CIE curve
   } else {                                             // cubic response for values [21-255]
@@ -642,8 +641,7 @@ void BusNetwork::setPixelColor(unsigned pix, uint32_t c) {
 void BusNetwork::show() {
   if (!_valid || !canShow()) return;
   _broadcastLock = true;
-  uint8_t adjBri = _scale != 100 ? scaleBri(_bri, _scale) : _bri;
-  realtimeBroadcast(_UDPtype, _client, _len, _data, adjBri, hasWhite());
+  realtimeBroadcast(_UDPtype, _client, _len, _data, scaleBri(_bri, _scale), hasWhite());
   _broadcastLock = false;
 }
 
@@ -1013,8 +1011,7 @@ void BusHub75Matrix::setPixelColor(unsigned pix, uint32_t c) {
 void BusHub75Matrix::setBrightness(uint8_t b) {
   Bus::setBrightness(b);
   if (!_valid) return;
-  uint8_t adjBri = _scale != 100 ? scaleBri(_bri, _scale) : _bri;
-  display->setBrightness(adjBri);
+  display->setBrightness(scaleBri(_bri, _scale));
 }
 
 void BusHub75Matrix::show(void) {

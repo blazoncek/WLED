@@ -242,7 +242,11 @@ class Bus {
     static uint8_t _cctBlend;
 
     uint32_t autoWhiteCalc(uint32_t c) const;
-    static inline uint8_t scaleBri(uint8_t bri, uint8_t multiplier) { unsigned b = ((unsigned)bri*multiplier)/100; return b > 255 ? 255 : b; }
+    static inline unsigned __attribute__((optimize("O2"))) scaleBri(unsigned bri, unsigned multiplier) {
+      if (multiplier == 100) return bri;
+      unsigned b = (bri * multiplier) / 100;
+      return b > 255 ? 255 : b;
+    }
 };
 
 
