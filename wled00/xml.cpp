@@ -36,7 +36,7 @@ static void extractPin(Print& settingsScript, const JsonObject &obj, const char 
   }
 }
 
-void fillWLEDVersion(char *buf, size_t len) {
+static void fillWLEDVersion(char *buf, size_t len) {
   if (!buf || len == 0) return;
 
   snprintf_P(buf,len,PSTR("WLED %s (%d)<br>\\\"%s\\\"<br>(CPU: %s)"),
@@ -86,7 +86,7 @@ static void fillUMPins(Print& settingsScript, const JsonObject &mods)
   }
 }
 
-void appendGPIOinfo(Print& settingsScript) {
+static void appendGPIOinfo(Print& settingsScript) {
   settingsScript.print(F("um_p=[-1")); // has to have 1 element
   if (i2c_sda > -1 && i2c_scl > -1) {
     settingsScript.printf_P(PSTR(",%d,%d"), i2c_sda, i2c_scl);

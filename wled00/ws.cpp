@@ -5,9 +5,9 @@
  */
 #ifdef WLED_ENABLE_WEBSOCKETS
 
-uint16_t wsLiveClientId = 0;
-unsigned long wsLastLiveTime = 0;
-//uint8_t* wsFrameBuffer = nullptr;
+static uint16_t wsLiveClientId = 0;
+static unsigned long wsLastLiveTime = 0;
+//static uint8_t* wsFrameBuffer = nullptr;
 
 #define WS_LIVE_INTERVAL 40
 
@@ -166,7 +166,7 @@ void sendDataWs(AsyncWebSocketClient * client)
   releaseJSONBufferLock();
 }
 
-bool sendLiveLedsWs(uint32_t wsClient)
+static bool sendLiveLedsWs(uint32_t wsClient)
 {
   AsyncWebSocketClient * wsc = ws.client(wsClient);
   if (!wsc || wsc->queueLength() > 0) return false; //only send if queue free

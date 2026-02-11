@@ -25,7 +25,6 @@
 #include "colors.h"
 #include "network.h"
 
-extern char hostName[];
 extern bool cctICused;
 extern uint32_t (*gamma32Func)(uint32_t);
 

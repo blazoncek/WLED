@@ -142,8 +142,6 @@ void publishMqtt();
 String getTZNamesJSONString();
 void handleTime();
 void handleNetworkTime();
-void sendNTPPacket();
-bool checkNTPResponse();
 void updateLocalTime();
 void getTimeString(char* out);
 bool checkCountdown();
@@ -180,8 +178,6 @@ void clearTimers();
 
 //overlay.cpp
 void handleOverlayDraw();
-void _overlayAnalogCountdown();
-void _overlayAnalogClock();
 
 //playlist.cpp
 void shufflePlaylist();

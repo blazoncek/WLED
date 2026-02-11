@@ -17,8 +17,6 @@
 
 #define IMPROV_VERSION 1
 
-void parseWiFiCommand(char *rpcData);
-
 enum ImprovPacketType {
   Current_State = 0x01,
   Error_State = 0x02,
@@ -36,6 +34,29 @@ enum ImprovPacketByte {
 #ifndef WLED_DISABLE_IMPROV_WIFISCAN
 static bool improvWifiScanRunning = false;
 #endif
+
+static void parseWiFiCommand(char* rpcData) {
+  unsigned len = rpcData[0];
+  if (!len || len > 126) return;
+
+  unsigned ssidLen = rpcData[1];
+  if (ssidLen > len -1 || ssidLen > 32) return;
+  memset(multiWiFi[0].clientSSID, 0, 32);
+  memcpy(multiWiFi[0].clientSSID, rpcData+2, ssidLen);
+
+  memset(multiWiFi[0].clientPass, 0, 64);
+  if (len > ssidLen +1) {
+    unsigned passLen = rpcData[2+ssidLen];
+    memset(multiWiFi[0].clientPass, 0, 64);
+    memcpy(multiWiFi[0].clientPass, rpcData+3+ssidLen, passLen);
+  }
+
+  sendImprovStateResponse(0x03); //provisioning
+  improvActive = 2;
+
+  forceReconnect = true;
+  serializeConfig();
+}
 
 //blocking function to parse an Improv Serial packet
 void handleImprovPacket() {
@@ -250,25 +271,3 @@ void handleImprovWifiScan() {
 void startImprovWifiScan() {}
 void handleImprovWifiScan() {}
 #endif
-
-void parseWiFiCommand(char* rpcData) {
-  unsigned len = rpcData[0];
-  if (!len || len > 126) return;
-
-  unsigned ssidLen = rpcData[1];
-  if (ssidLen > len -1 || ssidLen > 32) return;
-  memset(multiWiFi[0].clientSSID, 0, sizeof(multiWiFi[0].clientSSID));
-  memcpy(multiWiFi[0].clientSSID, rpcData+2, ssidLen);
-
-  memset(multiWiFi[0].clientPass, 0, sizeof(multiWiFi[0].clientPass));
-  if (len > ssidLen +1) {
-    unsigned passLen = rpcData[2+ssidLen];
-    memcpy(multiWiFi[0].clientPass, rpcData+3+ssidLen, min(size_t(passLen), sizeof(multiWiFi[0].clientPass)));
-  }
-
-  sendImprovStateResponse(0x03); //provisioning
-  improvActive = 2;
-
-  forceReconnect = true;
-  serializeConfig();
-}
