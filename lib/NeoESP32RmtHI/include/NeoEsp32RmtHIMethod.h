@@ -58,7 +58,6 @@ public:
         _sizeData(pixelCount * elementSize + settingsSize),
         _pin(pin)
     {
-        construct();
     }
 
     NeoEsp32RmtHIMethodBase(uint8_t pin, uint16_t pixelCount, size_t elementSize, size_t settingsSize, NeoBusChannel channel) :
@@ -66,7 +65,6 @@ public:
         _pin(pin),
         _channel(channel)
     {
-        construct();
     }
 
     ~NeoEsp32RmtHIMethodBase()
@@ -89,8 +87,22 @@ public:
         return (ESP_OK == ESP_ERROR_CHECK_WITHOUT_ABORT_SILENT_TIMEOUT(NeoEsp32RmtHiMethodDriver::WaitForTxDone(_channel.RmtChannelNumber, 0)));
     }
 
-    void Initialize()
+    bool Initialize()
     {
+        _dataEditing = static_cast<uint8_t*>(malloc(_sizeData));
+        if (!_dataEditing)
+        {
+            return false;
+        }
+
+        _dataSending = static_cast<uint8_t*>(malloc(_sizeData));
+        if (!_dataSending)
+        {
+            free(_dataEditing);
+            _dataEditing = nullptr;
+            return false;
+        }
+
         rmt_config_t config = {};
 
         config.rmt_mode = RMT_MODE_TX;
@@ -108,7 +120,15 @@ public:
         config.clk_div = T_SPEED::RmtClockDivider;
 
         ESP_ERROR_CHECK(rmt_config(&config));   // Uses ESP library
-        ESP_ERROR_CHECK(NeoEsp32RmtHiMethodDriver::Install(_channel.RmtChannelNumber, T_SPEED::RmtBit0, T_SPEED::RmtBit1, T_SPEED::RmtDurationReset));
+        esp_err_t result = NeoEsp32RmtHiMethodDriver::Install(_channel.RmtChannelNumber, T_SPEED::RmtBit0, T_SPEED::RmtBit1, T_SPEED::RmtDurationReset);
+        ESP_ERROR_CHECK(result);
+        if (result != ESP_OK) {
+            free(_dataEditing);
+            _dataEditing = nullptr;
+            free(_dataSending);
+            _dataSending = nullptr;
+        }
+        return result == ESP_OK;
     }
 
     void Update(bool maintainBufferConsistency)
@@ -168,16 +188,6 @@ private:
     // Holds data stream which include LED color values and other settings as needed
     uint8_t*  _dataEditing;   // exposed for get and set
     uint8_t*  _dataSending;   // used for async send using RMT
-
-
-    void construct()
-    {
-        _dataEditing = static_cast<uint8_t*>(malloc(_sizeData));
-        // data cleared later in Begin()
-
-        _dataSending = static_cast<uint8_t*>(malloc(_sizeData));
-        // no need to initialize it, it gets overwritten on every send
-    }
 };
 
 // normal

@@ -6,7 +6,7 @@
     {
       "owner": "makuna",      
       "name": "NeoPixelBus",
-      "version": "https://github.com/blazoncek/NeoPixelBus.git#clearto-buffers"
+      "version": "https://github.com/blazoncek/NeoPixelBus.git#delayed-malloc-fix"
     }
   ]
 }  
