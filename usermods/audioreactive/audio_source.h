@@ -222,14 +222,22 @@ class I2SSource : public AudioSource {
         //  * C3: does not support PDM to PCM input. SoC would allow PDM RX, but there is no hardware to directly convert to PCM so it will not work. https://github.com/espressif/esp-idf/issues/8796
 
         _config.mode = i2s_mode_t(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM); // Change mode to pdm if clock pin not provided. PDM is not supported on ESP32-S2. PDM RX not supported on ESP32-C3
-        _config.channel_format =I2S_PDM_MIC_CHANNEL;                             // seems that PDM mono mode always uses left channel.
-        _config.use_apll = true;                                                 // experimental - use aPLL clock source to improve sampling quality
+        _config.channel_format = I2S_PDM_MIC_CHANNEL;                            // seems that PDM mono mode always uses left channel.
+        #if !defined(WLED_USE_ETHERNET)  // fix for #5391 aPLL resource conflict - aPLL is needed for ethernet boards with internal RMII clock
+        _config.use_apll = true;                                                 // experimental - use aPLL clock source to improve sampling quality, and to avoid glitches.
+        #else
+        _config.use_apll = false;                                                // don't use aPLL clock source (fix for #5391)
+        #endif
         #endif
       }
 
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 2, 0)
       if (mclkPin != I2S_PIN_NO_CHANGE) {
-        _config.use_apll = true; // experimental - use aPLL clock source to improve sampling quality, and to avoid glitches.
+        #if !defined(WLED_USE_ETHERNET)  // fix for #5391 aPLL resource conflict - aPLL is needed for ethernet boards with internal RMII clock
+        _config.use_apll = true;                                                 // experimental - use aPLL clock source to improve sampling quality, and to avoid glitches.
+        #else
+        _config.use_apll = false;                                                // don't use aPLL clock source (fix for #5391)
+        #endif
         // //_config.fixed_mclk = 512 * _sampleRate;
         // //_config.fixed_mclk = 256 * _sampleRate;
       }

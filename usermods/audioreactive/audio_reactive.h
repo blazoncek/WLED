@@ -2167,6 +2167,10 @@ class AudioReactive : public Usermod {
 
 #ifdef ARDUINO_ARCH_ESP32
 
+    #if SR_DMTYPE==5 && !defined(SOC_I2S_SUPPORTS_PDM_RX)
+      #warning "SR_DMTYPE 5 (PDM) is not supported on this ESP32 variant. Type removed."
+      #undef SR_DMTYPE
+    #endif
     #ifndef SR_DMTYPE // I2S mic type
       #define SR_DMTYPE 0 // none/disabled
     #endif
@@ -2808,7 +2812,7 @@ class AudioReactive : public Usermod {
 
       switch (dmType) {
         case 1:
-          DEBUGSR_PRINT(F("AR: Generic I2S Microphone - ")); DEBUGSR_PRINTLN(F(I2S_MIC_CHANNEL_TEXT));
+          DEBUGSR_PRINT(F("AR: I2S Microphone - ")); DEBUGSR_PRINTLN(F(I2S_MIC_CHANNEL_TEXT));
           audioSource = new(std::nothrow) I2SSource(SAMPLE_RATE, BLOCK_SIZE);
           delay(100);
           if (audioSource) audioSource->initialize(i2swsPin, i2ssdPin, i2sckPin);
@@ -2829,7 +2833,7 @@ class AudioReactive : public Usermod {
           break;
 
         case 4:
-          DEBUGSR_PRINT(F("AR: Generic I2S Microphone with Master Clock - ")); DEBUGSR_PRINTLN(F(I2S_MIC_CHANNEL_TEXT));
+          DEBUGSR_PRINT(F("AR: I2S Microphone with Master Clock - ")); DEBUGSR_PRINTLN(F(I2S_MIC_CHANNEL_TEXT));
           audioSource = new(std::nothrow) I2SSource(SAMPLE_RATE, BLOCK_SIZE, 1.0f/24.0f);
           delay(100);
           if (audioSource) audioSource->initialize(i2swsPin, i2ssdPin, i2sckPin, mclkPin);
@@ -2837,7 +2841,7 @@ class AudioReactive : public Usermod {
 
         #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
         case 5:
-          DEBUGSR_PRINT(F("AR: I2S PDM Microphone - ")); DEBUGSR_PRINTLN(F(I2S_PDM_MIC_CHANNEL_TEXT));
+          DEBUGSR_PRINT(F("AR: PDM Microphone - ")); DEBUGSR_PRINTLN(F(I2S_PDM_MIC_CHANNEL_TEXT));
           audioSource = new(std::nothrow) I2SSource(SAMPLE_RATE, BLOCK_SIZE, 1.0f/4.0f);
           useBandPassFilter = true;  // this reduces the noise floor on SPM1423 from 5% Vpp (~380) down to 0.05% Vpp (~5)
           delay(100);
@@ -3213,7 +3217,7 @@ class AudioReactive : public Usermod {
             //if (audioSource->getType() == AudioSource::Type_I2SAdc) {
             //  infoArr.add(F("ADC analog")); // no longer supported
             //} else {
-              infoArr.add(F("I2S digital"));
+              infoArr.add(dmType == 5 ? F("PDM digital") : F("I2S digital"));
             //}
             // input level or "silence"
             if (maxSample5sec > 1.0f) {
@@ -3444,7 +3448,7 @@ class AudioReactive : public Usermod {
 #ifdef ARDUINO_ARCH_ESP32
       configComplete &= getJsonValue(top[FPSTR(_digitalmic)]["type"],   dmType);
       #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3)
-      if (dmType == 5) dmType = SR_DMTYPE;   // MCU does not support PDM
+      if (dmType == 5) dmType = 0;   // MCU does not support PDM
       #endif
 
       configComplete &= getJsonValue(top[FPSTR(_digitalmic)]["pin"][0], i2ssdPin);
@@ -3490,7 +3494,7 @@ class AudioReactive : public Usermod {
       uiScript.print(F("addOption(dd,'SPH0654',3);"));
       uiScript.print(F("addOption(dd,'Generic I2S with Mclk',4);"));
       #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
-      uiScript.print(F("addOption(dd,'Generic I2S PDM',5);"));
+      uiScript.print(F("addOption(dd,'Generic PDM',5);"));
       #endif
       uiScript.print(F("addOption(dd,'ES8388',6);"));
     
