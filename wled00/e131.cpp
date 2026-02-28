@@ -266,7 +266,8 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol) {
         }
       }
     }
-    unsigned ddpChannelsPerLed = ((p->dataType & 0b00111000)>>3 == 0b011) ? 4 : 3; // data type 0x1B (formerly 0x1A) is RGBW (type 3, 8 bit/channel)
+    if (!(p->dataType == DDP_TYPE_RGBW32 || p->dataType == DDP_TYPE_RGB24) && p->destination != 1) return; // only RGB or RGBW supported and default device ID
+    unsigned ddpChannelsPerLed = 3 + (p->dataType == DDP_TYPE_RGBW32); // data type 0x1B (formerly 0x1A) is RGBW (type 3, 8 bit/channel)
     uint32_t start =  htonl(p->channelOffset) / ddpChannelsPerLed;
     start += DMXAddress / ddpChannelsPerLed;
     unsigned stop = start + htons(p->dataLen) / ddpChannelsPerLed;

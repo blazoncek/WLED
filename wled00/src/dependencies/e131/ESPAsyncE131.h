@@ -50,6 +50,8 @@ typedef struct ip_addr ip4_addr_t;
 #define ARTNET_DEFAULT_PORT 6454
 #define DDP_DEFAULT_PORT    4048
 
+#define DDP_HEADER_SIZE 10   // increases to 14 if timecode flag is set
+#define DDP_VERSION_MASK 0xC0
 #define DDP_PUSH_FLAG 0x01
 #define DDP_TIMECODE_FLAG 0x10
 

@@ -460,9 +460,12 @@ void WLED::setup()
   WiFi.persistent(false);
   //WiFi.enableLongRange(true);
   WiFi.onEvent(WiFiEvent);
-//#if defined(ARDUINO_ARCH_ESP32) && ESP_IDF_VERSION_MAJOR==4 && !defined(CONFIG_IDF_TARGET_ESP32S2)
-//  WiFi.useStaticBuffers(true);    // use preallocated buffers (for speed); WARNING: uses 60kB of RAM!!!
-//#endif
+#if defined(ARDUINO_ARCH_ESP32) && ESP_IDF_VERSION_MAJOR==4
+  WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+  #if defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(WLED_ENABLE_HUB75MATRIX)
+  WiFi.useStaticBuffers(true);    // use preallocated buffers (for speed); WARNING: uses 60kB of RAM!!!
+  #endif
+#endif
   delay(15);                      // wait for hardware to be ready
 
   if (isWiFiConfigured()) {

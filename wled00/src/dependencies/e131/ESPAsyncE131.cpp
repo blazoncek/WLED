@@ -124,8 +124,13 @@ void ESPAsyncE131::parsePacket(AsyncUDPPacket _packet) {
 	} 
   
   if (error && _packet.localPort() == DDP_DEFAULT_PORT) { //DDP packet
-    error = false;
-    protocol = P_DDP;
+    // check if it is indeed DDP packet (version bits >0; data len == actual packet length - header)
+    if (_packet.length() > DDP_HEADER_SIZE && (sbuff->flags & DDP_VERSION_MASK) != 0) {
+      if (sbuff->dataLen == _packet.length() - DDP_HEADER_SIZE - (sbuff->flags & DDP_TIMECODE_FLAG ? sizeof(uint32_t) : 0)) {
+        error = false;
+        protocol = P_DDP;
+      }
+    }
   }
 
   if (!error) {
