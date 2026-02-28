@@ -104,30 +104,53 @@ void Bus::calculateCCT(uint32_t c, uint8_t &ww, uint8_t &cw) {
     cct = (approximateKelvinFromRGB(c) - 1900) >> 5;  // convert K (from RGB value) to relative format
   }
 
-  //0 - linear (CCT 127 = 50% warm, 50% cold), 127 - additive CCT blending (CCT 127 = 100% warm, 100% cold)
-  if (cct       < _cctBlend) ww = 255;
-  else                       ww = ((255-cct) * 255) / (255 - _cctBlend);
-  if ((255-cct) < _cctBlend) cw = 255;
-  else                       cw = (cct * 255) / (255 - _cctBlend);
+  // CCT blending modes (_cctBlend):
+  // blend<0: ww: ▓▓▒░__  | blend=0: ww: ▓▒▒░░ |  blend>0 ww: ▓▓▓▒░
+  //          cw: __░▒▓▓  |          cw: ░░▒▒▓ |          cw: ░▒▓▓▓
+  if (_cctBlend < 0) {
+    int32_t ww_val, cw_val;
+    uint16_t range = 255 - 2 * (uint8_t)(-_cctBlend);
+    if (range > 255) range = 255; // prevent overflow
+    ww_val = range ? ((int32_t)(255 + _cctBlend - cct) * 255) / range : (cct < 128 ? 255 : 0); // exclusive blending
+    cw_val = 255 - ww_val;
+    ww = constrain(ww_val, 0, 255);
+    cw = constrain(cw_val, 0, 255);
+  } else {
+    //0 - linear (CCT 127 = 50% warm, 50% cold), 127 - additive CCT blending (CCT 127 = 100% warm, 100% cold)
+    if (cct       < (uint8_t)_cctBlend) ww = 255;
+    else                                ww = ((255-cct) * 255) / (255 - _cctBlend);
+    if ((255-cct) < (uint8_t)_cctBlend) cw = 255;
+    else                                cw = (cct * 255) / (255 - _cctBlend);
+  }
 
   ww = (w * ww) / 255; //brightness scaling
   cw = (w * cw) / 255;
 }
 
-uint32_t Bus::autoWhiteCalc(uint32_t c) const {
+// calculates white channel and CCT values based on given settings
+uint32_t Bus::autoWhiteCalc(uint32_t c, uint8_t &ww, uint8_t &cw) const {
   unsigned aWM = _autoWhiteMode;
   if (_gAWM < AW_GLOBAL_DISABLED) aWM = _gAWM;
-  if (aWM == RGBW_MODE_MANUAL_ONLY) return c;
+  uint32_t rgbIn = c & 0x00FFFFFF; // save original (RGB) color for CCT calculation
   unsigned w = W(c);
-  //ignore auto-white calculation if w>0 and mode DUAL (DUAL behaves as BRIGHTER if w==0)
-  if (w > 0 && aWM == RGBW_MODE_DUAL) return c;
-  unsigned r = R(c);
-  unsigned g = G(c);
-  unsigned b = B(c);
-  if (aWM == RGBW_MODE_MAX) return RGBW32(r, g, b, r > g ? (r > b ? r : b) : (g > b ? g : b)); // brightest RGB channel
-  w = r < g ? (r < b ? r : b) : (g < b ? g : b);
-  if (aWM == RGBW_MODE_AUTO_ACCURATE) { r -= w; g -= w; b -= w; } //subtract w in ACCURATE mode
-  return RGBW32(r, g, b, w);
+  if (aWM != RGBW_MODE_MANUAL_ONLY || (aWM == RGBW_MODE_DUAL && w > 0)) {
+    //ignore auto-white calculation if w>0 and mode DUAL (DUAL behaves as BRIGHTER if w==0)
+    unsigned r = R(c); // note: using uint8_t generates larger code
+    unsigned g = G(c);
+    unsigned b = B(c);
+    if (aWM == RGBW_MODE_MAX) {
+      w = r > g ? (r > b ? r : b) : (g > b ? g : b); // brightest RGB channel
+    } else {
+      w = r < g ? (r < b ? r : b) : (g < b ? g : b); // darkest RGB channel
+      if (aWM == RGBW_MODE_AUTO_ACCURATE) { r -= w; g -= w; b -= w; } //subtract w in ACCURATE mode
+    }
+    c = RGBW32(r, g, b, w);
+  }
+  if (_hasCCT) {
+    rgbIn |= (w << 24); // need original rgb values in case CCT is derived from RGB
+    calculateCCT(rgbIn, ww, cw);
+  }
+  return c;
 }
 
 
@@ -212,10 +235,10 @@ void BusDigital::estimateCurrentAndLimitBri() {
     unsigned hwLen = _len;
     if (_type == TYPE_WS2812_1CH_X3) hwLen = NUM_ICS_WS2812_1CH_3X(_len); // only needs a third of "RGB" LEDs for NeoPixelBus
     for (unsigned i = 0; i < hwLen; i++) {
-      // TODO: fix CCT handling
-      uint32_t c = color_fade(PolyBus::getPixelColor(_busPtr, _iType, i, 0), scaleB, true);
-      if (hasCCT()) Bus::calculateCCT(c, cctWW, cctCW); // this will unfortunately corrupt CCT data
-      PolyBus::setPixelColor(_busPtr, _iType, i, c, 0, (cctCW<<8) | cctWW); // repaint all pixels with new brightness
+      uint8_t co = _colorOrderMap.getPixelColorOrder(i + _start, _colorOrder);                // need to revert color order for correct color scaling and CCT calc in case white is swapped
+      uint32_t c = color_fade(PolyBus::getPixelColor(_busPtr, _iType, i, co), scaleB, true);  // will not return correct W for CCT LEDs
+      if (hasCCT() && _type != TYPE_WS2812_WWA) Bus::calculateCCT(c, cctWW, cctCW);           // this will unfortunately corrupt CCT data since W will be off
+      PolyBus::setPixelColor(_busPtr, _iType, i, c, co, (cctCW<<8) | cctWW);                  // repaint all pixels with new brightness
     }
     BusDigital::_milliAmpsTotal = _milliAmpsLimit;
   }
@@ -246,9 +269,24 @@ void BusDigital::setStatusPixel(uint32_t c) {
 
 void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
   if (!_valid || pix >= _len) return;
-  if (hasWhite()) c = autoWhiteCalc(c);
+  unsigned sBri = scaleBri(_bri, _scale);
   if (Bus::_cct >= 1900) c = colorBalanceFromKelvin(Bus::_cct, c); //color correction from CCT
-  c = gamma32Func(color_fade(c, scaleBri(_bri, _scale), true));
+
+  uint8_t cctWW = 0, cctCW = 0;
+  if (hasWhite()) c = autoWhiteCalc(c, cctWW, cctCW);
+  uint16_t wwcw = 0;
+  if (hasCCT()) {
+    if (_type == TYPE_WS2812_WWA) {
+      // for WS2812 WWA we need to set WW and CW into R and G channels as these are not treated as RGBW LEDs (will need to account in ABL)
+      c = RGBW32(cctWW, cctCW, 0, 0); // ww, cw, 0, 0; will be scaled using color_fade() and W is lost after sending to NPB
+    } else {
+      // apply brightness to CCT
+      wwcw  = (((unsigned)cctCW + 1) * sBri) & 0xFF00;
+      wwcw |= (((unsigned)cctWW + 1) * sBri) >> 8;
+      wwcw = gamma32Func((uint32_t)wwcw); // upper two bytes ignored
+    }
+  }
+  c = gamma32Func(color_fade(c, sBri, true));
 
   // pre-calcualte power usage for per-output ABL (a single bus should never have over 2000 LEDs so uint32_t is enough for _busPowerSum)
   // WARNING: assumes pixel is not modified agin until show() is called
@@ -271,14 +309,7 @@ void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
       case 2: c = RGBW32(R(cOld), G(cOld), W(c)   , 0); break;
     }
   }
-  uint16_t wwcw = 0;
-  if (hasCCT()) {
-    uint8_t cctWW = 0, cctCW = 0;
-    Bus::calculateCCT(c, cctWW, cctCW);
-    wwcw = (cctCW<<8) | cctWW;
-    if (_type == TYPE_WS2812_WWA) c = RGBW32(cctWW, cctCW, 0, W(c));
-  }
-  PolyBus::setPixelColor(_busPtr, _iType, pix, c, co, wwcw);
+  PolyBus::setPixelColor(_busPtr, _iType, pix, c, co, (cctCW<<8) | cctWW);
 }
 
 size_t BusDigital::getPins(uint8_t* pinArray) const {
@@ -419,10 +450,11 @@ BusPwm::BusPwm(const BusConfig &bc)
 
 void BusPwm::setPixelColor(unsigned pix, uint32_t c) {
   if (pix != 0 || !_valid) return; //only react to first pixel
-  if (_type != TYPE_ANALOG_3CH) c = autoWhiteCalc(c);
   if (Bus::_cct >= 1900 && (_type == TYPE_ANALOG_3CH || _type == TYPE_ANALOG_4CH)) {
     c = colorBalanceFromKelvin(Bus::_cct, c); //color correction from CCT
   }
+  uint8_t cctWW = 0, cctCW = 0;
+  if (_type != TYPE_ANALOG_3CH) c = autoWhiteCalc(c, cctWW, cctCW);
   c = gamma32Func(c);
   uint8_t r = R(c);
   uint8_t g = G(c);
@@ -438,14 +470,18 @@ void BusPwm::setPixelColor(unsigned pix, uint32_t c) {
         _data[0] = w;
         _data[1] = Bus::_cct < 0 || Bus::_cct > 255 ? 127 : Bus::_cct;
       } else {
-        Bus::calculateCCT(c, _data[0], _data[1]);
+        _data[0] = cctWW;
+        _data[1] = cctCW;
       }
       break;
     case TYPE_ANALOG_5CH: //RGB + warm white + cold white
       if (cctICused)
         _data[4] = Bus::_cct < 0 || Bus::_cct > 255 ? 127 : Bus::_cct;
-      else
-        Bus::calculateCCT(c, w, _data[4]);
+      else {
+        w = cctWW;
+        _data[4] = cctCW;
+      }
+      // fall through to set RGBW channels
     case TYPE_ANALOG_4CH: //RGBW
       _data[3] = w;
     case TYPE_ANALOG_3CH: //standard dumb RGB
@@ -488,7 +524,7 @@ void BusPwm::show() {
     analogWrite(_pins[i], duty);
     #else
     int deadTime = 0;
-    if (_type == TYPE_ANALOG_2CH && Bus::_cctBlend == 0) {
+    if (_type == TYPE_ANALOG_2CH && Bus::_cctBlend <= 0) {
       // add dead time between signals (when using dithering, two full 8bit pulses are required)
       deadTime = (1+dithering) << bitShift;
       // we only need to take care of shortening the signal at (almost) full brightness otherwise pulses may overlap
@@ -501,8 +537,10 @@ void BusPwm::show() {
     unsigned ch = channel%8;  // group channel
     // directly write to LEDC struct as there is no HAL exposed function for dithering
     // duty has 20 bit resolution with 4 fractional bits (24 bits in total)
+    //LEDC_MUTEX_LOCK(); // removed by @dedhai
     LEDC.channel_group[gr].channel[ch].duty.duty = duty << ((!dithering)*4);  // lowest 4 bits are used for dithering, shift by 4 bits if not using dithering
     LEDC.channel_group[gr].channel[ch].hpoint.hpoint = hPoint >> bitShift;    // hPoint is at _depth resolution (needs shifting if dithering)
+    //LEDC_MUTEX_UNLOCK(); // removed by @dedhai
     ledc_update_duty((ledc_mode_t)gr, (ledc_channel_t)ch);
     hPoint += duty + deadTime;        // offset to cascade the signals
     if (hPoint >= maxBri) hPoint = 0; // offset it out of bounds, reset
@@ -567,12 +605,7 @@ BusOnOff::BusOnOff(const BusConfig &bc)
 
 void BusOnOff::setPixelColor(unsigned pix, uint32_t c) {
   if (pix != 0 || !_valid) return; //only react to first pixel
-  c = autoWhiteCalc(c);
-  uint8_t r = R(c);
-  uint8_t g = G(c);
-  uint8_t b = B(c);
-  uint8_t w = W(c);
-  _data = bool(r|g|b|w) && bool(_bri) ? 0xFF : 0;
+  _data = (c > 0) && bool(_bri) ? 0xFF : 0; // if any color channel is on and brightness is not zero, set to on
 }
 
 void BusOnOff::show() {
@@ -628,8 +661,9 @@ BusNetwork::BusNetwork(const BusConfig &bc)
 
 void BusNetwork::setPixelColor(unsigned pix, uint32_t c) {
   if (!_valid || pix >= _len) return;
-  if (_hasWhite) c = autoWhiteCalc(c);
   if (Bus::_cct >= 1900) c = colorBalanceFromKelvin(Bus::_cct, c); //color correction from CCT
+  uint8_t ww, cw; // dummy, unused
+  if (_hasWhite) c = autoWhiteCalc(c, ww, cw);
   // we do not apply gamma on network buses
   unsigned offset = pix * _UDPchannels;
   _data[offset]   = R(c);
@@ -1406,8 +1440,8 @@ ColorOrderMap& BusManager::getColorOrderMap() { return _colorOrderMap; }
 bool PolyBus::_useParallelI2S = false;
 
 // Bus static member definition
-int16_t Bus::_cct = -1;
-uint8_t Bus::_cctBlend = 0;
+int16_t Bus::_cct = -1;     // -1 means use approximateKelvinFromRGB(), 0-255 is standard, >1900 use colorBalanceFromKelvin()
+int8_t  Bus::_cctBlend = 0; // -128 to +127
 uint8_t Bus::_gAWM = AW_GLOBAL_DISABLED;
 
 uint16_t BusDigital::_milliAmpsTotal = 0;
