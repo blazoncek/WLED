@@ -92,6 +92,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     #ifdef ARDUINO_ARCH_ESP32
     int tx = request->arg(F("TX")).toInt();
     txPower = min(max(tx, (int)WIFI_POWER_2dBm), (int)WIFI_POWER_19_5dBm);
+    WiFi.setTxPower(wifi_power_t(txPower)); // must set when WiFi is already started
     #endif
 
     force802_3g = request->hasArg(F("FG"));

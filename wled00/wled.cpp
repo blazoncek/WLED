@@ -477,6 +477,9 @@ void WLED::setup()
     showWelcomePage = true;
     WiFi.mode(WIFI_MODE_AP);      // WiFi is not configured so we'll most likely open an AP
   }
+  #ifdef ARDUINO_ARCH_ESP32
+  WiFi.setTxPower(wifi_power_t(txPower)); // must set when WiFi is already started
+  #endif
 
   // all GPIOs are allocated at this point
   serialCanRX = !PinManager::isPinAllocated(hardwareRX); // Serial RX pin (GPIO 3 on ESP32 and ESP8266)
@@ -659,10 +662,6 @@ void WLED::initAP(bool resetAP)
 
     dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
     dnsServer.start(53, "*", WiFi.softAPIP());
-
-    #ifdef ARDUINO_ARCH_ESP32
-    WiFi.setTxPower(wifi_power_t(txPower));
-    #endif
 
     #ifndef WLED_DISABLE_ESPNOW
     initESPNow();

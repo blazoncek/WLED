@@ -163,7 +163,6 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 #ifdef ARDUINO_ARCH_ESP32
   WiFi.setSleep(!noWifiSleep);
   WiFi.setHostname(hostName);
-  WiFi.setTxPower(wifi_power_t(txPower));
 #else
   WiFi.setPhyMode(force802_3g ? WIFI_PHY_MODE_11G : WIFI_PHY_MODE_11N);
   wifi_set_sleep_type((noWifiSleep) ? NONE_SLEEP_T : MODEM_SLEEP_T);
