@@ -1,8 +1,10 @@
 #pragma once
 #ifndef WLED_COLORS_H
 #define WLED_COLORS_H
-
-#include <FastLED.h>
+#include "src/dependencies/fastled_slim/fastled_slim.h"
+/*
+ * Color structs and color utility functions
+ */
 
 //color mangling macros
 #define RGBW32(r,g,b,w) (uint32_t((byte(w) << 24) | (byte(r) << 16) | (byte(g) << 8) | (byte(b))))
@@ -221,7 +223,7 @@ struct CRGBA {
   // Conversion operator to uint32_t (!!! will strip alpha channel, producing 0x00RRGGBB)
   explicit inline operator uint32_t() const { return color32; }
 
-#ifdef FASTLED_VERSION
+#ifdef FASTLED_SLIM
   // Constructor from CRGB
   inline CRGBA(const CRGB &rgb) : b(rgb.b), g(rgb.g), r(rgb.r), a(255) {}
 
@@ -269,12 +271,12 @@ struct CHSV32 { // 32bit HSV color with 16bit hue for more accurate conversions
   inline CHSV32(const CRGBA& rgb) { rgb2hsv(rgb.color32, *this); } // constructor from CRGBA
   inline CHSV32(uint32_t rgb) { rgb2hsv(rgb, *this); } // constructor from uint32_t (represented as 0x00RRGGBB)
 
-  #ifdef FASTLED_VERSION
+  #ifdef FASTLED_SLIM
   explicit inline operator CHSV() const { return CHSV((uint8_t)(h >> 8), s, v); } // typecast to CHSV
   #endif
 };
 
-#ifdef FASTLED_VERSION
+#ifdef FASTLED_SLIM
 inline CHSV rgb2hsv(const CRGB c) { CHSV32 hsv; rgb2hsv(CRGBA(c).color32, hsv); return CHSV(hsv); } // CRGB to hsv
 #endif
 

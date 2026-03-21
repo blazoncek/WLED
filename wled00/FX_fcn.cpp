@@ -207,7 +207,7 @@ CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) {
   if (pal == 0) pal = _default_palette; // _default_palette is set in setMode()
   switch (pal) {
     case 0: //default palette. Invalid entry, kept for "just in case".
-      targetPalette = PartyColors_p;
+      targetPalette = *fastledPalettes[0];
       break;
     case 1: //randomly generated palette
       targetPalette = _randomPalette; //random palette is generated at intervals in handleRandomPalette()

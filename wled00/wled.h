@@ -166,9 +166,10 @@
 #include "src/dependencies/json/AsyncJson-v6.h"
 #include "src/dependencies/json/ArduinoJson-v6.h"
 
-#define FASTLED_INTERNAL //remove annoying pragma messages
-#define USE_GET_MILLISECOND_TIMER
-#include "FastLED.h"
+//#define FASTLED_INTERNAL //remove annoying pragma messages
+//#define USE_GET_MILLISECOND_TIMER
+//#include "FastLED.h"
+#include "src/dependencies/fastled_slim/fastled_slim.h"
 // fastled sin16 replacement
 #ifdef sin16
   #undef sin16
