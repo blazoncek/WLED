@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2601310
+#define VERSION 2603290
 #else
 #define VERSION BUILD
 #endif
@@ -421,17 +421,17 @@ WLED_GLOBAL bool arlsForceMaxBri _INIT(false);                    // enable to f
   WLED_GLOBAL uint16_t DMXStart _INIT(10);        // start address of the first fixture
   WLED_GLOBAL uint16_t DMXStartLED _INIT(0);      // LED from which DMX fixtures start
 #endif
-WLED_GLOBAL uint16_t e131Universe _INIT(1);                       // settings for E1.31 (sACN) protocol (only DMX_MODE_MULTIPLE_* can span over consecutive universes)
-WLED_GLOBAL uint16_t e131Port _INIT(5568);                        // DMX in port. E1.31 default is 5568, Art-Net is 6454
-WLED_GLOBAL byte e131Priority _INIT(0);                           // E1.31 port priority (if != 0 priority handling is active)
-WLED_GLOBAL E131Priority highPriority _INIT(3);                   // E1.31 highest priority tracking, init = timeout in seconds
-WLED_GLOBAL byte DMXMode _INIT(DMX_MODE_MULTIPLE_RGB);            // DMX mode (s.a.)
-WLED_GLOBAL uint16_t DMXAddress _INIT(1);                         // DMX start address of fixture, a.k.a. first Channel [for E1.31 (sACN) protocol]
-WLED_GLOBAL uint16_t DMXSegmentSpacing _INIT(0);                  // Number of void/unused channels between each segments DMX channels
-WLED_GLOBAL byte e131LastSequenceNumber[E131_MAX_UNIVERSE_COUNT]; // to detect packet loss
-WLED_GLOBAL bool e131Multicast _INIT(false);                      // multicast or unicast
-WLED_GLOBAL bool e131SkipOutOfSequence _INIT(false);              // freeze instead of flickering
-WLED_GLOBAL uint16_t pollReplyCount _INIT(0);                     // count number of replies for ArtPoll node report
+WLED_GLOBAL uint16_t e131Universe      _INIT(1);                      // settings for E1.31 (sACN) protocol (only DMX_MODE_MULTIPLE_* can span over consecutive universes)
+WLED_GLOBAL uint16_t e131Port          _INIT(5568);                   // DMX in port. E1.31 default is 5568, Art-Net is 6454
+WLED_GLOBAL byte e131Priority          _INIT(0);                      // E1.31 port priority (if != 0 priority handling is active)
+WLED_GLOBAL E131Priority highPriority  _INIT(3);                      // E1.31 highest priority tracking, init = timeout in seconds
+WLED_GLOBAL byte DMXMode               _INIT(DMX_MODE_MULTIPLE_RGB);  // DMX mode (s.a.)
+WLED_GLOBAL uint16_t DMXAddress        _INIT(1);                      // DMX start address of fixture, a.k.a. first Channel [for E1.31 (sACN) protocol]
+WLED_GLOBAL uint16_t DMXSegmentSpacing _INIT(0);                      // Number of void/unused channels between each segments DMX channels
+WLED_GLOBAL byte e131LastSequenceNumber[E131_MAX_UNIVERSE_COUNT] _INIT_N(({0})); // to detect packet loss; 1 mandatory for DDP
+WLED_GLOBAL bool e131Multicast         _INIT(false);                  // multicast or unicast
+WLED_GLOBAL bool e131SkipOutOfSequence _INIT(false);                  // freeze instead of flickering
+WLED_GLOBAL uint16_t pollReplyCount    _INIT(0);                      // count number of replies for ArtPoll node report
 
 // mqtt
 WLED_GLOBAL unsigned long lastMqttReconnectAttempt _INIT(0);  // used for other periodic tasks too

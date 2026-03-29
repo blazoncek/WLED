@@ -255,14 +255,14 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol) {
   { //DDP
     realtimeIP = clientIP;
     int lastPushSeq = e131LastSequenceNumber[0];
-    //reject late packets belonging to previous frame (assuming 4 packets max. before push)
+    int sn = p->sequenceNum & 0xF;
+    // reject late packets belonging to previous frame (assuming 9 packets max. before push (max ~4300 pixels))
     if (e131SkipOutOfSequence && lastPushSeq) {
-      int sn = p->sequenceNum & 0xF;
       if (sn) {
-        if (lastPushSeq > 5) {
-          if (sn > (lastPushSeq -5) && sn < lastPushSeq) return;
+        if (lastPushSeq > 8) {
+          if (sn > (lastPushSeq - 8) && sn < lastPushSeq) return;
         } else {
-          if (sn > (10 + lastPushSeq) || sn < lastPushSeq) return;
+          if (sn > (15 - lastPushSeq) || sn < lastPushSeq) return;
         }
       }
     }
@@ -285,7 +285,6 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol) {
     ddpSeenPush |= push;
     if (!ddpSeenPush || push) { // if we've never seen a push, or this is one, render display
       e131NewData = true;
-      int sn = p->sequenceNum & 0xF;
       if (sn) e131LastSequenceNumber[0] = sn;
     }
     return;
