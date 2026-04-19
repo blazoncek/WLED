@@ -185,15 +185,17 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   if (seg.mirror_y != mirror_y || seg.transpose != transpose) seg.markForReset();
   #endif
 
-  int len = (stop > start) ? stop - start : 1;
-  int offset = elem[F("of")] | INT32_MAX;
-  if (offset != INT32_MAX) {
-    int offsetAbs = abs(offset);
-    if (offsetAbs > len - 1) offsetAbs %= len;
-    if (offset < 0) offsetAbs = len - offsetAbs;
-    of = offsetAbs;
+  if (stop > start) {
+    int len = stop - start;
+    int offset = elem[F("of")] | INT32_MAX;
+    if (offset != INT32_MAX) {
+      int offsetAbs = abs(offset);
+      offsetAbs %= len;
+      if (offset < 0) of = len - offsetAbs;
+      else            of = offsetAbs;
+    }
+    if (of > len - 1) of = len - 1;
   }
-  if (stop > start && of > len -1) of = len -1;
 
   if (newSeg || !strip.isServicing()) {
     // update new segment or segment not being serviced

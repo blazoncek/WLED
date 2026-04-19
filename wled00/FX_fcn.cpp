@@ -404,59 +404,90 @@ void Segment::handleRandomPalette() {
 // strip must be suspended (strip.suspend()) before calling this function
 // this function may call fill() to clear pixels if spacing or mapping changed (which requires setting _vWidth, _vHeight, _vLength or beginDraw())
 void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, uint16_t ofs, uint16_t i1Y, uint16_t i2Y, uint8_t m12) {
-  // return if neither bounds nor grouping have changed
-  bool boundsUnchanged = (start == i1 && stop == i2);
-  #ifndef WLED_DISABLE_2D
-  boundsUnchanged &= (startY == i1Y && stopY == i2Y); // 2D
-  #endif
-  boundsUnchanged &= (grouping == grp && spacing == spc); // changing grouping and/or spacing changes virtual segment length (painting dimensions)
-
-  if (stop && (spc > 0 || m12 != map1D2D)) clear();
-  if (grp) { // prevent assignment of 0
-    grouping = grp;
-    spacing = spc;
-  } else {
-    grouping = 1;
-    spacing = 0;
+  // constrain start/stop indexes, grouping, spacing and mapping
+  const unsigned matrixSize = Segment::maxWidth*Segment::maxHeight; // in pixel count; equal to strip.getLengthTotal() for 1D set-up
+  // i1 must be less than matrix width - 1 (1D/2D) or larger than matrix pixel count but smaller than total pixel count(2D)
+  if (i1 >= matrixSize) {
+    i1 = MIN(i1, strip.getLengthTotal() - 1); // limit trailing strip
+    i1Y = 0;                                  // this is 1D segment; force it
+    i2Y = 1;                                  // this is 1D segment; force it
+  } else if (i1 >= Segment::maxWidth) {
+    i1 = Segment::maxWidth - 1;               // set to last column
+    //i1 = start;                               // revert/ignore change (<0.15.3 behaviour)
   }
-  if (ofs < UINT16_MAX) offset = ofs;
-  map1D2D  = constrain(m12, 0, 7);
+  // i2 must be smaller than total pixel count or smaller than martix width
+  if (i2 > matrixSize && i1 >= matrixSize) {
+    i2 = MIN(i2, strip.getLengthTotal());     // limit trailing strip
+  } else if (i2 > Segment::maxWidth) {
+    i2 = Segment::maxWidth;                   // limit to matrix width
+  }
+  #ifndef WLED_DISABLE_2D
+  // for 2D constrain startY/stopY
+  if (Segment::maxHeight > 1) { // 2D
+    if (i1Y >= Segment::maxHeight) {
+      i1Y = Segment::maxHeight - 1;
+      //i1Y = startY;                           // revert/ignore change (<0.15.3 behaviour)
+    }
+    i2Y = constrain(i2Y, 1, Segment::maxHeight);
+  } else
+  #endif
+  {
+    i1Y = 0;
+    i2Y = 1;
+    int width = i2 - i1;
+    if (ofs < UINT16_MAX && width <= (int)ofs) {
+      ofs = width - 1;  // same behaviour as in deserializeSegment()
+    }
+  }
+  // fix invalid grouping (and reset spacing)
+  if (grp == 0) {
+    grp = 1;
+    spc = 0;
+  }
+  m12 = constrain(m12, 0, M12_maxMapping);
 
-  DEBUGFX_PRINTF_P(PSTR("Geometry: (%d,%d -> %d,%d) [%d,%d] ofs:%d m:%d\n"), (int)i1, (int)i2, (int)i1Y, (int)i2Y, (int)grp, (int)spc, (int)ofs, (int)m12);
+  // return if neither bounds, grouping or mapping have changed
+  // changing grouping and/or spacing and/or mapping changes virtual segment length (painting dimensions)
+  const bool boundsUnchanged = (start == i1 && stop == i2) &&
+  #ifndef WLED_DISABLE_2D
+    (startY == i1Y && stopY == i2Y) && // 2D
+  #endif
+    (grouping == grp && spacing == spc && m12 == map1D2D && ofs == offset);
+
   if (boundsUnchanged) return;
 
-  unsigned oldLength = length();
+  DEBUGFX_PRINTF_P(PSTR("Geometry: (%d,%d -> %d,%d) [%d,%d] ofs:%d m:%d\n"), (int)i1, (int)i2, (int)i1Y, (int)i2Y, (int)grp, (int)spc, (int)ofs, (int)m12);
 
   markForReset();
   if (_t) stopTransition(); // we can't use transition if segment dimensions changed
   stateChanged = true;      // send UDP/WS broadcast
 
-  // apply change immediately
-  if (i2 <= i1) { //disable segment
-    deallocateData();
-    p_free(pixels);
-    pixels = nullptr;
-    stop = 0;
-    return;
-  }
-  if (i1 < Segment::maxWidth || (i1 >= Segment::maxWidth*Segment::maxHeight && i1 < strip.getLengthTotal())) start = i1; // Segment::maxWidth equals strip.getLengthTotal() for 1D
-  stop = i2 > Segment::maxWidth*Segment::maxHeight ? MIN(i2,strip.getLengthTotal()) : constrain(i2, 1, Segment::maxWidth);
-  startY = 0;
-  stopY  = 1;
-  #ifndef WLED_DISABLE_2D
-  if (Segment::maxHeight>1) { // 2D
-    if (i1Y < Segment::maxHeight) startY = i1Y;
-    stopY = constrain(i2Y, 1, Segment::maxHeight);
-  }
-  #endif
   // safety check
-  if (start >= stop || startY >= stopY) {
+  if (i2 <= i1 || i2Y <= i1Y) { // disable segment if stop is smaller or equal to start
     deallocateData();
     p_free(pixels);
     pixels = nullptr;
     stop = 0;
+    // reset grouping, spacing and offset on deactivation
+    grouping = 1;
+    spacing = 0;
+    offset = 0;
     return;
   }
+
+  if (spc > 0 || m12 != map1D2D) clear(); // clear entire segment if spacing or mapping changed
+
+  unsigned oldLength = length();
+  // apply change
+  map1D2D = m12;
+  grouping = grp;
+  spacing = spc;
+  start = i1;
+  stop = i2;
+  startY = i1Y;
+  stopY = i2Y;
+  if (ofs < UINT16_MAX) offset = ofs;
+
   // allocate FX render buffer only if increased in size (prevent fragmentation)
   if (length() > oldLength) {
     // allocate render buffer (always entire segment), prefer IRAM/PSRAM. Note: impact on FPS with PSRAM buffer is low (<2% with QSPI PSRAM) on S2/S3
@@ -467,6 +498,7 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
       deallocateData();
       errorFlag = ERR_NORAM_PX;
       stop = 0;
+      // no reset
       return;
     }
 
@@ -549,7 +581,7 @@ Segment &Segment::setMode(uint8_t fx, bool loadDefaults) {
       sOpt = extractModeDefaults(fx, "o1");  check1    = (sOpt >= 0) ? (bool)sOpt : false;
       sOpt = extractModeDefaults(fx, "o2");  check2    = (sOpt >= 0) ? (bool)sOpt : false;
       sOpt = extractModeDefaults(fx, "o3");  check3    = (sOpt >= 0) ? (bool)sOpt : false;
-      sOpt = extractModeDefaults(fx, "m12"); if (sOpt >= 0) map1D2D   = constrain(sOpt, 0, 7); else map1D2D = M12_Pixels;  // reset mapping if not defined (2D FX may not work)
+      sOpt = extractModeDefaults(fx, "m12"); if (sOpt >= 0) map1D2D   = constrain(sOpt, 0, M12_maxMapping); else map1D2D = M12_Pixels;  // reset mapping if not defined (2D FX may not work)
       sOpt = extractModeDefaults(fx, "rev"); if (sOpt >= 0) reverse   = (bool)sOpt;
       sOpt = extractModeDefaults(fx, "mi");  if (sOpt >= 0) mirror    = (bool)sOpt; // NOTE: setting this option is a risky business
       sOpt = extractModeDefaults(fx, "rY");  if (sOpt >= 0) reverse_y = (bool)sOpt;

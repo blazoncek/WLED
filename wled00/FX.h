@@ -396,7 +396,8 @@ typedef enum mapping1D2D {
   M12_pBar = 1,
   M12_pArc = 2,
   M12_pCorner = 3,
-  M12_sPinwheel = 4
+  M12_sPinwheel = 4,
+  M12_maxMapping = 7
 } mapping1D2D_t;
 
 class WS2812FX;
