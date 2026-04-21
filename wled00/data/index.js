@@ -679,10 +679,10 @@ function parseInfo(i) {
 	isM = mw>0 && mh>0;
 	if (!isM) {
 		gId("filter2D").classList.add('hide');
-		qSA('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='none';});
+		qSA('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='none';o.hidden=true;o.disabled=true;});
 	} else {
 		gId("filter2D").classList.remove('hide');
-		qSA('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='';});
+		qSA('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='';o.hidden=false;o.disabled=false;});
 	}
 	gId("updBt").style.display = (i.opt & 1) ? '':'none';
 }
