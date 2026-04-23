@@ -598,7 +598,7 @@ static void decodeIRJson(uint32_t code)
       }
     } else {
       // HTTP API command
-      String apireq = "win"; apireq += '&';                        // reduce flash string usage
+      String apireq = "win"; apireq += '&';                        // reduce RAM string usage
       if (cmdStr.indexOf("~") > 0 || fdo["rpt"]) lastValidCode = code; // repeatable action
       if (!cmdStr.startsWith(apireq)) cmdStr = apireq + cmdStr;    // if no "win&" prefix
       if (!irApplyToAllSelected && cmdStr.indexOf(F("SS="))<0) {
@@ -607,8 +607,8 @@ static void decodeIRJson(uint32_t code)
         cmdStr += tmp;
       }
       fdo.clear();                                                 // clear JSON buffer (it is no longer needed)
-      handleSet(nullptr, cmdStr, false);                           // no stateUpdated() call here
-      stateUpdated(CALL_MODE_BUTTON_PRESET);
+      handleSet(nullptr, cmdStr, false);                           // stateUpdated(CALL_MODE_NO_NOTIFY) called here
+      notify(CALL_MODE_BUTTON_PRESET);                             // since notifications are not sent in handleSet()
     }
   } else {
     // command is JSON object
@@ -619,7 +619,6 @@ static void decodeIRJson(uint32_t code)
         jsonCmdObj["seg"] = seg;                                  // replace array with object
       }
       deserializeState(jsonCmdObj, CALL_MODE_BUTTON_PRESET);      // **will call stateUpdated() with correct CALL_MODE**
-      stateUpdated(CALL_MODE_BUTTON_PRESET);
     } else {
       uint8_t psave = jsonCmdObj[F("psave")].as<int>();
       char pname[33];

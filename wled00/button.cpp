@@ -20,7 +20,7 @@ void shortPressAction(uint8_t b)
   if (!buttons[b].macroButton) {
     switch (b) {
       case 0: toggleOnOff(); stateUpdated(CALL_MODE_BUTTON); break;
-      case 1: ++effectCurrent %= strip.getModeCount(); stateChanged = true; colorUpdated(CALL_MODE_BUTTON); break;
+      case 1: ++effectCurrent %= strip.getModeCount(); colorUpdated(CALL_MODE_BUTTON); break;
     }
   } else {
     applyPreset(buttons[b].macroButton, CALL_MODE_BUTTON_PRESET);
@@ -361,20 +361,21 @@ void handleButton()
 void handleOnOff()
 {
   unsigned long now = millis();
-  if (rlyStartTime && now - rlyStartTime < rlyDelay*10) return; // don't do anything if we are waiting for relay delay
+  if (rlyStartTime) {
+    if (now - rlyStartTime < rlyDelay*10) return; // don't do anything if we are waiting for relay delay
+    else {
+      // relay delay has passed start actual transition
+      transitionActive = true;
+      transitionStartTime = now;        // start counting transition from the moment when relay delay finished
+      rlyStartTime = 0;                 // reset relay status
+    }
+  }
 
   // perform fade global brightness transition
   if (transitionActive) {
-    // we need to start segment transitions after relay delay passed 
-    if (rlyStartTime) {
-      strip.setTransitionMode(true);    // force all segments to transition mode
-      rlyStartTime = 0;                 // reset relay status
-      transitionStartTime = now;        // start counting transition from the moment when relay delay finished
-    }
     int ti = now - transitionStartTime;
     int tr = strip.getTransition() + 1; // ensure non-zero just in case
     if (ti/tr > 0) {
-      strip.setTransitionMode(false);   // stop all transitions
       // restore (global) transition time if not called from UDP notifier or single/temporary transition from JSON (also playlist)
       if (jsonTransitionOnce) strip.setTransition(transitionDelay);
       transitionActive = false;
@@ -383,9 +384,6 @@ void handleOnOff()
     } else {
       byte briTO = briT;
       int deltaBri = (int)bri - (int)briOld;
-      // if we have non-fade transition set final brightness immediately
-      //if (transitionStyle != TRANSITION_FADE) briT = bri;
-      //else                                    
       briT = briOld + (deltaBri * ti / tr);
       if (briTO != briT) applyBri();
     }

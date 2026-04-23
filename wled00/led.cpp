@@ -84,11 +84,12 @@ void stateUpdated(byte callMode) {
   //                     6: fx changed 7: hue 8: preset cycle 9: blynk 10: alexa 11: ws send only 12: button preset
   setValuesFromFirstSelectedSeg();  // a much better approach would be to use main segment: setValuesFromMainSeg()
 
-  if (bri != briOld || stateChanged) {
+  // notifications
+  if (bri != briOld || stateChanged) {    // bri != briOld must be checked since changing brightness does not always set stateChanged
     if (stateChanged) currentPreset = 0; //something changed, so we are no longer in the preset
 
     if (callMode != CALL_MODE_NOTIFICATION && callMode != CALL_MODE_NO_NOTIFY) notify(callMode);
-    if (bri != briOld && nodeBroadcastEnabled) sendSysInfoUDP(); // update on state
+    if (bri != briOld && nodeBroadcastEnabled) sendSysInfoUDP(); // update "on" state
 
     //set flag to update ws and mqtt
     interfaceUpdateCallMode = callMode;
@@ -99,20 +100,24 @@ void stateUpdated(byte callMode) {
     }
   }
 
+  // nightlight
   unsigned long now = millis();
-  if (callMode != CALL_MODE_NO_NOTIFY && nightlightActive && (nightlightMode == NL_MODE_FADE || nightlightMode == NL_MODE_COLORFADE)) {
-    briNlT = bri;
-    nightlightDelayMs -= (now - nightlightStartTime);
-    nightlightStartTime = now;
+  if (nightlightActive && callMode != CALL_MODE_NO_NOTIFY) {
+    if (nightlightMode == NL_MODE_FADE || nightlightMode == NL_MODE_COLORFADE) {
+      briNlT = bri;
+      nightlightDelayMs -= (now - nightlightStartTime);
+      nightlightStartTime = now;
+    }
+    //deactivate nightlight if target brightness is reached
+    if (bri == nightlightTargetBri && nightlightMode != NL_MODE_SUN) nightlightActive = false;
   }
+
+  // off
   if (briT == 0) {
     if (callMode != CALL_MODE_NOTIFICATION) strip.resetTimebase(); //effect start from beginning
   }
 
   if (bri > 0) briLast = bri;
-
-  //deactivate nightlight if target brightness is reached
-  if (bri == nightlightTargetBri && callMode != CALL_MODE_NO_NOTIFY && nightlightMode != NL_MODE_SUN) nightlightActive = false;
 
   // notify usermods of state change
   UsermodManager::onStateChange(callMode);
@@ -128,11 +133,11 @@ void stateUpdated(byte callMode) {
   } else {
     if (transitionActive) {
       // already active, just update briOld to reflect current state (no further notifications sent during on/off fade)
-      briOld = briT;
-    } else {
-      // since not all effects are updated each frame we will need to force all segments into transtiton mode
-      // but we will do that after relay delay has passed
-      if (!rlyStartTime && (bri != briOld || stateChanged)) strip.setTransitionMode(true); // force all segments to transition mode
+      briOld = briT;  // briT is updated in handleOnOff()
+    } else if (!rlyStartTime && (bri != briOld)) {
+      // if relay is in idle state (!rlyStartTime) then we have change in brightness; start global brightness transition (may be to "off")
+      // if relay is not in idle state (rlyStartTime>0) then we have an global "off" to "on" transition and LEDs start
+      // with a delay (this delay is handled in handleOnOff())
       transitionActive = true;
       transitionStartTime = now;
     }
@@ -165,6 +170,7 @@ void updateInterfaces(uint8_t callMode) {
 // legacy method, applies values from col, effectCurrent, ... to selected segments
 void colorUpdated(byte callMode) {
   applyValuesToSelectedSegs();
+  if (callMode != CALL_MODE_NO_NOTIFY && callMode != CALL_MODE_INIT) stateChanged = true;
   stateUpdated(callMode);
 }
 

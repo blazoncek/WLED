@@ -399,17 +399,13 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   netDebugEnabled = root[F("debug")] | netDebugEnabled;
   #endif
 
+  // on/off & brightness logic : brightness always overrides "on" switch; i.e. if both are set, ignore "on"
   bool onBefore = bri;
-  getVal(root["bri"], bri);
-  if (bri != briOld) stateChanged = true;
-
-  bool on = root["on"] | (bri > 0);
-  if (!on != !bri) toggleOnOff();
-
-  if (root["on"].is<const char*>() && tolower(root["on"].as<const char*>()[0]) == 't') {
-    if (onBefore || !bri) toggleOnOff(); // do not toggle off again if just turned on by bri (makes e.g. "{"on":"t","bri":32}" work)
+  if (getVal(root["bri"], bri)) {
+    if (onBefore ^ (bri > 0)) toggleOnOff();  // XOR logic (will also fire toggleRelay() if necessary and set stateChanged)
+  } else {
+    if (onBefore ^ getBoolVal(root["on"], onBefore)) toggleOnOff(); // XOR logic (will also fire toggleRelay() if necessary and set stateChanged)
   }
-  if (!onBefore && on) toggleRelay(on);  // must toggle relay manually
 
   if (bri && !onBefore) { // unfreeze all segments when turning on
     for (size_t s=0; s < strip.getSegmentsNum(); s++) {
@@ -531,9 +527,9 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   // HTTP API commands (must be handled before "ps")
   const char* httpwin = root["win"];
   if (httpwin) {
-    String apireq = "win"; apireq += '&'; // reduce flash string usage
+    String apireq = "win"; apireq += '&'; // reduce RAM string usage
     apireq += httpwin;
-    handleSet(nullptr, apireq, false);    // may set stateChanged
+    handleSet(nullptr, apireq, false);    // calls stateUpdated(CALL_MODE_NO_NOTIFY)
   }
 
   // Applying preset from JSON API has 2 cases: a) "pd" AKA "preset direct" and b) "ps" AKA "preset select"

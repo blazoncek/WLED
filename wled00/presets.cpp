@@ -189,12 +189,10 @@ void handlePresets()
   //HTTP API commands
   const char* httpwin = fdo["win"];
   if (httpwin) {
-    String apireq = "win"; // reduce flash string usage
-    apireq += F("&IN&"); // internal call
+    String apireq = "win"; apireq += '&'; // reduce RAM string usage
     apireq += httpwin;
-    handleSet(nullptr, apireq, false); // may call applyPreset() via PL=
-    setValuesFromFirstSelectedSeg(); // fills legacy values
-    changePreset = true;
+    handleSet(nullptr, apireq, false);    // may call applyPreset() via PL=
+    setValuesFromFirstSelectedSeg();      // fills legacy values
   } else {
     if (!fdo["seg"].isNull() || !fdo["on"].isNull() || !fdo["bri"].isNull() || !fdo["nl"].isNull() || !fdo["ps"].isNull() || !fdo[F("playlist")].isNull()) changePreset = true;
     if (!(tmpMode == CALL_MODE_BUTTON_PRESET && fdo["ps"].is<const char *>() && strchr(fdo["ps"].as<const char *>(),'~') != strrchr(fdo["ps"].as<const char *>(),'~')))
@@ -202,6 +200,7 @@ void handlePresets()
     deserializeState(fdo, CALL_MODE_NO_NOTIFY, tmpPreset); // may change presetToApply by calling applyPreset()
   }
   if (!errorFlag && tmpPreset < 255 && changePreset) currentPreset = tmpPreset;
+  if (tmpMode != CALL_MODE_NO_NOTIFY && tmpMode != CALL_MODE_NOTIFICATION) notify(tmpMode);  // send actual notifications
 
   #if defined(ARDUINO_ARCH_ESP32)
   //Aircoookie recommended not to delete buffer
@@ -212,8 +211,6 @@ void handlePresets()
   #endif
 
   releaseJSONBufferLock();
-  if (changePreset) notify(tmpMode); // force UDP notification
-  stateUpdated(tmpMode);  // was colorUpdated() if anything breaks (also schedules updateInterfaces())
 }
 
 //called from handleSet(PS=) [network callback (sObj is empty)], IR (irrational) [loop context] and deserializeState() [network callback]
