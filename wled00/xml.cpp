@@ -462,6 +462,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormCheckbox(settingsScript,PSTR("SD"),notifyDirect);
     printSetFormCheckbox(settingsScript,PSTR("SB"),notifyButton);
     printSetFormCheckbox(settingsScript,PSTR("SH"),notifyHue);
+    printSetFormCheckbox(settingsScript,PSTR("SM"),notifyMQTT);
     printSetFormValue(settingsScript,PSTR("UR"),udpNumRetries);
 
     printSetFormCheckbox(settingsScript,PSTR("NL"),nodeListEnabled);

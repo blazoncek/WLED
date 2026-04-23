@@ -280,7 +280,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #define CALL_MODE_NOTIFICATION   3     //caused by incoming notification (UDP or DMX preset)
 #define CALL_MODE_NIGHTLIGHT     4     //nightlight progress
 #define CALL_MODE_NO_NOTIFY      5     //change state but do not send notifications (UDP)
-#define CALL_MODE_FX_CHANGED     6     //no longer used
+#define CALL_MODE_MQTT           6     //change initiated via MQTT
 #define CALL_MODE_HUE            7
 #define CALL_MODE_PRESET_CYCLE   8     //no longer used
 #define CALL_MODE_BLYNK          9     //no longer used

@@ -538,7 +538,7 @@ WLED_GLOBAL uint8_t paletteBlend _INIT(0);        // determines bending and wrap
 
 // transitions
 WLED_GLOBAL uint8_t       transitionStyle          _INIT(0);      // effect/on-off transitionig style
-WLED_GLOBAL bool          transitionActive         _INIT(false);
+WLED_GLOBAL bool          transitionActive         _INIT(false);  // flag to indicate on/off transition is active
 WLED_GLOBAL uint16_t      transitionDelay          _INIT(750);    // global transition duration
 WLED_GLOBAL uint16_t      transitionDelayDefault   _INIT(750);    // default transition time (stored in cfg.json)
 WLED_GLOBAL unsigned long transitionStartTime      _INIT(0UL);
@@ -640,19 +640,21 @@ typedef class Send {
         bool Button : 1;
         bool Alexa  : 1;
         bool Hue    : 1;
-        uint8_t reserved : 4;
+        bool MQTT   : 1;
+        uint8_t reserved : 3;
       };
     };
   Send(int o) { Options = o; }
-  Send(bool d, bool b, bool a, bool h) {
+  Send(bool d, bool b, bool a, bool h, bool m) {
     Direct = d;
     Button = b;
     Alexa = a;
     Hue = h;
+    MQTT = m;
   }
 } __attribute__ ((aligned(1), packed)) send_notification_t;
 WLED_GLOBAL receive_notification_t receiveN _INIT(0b01100111);
-WLED_GLOBAL send_notification_t    notifyG  _INIT(0b00001111);
+WLED_GLOBAL send_notification_t    notifyG  _INIT(0b00000011);
 #define receiveNotificationBrightness receiveN.Brightness
 #define receiveNotificationColor      receiveN.Color
 #define receiveNotificationEffects    receiveN.Effects
@@ -664,18 +666,20 @@ WLED_GLOBAL send_notification_t    notifyG  _INIT(0b00001111);
 #define notifyButton notifyG.Button
 #define notifyAlexa  notifyG.Alexa
 #define notifyHue    notifyG.Hue
+#define notifyMQTT   notifyG.MQTT
 #else
 WLED_GLOBAL bool receiveNotificationBrightness _INIT(true);       // apply brightness from incoming notifications
 WLED_GLOBAL bool receiveNotificationColor      _INIT(true);       // apply color
 WLED_GLOBAL bool receiveNotificationEffects    _INIT(true);       // apply effects setup
 WLED_GLOBAL bool receiveNotificationPalette    _INIT(true);       // apply palette
-WLED_GLOBAL bool receiveSegmentOptions         _INIT(false);      // apply segment options
+WLED_GLOBAL bool receiveSegmentOptions         _INIT(true);       // apply segment options
 WLED_GLOBAL bool receiveSegmentBounds          _INIT(false);      // apply segment bounds (start, stop, offset)
-WLED_GLOBAL bool receiveDirect _INIT(true);                       // receive UDP/Hyperion realtime
+WLED_GLOBAL bool receiveDirect                 _INIT(true);       // receive UDP/Hyperion realtime
 WLED_GLOBAL bool notifyDirect _INIT(true);                        // send notification if change via UI or HTTP API
 WLED_GLOBAL bool notifyButton _INIT(true);                        // send if updated by button or infrared remote
 WLED_GLOBAL bool notifyAlexa  _INIT(false);                       // send notification if updated via Alexa
 WLED_GLOBAL bool notifyHue    _INIT(false);                       // send notification if Hue light changes
+WLED_GLOBAL bool notifyMQTT   _INIT(false);                       // send notification on MQTT change
 #endif
 
 // effects

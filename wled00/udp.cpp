@@ -29,6 +29,7 @@ void notify(byte callMode, bool followUp)
     case CALL_MODE_HUE:           if (!notifyHue)    return; break;
     case CALL_MODE_PRESET_CYCLE:  if (!notifyDirect) return; break;
     case CALL_MODE_ALEXA:         if (!notifyAlexa)  return; break;
+    case CALL_MODE_MQTT:          if (!notifyMQTT)   return; break;
     default: return;
   }
   byte udpOut[WLEDPACKETSIZE];  //TODO: optimize size to use only active segments

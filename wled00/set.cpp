@@ -428,6 +428,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     notifyButton = request->hasArg(F("SB"));
     notifyAlexa = request->hasArg(F("SA"));
     notifyHue = request->hasArg(F("SH"));
+    notifyMQTT = request->hasArg(F("SM"));
 
     t = request->arg(F("UR")).toInt();
     if ((t>=0) && (t<30)) udpNumRetries = t;
@@ -1233,7 +1234,7 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
   if (!apply) return true; // when called by JSON API, do not call colorUpdated() here
 
   pos = req.indexOf(F("&NN")); //do not send UDP notifications this time
-  stateUpdated((pos > 0) ? CALL_MODE_NO_NOTIFY : CALL_MODE_DIRECT_CHANGE);
+  stateUpdated((request == nullptr) || (pos > 0) ? CALL_MODE_NO_NOTIFY : CALL_MODE_DIRECT_CHANGE);
 
   // internal call, does not send XML response
   pos = req.indexOf(F("IN"));
