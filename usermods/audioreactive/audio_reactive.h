@@ -2713,7 +2713,8 @@ class AudioReactive : public Usermod {
 
   public:
     //Functions called by WLED or other usermods
-    AudioReactive() { AudioReactive::instance = this; }
+    AudioReactive() : Usermod() { AudioReactive::instance = this; }
+    virtual ~AudioReactive();
     inline bool isEnabled() { return enabled; }
     inline static AudioReactive* getInstance() { return instance; }
 
@@ -3548,9 +3549,9 @@ class AudioReactive : public Usermod {
     //{
       //strip.setPixelColor(0, RGBW32(0,0,0,0)) // set the first pixel to black
     //}
-
+#ifndef WLED_DISABLE_ESPNOW
     bool onEspNowMessage(uint8_t *sender, uint8_t *data, uint8_t len) override;
-
+#endif
     /*
      * getId() allows you to optionally give your V2 usermod an unique ID (please define it in const.h!).
      * This could be used in the future for the system to determine whether your usermod is installed.
@@ -3690,6 +3691,7 @@ bool AudioReactive::onEspNowMessage(uint8_t *address, uint8_t *data, uint8_t len
 }
 #endif
 
+AudioReactive::~AudioReactive() = default;
 AudioReactive* AudioReactive::instance = nullptr;
 
 // strings to reduce flash memory usage (used more than twice)
