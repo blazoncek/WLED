@@ -403,6 +403,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   bool onBefore = bri;
   if (getVal(root["bri"], bri)) {
     if (onBefore ^ (bri > 0)) toggleOnOff();  // XOR logic (will also fire toggleRelay() if necessary and set stateChanged)
+    else stateChanged = true;
   } else {
     if (onBefore ^ getBoolVal(root["on"], onBefore)) toggleOnOff(); // XOR logic (will also fire toggleRelay() if necessary and set stateChanged)
   }
