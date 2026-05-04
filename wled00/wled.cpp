@@ -40,7 +40,7 @@ void WLED::loop()
 {
   static uint32_t      lastHeap = UINT32_MAX;
   static unsigned long heapTime = 0;
-#ifdef WLED_DEBUG
+#if defined(WLED_DEBUG) && defined(WLED_DEBUG_STATS)
   static unsigned long lastRun = 0;
   unsigned long        loopMillis = millis();
   size_t               loopDelay = loopMillis - lastRun;
@@ -73,7 +73,7 @@ void WLED::loop()
   unsigned long usermodMillis = millis();
   #endif
   UsermodManager::loop();
-  #ifdef WLED_DEBUG
+  #if defined(WLED_DEBUG) && defined(WLED_DEBUG_STATS)
   usermodMillis = millis() - usermodMillis;
   avgUsermodMillis += usermodMillis;
   if (usermodMillis > maxUsermodMillis) maxUsermodMillis = usermodMillis;
@@ -81,7 +81,6 @@ void WLED::loop()
 
   yield();
   handleButton();
-  handleOnOff();
   #ifndef WLED_DISABLE_INFRARED
   handleIR();
   #endif
@@ -100,7 +99,7 @@ void WLED::loop()
     yield();
   }
 
-  #ifdef WLED_DEBUG
+  #if defined(WLED_DEBUG) && defined(WLED_DEBUG_STATS)
   stripMillis = millis();
   #endif
   if (!realtimeMode || realtimeOverride || useMainSegmentOnly)  // block stuff if WARLS/Adalight is enabled
@@ -109,6 +108,7 @@ void WLED::loop()
     #ifdef WLED_ENABLE_AOTA
     if (Network.isConnected() && aOtaEnabled && !otaLock && correctPIN) ArduinoOTA.handle();
     #endif
+    handleBrightness(); // WARLS/Adalight/realtime handles its own brightness (does not use transtion/fade)
     handleNightlight();
     yield();
 
@@ -133,7 +133,7 @@ void WLED::loop()
       #endif
     }
   }
-  #ifdef WLED_DEBUG
+  #if defined(WLED_DEBUG) && defined(WLED_DEBUG_STATS)
   stripMillis = millis() - stripMillis;
   avgStripMillis += stripMillis;
   if (stripMillis > maxStripMillis) maxStripMillis = stripMillis;
@@ -237,14 +237,14 @@ void WLED::loop()
     reset();
 
 // DEBUG serial logging (every 30s)
-#ifdef WLED_DEBUG
+#if defined(WLED_DEBUG) && defined(WLED_DEBUG_STATS)
   unsigned long now = millis();
   loopMillis = now - loopMillis;
-  if (loopMillis > 30) {
-    DEBUG_PRINTF_P(PSTR(" Loop took %lums.\n"),     loopMillis);
-    DEBUG_PRINTF_P(PSTR(" Usermods took %lums.\n"), usermodMillis);
-    DEBUG_PRINTF_P(PSTR(" Strip took %lums.\n"),    stripMillis);
-  }
+  //if (loopMillis > 30) {
+  //  DEBUG_PRINTF_P(PSTR(" Loop took %lums.\n"),     loopMillis);
+  //  DEBUG_PRINTF_P(PSTR(" Usermods took %lums.\n"), usermodMillis);
+  //  DEBUG_PRINTF_P(PSTR(" Strip took %lums.\n"),    stripMillis);
+  //}
   avgLoopMillis += loopMillis;
   if (loopMillis > maxLoopMillis) maxLoopMillis = loopMillis;
   if (WiFi.status() != lastWifiState) wifiStateChangedTime = now;

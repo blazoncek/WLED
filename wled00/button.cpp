@@ -210,13 +210,14 @@ void handleAnalog(uint8_t b)
     if (buttons[b].macroDoublePress >= 250) {
       // global brightness
       if (aRead == 0) {
-        if (bri > 0) toggleOnOff();
+        briLast = bri;
+        bri = 0;
       } else {
         if (bri == 0) {
-          strip.restartRuntime();
-          toggleOnOff(); // needed for switching on relay
+          strip.restartRuntime(); // switching from Off to On requires effects to be restarted
+          toggleRelay(true); // needed for switching on relay early enough
         }
-        bri = aRead;  // override briLast from toggleOnOff()
+        bri = aRead;
       }
     } else if (buttons[b].macroDoublePress == 249) {
       // effect speed
@@ -227,7 +228,7 @@ void handleAnalog(uint8_t b)
     } else if (buttons[b].macroDoublePress == 247) {
       // selected palette
       effectPalette = map(aRead, 0, 252, 0, getPaletteCount()-1);
-      effectPalette = constrain(effectPalette, 0, getPaletteCount()-1);  // map is allowed to "overshoot", so we need to contrain the result
+      effectPalette = constrain(effectPalette, 0, getPaletteCount()-1);  // map is allowed to "overshoot", so we need to constrain the result
     } else if (buttons[b].macroDoublePress == 200) {
       // primary color, hue, full saturation
       colorHStoRGB(aRead*256, 255, colPri);
@@ -356,70 +357,6 @@ void handleButton()
   if (now - lastAnalogRead > ANALOG_BTN_READ_CYCLE) {
     lastAnalogRead = now;
   }
-}
-
-void handleOnOff()
-{
-  unsigned long now = millis();
-  if (rlyStartTime) {
-    if (now - rlyStartTime < rlyDelay*10) return; // don't do anything if we are waiting for relay delay
-    else {
-      // relay delay has passed start actual transition
-      transitionActive = true;
-      transitionStartTime = now;        // start counting transition from the moment when relay delay finished
-      rlyStartTime = 0;                 // reset relay status
-    }
-  }
-
-  // perform fade global brightness transition
-  if (transitionActive) {
-    int ti = now - transitionStartTime;
-    int tr = strip.getTransition() + 1; // ensure non-zero just in case
-    if (ti/tr > 0) {
-      // restore (global) transition time if not called from UDP notifier or single/temporary transition from JSON (also playlist)
-      if (jsonTransitionOnce) strip.setTransition(transitionDelay);
-      transitionActive = false;
-      jsonTransitionOnce = false;
-      applyFinalBri();
-    } else {
-      byte briTO = briT;
-      int deltaBri = (int)bri - (int)briOld;
-      briT = briOld + (deltaBri * ti / tr);
-      if (briTO != briT) applyBri();
-    }
-  }
-
-  // if we want to control on-board LED (ESP8266) or relay we have to do it here as the final show() may not happen until
-  // next loop() cycle
-  if (strip.getBrightness()) {
-    // we want to be on
-    lastOnTime = now;
-    if (offMode) {
-      // but we are off
-      BusManager::on();
-      offMode = false;
-      // relay was switched on in toggleOnOff() or similar on/off action (deserializeState()); here, it would be too late
-    }
-  } else if (now - lastOnTime > 600 && !strip.needsUpdate()) {
-    // for turning LED or relay off we need to wait until strip no longer needs updates (strip.trigger())
-    // we want to be off
-    if (!offMode) {
-      // but we are on
-      BusManager::off();
-      offMode = true;
-      toggleRelay(!offMode);  // switch off
-    }
-  }
-}
-
-// relay control
-void toggleRelay(bool on) {
-  // init relay pin and switch
-  if (rlyPin >= 0) {
-    pinMode(rlyPin, rlyOpenDrain ? OUTPUT_OPEN_DRAIN : OUTPUT);
-    digitalWrite(rlyPin, !(rlyMde ^ on)); // !XOR: 00=0, 01=1, 10=1, 11=0; we need inverse of that
-  }
-  rlyStartTime = on ? millis() : 0;
 }
 
 void IRAM_ATTR touchButtonISR()

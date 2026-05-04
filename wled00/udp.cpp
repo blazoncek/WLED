@@ -422,7 +422,8 @@ void realtimeLock(uint32_t timeoutMs, byte md)
     // if strip is off (bri==0) and not already in RTM
     if (briT == 0) {
       strip.setBrightness(briLast, true);
-      toggleRelay(true); // switch relay on (needs to be done here)
+      toggleRelay(true);  // switch relay on (needs to be done here)
+      rlyStartTime = 0;   // ignore relay delay if WARLS/Adalight/realtime active
     }
   }
 
@@ -827,7 +828,7 @@ uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const
         if (currentPacket == (packetCount - 1U)) {
           // last packet, set the push flag
           // TODO: determine if we want to send an empty push packet to each destination after sending the pixel data
-          flags = DDP_FLAGS1_VER1 | DDP_FLAGS1_PUSH;
+          flags |= DDP_FLAGS1_PUSH;
           if (channelCount % DDP_CHANNELS_PER_PACKET) {
             packetSize = channelCount % DDP_CHANNELS_PER_PACKET;
           }

@@ -40,19 +40,16 @@ void applyValuesToSelectedSegs() {
 
 
 // starts on/off transition
-void toggleOnOff()
-{
-  if (bri == 0)
-  {
+void toggleOnOff() {
+  if (bri == 0) {
     bri = briLast;
     strip.restartRuntime();
     // we need to switch relay on immediately for delay to work properly
     toggleRelay(true);
-  } else
-  {
+  } else {
     briLast = bri;
     bri = 0;
-    // we will switch off relay in handleOnOff() when transition finishes
+    // we will switch off relay in handleBrightness() when transition finishes
   }
   stateChanged = true;
 }
@@ -60,8 +57,7 @@ void toggleOnOff()
 
 //applies global temporary brightness (briT) to strip (during on/off transition)
 void applyBri() {
-  if (realtimeOverride || !(realtimeMode && arlsForceMaxBri))
-  {
+  if (realtimeOverride || !(realtimeMode && arlsForceMaxBri)) {
     //DEBUG_PRINTF_P(PSTR("Applying strip brightness: %d (%d,%d)\n"), (int)briT, (int)bri, (int)briOld);
     strip.setBrightness(briT);
   }
@@ -98,6 +94,9 @@ void stateUpdated(byte callMode) {
       notify(CALL_MODE_NIGHTLIGHT);
       interfaceUpdateCallMode = CALL_MODE_NIGHTLIGHT;
     }
+
+    // notify usermods of state change
+    UsermodManager::onStateChange(callMode);
   }
 
   // nightlight
@@ -119,27 +118,33 @@ void stateUpdated(byte callMode) {
 
   if (bri > 0) briLast = bri;
 
-  // notify usermods of state change
-  UsermodManager::onStateChange(callMode);
-
   // state was updated, notifications were sent, determine if we need to set segments into transition mode and fade brightness
   if (strip.getTransition() == 0) {
     // no transition, just apply desitred brightness immediately (even if not changed)
-    //if (rlyStartTime) rlyStartTime = 0;
     jsonTransitionOnce = false;
     transitionActive = false;
     applyFinalBri();
     strip.trigger();
   } else {
-    if (transitionActive) {
-      // already active, just update briOld to reflect current state (no further notifications sent during on/off fade)
-      briOld = briT;  // briT is updated in handleOnOff()
-    } else if (!rlyStartTime && (bri != briOld)) {
+    if (bri != briOld) {
+      if (transitionActive && transitionStyle == TRANSITION_FADE) {
+        // already active, just update briOld to reflect current state (no further notifications sent during brightness change fade)
+        // this will unfortunately cause all pixels to become instantly visible in non-fade transitions
+        if (now - transitionStartTime > 9) {
+          // transition may have started in paralel from handleBrightness() so only update briOld if enough time has passed (>MIN_SHOW_DELAY)
+          briOld = briT;  // briT is updated in handleBrightness()
+          DEBUG_PRINTLN(F("-- Updating briOld."));
+        }
+      }
       // if relay is in idle state (!rlyStartTime) then we have change in brightness; start global brightness transition (may be to "off")
       // if relay is not in idle state (rlyStartTime>0) then we have an global "off" to "on" transition and LEDs start
-      // with a delay (this delay is handled in handleOnOff())
+      // with a delay (this delay is handled in handleBrightness())
+      if (!rlyStartTime) strip.setTransitionMode(true); // force all segments to transition mode (for clipping to work)
       transitionActive = true;
       transitionStartTime = now;
+//    } else if (jsonTransitionOnce) {
+//      strip.setTransition(transitionDelay);
+//      jsonTransitionOnce = false;
     }
   }
   stateChanged = false;
@@ -170,8 +175,90 @@ void updateInterfaces(uint8_t callMode) {
 // legacy method, applies values from col, effectCurrent, ... to selected segments
 void colorUpdated(byte callMode) {
   applyValuesToSelectedSegs();
-  if (callMode != CALL_MODE_NO_NOTIFY && callMode != CALL_MODE_INIT) stateChanged = true;
   stateUpdated(callMode);
+}
+
+
+// handle On/Off and brightness change transitions
+void handleBrightness() {
+  unsigned long now = millis();
+  if (rlyStartTime) {
+    // relay was activated
+    if (now - rlyStartTime <= rlyDelay*10) return; // don't do anything if we are waiting for relay delay
+    else {
+      if (strip.getTransition() == 0) {
+        // no transition, just apply desitred brightness immediately (even if not changed)
+        transitionActive = false;
+        applyFinalBri();
+      } else if (!transitionActive) {
+        // relay delay has passed start actual transition
+        strip.setTransitionMode(true);  // force all segments to transition mode (for clipping to work)
+        transitionActive = true;
+        transitionStartTime = now;      // start counting transition from the moment when relay delay finished
+      }
+      rlyStartTime = 0;                 // reset relay status
+    }
+    strip.restartRuntime();             // switching from Off to On requires effects to be restarted
+  }
+
+  // perform fade global brightness transition
+  if (transitionActive) {
+    int ti = now - transitionStartTime;
+    int tr = strip.getTransition() + 1; // ensure non-zero just in case
+    if (ti/tr > 0) {
+      // restore (global) transition time if not called from UDP notifier or single/temporary transition from JSON (also playlist)
+      if (jsonTransitionOnce) strip.setTransition(transitionDelay);
+      transitionActive = false;
+      jsonTransitionOnce = false;
+      applyFinalBri();
+    } else {
+      // handling of global non-fade brightness transition is tricky and is done in segment blending for On/Off transitions
+      // changing global brighntess (bri>0) is done in fade fashion as it is too complex to handle otherwise
+      // (segments have no knowledge of global brightness as it is applied at bus level)
+      byte briTO = briT;
+      int deltaBri = (int)bri - (int)briOld;
+      if (transitionStyle != TRANSITION_FADE && ((bool)bri ^ (bool)briOld)) {
+        // changing On/Off in non-fade transitions must be immediate
+        if (deltaBri > 0) briT = bri;
+        if (deltaBri < 0) briT = briOld;
+      } else
+        briT = briOld + (deltaBri * ti / tr);
+      if (briTO != briT) applyBri();
+    }
+  }
+
+  // if we want to control on-board LED (ESP8266) or relay we have to do it here as the final show() may not happen until
+  // next loop() cycle
+  if (strip.getBrightness()) {
+    // we want to be on
+    lastOnTime = now;
+    if (offMode) {
+      // but we are off
+      BusManager::on();
+      offMode = false;
+      // relay was switched on in toggleOnOff() or similar on/off action (deserializeState()); here, it would be too late
+    }
+  } else if (now - lastOnTime > 600 && !strip.needsUpdate()) {
+    // for turning LED or relay off we need to wait until strip no longer needs updates (strip.trigger())
+    // we want to be off
+    if (!offMode) {
+      // but we are on
+      BusManager::off();
+      offMode = true;
+      toggleRelay(!offMode);  // switch off
+    }
+  }
+}
+
+
+// relay control
+void toggleRelay(bool on) {
+  // init relay pin and switch
+  if (rlyPin >= 0) {
+    pinMode(rlyPin, rlyOpenDrain ? OUTPUT_OPEN_DRAIN : OUTPUT);
+    digitalWrite(rlyPin, !(rlyMde ^ on)); // !XOR: 00=0, 01=1, 10=1, 11=0; we need inverse of that
+  }
+  rlyStartTime = on ? millis() : 0;
 }
 
 

@@ -485,30 +485,25 @@ class Segment {
     static CRGBPalette16 _newRandomPalette;   // target random palette
     static uint16_t      _lastPaletteChange;  // last random palette change time (in seconds)
     static uint16_t      _nextPaletteBlend;   // next due time for random palette morph (in millis())
-    static bool          _modeBlend;          // mode/effect blending semaphore
     // clipping rectangle used for blending
     static uint16_t      _clipStart, _clipStop;
     static uint8_t       _clipStartY, _clipStopY;
 
-    // transition data, holds values during transition (76 bytes/28 bytes)
+    // transition data, holds values during transition (76 bytes)
     struct Transition {
       Segment      *_oldSegment;          // previous segment environment (may be nullptr if effect did not change)
       unsigned long _start;               // must accommodate millis()
       CRGBA         _colors[NUM_COLORS];  // current colors
-      #ifndef WLED_SAVE_RAM
-      CRGBPalette16 _palT;                // temporary palette (slowly being morphed from old to new)
-      #endif
+      CRGBPalette16 _palT;                // temporary palette (slowly being morphed from old to new; 48 bytes)
       uint16_t      _dur;                 // duration of transition in ms
-      uint16_t      _progress;            // transition progress (0-65535); pre-calculated from _start & _dur in updateTransitionProgress()
+      uint16_t      _progress;            // transition progress (0-65535); pre-calculated from _start & _dur in handleTransition()
       uint8_t       _prevPaletteBlends;   // number of previous palette blends (there are max 255 blends possible)
       uint8_t       _palette, _bri, _cct; // palette ID, brightness and CCT at the start of transition (brightness will be 0 if segment was off)
       Transition(uint16_t dur=750)
       : _oldSegment(nullptr)
       , _start(millis())
       , _colors{0,0,0}
-      #ifndef WLED_SAVE_RAM
       , _palT(CRGBPalette16(CRGB::Black))
-      #endif
       , _dur(dur)
       , _progress(0)
       , _prevPaletteBlends(0)
@@ -545,18 +540,18 @@ class Segment {
 
     // transition functions
     void stopTransition();                  // ends transition mode by destroying transition structure (does nothing if not in transition)
-    void updateTransitionProgress() const;  // sets transition progress (0-65535) based on time passed since transition start
     inline void handleTransition() {
-      updateTransitionProgress();
-      if (isInTransition() && progress() == 0xFFFFU) stopTransition();
+      if (isInTransition()) {
+        unsigned diff = millis() - _t->_start;
+        if (_t->_dur > 0 && diff < _t->_dur) _t->_progress = diff * 0xFFFFU / _t->_dur;
+        else                                 _t->_progress = 0xFFFFU;
+        if (_t->_progress == 0xFFFFU) stopTransition();
+      }
     }
-    inline uint16_t progress() const          { return isInTransition() ? _t->_progress : 0xFFFFU; } // relies on handleTransition()/updateTransitionProgress() to update progression variable
+    inline uint16_t progress() const          { return isInTransition() ? _t->_progress : 0xFFFFU; } // relies on handleTransition() to update progression variable
     inline Segment *getOldSegment() const     { return isInTransition() ? _t->_oldSegment : nullptr; }
 
-    inline static void modeBlend(bool blend)  { Segment::_modeBlend = blend; }
-    inline static void setClippingRect(int startX, int stopX, int startY = 0, int stopY = 1) { _clipStart = startX; _clipStop = stopX; _clipStartY = startY; _clipStopY = stopY; };
-    inline static bool isPreviousMode()       { return Segment::_modeBlend; }    // needed for determining CCT/opacity during non-BLEND_STYLE_FADE transition
-
+    static void setClippingRect(int startX, int stopX, int startY = 0, int stopY = 1);
     static void handleRandomPalette();
 
   public:
