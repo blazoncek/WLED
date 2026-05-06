@@ -1413,6 +1413,66 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
   const unsigned orgTS     = transitionStyle;
   if (width*height == 1) transitionStyle = TRANSITION_FADE; // disable style for single pixel segments (use fade instead)
 
+  // fast path (by @dedehai): handle the default case - no transitions, no grouping/spacing, no mirroring, no CCT
+  if (!topSegment.isInTransition() && topSegment.groupLength() == 1 && !topSegment.mirror && !topSegment.mirror_y) {
+#ifndef WLED_DISABLE_2D
+    // 2D fast path
+    if (isMatrix && stopIndx <= matrixSize && !_pixelCCT) {
+      // adjust starting position and steps based on Reverse/Transpose
+      if (!topSegment.transpose) {
+        // Calculate pointer steps to avoid 'if' and 'XY()' inside loops
+        int x_inc = 1;
+        int y_inc = Segment::maxWidth;
+        size_t start_offset = startIndx;
+        if (topSegment.reverse)   { start_offset += (width - 1); x_inc = -1; }
+        if (topSegment.reverse_y) { start_offset += (height - 1) * Segment::maxWidth; y_inc = -Segment::maxWidth; }
+        uint32_t *pRow = _pixels + start_offset;
+        for (int y = 0; y < height; y++) {
+          pRow += y * y_inc;
+          const int y_width = y * width;
+          for (int x = 0; x < width; x++) {
+            uint32_t       *p  = pRow + x * x_inc;
+            const CRGBA    c_a = topSegment.getPixelColorRaw(x + y_width);
+            const unsigned o   = hasWhite ? opacity : (opacity * (c_a.a + 1)) >> 8; // combine segment opacity with pixel opacity (c_a.a is alpha channel)
+            const uint32_t c   = hasWhite ? c_a.color32 : c_a.color32 & 0xFFFFFF;
+            *p = color_blend(*p, blend(c, *p), o);
+          }
+        }
+      } else { // transposed
+        for (int y = 0; y < height; y++) {
+          const int px = topSegment.reverse ? (height - y - 1) : y;                 // source pixel: swap y into x, reverse if needed
+          for (int x = 0; x < width; x++) {
+            const int      py  = topSegment.reverse_y ? (width  - x - 1) : x;       // source pixel: swap x into y, reverse if needed
+            const CRGBA    c_a = topSegment.getPixelColorRaw(px + py * height);     // height = virtual width
+            const unsigned o   = hasWhite ? opacity : (opacity * (c_a.a + 1)) >> 8; // combine segment opacity with pixel opacity (c_a.a is alpha channel)
+            const uint32_t c   = hasWhite ? c_a.color32 : c_a.color32 & 0xFFFFFF;
+            const size_t   idx = XY(topSegment.start + x, topSegment.startY + y);   // write logical (non swapped) pixel coordinate
+            _pixels[idx] = color_blend(_pixels[idx], blend(c, _pixels[idx]), o);
+          }
+        }
+      }
+      return;
+    } else
+#endif
+    if (!isMatrix) {
+      // 1D fast path, include CCT as it is more common on 1D setups
+      int start = topSegment.start;
+      int off   = topSegment.offset;
+      for (int i = 0; i < length; i++) {
+        const CRGBA    c_a = topSegment.getPixelColorRaw(i);
+        const unsigned o   = hasWhite ? opacity : (opacity * (c_a.a + 1)) >> 8; // combine segment opacity with pixel opacity (c_a.a is alpha channel)
+        const uint32_t c   = hasWhite ? c_a.color32 : c_a.color32 & 0xFFFFFF;
+        int p = topSegment.reverse ? (length - i - 1) : i;
+        int idx = start + p + off;
+        if (idx >= topSegment.stop) idx -= length;
+        _pixels[idx] = color_blend(_pixels[idx], blend(c, _pixels[idx]), o);
+        if (_pixelCCT) _pixelCCT[idx] = cct;
+      }
+      return;
+    }
+  }
+
+  // slow path: handle transitions, grouping/spacing, segments with clipping and CCT pixels
   Segment::setClippingRect(0, 0);             // disable clipping by default
 
   const unsigned dw = (transitionStyle == TRANSITION_OUTSIDE_IN ? progInv : progress) * width / 0xFFFFU + 1;
