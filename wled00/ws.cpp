@@ -212,13 +212,14 @@ bool sendLiveLedsWs(uint32_t wsClient)
     if (strip.isMatrix && n>1 && (i/Segment::maxWidth)%n) i += Segment::maxWidth * (n-1);
 #endif
     uint32_t c = strip.getPixelColor(i);
+    //fast_color_scale(c, briT);
     uint8_t r = R(c);
     uint8_t g = G(c);
     uint8_t b = B(c);
     uint8_t w = W(c);
-    buffer[pos++] = bri ? qadd8(w, r) : 0; //R, add white channel to RGB channels as a simple RGBW -> RGB map
-    buffer[pos++] = bri ? qadd8(w, g) : 0; //G
-    buffer[pos++] = bri ? qadd8(w, b) : 0; //B
+    buffer[pos++] = briT ? qadd8(w, r) : 0; //R, add white channel to RGB channels as a simple RGBW -> RGB map
+    buffer[pos++] = briT ? qadd8(w, g) : 0; //G
+    buffer[pos++] = briT ? qadd8(w, b) : 0; //B
   }
 
   wsc->binary(std::move(wsBuf));
