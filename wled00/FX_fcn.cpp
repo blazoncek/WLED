@@ -1691,33 +1691,34 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
         }
       } else {
         // clipped pixels contain previous values (color, brightness, palette and segment's pixels if mode was changed)
-        const bool clipped = topSegment.isPixelXYClipped(c, r);     // pixel is never clipped for FADE transition
-        // select source pixel intelligently either from new segment (unclipped) or old segment (clipped) in a sigle pass
-        CRGBA *_pixelsR;
-        int vCols;              // old segment may have different grouping or spacing or mapping
-        int vRows;              // old segment may have different grouping or spacing or mapping
-        // if segment is in transition and pixel is clipped take old segment's pixel and opacity
-        // for clipped pixels use old segment's opacity (allow segment on/off/brightness transitions)
-        if (clipped && segO) {
-          o = segO->currentBri();
-          _pixelsR = _pixelsO;
-          vCols = oCols;
-          vRows = oRows;
-        } else {
-          _pixelsR = _pixelsN;
-          vCols = nCols;
-          vRows = nRows;
-        }
-        // if we blend using "push" style we need to "shift" canvas to left/right/up/down
-        if ((transitionStyle & TRANSITION_PUSH_MASK)) {
-          x = (x + vCols - offsetX) % vCols;
-          y = (y + vRows - offsetY) % vRows;
-        }
-        // safety check needed as old and new segment may have different goruping/spacing/mapping
-        if (x < vCols && y < vRows) c_a = _pixelsR[x + y*vCols];
+        const bool clipped = topSegment.isPixelXYClipped(c, r);
         // if we have global brightness change (not On/Off change) we will ignore transition style and just fade brightness (see led.cpp)
         // what follows is workaround for On/Off transition (briOld == 0 || bri == 0)
-        if ((briOld == 0 || bri == 0) && !(clipped ^ (bool)bri)) c_a = BLACK;
+        if (!((briOld == 0 || bri == 0) && !(clipped ^ (bool)bri))) {
+          // select source pixel intelligently either from new segment (unclipped) or old segment (clipped) in a sigle pass
+          CRGBA *_pixelsR;
+          int vCols;              // old segment may have different grouping or spacing or mapping
+          int vRows;              // old segment may have different grouping or spacing or mapping
+          // if segment is in transition and pixel is clipped take old segment's pixel and opacity
+          // for clipped pixels use old segment's opacity (allow segment on/off/brightness transitions)
+          if (clipped && segO) {
+            o = segO->currentBri();
+            _pixelsR = _pixelsO;
+            vCols = oCols;
+            vRows = oRows;
+          } else {
+            _pixelsR = _pixelsN;
+            vCols = nCols;
+            vRows = nRows;
+          }
+          // if we blend using "push" style we need to "shift" canvas to left/right/up/down
+          if ((transitionStyle & TRANSITION_PUSH_MASK)) {
+            x = (x + vCols - offsetX) % vCols;
+            y = (y + vRows - offsetY) % vRows;
+          }
+          // safety check needed as old and new segment may have different goruping/spacing/mapping
+          if (x < vCols && y < vRows) c_a = _pixelsR[x + y*vCols];
+        }
       }
 
       // map it into frame buffer
@@ -1800,25 +1801,26 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
         }
       } else {
         // clipped pixels contain previous values (color, brightness, palette and segment's pixels if mode was changed)
-        const bool clipped = topSegment.isPixelClipped(k);          // pixel is never clipped for FADE
-        // if segment is in transition and pixel is clipped take old segment's pixel and opacity
-        const Segment *seg;
-        int vLen;
-        if (clipped && segO) {
-          o = segO->currentBri();
-          vLen = oLen;
-          seg = segO;
-        } else {
-          vLen = nLen;
-          seg = &topSegment;
-        }
-        // if we blend using "push" style we need to "shift" source canvas to left or right
-        if ((transitionStyle & TRANSITION_PUSH_MASK)) i = (i + vLen - offsetI) % vLen;
-        // get clipped pixel from old segment or unclipped pixel from new segment
-        if (i < vLen) c_a = seg->getPixelColorRaw(i);
+        const bool clipped = topSegment.isPixelClipped(k);
         // if we have global brightness change (not On/Off change) we will ignore transition style and just fade brightness (see led.cpp)
         // what follows is a workaround for On/Off transition (briOld == 0 || bri == 0)
-        if ((briOld == 0 || bri == 0) && !(clipped ^ (bool)bri)) c_a = BLACK;
+        if (!((briOld == 0 || bri == 0) && !(clipped ^ (bool)bri))) {
+          // if segment is in transition and pixel is clipped take old segment's pixel and opacity
+          const Segment *seg;
+          int vLen;
+          if (clipped && segO) {
+            o = segO->currentBri();
+            vLen = oLen;
+            seg = segO;
+          } else {
+            vLen = nLen;
+            seg = &topSegment;
+          }
+          // if we blend using "push" style we need to "shift" source canvas to left or right
+          if ((transitionStyle & TRANSITION_PUSH_MASK)) i = (i + vLen - offsetI) % vLen;
+          // get clipped pixel from old segment or unclipped pixel from new segment
+          if (i < vLen) c_a = seg->getPixelColorRaw(i);
+        }
       }
 
       // map into frame buffer
