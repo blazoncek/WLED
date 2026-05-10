@@ -20,6 +20,9 @@
   #error "Max segments must be at least max number of busses!"
 #endif
 
+#ifdef WLED_DEBUG_FX
+  #warning Effect debugging enabled. Performance may suffer.
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 // Segment class implementation
@@ -265,6 +268,11 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
     segmentCopy = false; // try to continue without segment copy
   }
 
+  // When any of segment's parameters change in deserializeSegment() (i.e. seg.setSxxxx())
+  // startTransition() is called. This means that multiple startTransition() calls are made
+  // as the JSON (or HTTP) API is processed. First call will either make a copy of segment or store original values
+  // for colors, palettes & brightness. Subsequent calls should only modify these values if transition
+  // has already progressed beyond 0 (or 1 frame to be exact)
   if (isInTransition()) {
     if (segmentCopy && !_t->_oldSegment) {
       // already in transition but segment copy requested and not yet created
@@ -277,7 +285,25 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
         for (unsigned i = 0; i < NUM_COLORS; i++) _t->_oldSegment->colors[i] = _t->_colors[i];
         DEBUGFX_PRINTF_P(PSTR("-- Updated transition with segment copy: S=%p T(%p) O[%p] OP[%p]\n"), this, _t, _t->_oldSegment, _t->_oldSegment->pixels);
         if (!_t->_oldSegment->isActive()) stopTransition();
+      } else {
+        DEBUGFX_PRINTLN(F("-- Error allocating memory for segment copy."));
+        errorFlag = ERR_NORAM;
       }
+    } else if (_t->_progress > 0) {
+      // If we are already in transition we need to copy current intermediate color into old color
+      // so that changing it will not produce abrup change. We will also do similar for palette.
+      // However, palette change progress is recorded in _palT (see beginDraw()).
+      if (_t->_oldSegment) {
+        for (unsigned i = 0; i < NUM_COLORS; i++) _t->_oldSegment->colors[i].nblend(colors[i], _t->_progress);
+        _t->_oldSegment->palette = _t->_palette;          // update palette and colors (from middle of transition)
+      } else {
+        for (unsigned i = 0; i < NUM_COLORS; i++) _t->_colors[i].nblend(colors[i], _t->_progress);
+        _t->_palette = palette;                           // update palette and colors (from middle of transition)
+      }
+      DEBUGFX_PRINTF_P(PSTR("-- Updated transition: S=%p T(%p) O[%p]\n"), this, _t, _t->_oldSegment);
+      _t->_start = millis();                                // restart countdown
+      _t->_dur   = dur;                                     // update duration
+      _t->_prevPaletteBlends = 0;                           // reset previous palette blends
     }
     return;
   }
@@ -296,8 +322,12 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
       if (!_t->_oldSegment->isActive()) stopTransition();
     } else {
       DEBUGFX_PRINTF_P(PSTR("-- Started transition without old segment: S=%p T(%p)\n"), this, _t);
+      if (segmentCopy) errorFlag = ERR_NORAM;
     }
-  };
+  } else {
+    DEBUGFX_PRINTLN(F("-- Error allocating memory for transition."));
+    errorFlag = ERR_NORAM;
+  }
 }
 
 void Segment::stopTransition() {
@@ -1413,13 +1443,16 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
   const unsigned orgTS     = transitionStyle;
   if (width*height == 1) transitionStyle = TRANSITION_FADE; // disable style for single pixel segments (use fade instead)
 
+#ifndef ESP8266
   // fast path (by @dedehai): handle the default case - no transitions, no grouping/spacing, no mirroring, no CCT
+  // TODO: crashes in topSegment.getPixelColorRaw() on ESP8266 (even when index is not OOB) after WiFi starts connecting
   if (!topSegment.isInTransition() && topSegment.groupLength() == 1 && !topSegment.mirror && !topSegment.mirror_y) {
-#ifndef WLED_DISABLE_2D
+  #ifndef WLED_DISABLE_2D
     // 2D fast path
     if (isMatrix && stopIndx <= matrixSize && !_pixelCCT) {
       // adjust starting position and steps based on Reverse/Transpose
       if (!topSegment.transpose) {
+        DEBUGFX_PRINTLN(F("Fastpath 2D non-transposed."));
         // Calculate pointer steps to avoid 'if' and 'XY()' inside loops
         int x_inc = 1;
         int y_inc = Segment::maxWidth;
@@ -1439,6 +1472,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
           }
         }
       } else { // transposed
+        DEBUGFX_PRINTLN(F("Fastpath 2D transposed."));
         for (int y = 0; y < height; y++) {
           const int px = topSegment.reverse ? (height - y - 1) : y;                 // source pixel: swap y into x, reverse if needed
           for (int x = 0; x < width; x++) {
@@ -1453,7 +1487,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       }
       return;
     } else
-#endif
+  #endif
     if (!isMatrix) {
       // 1D fast path, include CCT as it is more common on 1D setups
       int start = topSegment.start;
@@ -1471,6 +1505,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       return;
     }
   }
+#endif
 
   // slow path: handle transitions, grouping/spacing, segments with clipping and CCT pixels
   Segment::setClippingRect(0, 0);             // disable clipping by default
