@@ -329,6 +329,7 @@ void handleButton()
           DEBUG_PRINTLN(F("Factory Reset triggered by button."));
           WLED_FS.format();
           doReboot = true;
+          doSerializeConfig = false;
         } else {
           WLED::instance().initAP(true);
         }
