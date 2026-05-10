@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2605040
+#define VERSION 2605100
 #else
 #define VERSION BUILD
 #endif
@@ -697,11 +697,8 @@ WLED_GLOBAL byte currentPreset _INIT(0);
 
 WLED_GLOBAL byte errorFlag _INIT(0);
 
-WLED_GLOBAL String messageHead, messageSub;
-WLED_GLOBAL byte optionType;
-
-WLED_GLOBAL bool doSerializeConfig _INIT(false);        // flag to initiate saving of config
-WLED_GLOBAL bool doReboot          _INIT(false);        // flag to initiate reboot from async handlers
+WLED_GLOBAL volatile bool doSerializeConfig _INIT(false);        // flag to initiate saving of config
+WLED_GLOBAL volatile bool doReboot          _INIT(false);        // flag to initiate reboot from async handlers
 
 // status led
 #if defined(STATUSLED)

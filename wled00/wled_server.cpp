@@ -28,6 +28,9 @@ static const char s_notimplemented[] PROGMEM = "Not implemented";
 static const char s_accessdenied[]   PROGMEM = "Access Denied";
 static const char _common_js[]       PROGMEM = "/common.js";
 
+static String messageHead, messageSub;
+static byte optionType;
+
 //Is this an IP?
 static bool isIp(const String &str) {
   for (size_t i = 0; i < str.length(); i++) {
