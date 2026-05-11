@@ -339,7 +339,7 @@ std::vector<LEDType> BusDigital::getLEDTypes() {
     {TYPE_UCS8903,       "D",  PSTR("UCS8903")},
     {TYPE_APA106,        "D",  PSTR("APA106/PL9823")},
     {TYPE_TM1914,        "D",  PSTR("TM1914")},
-    {TYPE_FW1906,        "D",  PSTR("FW1906 GRBCW")},
+    {TYPE_FW1906,        "D",  PSTR("FW1906/WS281x GRBCW")},
     {TYPE_UCS8904,       "D",  PSTR("UCS8904 RGBW")},
     {TYPE_WS2805,        "D",  PSTR("WS2805 RGBCW")},
     {TYPE_SM16825,       "D",  PSTR("SM16825 RGBCW")},
@@ -347,7 +347,7 @@ std::vector<LEDType> BusDigital::getLEDTypes() {
     //{TYPE_WS2812_2CH_X3, "D",  PSTR("WS281x CCT")}, // not implemented
     {TYPE_WS2812_WWA,    "D",  PSTR("WS281x WWA")}, // amber ignored
     {TYPE_WS281X_DUAL,   "D",  PSTR("WS281x RGBW Dual-chip")},
-    {TYPE_WS281X_WWCW,   "D",  PSTR("WS281x RGBCW Dual-chip")},
+    //{TYPE_WS281X_WWCW,   "D",  PSTR("WS281x RGBCW Dual-chip")}, //same as FW1906
     {TYPE_WS2801,        "2P", PSTR("WS2801")},
     {TYPE_APA102,        "2P", PSTR("APA102")},
     {TYPE_LPD8806,       "2P", PSTR("LPD8806")},
