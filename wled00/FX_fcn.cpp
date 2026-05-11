@@ -283,6 +283,9 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
       if (_t->_oldSegment) {
         _t->_oldSegment->palette = _t->_palette;          // restore original palette and colors (from start of transition)
         for (unsigned i = 0; i < NUM_COLORS; i++) _t->_oldSegment->colors[i] = _t->_colors[i];
+        // if already partway through a FADE transition, set old segment's colors to current blend to avoid jumping back to original colors
+        if (_t->_progress > 0)
+          for (unsigned i = 0; i < NUM_COLORS; i++) _t->_oldSegment->colors[i].nblend(colors[i], _t->_progress);
         DEBUGFX_PRINTF_P(PSTR("-- Updated transition with segment copy: S=%p T(%p) O[%p] OP[%p]\n"), this, _t, _t->_oldSegment, _t->_oldSegment->pixels);
         if (!_t->_oldSegment->isActive()) stopTransition();
       } else {
@@ -300,10 +303,16 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
         for (unsigned i = 0; i < NUM_COLORS; i++) _t->_colors[i].nblend(colors[i], _t->_progress);
         _t->_palette = palette;                           // update palette and colors (from middle of transition)
       }
+      // we do the same for opacity and CCT (using methods which work correctly as we are already in transition)
+      _t->_bri   = currentBri();
+      _t->_cct   = currentCCT();
       DEBUGFX_PRINTF_P(PSTR("-- Updated transition: S=%p T(%p) O[%p]\n"), this, _t, _t->_oldSegment);
-      _t->_start = millis();                                // restart countdown
-      _t->_dur   = dur;                                     // update duration
-      _t->_prevPaletteBlends = 0;                           // reset previous palette blends
+      // we should not restart timers for non-FADE transitions
+      if (transitionStyle == TRANSITION_FADE) {
+        _t->_start = millis();                              // restart countdown
+        _t->_dur   = dur;                                   // update duration
+        _t->_prevPaletteBlends = 0;                         // reset previous palette blends
+      }
     }
     return;
   }
