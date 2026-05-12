@@ -113,7 +113,7 @@ static uint8_t qadd8(uint8_t i, uint8_t j) {
 /*
  * No blinking. Just plain old static light.
  */
-uint16_t mode_static(void) {
+uint16_t mode_static() {
   SEGMENT.fill(SEGCOLOR(0));
   return strip.isOffRefreshRequired() ? FRAMETIME : 350;
 }
@@ -6444,6 +6444,106 @@ uint16_t mode_2Dminesweeper() {
 static const char _data_FX_MODE_2DMINESWEEPER[] PROGMEM = "Minesweeper@;;;2";
 */
 
+/*
+/  Perlinscape effect - a Perlin noise Landscape
+*   Created by stepko (@St3p40 https://github.com/St3p40) as part of Stepko Land on soulmatelights.com
+*   Adapted to WLED by Bob Loeffler (@bobloeffler68) with additional features (and help from Claude)
+*   First slider is for speed
+*   Second slider is for zooming in/out (Perlin scaling)
+*   Third slider is the X multiplier
+*   Fourth slider is the Y multiplier
+*   Second checkbox will rotate the image
+*   Third checkbox will randomize the horizonal and vertical directions
+*/
+uint16_t mode_2D_perlinscape() {
+  if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static();  // not a 2D set-up
+
+  const uint16_t width = SEG_W;
+  const uint16_t height = SEG_H;
+
+  if (!SEGENV.allocateData(4 * sizeof(float) + sizeof(uint32_t))) return mode_static();
+
+  uint32_t speedDiv = map(SEGMENT.speed, 0, 255, 50, 1);
+  uint32_t t        = strip.now / speedDiv;
+  uint8_t  Xmult    = SEGMENT.custom1 >> 2;
+  uint8_t  Ymult    = SEGMENT.custom2 >> 2;
+
+  uint32_t prevT = reinterpret_cast<uint32_t&>(*SEGENV.data);
+  float offX  = reinterpret_cast<float&>(*(SEGENV.data + sizeof(uint32_t)));
+  float offY  = reinterpret_cast<float&>(*(SEGENV.data + sizeof(uint32_t) +   sizeof(float)));
+  float stepX = reinterpret_cast<float&>(*(SEGENV.data + sizeof(uint32_t) + 2*sizeof(float)));
+  float stepY = reinterpret_cast<float&>(*(SEGENV.data + sizeof(uint32_t) + 3*sizeof(float)));
+
+  if (SEGENV.call == 0) {
+    SEGENV.aux0 = hw_random16(5000, 10000);
+    SEGENV.aux1 = 0;
+    offX  = 0.0f;
+    offY  = 0.0f;
+    stepX = 1.0f;
+    stepY = 1.0f;
+    prevT = t;
+  }
+
+  if (SEGMENT.check3 && (strip.now - SEGENV.step > SEGENV.aux0)) {
+    // if randomizing, change/randomize direction (aux1) every 5-10s (aux0)
+    SEGENV.aux0 = hw_random16(5000, 10000);
+    SEGENV.aux1 = hw_random8(4);
+    SEGENV.step = strip.now;
+  }
+
+  bool flipX = SEGMENT.check3 ? (SEGENV.aux1 & 0x01) : false;
+  bool flipY = SEGMENT.check3 ? (SEGENV.aux1 & 0x02) : false;
+
+  float targetX = flipX ? -1.0f : 1.0f;
+  float targetY = flipY ? -1.0f : 1.0f;
+  stepX += (targetX - stepX) * 0.05f;
+  stepY += (targetY - stepY) * 0.05f;
+
+  uint32_t dt = t - prevT;
+  offX += stepX * dt;
+  offY += stepY * dt;
+  prevT = t;
+
+  int32_t tX = (int32_t)offX;
+  int32_t tY = (int32_t)offY;
+
+  // Rotation
+  float cosA = 1.0f, sinA = 0.0f;
+  float cx = width * 0.5f;
+  float cy = height * 0.5f;
+
+  if (SEGMENT.check2) {
+    float angle = strip.now / 5000.0f;
+    cosA = cos_approx(angle);
+    sinA = sin_approx(angle);
+  }
+
+  float scale = map(SEGMENT.intensity, 0, 255, 10, 200) / 100.0f;  // range 0.1 to 2.0
+
+  for (byte x = 0; x < width; x++) {
+    for (byte y = 0; y < height; y++) {
+      float rx = cosA * (x - cx) - sinA * (y - cy) + cx;
+      float ry = sinA * (x - cx) + cosA * (y - cy) + cy;
+
+      float scaled_x = rx * Xmult * scale;
+      float scaled_y = ry * Ymult * scale;
+
+      if (SEGMENT.palette) {
+        // Palette mode (i.e. not a Default palette)
+        uint8_t paletteIndex = perlin8(scaled_x, scaled_y, t);
+        uint8_t brightness   = perlin8(scaled_x + tX, scaled_y + tY);
+        SEGMENT.setPixelColorXY(x, y, SEGMENT.color_from_palette(paletteIndex, false, PALETTE_FIXED, brightness));
+      } else {
+        // Raw RGB mode
+        SEGMENT.setPixelColorXY(x, y, perlin8(scaled_x, scaled_y, t), perlin8(scaled_x, scaled_y + tY), perlin8(scaled_x + tX, scaled_y));
+      }
+    }
+  }
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_2DPERLINSCAPE[] PROGMEM = "Perlinscape@!,Zoom,X multiplier,Y multiplier,,,Rotate,Random;;!;2;";
+
+
 ////////////////////////////////////////////
 // PARTICLE SYSTEM EFFECTS
 ////////////////////////////////////////////
@@ -8961,6 +9061,7 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_2DSOAP, &mode_2Dsoap, _data_FX_MODE_2DSOAP);
   addEffect(FX_MODE_2DOCTOPUS, &mode_2Doctopus, _data_FX_MODE_2DOCTOPUS);
   addEffect(FX_MODE_2DWAVINGCELL, &mode_2Dwavingcell, _data_FX_MODE_2DWAVINGCELL);
+  addEffect(FX_MODE_2DPERLINSCAPE, &mode_2D_perlinscape, _data_FX_MODE_2DPERLINSCAPE);
   #ifndef WLED_DISABLE_PARTICLESYSTEM2D
   addEffect(FX_MODE_PARTICLEVOLCANO, &mode_particlevolcano, _data_FX_MODE_PARTICLEVOLCANO);
   addEffect(FX_MODE_PARTICLEFIREWORKS, &mode_particlefireworks, _data_FX_MODE_PARTICLEFIREWORKS);

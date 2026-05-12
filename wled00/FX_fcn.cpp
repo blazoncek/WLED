@@ -47,7 +47,7 @@ uint8_t  Segment::_clipStopY = 1;
 
 // copy constructor
 Segment::Segment(const Segment &orig) {
-  //DEBUGFX_PRINTF_P(PSTR("-- Copy segment constructor: %p -> %p\n"), &orig, this);
+  DEBUGFX_PRINTF_P(PSTR("-- Copy segment constructor: %p -> %p\n"), &orig, this);
   memcpy((void*)this, (void*)&orig, sizeof(Segment));
   _t   = nullptr; // copied segment cannot be in transition
   name = nullptr;
@@ -72,7 +72,7 @@ Segment::Segment(const Segment &orig) {
 
 // move constructor
 Segment::Segment(Segment &&orig) noexcept {
-  //DEBUGFX_PRINTF_P(PSTR("-- Move segment constructor: %p -> %p\n"), &orig, this);
+  DEBUGFX_PRINTF_P(PSTR("-- Move segment constructor: %p -> %p\n"), &orig, this);
   memcpy((void*)this, (void*)&orig, sizeof(Segment));
   orig._t   = nullptr; // old segment cannot be in transition any more
   orig.name = nullptr;
@@ -83,7 +83,7 @@ Segment::Segment(Segment &&orig) noexcept {
 
 // copy assignment
 Segment& Segment::operator= (const Segment &orig) {
-  //DEBUGFX_PRINTF_P(PSTR("-- Copying segment: %p -> %p\n"), &orig, this);
+  DEBUGFX_PRINTF_P(PSTR("-- Copying segment: %p -> %p\n"), &orig, this);
   if (this != &orig) {
     // clean destination
     if (name) { d_free(name); name = nullptr; }
@@ -117,7 +117,7 @@ Segment& Segment::operator= (const Segment &orig) {
 
 // move assignment
 Segment& Segment::operator= (Segment &&orig) noexcept {
-  //DEBUGFX_PRINTF_P(PSTR("-- Moving segment: %p -> %p\n"), &orig, this);
+  DEBUGFX_PRINTF_P(PSTR("-- Moving segment: %p -> %p\n"), &orig, this);
   if (this != &orig) {
     if (name) { d_free(name); name = nullptr; } // free old name
     if (isInTransition()) stopTransition(); // also erases _t
@@ -188,7 +188,7 @@ void Segment::deallocateData() {
   */
 void Segment::resetIfRequired() {
   if (!reset || !isActive()) return;
-  //DEBUGFX_PRINTF_P(PSTR("-- Segment reset: %p\n"), this);
+  DEBUGFX_PRINTF_P(PSTR("-- Segment reset: %p\n"), this);
   if (data && _dataLen > 0) memset(data, 0, _dataLen);  // prevent heap fragmentation (just erase buffer instead of deallocateData())
   if (_dataLen > FAIR_DATA_PER_SEG) deallocateData();   // do not keep large allocations
   if (pixels) for (size_t i = 0; i < length(); i++) pixels[i] = hasWhite() ? BLACK : CRGBA(BLACK); // clear pixel buffer
@@ -254,6 +254,7 @@ CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) {
 
 // starting a transition has to occur before change so we get current values 1st
 void Segment::startTransition(uint16_t dur, bool segmentCopy) {
+  DEBUGFX_PRINTF_P(PSTR("-- Starting transition: %ums w/%s segment copy\n"), (unsigned)dur, (segmentCopy ? "" : "o"));
   if (dur == 0 || !isActive()) {
     if (isInTransition()) _t->_dur = 0;
     return;
@@ -273,6 +274,7 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
   // as the JSON (or HTTP) API is processed. First call will either make a copy of segment or store original values
   // for colors, palettes & brightness. Subsequent calls should only modify these values if transition
   // has already progressed beyond 0 (or 1 frame to be exact)
+  // _t->_progress is updated in WS2812FX::service() using handleTransition() call and changing _t->_start has no effect
   if (isInTransition()) {
     if (segmentCopy && !_t->_oldSegment) {
       // already in transition but segment copy requested and not yet created
@@ -281,38 +283,40 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
       _t->_dur   = dur;
       _t->_prevPaletteBlends = 0;                         // reset previous palette blends
       if (_t->_oldSegment) {
+        if (!_t->_oldSegment->isActive()) {               // even though segment's copy may be created it may lack pixel buffer
+          stopTransition();                               // in such case it will be marked inactive so stop transition entirely
+          return;
+        }
+        _t->_oldSegment->opacity = _t->_bri;              // restore original opacity
+        _t->_oldSegment->cct     = _t->_cct;              // restore original CCT
         _t->_oldSegment->palette = _t->_palette;          // restore original palette and colors (from start of transition)
         for (unsigned i = 0; i < NUM_COLORS; i++) _t->_oldSegment->colors[i] = _t->_colors[i];
-        // if already partway through a FADE transition, set old segment's colors to current blend to avoid jumping back to original colors
-        if (_t->_progress > 0)
-          for (unsigned i = 0; i < NUM_COLORS; i++) _t->_oldSegment->colors[i].nblend(colors[i], _t->_progress);
         DEBUGFX_PRINTF_P(PSTR("-- Updated transition with segment copy: S=%p T(%p) O[%p] OP[%p]\n"), this, _t, _t->_oldSegment, _t->_oldSegment->pixels);
-        if (!_t->_oldSegment->isActive()) stopTransition();
       } else {
         DEBUGFX_PRINTLN(F("-- Error allocating memory for segment copy."));
         errorFlag = ERR_NORAM;
       }
-    } else if (_t->_progress > 0) {
+    }
+    if (_t->_progress > 0) {
       // If we are already in transition we need to copy current intermediate color into old color
-      // so that changing it will not produce abrup change. We will also do similar for palette.
-      // However, palette change progress is recorded in _palT (see beginDraw()).
+      // so that changing it will not produce abrup change. We will also do similar for brightness and CCT.
+      // However, palette change progress is recorded in _palT (see beginDraw()) so we just reset blend count.
+      // We also need to restart transition (for all transitions!)
+      _t->_start = millis();                              // restart countdown
+      _t->_dur   = dur;                                   // update duration
+      _t->_prevPaletteBlends = 0;                         // reset previous palette blends
       if (_t->_oldSegment) {
         for (unsigned i = 0; i < NUM_COLORS; i++) _t->_oldSegment->colors[i].nblend(colors[i], _t->_progress);
         _t->_oldSegment->palette = _t->_palette;          // update palette and colors (from middle of transition)
+        _t->_oldSegment->opacity = currentBri();          // update opacity (from middle of transition)
+        _t->_oldSegment->cct     = currentCCT();          // update CCT (from middle of transition)
       } else {
         for (unsigned i = 0; i < NUM_COLORS; i++) _t->_colors[i].nblend(colors[i], _t->_progress);
         _t->_palette = palette;                           // update palette and colors (from middle of transition)
+        _t->_bri   = currentBri();                        // update opacity (from middle of transition)
+        _t->_cct   = currentCCT();                        // update CCT (from middle of transition)
       }
-      // we do the same for opacity and CCT (using methods which work correctly as we are already in transition)
-      _t->_bri   = currentBri();
-      _t->_cct   = currentCCT();
       DEBUGFX_PRINTF_P(PSTR("-- Updated transition: S=%p T(%p) O[%p]\n"), this, _t, _t->_oldSegment);
-      // we should not restart timers for non-FADE transitions
-      if (transitionStyle == TRANSITION_FADE) {
-        _t->_start = millis();                              // restart countdown
-        _t->_dur   = dur;                                   // update duration
-        _t->_prevPaletteBlends = 0;                         // reset previous palette blends
-      }
     }
     return;
   }
@@ -341,7 +345,7 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
 
 void Segment::stopTransition() {
   DEBUGFX_PRINTF_P(PSTR("-- Stopping transition: S=%p T(%p) O[%p]\n"), this, _t, _t->_oldSegment);
-  delete _t;
+  delete _t;  // will also call destructor for _oldSegment and free its memory
   _t = nullptr;
 }
 
@@ -537,7 +541,7 @@ Segment &Segment::setColor(uint8_t slot, CRGBA c) {
     if (slot == 0 && c == BLACK) return *this; // on/off segment cannot have primary color black
     if (slot == 1 && c != BLACK) return *this; // on/off segment cannot have secondary color non black
   }
-  //DEBUGFX_PRINTF_P(PSTR("- Starting color transition: %d [0x%X]\n"), slot, c);
+  DEBUGFX_PRINTF_P(PSTR("- Starting color transition: %d [0x%X]\n"), slot, c);
   startTransition(strip.getTransition(), transitionStyle != TRANSITION_FADE); // start transition prior to change
   colors[slot] = c;
   stateChanged = true; // send UDP/WS broadcast
@@ -551,7 +555,7 @@ Segment &Segment::setCCT(uint16_t k) {
     k = (k - 1900) >> 5;
   }
   if (cct != k) {
-    //DEBUGFX_PRINTF_P(PSTR("- Starting CCT transition: %d\n"), k);
+    DEBUGFX_PRINTF_P(PSTR("- Starting CCT transition: %d\n"), k);
     startTransition(strip.getTransition(), false); // start transition prior to change (no need to copy segment)
     cct = k;
     stateChanged = true; // send UDP/WS broadcast
@@ -561,7 +565,7 @@ Segment &Segment::setCCT(uint16_t k) {
 
 Segment &Segment::setOpacity(uint8_t o) {
   if (opacity != o) {
-    //DEBUGFX_PRINTF_P(PSTR("- Starting opacity transition: %d\n"), o);
+    DEBUGFX_PRINTF_P(PSTR("- Starting opacity transition: %d\n"), o);
     startTransition(strip.getTransition(), transitionStyle != TRANSITION_FADE); // start transition prior to change
     opacity = o;
     stateChanged = true; // send UDP/WS broadcast
@@ -572,8 +576,10 @@ Segment &Segment::setOpacity(uint8_t o) {
 Segment &Segment::setOption(uint8_t n, bool val) {
   bool prev = (options >> n) & 0x01;
   if (val == prev) return *this;
-  //DEBUGFX_PRINTF_P(PSTR("- Starting option transition: %d\n"), n);
-  if (n == SEG_OPTION_ON) startTransition(strip.getTransition(), transitionStyle != TRANSITION_FADE); // start transition prior to change
+  if (n == SEG_OPTION_ON) {
+    DEBUGFX_PRINTF_P(PSTR("- Starting on/off transition: %d\n"), n);
+    startTransition(strip.getTransition(), transitionStyle != TRANSITION_FADE); // start transition prior to change
+  }
   if (val) options |=   0x01 << n;
   else     options &= ~(0x01 << n);
   stateChanged = true; // send UDP/WS broadcast
@@ -622,7 +628,7 @@ Segment &Segment::setMode(uint8_t fx, bool loadDefaults) {
 Segment &Segment::setPalette(uint8_t pal) {
   if (pal <= 255-customPalettes.size() && pal > FIXED_PALETTE_COUNT) pal = 0; // not built in palette or custom palette
   if (pal != palette) {
-    //DEBUGFX_PRINTF_P(PSTR("- Starting palette transition: %d\n"), pal);
+    DEBUGFX_PRINTF_P(PSTR("- Starting palette transition: %d\n"), pal);
     startTransition(strip.getTransition(), transitionStyle != TRANSITION_FADE); // start transition prior to change (no need to copy segment)
     palette = pal;
     stateChanged = true; // send UDP/WS broadcast
@@ -1582,6 +1588,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     const int oCols = segO ? segO->virtualWidth() : nCols;
     const int oRows = segO ? segO->virtualHeight() : nRows;
 
+    // TODO: CCT would require same treatement as opacity (but is rare and hence not yet implemented)
     const auto setMirroredPixel = [&](int x, int y, uint32_t c, uint8_t o) {
       const int baseX = topSegment.start  + x;
       const int baseY = topSegment.startY + y;
@@ -1746,7 +1753,8 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
           // if segment is in transition and pixel is clipped take old segment's pixel and opacity
           // for clipped pixels use old segment's opacity (allow segment on/off/brightness transitions)
           if (clipped && segO) {
-            o = segO->currentBri();
+            o = segO->on ? segO->opacity : 0; // old segment is never in transition (_t == nullptr) so no need for currentBri()
+            //cct = segO->cct;    // TODO: CCT would require same treatement as opacity
             _pixelsR = _pixelsO;
             vCols = oCols;
             vRows = oRows;
@@ -1800,6 +1808,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     const int nLen = topSegment.virtualLength();
     const int oLen = segO ? segO->virtualLength() : nLen;
 
+    // TODO: CCT would require same treatement as opacity (but is rare and hence not yet implemented)
     const auto setMirroredPixel = [&](int i, uint32_t c, uint8_t o) {
       int indx = topSegment.start + i;
       // Apply mirroring
@@ -1853,7 +1862,8 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
           const Segment *seg;
           int vLen;
           if (clipped && segO) {
-            o = segO->currentBri();
+            o = segO->on ? segO->opacity : 0; // old segment is never in transition (_t == nullptr) so no need for currentBri()
+            //cct = segO->cct;  // TODO: CCT would require same treatement as opacity
             vLen = oLen;
             seg = segO;
           } else {

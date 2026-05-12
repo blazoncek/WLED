@@ -253,7 +253,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_2DPLASMAROTOZOOM       114  // was Candy Cane prior to 0.14 (use Chase 2)
 #define FX_MODE_BLENDS                 115
 #define FX_MODE_TV_SIMULATOR           116
-//#define FX_MODE_DYNAMIC_SMOOTH         117  // candidate for removal (check3 in dynamic)
+#define FX_MODE_2DPERLINSCAPE          117  // was Dynamic Smooth (use Dynamic with check 3)
 #define FX_MODE_SHIMMER                161  // gap fill, non SR 1D effect
 
 // new 0.14 2D effects
@@ -512,7 +512,7 @@ class Segment {
       , _cct(0)
       {}
       ~Transition() {
-        //DEBUGFX_PRINTF_P(PSTR("-- Destroying transition: %p\n"), this);
+        DEBUGFX_PRINTF_P(PSTR("-- Destroying transition: %p\n"), this);
         if (_oldSegment) delete _oldSegment;
       }
     } *_t;
@@ -732,10 +732,6 @@ class Segment {
     [[gnu::hot]] void setPixelColorXY(int x, int y, CRGBA c) const; // set relative pixel within segment with color
     inline void setPixelColorXY(unsigned x, unsigned y, CRGBA c) const                  { setPixelColorXY(int(x), int(y), c); }
     inline void setPixelColorXY(int x, int y, byte r, byte g, byte b, byte w = 0) const { setPixelColorXY(x, y, CRGBA(r,g,b)); }
-    #ifdef WLED_USE_AA_PIXELS
-    void setPixelColorXY(float x, float y, CRGBA c, bool aa = true) const;
-    inline void setPixelColorXY(float x, float y, byte r, byte g, byte b, byte w = 0, bool aa = true) const { setPixelColorXY(x, y, RGBW32(r,g,b,w), aa); }
-    #endif
     [[gnu::hot]] bool isPixelXYClipped(int x, int y) const;
     [[gnu::hot]] CRGBA getPixelColorXY(int x, int y) const;
     // 2D support functions
@@ -763,10 +759,6 @@ class Segment {
     inline void setPixelColorXY(int x, int y, CRGBA c) const                            { setPixelColor(x, c); }
     inline void setPixelColorXY(unsigned x, unsigned y, CRGBA c) const                  { setPixelColor(int(x), c); }
     inline void setPixelColorXY(int x, int y, byte r, byte g, byte b, byte w = 0) const { setPixelColor(x, CRGBA(r,g,b)); }
-    #ifdef WLED_USE_AA_PIXELS
-    inline void setPixelColorXY(float x, float y, CRGBA c, bool aa = true) const        { setPixelColor(x, c, aa); }
-    inline void setPixelColorXY(float x, float y, byte r, byte g, byte b, byte w = 0, bool aa = true) { setPixelColor(x, CRGBA(r,g,b), aa); }
-    #endif
     inline bool isPixelXYClipped(int x, int y) const                                    { return isPixelClipped(x); }
     inline CRGBA getPixelColorXY(int x, int y) const                                    { return getPixelColor(x); }
     inline void blendPixelColorXY(uint16_t x, uint16_t y, CRGBA c, uint8_t blend) const { blendPixelColor(x, c, blend); }
