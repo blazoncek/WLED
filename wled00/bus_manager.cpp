@@ -769,6 +769,7 @@ constexpr size_t HUB75_PIN_COUNT = sizeof(HUB75_I2S_CFG::gpio) / sizeof(int8_t);
 static uint8_t __portal[HUB75_PIN_COUNT]    PROGMEM = { 42, 41, 40, 38, 39, 37, 45, 36, 48, 35, 21, 47, 14,  2};
 static uint8_t __moonhub[HUB75_PIN_COUNT]   PROGMEM = {  1,  5,  6,  7, 13,  9, 16, 48, 47, 21, 38,  8,  4, 18};
 static uint8_t __s3generic[HUB75_PIN_COUNT] PROGMEM = {  1,  2, 42, 41, 40, 39, 45, 48, 47, 21, 38,  8,  3, 18};
+static uint8_t __hd_wf2[HUB75_PIN_COUNT]    PROGMEM = {  2,  6, 10,  3,  7, 11, 39, 38, 37, 36, 21, 33, 35, 34};
 #elif defined(CONFIG_IDF_TARGET_ESP32S2)
 static uint8_t __s2drive[HUB75_PIN_COUNT]   PROGMEM = {  2,  6,  3,  4,  8,  5, 39, 38, 37, 36, 12, 33, 35, 34};
 #elif defined(CONFIG_IDF_TARGET_ESP32)
@@ -789,6 +790,9 @@ static const uint8_t * const getHub75Pins(uint8_t type, uint8_t *dest = nullptr)
       break;
     case TYPE_HUB75MATRIX_S3:
       b = __s3generic;
+      break;
+    case TYPE_HUB75HD_WF2:
+      b = __hd_wf2;
       break;
 #elif defined(CONFIG_IDF_TARGET_ESP32S2)
     case TYPE_HUB75MATRIX_S2DRIVE:
@@ -1121,6 +1125,7 @@ std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
     {TYPE_HUB75MATRIX_PORTAL,  "H", PSTR("HUB75 (Adafruit Matrix Portal)")},
     {TYPE_HUB75MATRIX_MOONHUB, "H", PSTR("HUB75 (Moonhub T7 S3)")},
     {TYPE_HUB75MATRIX_S3,      "H", PSTR("HUB75 (S3 with PSRAM)")},
+    {TYPE_HUB75HD_WF2,         "H", PSTR("HUB75 (Huidu HD-WF2)")},
 #elif defined(CONFIG_IDF_TARGET_ESP32S2)
     {TYPE_HUB75MATRIX_S2DRIVE, "H", PSTR("HUB75 (S2 Drive P4)")},
 #elif defined(CONFIG_IDF_TARGET_ESP32)

@@ -122,6 +122,7 @@ uint16_t approximateKelvinFromRGB(uint32_t rgb);
 #define TYPE_HUB75MATRIX_PORTAL  64           //Adafruit Matrix Portal S3 board (https://www.adafruit.com/product/5778)
 #define TYPE_HUB75MATRIX_MOONHUB 65           //MoonHub75 board
 #define TYPE_HUB75MATRIX_S3      66           //plain S3 Hub75 matrix board
+#define TYPE_HUB75HD_WF2         67           //Huidu HD-WF2 (S3 without PSRAM!!)
 #elif defined(CONFIG_IDF_TARGET_ESP32S2)
 #define TYPE_HUB75MATRIX_S2DRIVE 64           //S2 drive (https://www.ledclub.net/2025/03/15/esp32-s2-drive-p4-80x40-led-matrix/)
 #elif defined(CONFIG_IDF_TARGET_ESP32)
