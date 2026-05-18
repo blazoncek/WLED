@@ -454,6 +454,7 @@ void WLED::setup()
   DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 
   if (needsCfgSave) serializeConfig(); // need to wait for strip to be initialised #4752
+  if (bootPreset > 0) handlePresets(); // handle boot preset applied in beginStrip(); see wled#5573 for reasons
 
   DEBUG_PRINTLN(F("Starting WiFi"));
   // configurable WiFi options are set in cfg.cpp
@@ -879,12 +880,14 @@ ESP-NOW  inited in AP mode (channel: 6/1).
 #ifndef WLED_DISABLE_ESPNOW
   // WL_NO_SHIELD means WiFi is turned off while WL_IDLE_STATUS means we are not trying to connect to SSID (but we may be in AP mode)
   // so need to occasionally check if we can reconnect to restart WiFi
+  // this still fails with wifiState==0 and getMode()==1; static IP assigned and Lost IP event triggered every ~3 min
   if ((wifiState == WL_NO_SHIELD && !apActive) || (wifiState == WL_IDLE_STATUS && lastReconnectAttempt > 0 && !apClients && !apActive)) {
     // if we haven't heard master & 5 minutes have passes since last reconect
     if (now > WLED_AP_TIMEOUT/2 + heartbeatESPNow && now > WLED_AP_TIMEOUT + lastReconnectAttempt) { // 2.5/5min timeout
       DEBUG_PRINTF_P(PSTR("WiFi: Not initialised %d (%d) @ %lus\n"), (int)wifiState, (int)WiFi.getMode(), now/1000);
       if (wifiConfigured) {
         WiFi.mode(WIFI_MODE_STA);
+        delay(15);
         if (multiWiFi.size() > 1 || WiFi.scanComplete() == -2) findWiFi(true);
         //lastReconnectAttempt = now + 6000;
       } else if (wifiState == WL_NO_SHIELD) {

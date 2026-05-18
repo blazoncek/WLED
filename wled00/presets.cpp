@@ -164,7 +164,7 @@ void handlePresets()
   JsonObject fdo;
 
   presetToApply = 0; //clear request for preset
-  callModeToApply = 0;
+  callModeToApply = CALL_MODE_INIT;
 
   DEBUG_PRINTF_P(PSTR("Applying preset: %u\n"), (unsigned)tmpPreset);
 
@@ -194,13 +194,18 @@ void handlePresets()
     handleSet(nullptr, apireq, false);    // may call applyPreset() via PL=
     setValuesFromFirstSelectedSeg();      // fills legacy values
   } else {
+    // remove load request for presets to prevent recursive crash, except if:
+    // - called by button preset which contains preset cycling string "1~5~"
+    // - or boot preset (i.e. with preset chaining like {"lor":2,"udpn":{"send":true},"MultiRelay":{"relay":1,"on":true},"ps":"1~5r"})
+    // for boot preset call mode is modified in deserializeState() to prevent recursion
+    bool removePS = !(tmpMode == CALL_MODE_BUTTON_PRESET && fdo["ps"].is<const char *>() && strchr(fdo["ps"].as<const char *>(),'~') != strrchr(fdo["ps"].as<const char *>(),'~'));
+    removePS = removePS && tmpMode != CALL_MODE_INIT;
+    if (removePS) fdo.remove("ps");
     if (!fdo["seg"].isNull() || !fdo["on"].isNull() || !fdo["bri"].isNull() || !fdo["nl"].isNull() || !fdo["ps"].isNull() || !fdo[F("playlist")].isNull()) changePreset = true;
-    if (!(tmpMode == CALL_MODE_BUTTON_PRESET && fdo["ps"].is<const char *>() && strchr(fdo["ps"].as<const char *>(),'~') != strrchr(fdo["ps"].as<const char *>(),'~')))
-      fdo.remove("ps"); // remove load request for presets to prevent recursive crash (if not called by button and contains preset cycling string "1~5~")
     deserializeState(fdo, CALL_MODE_NO_NOTIFY, tmpPreset); // may change presetToApply by calling applyPreset()
   }
   if (!errorFlag && tmpPreset < 255 && changePreset) currentPreset = tmpPreset;
-  if (tmpMode != CALL_MODE_NO_NOTIFY && tmpMode != CALL_MODE_NOTIFICATION) notify(tmpMode);  // send actual notifications
+  if (tmpMode != CALL_MODE_NO_NOTIFY && tmpMode != CALL_MODE_NOTIFICATION && tmpMode != CALL_MODE_INIT) notify(tmpMode);  // send actual notifications
 
   #if defined(ARDUINO_ARCH_ESP32)
   //Aircoookie recommended not to delete buffer
