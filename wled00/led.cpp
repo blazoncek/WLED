@@ -76,6 +76,7 @@ void applyFinalBri() {
 //called after every state changes, schedules interface updates, handles brightness transition and nightlight activation
 //unlike colorUpdated(), does NOT apply any colors or FX to segments
 void stateUpdated(byte callMode) {
+  DEBUG_PRINTF_P(PSTR("State updated called. %d %d\n"), (int)transitionActive, (int)nightlightActive);
   //call for notifier -> 0: init 1: direct change 2: button 3: notification 4: nightlight 5: other (No notification)
   //                     6: fx changed 7: hue 8: preset cycle 9: blynk 10: alexa 11: ws send only 12: button preset
   setValuesFromFirstSelectedSeg();  // a much better approach would be to use main segment: setValuesFromMainSeg()
@@ -89,27 +90,12 @@ void stateUpdated(byte callMode) {
 
     //set flag to update ws and mqtt
     interfaceUpdateCallMode = callMode;
-  } else {
-    if (nightlightActive && !nightlightActiveOld && callMode != CALL_MODE_NOTIFICATION && callMode != CALL_MODE_NO_NOTIFY) {
-      notify(CALL_MODE_NIGHTLIGHT);
-      interfaceUpdateCallMode = CALL_MODE_NIGHTLIGHT;
-    }
-
-    // notify usermods of state change
-    UsermodManager::onStateChange(callMode);
   }
 
-  // nightlight
-  unsigned long now = millis();
-  if (nightlightActive && callMode != CALL_MODE_NO_NOTIFY) {
-    if (nightlightMode == NL_MODE_FADE || nightlightMode == NL_MODE_COLORFADE) {
-      briNlT = bri;
-      nightlightDelayMs -= (now - nightlightStartTime);
-      nightlightStartTime = now;
-    }
-    //deactivate nightlight if target brightness is reached
-    if (bri == nightlightTargetBri && nightlightMode != NL_MODE_SUN) nightlightActive = false;
-  }
+  // notify usermods of state change
+  UsermodManager::onStateChange(callMode);
+
+  if (nightlightActive) return;
 
   // off
   if (briT == 0) {
@@ -127,6 +113,7 @@ void stateUpdated(byte callMode) {
     strip.trigger();
   } else {
     if (bri != briOld) {
+      unsigned long now = millis();
       if (transitionActive && transitionStyle == TRANSITION_FADE) {
         // already active, just update briOld to reflect current state (no further notifications sent during brightness change fade)
         // this will unfortunately cause all pixels to become instantly visible in non-fade transitions
@@ -142,9 +129,6 @@ void stateUpdated(byte callMode) {
       if (!rlyStartTime) strip.setTransitionMode(true); // force all segments to transition mode (for clipping to work)
       transitionActive = true;
       transitionStartTime = now;
-//    } else if (jsonTransitionOnce) {
-//      strip.setTransition(transitionDelay);
-//      jsonTransitionOnce = false;
     }
   }
   stateChanged = false;
@@ -202,7 +186,7 @@ void handleBrightness() {
   }
 
   // perform fade global brightness transition
-  if (transitionActive) {
+  if (transitionActive && !nightlightActive) {
     int ti = now - transitionStartTime;
     int tr = strip.getTransition() + 1; // ensure non-zero just in case
     if (ti/tr > 0) {
@@ -262,82 +246,101 @@ void toggleRelay(bool on) {
 }
 
 
+static unsigned long lastNlUpdate = 0;
+
 void handleNightlight() {
   unsigned long now = millis();
   if (now < 100 && lastNlUpdate > 0) lastNlUpdate = 0; // take care of millis() rollover
   if (now - lastNlUpdate < 100) return; // allow only 10 NL updates per second
   lastNlUpdate = now;
 
-  if (nightlightActive)
-  {
-    if (!nightlightActiveOld) //init
-    {
+  if (nightlightActive) {
+    // disable global brightness and segment transitions during nighlight (nightlight is a long transition on its own)
+    strip.setTransition(0);
+
+    if (!nightlightActiveOld) { //init
+      DEBUG_PRINTF_P(PSTR("Nightlight started for %u minutes.\n"), (unsigned)nightlightDelayMins);
       nightlightStartTime = now;
-      nightlightDelayMs = (unsigned)(nightlightDelayMins*60000);
       nightlightActiveOld = true;
-      briNlT = bri;
-      for (unsigned i=0; i<4; i++) colNlT[i] = colPri[i]; // remember starting color
-      if (nightlightMode == NL_MODE_SUN)
-      {
+      if (nightlightMode == NL_MODE_SUN) {
         //save current
         colNlT[0] = effectCurrent;
         colNlT[1] = effectSpeed;
         colNlT[2] = effectPalette;
-
-        strip.getFirstSelectedSeg().setMode(FX_MODE_STATIC); // make sure seg runtime is reset if it was in sunrise mode
-        effectCurrent = FX_MODE_SUNRISE;            // colorUpdated() will take care of assigning that to all selected segments
-        effectSpeed = nightlightDelayMins;
+        // set SUNRISE effect
+        effectCurrent = FX_MODE_SUNRISE;
+        effectSpeed = min(60, (int)nightlightDelayMins);  //currently limited to 60 minutes
         effectPalette = 0;
-        if (effectSpeed > 60) effectSpeed = 60; //currently limited to 60 minutes
-        if (bri) effectSpeed += 60; //sunset if currently on
+        if (bri) effectSpeed += 60; //sunset if currently on (0-60 sunrise; 60-120 sunset)
+        applyValuesToSelectedSegs();
+        // reuse briNlT as a flag for sunrise/sunset
         briNlT = !bri; //true == sunrise, false == sunset
-        if (!bri) bri = briLast;
-        colorUpdated(CALL_MODE_NO_NOTIFY);
+        if (!bri) toggleOnOff();  // restarts effects, restores last known brightness & sets timer for actually applying brightness (in handleBrightness())
+        else strip.restartRuntime();
+      } else {
+        briNlT = bri; // starting brightness
+        for (unsigned i=0; i<4; i++) colNlT[i] = colPri[i]; // remember starting color
       }
+      notify(CALL_MODE_NIGHTLIGHT); // inform clients of brightness & color change
+      interfaceUpdateCallMode = CALL_MODE_NIGHTLIGHT;
     }
-    float nper = (now - nightlightStartTime)/((float)nightlightDelayMs);
-    if (nightlightMode == NL_MODE_FADE || nightlightMode == NL_MODE_COLORFADE)
-    {
-      bri = briNlT + ((nightlightTargetBri - briNlT)*nper);
-      if (nightlightMode == NL_MODE_COLORFADE)                                         // color fading only is enabled with "NF=2"
-      {
-        for (unsigned i=0; i<4; i++) colPri[i] = colNlT[i]+ ((colSec[i] - colNlT[i])*nper);   // fading from actual color to secondary color
-      }
-      colorUpdated(CALL_MODE_NO_NOTIFY);
-    }
-    if (nper >= 1) //nightlight duration over
-    {
+
+    int tper = (now - nightlightStartTime) / (nightlightDelayMins * 60);
+    if (tper >= 1000) { //nightlight duration over
+      DEBUG_PRINTLN(F("Nightlight finished."));
       nightlightActive = false;
-      if (nightlightMode == NL_MODE_SET)
-      {
-        bri = nightlightTargetBri;
-        colorUpdated(CALL_MODE_NO_NOTIFY);
+      nightlightActiveOld = false;
+      switch (nightlightMode) {
+        case NL_MODE_COLORFADE:
+        case NL_MODE_FADE:
+        case NL_MODE_SET:
+          bri = nightlightTargetBri;
+          if (bri == 0) briLast = briNlT; // set brigthness at the start of nightlight as briLast
+          break;
+        case NL_MODE_SUN:
+          if (!briNlT) { //turn off if sunset
+            effectCurrent = colNlT[0];
+            effectSpeed = colNlT[1];
+            effectPalette = colNlT[2];
+            applyValuesToSelectedSegs();
+            toggleOnOff();
+          }
+          break;
       }
-      if (bri == 0) briLast = briNlT;
-      if (nightlightMode == NL_MODE_SUN)
-      {
-        if (!briNlT) { //turn off if sunset
-          effectCurrent = colNlT[0];
-          effectSpeed = colNlT[1];
-          effectPalette = colNlT[2];
-          toggleOnOff();
-          applyFinalBri();
+      applyFinalBri();
+      strip.setTransition(transitionDelay); // re-enable transitions
+      notify(CALL_MODE_NIGHTLIGHT); // inform clients of brightness & color change
+      interfaceUpdateCallMode = CALL_MODE_NIGHTLIGHT;
+      if (macroNl > 0) applyPreset(macroNl);
+    } else {
+      switch (nightlightMode) {
+        case NL_MODE_COLORFADE:
+          for (unsigned i=0; i<4; i++) colPri[i] = colNlT[i]+ ((colSec[i] - colNlT[i])*tper)/1000;   // fading from actual color to secondary color
+          applyValuesToSelectedSegs();
+          // fallthrough (legacy behaviour)
+        case NL_MODE_FADE: {
+          uint8_t briTO = briT;
+          briT = briNlT + ((nightlightTargetBri - briNlT)*tper)/1000;
+          if (briT != briTO) applyBri();
+          break;
         }
       }
-
-      if (macroNl > 0)
-        applyPreset(macroNl);
-      nightlightActiveOld = false;
     }
-  } else if (nightlightActiveOld) //early de-init
-  {
+  } else if (nightlightActiveOld) { //early de-init (stopped midtransition)
     if (nightlightMode == NL_MODE_SUN) { //restore previous effect
       effectCurrent = colNlT[0];
       effectSpeed = colNlT[1];
       effectPalette = colNlT[2];
-      colorUpdated(CALL_MODE_NO_NOTIFY);
+      applyValuesToSelectedSegs();
+    } else {
+      bri = briNlT; // restore original brightness
     }
     nightlightActiveOld = false;
+    applyFinalBri();
+    strip.setTransition(transitionDelay); // re-enable transitions
+    notify(CALL_MODE_NIGHTLIGHT); // inform clients of brightness & color change
+    interfaceUpdateCallMode = CALL_MODE_NIGHTLIGHT;
+    DEBUG_PRINTLN(F("Nightlight interrupted."));
   }
 }
 

@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2605100
+#define VERSION 2605180
 #else
 #define VERSION BUILD
 #endif
@@ -328,10 +328,6 @@ WLED_GLOBAL uint32_t (*gamma32Func)(uint32_t) _INIT(nullGamma32);
 WLED_GLOBAL byte colPri[] _INIT_N(({ 255, 160, 0, 0 }));  // current RGB(W) primary color. colPri[] should be updated if you want to change the color.
 WLED_GLOBAL byte colSec[] _INIT_N(({ 0, 0, 0, 0 }));      // current RGB(W) secondary color
 
-WLED_GLOBAL byte nightlightTargetBri _INIT(0);      // brightness after nightlight is over
-WLED_GLOBAL byte nightlightDelayMins _INIT(60);
-WLED_GLOBAL byte nightlightMode      _INIT(NL_MODE_FADE); // See const.h for available modes. Was nightlightFade
-
 WLED_GLOBAL byte briMultiplier _INIT(100);          // % of brightness to set (to limit power, if you set it to 50 and set bri to 255, actual brightness will be 127)
 
 // User Interface CONFIG
@@ -506,14 +502,15 @@ WLED_GLOBAL uint8_t       randomPaletteChangeTime  _INIT(5);      // amount of t
 WLED_GLOBAL bool          useHarmonicRandomPalette _INIT(true);   // use *harmonic* random palette generation (nicer looking) or truly random
 
 // nightlight
-WLED_GLOBAL bool nightlightActive _INIT(false);
-WLED_GLOBAL bool nightlightActiveOld _INIT(false);
-WLED_GLOBAL uint32_t nightlightDelayMs _INIT(10);
+WLED_GLOBAL byte nightlightTargetBri   _INIT(0);                  // brightness after nightlight is over
+WLED_GLOBAL byte nightlightMode        _INIT(NL_MODE_FADE);       // See const.h for available modes. Was nightlightFade
+WLED_GLOBAL bool nightlightActive      _INIT(false);
+WLED_GLOBAL bool nightlightActiveOld   _INIT(false);
+WLED_GLOBAL byte nightlightDelayMins   _INIT(60);                 // nighlight duration in minutes
 WLED_GLOBAL byte nightlightDelayMinsDefault _INIT(nightlightDelayMins);
 WLED_GLOBAL unsigned long nightlightStartTime;
-WLED_GLOBAL unsigned long lastNlUpdate;
-WLED_GLOBAL byte briNlT _INIT(0);                     // current nightlight brightness
-WLED_GLOBAL byte colNlT[] _INIT_N(({ 0, 0, 0, 0 }));        // current nightlight color
+WLED_GLOBAL byte briNlT                _INIT(0);                  // brightness at the start of nightlight
+WLED_GLOBAL byte colNlT[]              _INIT_N(({ 0, 0, 0, 0 })); // colors at the start of nightlight
 
 // brightness
 WLED_GLOBAL unsigned long lastOnTime _INIT(0);
