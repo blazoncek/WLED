@@ -1901,7 +1901,7 @@ void WS2812FX::calcMilliAmpsAvg() {
 }
 
 void WS2812FX::show() {
-  if (!_pixels) return; // no pixels allocated, nothing to show
+  if (!_pixels || isUpdating()) return; // no pixels allocated, nothing to show or data is still being sent to LEDs
 
   unsigned long showNow = millis();
   size_t diff = showNow - _lastShow;
