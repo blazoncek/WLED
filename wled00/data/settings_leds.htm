@@ -899,10 +899,20 @@ Swap: <select id="xw${s}" name="XW${s}">
 			usedPins = [... new Set(usedPins)];
 			LTs.forEach((s,i)=>{
 				if (sel && sel == s) return;
+				let t = parseInt(s.value); // type
+				let n = s.name.substring(2,3); // bus number (0-Z) (must no use chrID(i), see if above)
+				let myPins = [];
+				// retrieve (ignore) one's own pins (replace select with input if dropdowns are not used)
+				if (!(isHub75(t) || isVir(t))) {
+					qSA(`.iST #pins${n} select[name^=G]`).forEach((r,k)=>{
+						if (parseInt(r.value) > -1) myPins.push(parseInt(r.value));
+					});
+				}
+				// disable select options (output types) with conflicting (unmodifiable) pins
 				for (let o of s.options) {
 					if (o.dataset.pins) {
 						let pins = o.dataset.pins.split(',').map(x=>parseInt(x));
-						if (pins.some(p=>usedPins.includes(p))) o.disabled = true;
+						if (pins.some(p=>usedPins.includes(p)) && !pins.some(p=>myPins.includes(p))) o.disabled = true;
 					}
 				}
 			});
