@@ -535,7 +535,9 @@ void checkTimers()
     // re-calculate sunrise and sunset just after midnight
     if (!hour(localTime) && minute(localTime)==1) calculateSunriseAndSunset();
 
+    #if defined(WLED_DEBUG) && defined(WLED_DEBUG_STATS)
     DEBUG_PRINTF_P(PSTR("Local time: %02d:%02d\n"), hour(localTime), minute(localTime));
+    #endif
     for (unsigned i = 0; i < 8; i++)
     {
       if (timerMacro[i] != 0
@@ -552,7 +554,9 @@ void checkTimers()
     // sunrise macro
     if (sunrise) {
       time_t tmp = sunrise + timerMinutes[8]*60;  // NOTE: may not be ok
+      #if defined(WLED_DEBUG) && defined(WLED_DEBUG_STATS)
       DEBUG_PRINTF_P(PSTR("Trigger time: %02d:%02d\n"), hour(tmp), minute(tmp));
+      #endif
       if (timerMacro[8] != 0
           && hour(tmp) == hour(localTime)
           && minute(tmp) == minute(localTime)
@@ -566,7 +570,9 @@ void checkTimers()
     // sunset macro
     if (sunset) {
       time_t tmp = sunset + timerMinutes[9]*60;  // NOTE: may not be ok
+      #if defined(WLED_DEBUG) && defined(WLED_DEBUG_STATS)
       DEBUG_PRINTF_P(PSTR("Trigger time: %02d:%02d\n"), hour(tmp), minute(tmp));
+      #endif
       if (timerMacro[9] != 0
           && hour(tmp) == hour(localTime)
           && minute(tmp) == minute(localTime)
