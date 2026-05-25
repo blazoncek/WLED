@@ -716,7 +716,7 @@ class Segment {
                                                                                 { addPixelColor(n, CRGBA(r,g,b), preserveCR); }
     inline void fadePixelColor(uint16_t n, uint8_t fade) const                  { setPixelColor(n, getPixelColor(n).nscale8_video(fade)); }
     [[gnu::hot]] CRGBA color_from_palette(uint16_t, bool mapping, bool moving, uint8_t mcol, uint8_t pbri = 255) const;
-    inline CRGBA color_wheel(uint8_t pos) const                                 { return color_from_palette(pos, false, false, 255); };
+    inline CRGBA color_wheel(uint8_t pos) const                                 { return color_from_palette(pos, false, true, 255); };
     // 2D matrix
     unsigned virtualWidth()  const;       // segment width in virtual pixels (accounts for groupping and spacing)
     unsigned virtualHeight() const;       // segment height in virtual pixels (accounts for groupping and spacing)
