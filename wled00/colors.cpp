@@ -15,6 +15,18 @@ CRGBA& CRGBA::nscale8(uint8_t scale) {
   return *this;
 }
 
+CRGBA& CRGBA::desaturate(uint8_t amount) {
+  int v = getPureValue();
+  if (amount == 255) {
+    r = g = b = v;
+  } else if (amount > 0) {
+    r = (r * (255-amount) + v * amount) >> 8;
+    g = (g * (255-amount) + v * amount) >> 8;
+    b = (b * (255-amount) + v * amount) >> 8;
+  }
+  return *this;
+}
+
 CRGBA& __attribute__((optimize("O2"))) CRGBA::nadd(CRGBA c, bool preserveCR) {
   uint32_t c2 = c.color32 & 0x00FFFFFF;             // ignore alpha/white of color2
   if (c.a < 255) fast_color_scale(c2, c.a);         // scale color2 by its alpha

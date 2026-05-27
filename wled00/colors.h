@@ -147,6 +147,9 @@ struct CRGBA {
   inline CRGBA& fadeToBlackBy(uint8_t amount) { return nscale8(255 - amount); }
 
   inline uint8_t getAverageLight() const { return (uint16_t(r) + uint16_t(g) + uint16_t(b)) * uint16_t(a) / (3*255); }
+  inline uint8_t getPureValue() const { return (unsigned(r) * 77 + unsigned(g) * 150 + unsigned(b) * 29) >> 8; }
+
+  CRGBA&  desaturate(uint8_t amount);
 
   // custom operators to shorten code (see: https://en.cppreference.com/w/cpp/language/operators.html for friend operators)
 
