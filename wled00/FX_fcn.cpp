@@ -206,7 +206,7 @@ CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) {
   //default palette. Differs depending on effect
   if (pal == 0) pal = _default_palette; // _default_palette is set in setMode()
   switch (pal) {
-    case 0: //default palette. Exceptions for specific effects above
+    case 0: //default palette. Invalid entry, kept for "just in case".
       targetPalette = PartyColors_p;
       break;
     case 1: //randomly generated palette
@@ -1122,7 +1122,7 @@ void Segment::blur1D(uint8_t blur_amount, bool smear) const {
  * @param i Palette Index (if mapping is true, the full palette will be _virtualSegmentLength long, if false, 255). Will wrap around automatically.
  * @param mapping if true, LED position in segment is considered for color
  * @param moving FastLED palettes will usually wrap back to the start smoothly. Set to true if effect has moving palette and you want wrap.
- * @param mcol If the default palette 0 is selected, return the standard color 0, 1 or 2 instead. If >2, Party palette is used instead
+ * @param mcol If the default palette 0 is selected, return the standard color 0, 1 or 2 instead. If >2 rainbow colors are used if not pixel-mapped otherwise Default/Partycolors palette
  * @param pbri Value to scale the brightness of the returned color by. Default is 255. (no scaling)
  * @returns Single color from palette
  */
