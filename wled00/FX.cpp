@@ -6446,103 +6446,88 @@ static const char _data_FX_MODE_2DMINESWEEPER[] PROGMEM = "Minesweeper@;;;2";
 */
 
 /*
-/  Perlinscape effect - a Perlin noise Landscape
-*   Created by stepko (@St3p40 https://github.com/St3p40) as part of Stepko Land on soulmatelights.com
-*   Adapted to WLED by Bob Loeffler (@bobloeffler68) with additional features (and help from Claude)
-*   First slider is for speed
-*   Second slider is for zooming in/out (Perlin scaling)
-*   Third slider is the X multiplier
-*   Fourth slider is the Y multiplier
-*   Second checkbox will rotate the image
-*   Third checkbox will randomize the horizonal and vertical directions
+/  Perlin Noise 3D effect - a Perlin noise Landscape
+*   Created by Stein (https://editor.soulmatelights.com/gallery/815-perlins-noise-3d)
+*   Adapted for WLED by Blaz Kristan (@blazoncek), credit Bob Loeffler (@bobloeffler68)
+*   Speed slider is for color changing speed
+*   Intensity slider is for zooming in/out (Perlin scaling)
+*   Custom1 slider is the X/Y multiplier/skewing
+*   Custom3 slider is the scape shifting/moving speed
+*   Check1 checkbox will randomize shifting/moving directions
 */
 uint16_t mode_2D_perlinscape() {
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static();  // not a 2D set-up
+  if (!SEGENV.allocateData(4 * sizeof(int32_t) + 2 * sizeof(uint32_t))) return mode_static();
 
-  const uint16_t width = SEG_W;
-  const uint16_t height = SEG_H;
+  const unsigned width  = SEG_W;
+  const unsigned height = SEG_H;
+  const unsigned zoom   = SEGMENT.intensity + 1;                                  // divide by 64 to get actual zoom level (1/64 - 4; ~ 0.015x - 4x)
+  const unsigned Xmult  = SEGMENT.custom1 > 128 ? SEGMENT.custom1 : 128;          // skew X dimension
+  const unsigned Ymult  = SEGMENT.custom1 < 128 ? (255 - SEGMENT.custom1) : 128;  // skew Y dimension
 
-  if (!SEGENV.allocateData(4 * sizeof(float) + sizeof(uint32_t))) return mode_static();
-
-  uint32_t speedDiv = map(SEGMENT.speed, 0, 255, 50, 1);
-  uint32_t t        = strip.now / speedDiv;
-  uint8_t  Xmult    = SEGMENT.custom1 >> 2;
-  uint8_t  Ymult    = SEGMENT.custom2 >> 2;
-
-  uint32_t prevT = reinterpret_cast<uint32_t&>(*SEGENV.data);
-  float offX  = reinterpret_cast<float&>(*(SEGENV.data + sizeof(uint32_t)));
-  float offY  = reinterpret_cast<float&>(*(SEGENV.data + sizeof(uint32_t) +   sizeof(float)));
-  float stepX = reinterpret_cast<float&>(*(SEGENV.data + sizeof(uint32_t) + 2*sizeof(float)));
-  float stepY = reinterpret_cast<float&>(*(SEGENV.data + sizeof(uint32_t) + 3*sizeof(float)));
+  int32_t  &offsetX  = *(reinterpret_cast<int32_t*>(SEGENV.data                       ));
+  int32_t  &offsetY  = *(reinterpret_cast<int32_t*>(SEGENV.data  +     sizeof(int32_t)));
+  int32_t  &deltaX   = *(reinterpret_cast<int32_t*>(SEGENV.data  + 2 * sizeof(int32_t)));
+  int32_t  &deltaY   = *(reinterpret_cast<int32_t*>(SEGENV.data  + 3 * sizeof(int32_t)));
+  uint32_t &nextFlip = *(reinterpret_cast<uint32_t*>(SEGENV.data + 4 * sizeof(int32_t)));
+  uint32_t &nextBlob = *(reinterpret_cast<uint32_t*>(SEGENV.data + 4 * sizeof(int32_t) + sizeof(uint32_t)));
+  uint16_t &z        = SEGENV.aux0;
 
   if (SEGENV.call == 0) {
-    SEGENV.aux0 = hw_random16(5000, 10000);
-    SEGENV.aux1 = 0;
-    offX  = 0.0f;
-    offY  = 0.0f;
-    stepX = 1.0f;
-    stepY = 1.0f;
-    prevT = t;
+    SEGENV.step = strip.now + hw_random16(5000, 10000); // next random direction update
+    offsetX = 0;
+    offsetY = 0;
+    deltaX  = 1;
+    deltaY  = 1;
+    nextBlob = strip.now + 100;
+    nextFlip = strip.now + 45;
   }
 
-  if (SEGMENT.check3 && (strip.now - SEGENV.step > SEGENV.aux0)) {
-    // if randomizing, change/randomize direction (aux1) every 5-10s (aux0)
-    SEGENV.aux0 = hw_random16(5000, 10000);
-    SEGENV.aux1 = hw_random8(4);
-    SEGENV.step = strip.now;
+  // every now and then change move direction and speed
+  if (strip.now > SEGENV.step) {
+    if (SEGMENT.check1) {
+      constexpr int scroll = 2;
+      deltaX += hw_random8(0, 5) - 2;
+      deltaX = constrain(deltaX, -scroll, scroll);
+      deltaY += hw_random8(0, 5) - 2;
+      deltaY = constrain(deltaY, -scroll, scroll);
+    }
+    SEGENV.step = strip.now + hw_random16(5000, 10000);
   }
 
-  bool flipX = SEGMENT.check3 ? (SEGENV.aux1 & 0x01) : false;
-  bool flipY = SEGMENT.check3 ? (SEGENV.aux1 & 0x02) : false;
-
-  float targetX = flipX ? -1.0f : 1.0f;
-  float targetY = flipY ? -1.0f : 1.0f;
-  stepX += (targetX - stepX) * 0.05f;
-  stepY += (targetY - stepY) * 0.05f;
-
-  uint32_t dt = t - prevT;
-  offX += stepX * dt;
-  offY += stepY * dt;
-  prevT = t;
-
-  int32_t tX = (int32_t)offX;
-  int32_t tY = (int32_t)offY;
-
-  // Rotation
-  float cosA = 1.0f, sinA = 0.0f;
-  float cx = width * 0.5f;
-  float cy = height * 0.5f;
-
-  if (SEGMENT.check2) {
-    float angle = strip.now / 5000.0f;
-    cosA = cos_approx(angle);
-    sinA = sin_approx(angle);
+  // increase hue and Perlin elevation every ~100 ms
+  if (nextBlob < strip.now) {
+    z++;
+    nextBlob = strip.now + (3 * FRAMETIME_FIXED + (255 - SEGMENT.speed));
+  }
+  // move offset every ~45ms
+  if (nextFlip < strip.now) {
+    offsetX += deltaX;
+    offsetY += deltaY;
+    nextFlip = strip.now + (FRAMETIME_FIXED * (32 - SEGMENT.custom3));
   }
 
-  float scale = map(SEGMENT.intensity, 0, 255, 10, 200) / 100.0f;  // range 0.1 to 2.0
-
-  for (byte x = 0; x < width; x++) {
-    for (byte y = 0; y < height; y++) {
-      float rx = cosA * (x - cx) - sinA * (y - cy) + cx;
-      float ry = sinA * (x - cx) + cosA * (y - cy) + cy;
-
-      float scaled_x = rx * Xmult * scale;
-      float scaled_y = ry * Ymult * scale;
-
+  for (unsigned x = 0; x < width; x++) {
+    for (unsigned y = 0; y < height; y++) {
+      uint16_t tX = x * zoom * Xmult / 255 + offsetX;
+      uint16_t tY = y * zoom * Ymult / 255 + offsetY;
+      // raw RGB mode
+      uint8_t h = z + inoise8(tX, tY, z);
+      uint8_t s = inoise8(tX, tY + z);
+      uint8_t v = qadd8(64,inoise8(tX + z, tY));
+      CRGBA color;
       if (SEGMENT.palette) {
         // Palette mode (i.e. not a Default palette)
-        uint8_t paletteIndex = perlin8(scaled_x, scaled_y, t);
-        uint8_t brightness   = perlin8(scaled_x + tX, scaled_y + tY);
-        SEGMENT.setPixelColorXY(x, y, SEGMENT.color_from_palette(paletteIndex, false, PALETTE_FIXED, brightness));
+        color = SEGMENT.color_from_palette(h, false, PALETTE_FIXED, 255, v).desaturate(255-s);
       } else {
-        // Raw RGB mode
-        SEGMENT.setPixelColorXY(x, y, perlin8(scaled_x, scaled_y, t), perlin8(scaled_x, scaled_y + tY), perlin8(scaled_x + tX, scaled_y));
+        color = CHSV32(h, qadd8(16,s), v);
       }
+      SEGMENT.setPixelColorXY(x, y, color);
     }
   }
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DPERLINSCAPE[] PROGMEM = "Perlinscape@!,Zoom,X multiplier,Y multiplier,,,Rotate,Random;;!;2;";
+static const char _data_FX_MODE_2DPERLINSCAPE[] PROGMEM = "Perlinscape@!,Zoom,Skew,,Move,Random;;!;2;sx=64,c3=15,o1=1";
 
 
 ////////////////////////////////////////////
