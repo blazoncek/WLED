@@ -162,11 +162,18 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #endif
 
 #ifndef WLED_MAX_BUTTONS
-  #define WLED_MAX_BUTTONS 32
+  #if WLED_NUM_PINS > 32
+    #define WLED_MAX_BUTTONS 32
+  #else
+    #define WLED_MAX_BUTTONS (WLED_NUM_PINS-1)
+  #endif
 #else
   #if WLED_MAX_BUTTONS < 2
     #undef WLED_MAX_BUTTONS
     #define WLED_MAX_BUTTONS 2
+  #elif WLED_MAX_BUTTONS >= WLED_NUM_PINS
+    #undef WLED_MAX_BUTTONS
+    #define WLED_MAX_BUTTONS (WLED_NUM_PINS-1)
   #endif
 #endif
 
