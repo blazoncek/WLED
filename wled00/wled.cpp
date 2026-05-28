@@ -344,7 +344,8 @@ void WLED::setup()
 #endif
 
 #ifdef ARDUINO_ARCH_ESP32
-  pinMode(hardwareRX, INPUT_PULLDOWN); delay(1);        // suppress noise in case RX pin is floating (at low noise energy) - see issue #3128
+  //pinMode(hardwareRX, INPUT_PULLDOWN); delay(1);        // suppress noise in case RX pin is floating (at low noise energy) - see issue #3128
+  gpio_pulldown_en((gpio_num_t)hardwareRX); delay(1);   // pinMode() manipulates ESP's GPIO muxer; suppress noise in case RX pin is floating (at low noise energy) - see issue #3128
 #endif
 #ifdef WLED_BOOTUPDELAY
   delay(WLED_BOOTUPDELAY); // delay to let voltage stabilize, helps with boot issues on some setups
@@ -458,14 +459,16 @@ void WLED::setup()
 
   DEBUG_PRINTLN(F("Starting WiFi"));
   // configurable WiFi options are set in cfg.cpp
-  WiFi.persistent(false);
   //WiFi.enableLongRange(true);
   WiFi.onEvent(WiFiEvent);
 #if defined(ARDUINO_ARCH_ESP32) && ESP_IDF_VERSION_MAJOR==4
+  WiFi.persistent(true);          // storing credentials in NVM fixes boot-up pause as connection is much faster, is disabled after first connection
   WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
   #if defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(WLED_ENABLE_HUB75MATRIX)
   WiFi.useStaticBuffers(true);    // use preallocated buffers (for speed); WARNING: uses 60kB of RAM!!!
   #endif
+#elif defined(ESP8266)
+  WiFi.persistent(false);         // on ESP8266 using NVM for wifi config has no benefit of faster connection
 #endif
   delay(15);                      // wait for hardware to be ready
 
@@ -674,15 +677,17 @@ void WLED::initAP(bool resetAP)
 
 // initConnection() (re)starts connection to configured WiFi/SSIDs
 // once the connection is established connected() is called
-void WLED::initConnection()
+void WLED::initConnection(bool force)
 {
   DEBUG_PRINTF_P(PSTR("initConnection() called @ %lus.\n"), millis()/1000);
   WiFi.disconnect(); // close old connections
-  //delay(5);          // wait for hardware to be ready
+  delay(5);          // wait for hardware to be ready
 
   lastReconnectAttempt = millis();
 
-  if (isWiFiConfigured()) {
+  if (!isWiFiConfigured()) return;
+
+  if (force) {
     DEBUG_PRINTF_P(PSTR("WiFi: Connecting to %s... @ %lus\n"), multiWiFi[selectedWiFi].clientSSID, millis()/1000);
     staActive = true;
 
@@ -703,6 +708,12 @@ void WLED::initConnection()
     // until connection is established or new configuration is submitted or disconnect() is called
     #ifndef WLED_DISABLE_ESPNOW
     scanESPNow = millis() + 30000;
+    #endif
+  } else {
+    WiFi.reconnect();
+    delay(5);            // wait for hardware to be ready
+    #ifdef WLED_DEBUG
+    WiFi.printDiag(DEBUGOUT);
     #endif
   }
 }
@@ -786,6 +797,8 @@ void WLED::connected()
   showWelcomePage = false;
   interfacesInited = true;
   DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
+
+  UsermodManager::connected();
 }
 
 void WLED::handleConnection()
@@ -801,7 +814,6 @@ void WLED::handleConnection()
         if (improvActive > 1) sendImprovIPRPCResult(ImprovRPCType::Command_Wifi);
       }
       connected();  // will init ESP-NOW
-      UsermodManager::connected();
       // shut down AP
       if (apBehavior != AP_BEHAVIOR_ALWAYS && apActive) {
         stopAP(false); // do not stop ESP-NOW
@@ -914,7 +926,7 @@ ESP-NOW  inited in AP mode (channel: 6/1).
     } else if (found > 0 || multiWiFi.size() == 1) {
       DEBUG_PRINTF_P(PSTR("WiFi: Initial connect or forced reconnect. @ %lus\n"), now/1000);
       selectedWiFi = found>0 ? found-1 : 0; // if configured WiFi was not found use 1st
-      initConnection(); // start connecting to preferred/configured WiFi
+      initConnection(true); // start connecting to preferred/configured WiFi
       forceReconnect = false;
       interfacesInited = false;
 #ifndef WLED_DISABLE_ESPNOW
@@ -1013,13 +1025,13 @@ ESP-NOW  inited in AP mode (channel: 6/1).
   if (isAPmode) sendESPNowHeartBeat();
 #endif
 
-  // WiFi is configured (with multiple networks); try to reconnect if not connected after 12s (or 300s if clients are connected to AP)
+  // WiFi is configured (with multiple networks); try to reconnect if not connected after 18s (or 300s if clients are connected to AP)
   // this will cycle through all configured SSIDs (findWiFi() will select strongest)
   // ESP usually connects to WiFi within 10s but we should give it a bit of time before attempting another network
   // when a disconnect happens (see onEvent()) the WiFi scan is reinitiated and forced reconnect scheduled
   // if we are ESP-NOW sync slave, connectiong to WiFi must not happen automatically as it will disrupt ESP-NOW channel
   // but we need a way to occasionally reconnect.
-  if (isSTAmode && wifiConfigured && (now > lastReconnectAttempt + (apActive ? WLED_AP_TIMEOUT : 12000) && apClients == 0)) {
+  if (isSTAmode && wifiConfigured && (now > lastReconnectAttempt + (apActive ? WLED_AP_TIMEOUT : 18000) && apClients == 0)) {
     // this code is executed if ESP was unsuccessful in connecting to selected SSID or disconnect happened.
     // it is repeated every 12s to select different SSID from the list if connects are not successful.
     if (improvActive == 2) improvActive = 3;
@@ -1036,9 +1048,10 @@ ESP-NOW  inited in AP mode (channel: 6/1).
     }
 #endif
     DEBUG_PRINTF_P(PSTR("WiFi: Last reconnect (%lus) too old @ %lus.\n"), lastReconnectAttempt/1000, now/1000);
+    int8_t oldWiFi = selectedWiFi;
     if (++selectedWiFi >= multiWiFi.size()) selectedWiFi = 0; // we couldn't connect, try with another network from the list
-    initConnection();                                         // start connecting to selected SSID
-    if (selectedWiFi > 0 && selectedWiFi == findWiFi()-1) lastReconnectAttempt += 120000; // if we selected best SSID then postpone connecting for 2 min (wrapped around/single)
+    initConnection(oldWiFi != selectedWiFi);                  // start connecting to selected SSID
+    if (multiWiFi.size() == 1 || (selectedWiFi > 0 && selectedWiFi == findWiFi()-1)) lastReconnectAttempt += 120000; // if we selected best SSID then postpone connecting for 2 min (wrapped around/single)
     return;
   }
 

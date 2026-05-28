@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2605180
+#define VERSION 2605280
 #else
 #define VERSION BUILD
 #endif
@@ -862,7 +862,7 @@ public:
   void handleConnection();
   void stopAP(bool stopESPNow = true);
   void initAP(bool resetAP = false);
-  void initConnection();
+  void initConnection(bool force = false);
   void connected();
   #if defined(STATUSLED)
   void handleStatusLED();

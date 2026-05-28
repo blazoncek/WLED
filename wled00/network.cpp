@@ -476,6 +476,12 @@ void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
       // followed by IDLE and SCAN_DONE
       DEBUG_PRINTF_P(PSTR("WiFi-E: Connected! @ %lus\n"), millis()/1000);
+      #ifdef ARDUINO_ARCH_ESP32
+      esp_wifi_set_storage(WIFI_STORAGE_RAM); // disable further updates of NVM credentials to prevent wear on flash (same as WiFi.persistent(false) but updates immediately, arduino wifi deficiency workaround)
+      #endif
+      #ifdef WLED_DEBUG
+      WiFi.printDiag(DEBUGOUT);
+      #endif
       wasConnected = true;
       #ifndef WLED_DISABLE_ESPNOW
       heartbeatESPNow = 0;
