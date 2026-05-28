@@ -2282,31 +2282,41 @@ bool WS2812FX::deserializeMap(unsigned n) {
   currentLedmap = 0;
   if (n == 0 || isFile) interfaceUpdateCallMode = CALL_MODE_WS_SEND; // schedule WS update (to inform UI)
 
-  if (!isFile && n==0 && isMatrix) {
-    // 2D panel support creates its own ledmap (on the fly) if a ledmap.json does not exist
-    setUpMatrix();
+  if (!isFile) {
+    #ifndef WLED_DISABLE_2D
+    if (n==0 && isMatrix) {
+      // 2D panel support creates its own ledmap (on the fly) if a ledmap.json does not exist
+      setUpMatrix();
+    }
+    #endif
     return false;
   }
 
-  if (!isFile || !requestJSONBufferLock(7)) return false;
-
-  StaticJsonDocument<64> filter;
-  filter[F("width")]  = true;
-  filter[F("height")] = true;
-  if (!readObjectFromFile(fileName, nullptr, pDoc, &filter)) {
-    DEBUG_PRINTF_P(PSTR("ERROR Invalid ledmap in %s\n"), fileName);
-    releaseJSONBufferLock();
-    return false; // if file does not load properly then exit
-  } else
-    DEBUG_PRINTF_P(PSTR("Reading LED map from %s\n"), fileName);
+  File f = WLED_FS.open(fileName, "r");
+  if (!f) {
+    DEBUG_PRINTF_P(PSTR("ledmap %s failed to open.\n"), fileName);
+    return false;
+  }
 
   #ifndef WLED_DISABLE_2D
-  // if we are loading default ledmap (at boot) set matrix width and height from the ledmap (compatible with WLED MM ledmaps)
-  JsonObject root = pDoc->as<JsonObject>();
-  if (n == 0 && (!root[F("width")].isNull() || !root[F("height")].isNull())) {
-    Segment::maxWidth  = min(max(root[F("width")].as<int>(), 1), 255);
-    Segment::maxHeight = min(max(root[F("height")].as<int>(), 1), 255);
-    isMatrix = true;
+  if (n == 0) {
+    StaticJsonDocument<64> filter;
+    StaticJsonDocument<256> doc;
+    filter[F("width")]  = true;
+    filter[F("height")] = true;
+    if (deserializeJson(doc, f, DeserializationOption::Filter(filter)) == DeserializationError::Ok) {
+      // if we are loading default ledmap (at boot) set matrix width and height from the ledmap (compatible with WLED MM ledmaps)
+      JsonObject root = doc.as<JsonObject>();
+      if (!root[F("width")].isNull() || !root[F("height")].isNull()) {
+        Segment::maxWidth  = min(max(root[F("width")].as<int>(), 1), 255);
+        Segment::maxHeight = min(max(root[F("height")].as<int>(), 1), 255);
+        isMatrix = true;
+        DEBUG_PRINTF_P(PSTR("2D Ledmap: %d,%d\n"), (int)Segment::maxWidth, (int)Segment::maxHeight);
+      } else {
+        isMatrix = false;
+        DEBUG_PRINTLN(F("Not a 2D ledmap."));
+      }
+    }
   }
   #endif
 
@@ -2314,6 +2324,7 @@ bool WS2812FX::deserializeMap(unsigned n) {
   customMappingTable = static_cast<uint16_t*>(p_malloc(sizeof(uint16_t)*getLengthTotal()));
 
   if (customMappingTable) {
+    f.seek(0);
     // initialize mapping table with invalid entries (2D part)
     size_t minMappingSize = min(Segment::maxWidth * Segment::maxHeight, (int)getLengthTotal());
     for (size_t i = 0; i < minMappingSize; i++) customMappingTable[i] = isMatrix ? 0xFFFF : i;
@@ -2321,14 +2332,12 @@ bool WS2812FX::deserializeMap(unsigned n) {
     for (size_t i = minMappingSize; i < getLengthTotal(); i++) customMappingTable[i] = i;
 
     DEBUG_PRINTF_P(PSTR("ledmap allocated: %uB @ %p\n"), sizeof(uint16_t)*getLengthTotal(), customMappingTable);
-    File f = WLED_FS.open(fileName, "r");
     // look for "map":[ (which may include spaces/newlines in between tokens)
     if (!f.find("\"map\"") || !f.find(':') || !f.find('[')) { // stops after the "map":[
       DEBUG_PRINTF_P(PSTR("ERROR Invalid ledmap in %s: no map found\n"), fileName);
       p_free(customMappingTable);
       customMappingTable = nullptr;
       f.close();
-      releaseJSONBufferLock();
       return false;
     }
 
@@ -2393,7 +2402,6 @@ bool WS2812FX::deserializeMap(unsigned n) {
     DEBUG_PRINTLN(F("ERROR LED map allocation error."));
   }
 
-  releaseJSONBufferLock();
   return (customMappingSize > 0);
 }
 
