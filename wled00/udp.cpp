@@ -265,6 +265,7 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
     size_t inactiveSegs = 0;
     for (size_t i = 0; i < numSrcSegs && i < WS2812FX::getMaxSegments(); i++) {
       unsigned ofs = 41 + i*udpIn[40]; //start of segment offset byte
+      if (ofs + 36 > UDP_IN_MAXSIZE) break; // avoid reading outside of UDP packet (wrong data?)
       unsigned id = udpIn[0 +ofs];
       DEBUG_PRINTF_P(PSTR("UDP segment received: %u\n"), id);
       if      (id >  strip.getSegmentsNum()) break;
@@ -513,8 +514,8 @@ void handleNotifications()
       }
       if (useMainSegmentOnly) strip.trigger();
       else                    strip.show();
-      return;
     }
+    return;
   }
 
   localIP = Network.localIP();
@@ -568,16 +569,16 @@ void handleNotifications()
 
   if (!receiveDirect) return;
 
-  //TPM2.NET
+  //TPM2.NET https://gist.github.com/jblang/89e24e2655be6c463c56
   if (udpIn[0] == 0x9c)
   {
-    //WARNING: this code assumes that the final TMP2.NET payload is evenly distributed if using multiple packets (ie. frame size is constant)
-    //if the number of LEDs in your installation doesn't allow that, please include padding bytes at the end of the last packet
+    // WARNING: this code assumes that the TMP2.NET payload is evenly distributed if using multiple packets (ie. frame size is constant)
+    // if the number of LEDs in your installation doesn't allow that, please include padding bytes at the end of the last packet
     byte tpmType = udpIn[1];
     if (tpmType == 0xaa) { //TPM2.NET polling, expect answer
       sendTPM2Ack(); return;
     }
-    if (tpmType != 0xda) return; //return if notTPM2.NET data
+    if (tpmType != 0xda || packetSize < 7 || udpIn[packetSize-1] != 0x36) return; //return if not TPM2.NET data (we don't handle Commands i.e. 0xC0)
 
     realtimeIP = (isSupp) ? notifier2Udp.remoteIP() : notifierUdp.remoteIP();
     realtimeLock(realtimeTimeoutMs, REALTIME_MODE_TPM2NET);
@@ -588,10 +589,18 @@ void handleNotifications()
     byte packetNum = udpIn[4]; //starts with 1!
     byte numPackets = udpIn[5];
 
+    // if we missed a packet or we are past last packet (malformed payload) just abort
+    if (tpmPacketCount < packetNum || tpmPacketCount > numPackets) {
+      tpmPacketCount = 0;
+      return;
+    }
+
     unsigned id = (tpmPayloadFrameSize/3)*(packetNum-1); //start LED
     unsigned totalLen = strip.getLengthTotal();
-    for (size_t i = 6; i < tpmPayloadFrameSize + 4U && id < totalLen; i += 3, id++) {
-      setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], 0);
+    size_t currentFrameSize = min(packetSize - 7, (size_t)tpmPayloadFrameSize);
+    for (size_t i = 0; i < currentFrameSize && id < totalLen; i += 3, id++) {
+      size_t ofs = 6 + i;
+      setRealtimePixel(id, udpIn[ofs], udpIn[ofs+1], udpIn[ofs+2], 0);
     }
     if (tpmPacketCount == numPackets) { //reset packet count and show if all packets were received
       tpmPacketCount = 0;
