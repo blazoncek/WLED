@@ -355,6 +355,20 @@ uint32_t sqrt32_bw(uint32_t x);
 #define floor_t floorf
 */
 
+// PRNG for 16bit and 8bit random numbers used by some effects (fastled replacement)
+namespace PRNG {
+  extern uint16_t seed;
+
+  inline void setSeed(uint16_t s) { seed = s; }
+  inline uint16_t getSeed() { return seed; }
+  uint16_t random16();
+  uint16_t random16(uint16_t lim);
+  uint16_t random16(uint16_t min, uint16_t lim);
+  uint8_t random8();
+  uint8_t random8(uint8_t lim);
+  uint8_t random8(uint8_t min, uint8_t lim);
+}
+
 //wled_serial.cpp
 void handleSerial();
 void updateBaudRate(uint32_t rate);

@@ -826,3 +826,21 @@ uint8_t perlin8(uint16_t x, uint16_t y) {
 uint8_t perlin8(uint16_t x, uint16_t y, uint16_t z) {
   return (((perlin3D_raw((uint32_t)x << 8, (uint32_t)y << 8, (uint32_t)z << 8, true) * 2015) >> 10) + 33168) >> 8; //scale to 16 bit, offset, then scale to 8bit
 }
+
+
+namespace PRNG {
+  uint16_t seed = 0x1234;
+
+  uint16_t random16() {
+      uint32_t s = seed;
+      s *= 0x9E37;
+      s ^= s >> 11;
+      seed = (s & 0xFFFF) ^ (s >> 16);
+      return seed;
+  }
+  uint16_t random16(uint16_t lim) { return ((uint32_t)random16() * lim) >> 16; }
+  uint16_t random16(uint16_t min, uint16_t lim) { uint16_t delta = lim - min; return random16(delta) + min; }
+  uint8_t random8() { return random16() & 0xFF; }
+  uint8_t random8(uint8_t lim) { return (uint8_t)(((uint16_t)random8() * lim) >> 8); }
+  uint8_t random8(uint8_t min, uint8_t lim) { uint8_t delta = lim - min; return random8(delta) + min; }
+}

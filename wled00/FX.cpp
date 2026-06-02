@@ -1546,30 +1546,30 @@ static const char _data_FX_MODE_MULTI_COMET[] PROGMEM = "Multi Comet@!,Fade;!,!;
  */
 uint16_t mode_random_chase(void) {
   if (SEGENV.call == 0) {
-    SEGENV.step = RGBW32(random8(), random8(), random8(), 0);
-    SEGENV.aux0 = random16();
+    SEGENV.step = RGBW32(PRNG::random8(), PRNG::random8(), PRNG::random8(), 0);
+    SEGENV.aux0 = PRNG::random16();
   }
-  unsigned prevSeed = random16_get_seed(); // save seed so we can restore it at the end of the function
+  unsigned prevSeed = PRNG::getSeed(); // save seed so we can restore it at the end of the function
   uint32_t cycleTime = 25 + (3 * (uint32_t)(255 - SEGMENT.speed));
   uint32_t it = strip.now / cycleTime;
   uint32_t color = SEGENV.step;
-  random16_set_seed(SEGENV.aux0);
+  PRNG::setSeed(SEGENV.aux0);
 
   for (int i = SEGLEN-1; i >= 0; i--) {
-    uint8_t r = random8(6) != 0 ? (color >> 16 & 0xFF) : random8();
-    uint8_t g = random8(6) != 0 ? (color >> 8  & 0xFF) : random8();
-    uint8_t b = random8(6) != 0 ? (color       & 0xFF) : random8();
+    uint8_t r = PRNG::random8(6) != 0 ? (color >> 16 & 0xFF) : PRNG::random8();
+    uint8_t g = PRNG::random8(6) != 0 ? (color >> 8  & 0xFF) : PRNG::random8();
+    uint8_t b = PRNG::random8(6) != 0 ? (color       & 0xFF) : PRNG::random8();
     color = RGBW32(r, g, b, 0);
     SEGMENT.setPixelColor(i, color);
     if (i == (int)SEGLEN-1 && SEGENV.aux1 != (it & 0xFFFFU)) { //new first color in next frame
       SEGENV.step = color;
-      SEGENV.aux0 = random16_get_seed();
+      SEGENV.aux0 = PRNG::getSeed();
     }
   }
 
   SEGENV.aux1 = it & 0xFFFF;
 
-  random16_set_seed(prevSeed); // restore original seed so other effects can use "random" PRNG
+  PRNG::setSeed(prevSeed); // restore original seed so other effects can use "random" PRNG
   return FRAMETIME;
 }
 static const char _data_FX_MODE_RANDOM_CHASE[] PROGMEM = "Stream 2@!;;";
@@ -2269,7 +2269,7 @@ static uint16_t ripple_base() {
     } else {//randomly create new wave
       if (hw_random16(IBN + 10000) <= (SEGMENT.intensity >> (is2D*3))) {
         ripples[i].state = 1;
-        ripples[i].pos = is2D ? ((hw_random8(SEG_W)<<8) | (hw_random8(SEG_H))) : random16(SEGLEN);
+        ripples[i].pos = is2D ? ((hw_random8(SEG_W)<<8) | (hw_random8(SEG_H))) : PRNG::random16(SEGLEN);
         ripples[i].color = hw_random8(); //color
       }
     }
@@ -3241,7 +3241,7 @@ uint16_t mode_exploding_fireworks(void)
       const unsigned half = cols/2;
       const unsigned quarter = cols/4;
       flare->pos = 0;
-      flare->posX = is2D ? hw_random16(half-quarter,half+quarter) : (SEGMENT.intensity > random8()); // will enable random firing side on 1D
+      flare->posX = is2D ? hw_random16(half-quarter,half+quarter) : (SEGMENT.intensity > hw_random8()); // will enable random firing side on 1D
       unsigned peakHeight = 75 + hw_random8(180); //0-255
       peakHeight = (peakHeight * (rows -1)) >> 8;
       flare->vel = sqrtf(-2.0f * gravity * float(peakHeight));
@@ -3814,17 +3814,17 @@ static const char _data_FX_MODE_PHASED[] PROGMEM = "Phased@!,!,,,,Noise;!,!;!";
 
 
 uint16_t mode_twinkleup(void) {                 // A very short twinkle routine with fade-in and dual controls. By Andrew Tuline.
-  unsigned prevSeed = random16_get_seed();      // save seed so we can restore it at the end of the function
-  random16_set_seed(535);                       // The randomizer needs to be re-set each time through the loop in order for the same 'random' numbers to be the same each time through.
+  unsigned prevSeed = PRNG::getSeed();      // save seed so we can restore it at the end of the function
+  PRNG::setSeed(535);                       // The randomizer needs to be re-set each time through the loop in order for the same 'random' numbers to be the same each time through.
 
   for (unsigned i = 0; i < SEGLEN; i++) {
-    unsigned ranstart = random8();               // The starting value (aka brightness) for each pixel. Must be consistent each time through the loop for this to work.
+    unsigned ranstart = PRNG::random8();               // The starting value (aka brightness) for each pixel. Must be consistent each time through the loop for this to work.
     unsigned pixBri = sin8_t(ranstart + 16 * strip.now/(256-SEGMENT.speed));
-    if (random8() > SEGMENT.intensity) pixBri = 0;
-    SEGMENT.setPixelColor(i, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(random8()+strip.now/100, false, PALETTE_FIXED, 0), (uint8_t)pixBri)); // will use SEGCOLOR(0) if Default palette used
+    if (PRNG::random8() > SEGMENT.intensity) pixBri = 0;
+    SEGMENT.setPixelColor(i, SEGCOLOR(1).nblend(SEGMENT.color_from_palette(PRNG::random8()+strip.now/100, false, PALETTE_FIXED, 0), (uint8_t)pixBri)); // will use SEGCOLOR(0) if Default palette used
   }
 
-  random16_set_seed(prevSeed); // restore original seed so other effects can use "random" PRNG
+  PRNG::setSeed(prevSeed); // restore original seed so other effects can use "random" PRNG
   return FRAMETIME;
 }
 static const char _data_FX_MODE_TWINKLEUP[] PROGMEM = "Twinkleup@!,Intensity;!,!;!;;m12=0";
@@ -5622,10 +5622,9 @@ uint16_t mode_2Dcrazybees(void) {
     int8_t deltaX, deltaY, signX, signY, error;
     void aimed(uint16_t w, uint16_t h) {
       const auto abs  = [](int x) { return x<0 ? -x : x; };
-      //random16_set_seed(millis());
-      aimX   = random8(0, w);
-      aimY   = random8(0, h);
-      hue    = random8();
+      aimX   = hw_random8(0, w);
+      aimY   = hw_random8(0, h);
+      hue    = hw_random8();
       deltaX = abs(aimX - posX);
       deltaY = abs(aimY - posY);
       signX  = posX < aimX ? 1 : -1;
@@ -5638,10 +5637,9 @@ uint16_t mode_2Dcrazybees(void) {
   bee_t *bee = reinterpret_cast<bee_t*>(SEGENV.data);
 
   if (SEGENV.call == 0) {
-    random16_set_seed(strip.now);
     for (size_t i = 0; i < n; i++) {
-      bee[i].posX = random8(0, cols);
-      bee[i].posY = random8(0, rows);
+      bee[i].posX = hw_random8(0, cols);
+      bee[i].posY = hw_random8(0, rows);
       bee[i].aimed(cols, rows);
     }
   }
