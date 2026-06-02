@@ -34,6 +34,7 @@ typedef const TProgmemRGBGradientPalette_byte *TProgmemRGBGradientPalette_bytes;
 typedef TProgmemRGBGradientPalette_bytes TProgmemRGBGradientPalettePtr;
 
 typedef uint16_t accum88;
+typedef uint8_t fract8;
 
 // color interpolation options for palette
 typedef enum {
@@ -61,15 +62,24 @@ void fill_gradient_RGB(CRGB* colors, uint32_t startpos, CRGB startcolor, uint32_
 void fill_gradient_RGB(CRGB* colors, uint32_t num, const CRGB& c1, const CRGB& c2);
 void fill_gradient_RGB(CRGB* colors, uint32_t num, const CRGB& c1, const CRGB& c2, const CRGB& c3);
 void fill_gradient_RGB(CRGB* colors, uint32_t num, const CRGB& c1, const CRGB& c2, const CRGB& c3, const CRGB& c4);
-void nblendPaletteTowardPalette(CRGBPalette16& current, CRGBPalette16& target, uint8_t maxChanges);
+[[gnu::hot, gnu::pure]] CRGB ColorFromPalette(const CRGBPalette16 &pal, uint8_t index, uint8_t brightness = (uint8_t)255U, TBlendType blendType = LINEARBLEND);
+[[gnu::pure]] void nblendPaletteTowardPalette(CRGBPalette16& current, CRGBPalette16& target, uint8_t maxChanges);
 
 uint8_t ease8InOutCubic(uint8_t i);
 uint16_t ease16InOutCubic(uint16_t i);
 uint8_t ease8InOutQuad(uint8_t i);
+uint8_t ease8InOutApprox(uint8_t i);
 uint8_t triwave8(uint8_t in);
 uint16_t triwave16(uint16_t in);
 uint8_t quadwave8(uint8_t in);
 uint8_t cubicwave8(uint8_t in);
+
+uint16_t beat88(accum88 beats_per_minute_88, uint32_t timebase = 0);
+uint16_t beat16(uint16_t beats_per_minute, uint32_t timebase = 0);
+uint8_t beat8(uint16_t beats_per_minute, uint32_t timebase = 0);
+uint16_t beatsin88_t(accum88 beats_per_minute_88, uint16_t lowest = 0, uint16_t highest = 65535, uint32_t timebase = 0, uint16_t phase_offset = 0);
+uint16_t beatsin16_t(accum88 beats_per_minute, uint16_t lowest = 0, uint16_t highest = 65535, uint32_t timebase = 0, uint16_t phase_offset = 0);
+uint8_t beatsin8_t(accum88 beats_per_minute, uint8_t lowest = 0, uint8_t highest = 255, uint32_t timebase = 0, uint8_t phase_offset = 0);
 
 // Representation of an HSV pixel (hue, saturation, value (aka brightness)).
 struct CHSV {

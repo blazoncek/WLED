@@ -1164,7 +1164,7 @@ CRGBA Segment::color_from_palette(uint16_t i, bool mapping, bool moving, uint8_t
       case 1: blend = LINEARBLEND; break;
       case 2: blend = LINEARBLEND_NOWRAP; break;
     }
-    palcol = ColorFromPaletteWLED(_currentPalette, paletteIndex, pbri, blend);
+    palcol = ColorFromPalette(_currentPalette, paletteIndex, pbri, blend);
   }
   if (hasW) palcol.alpha = color.alpha; // preserve white channel
   return palcol;

@@ -235,9 +235,6 @@ uint8_t extractModeSlider(uint8_t mode, uint8_t slider, char *dest, uint8_t maxL
 int16_t extractModeDefaults(uint8_t mode, const char *segVar);
 void checkSettingsPIN(const char *pin);
 uint16_t crc16(const unsigned char* data_p, size_t length);
-uint16_t beatsin88_t(accum88 beats_per_minute_88, uint16_t lowest = 0, uint16_t highest = 65535, uint32_t timebase = 0, uint16_t phase_offset = 0);
-uint16_t beatsin16_t(accum88 beats_per_minute, uint16_t lowest = 0, uint16_t highest = 65535, uint32_t timebase = 0, uint16_t phase_offset = 0);
-uint8_t beatsin8_t(accum88 beats_per_minute, uint8_t lowest = 0, uint8_t highest = 255, uint32_t timebase = 0, uint8_t phase_offset = 0);
 void enumerateLedmaps();
 [[gnu::hot]] uint8_t get_random_wheel_index(uint8_t pos);
 [[gnu::hot, gnu::pure]] float mapf(float x, float in_min, float in_max, float out_min, float out_max);
@@ -354,6 +351,20 @@ uint32_t sqrt32_bw(uint32_t x);
 #define fmod_t fmodf
 #define floor_t floorf
 */
+
+// PRNG for 16bit and 8bit random numbers used by some effects (fastled replacement)
+namespace PRNG {
+  extern uint16_t seed;
+
+  inline void setSeed(uint16_t s) { seed = s; }
+  inline uint16_t getSeed() { return seed; }
+  uint16_t random16();
+  uint16_t random16(uint16_t lim);
+  uint16_t random16(uint16_t min, uint16_t lim);
+  uint8_t random8();
+  uint8_t random8(uint8_t lim);
+  uint8_t random8(uint8_t min, uint8_t lim);
+}
 
 //wled_serial.cpp
 void handleSerial();

@@ -119,6 +119,9 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
   #if !defined(LEDC_CHANNEL_MAX) || !defined(LEDC_SPEED_MODE_MAX)
     #include "driver/ledc.h"
   #endif
+  #ifndef RMT_CHANNEL_MAX
+    #include "hal/rmt_types.h"
+  #endif
   #define WLED_MAX_ANALOG_CHANNELS (LEDC_CHANNEL_MAX*LEDC_SPEED_MODE_MAX)
   #define WLED_MAX_RMT_CHANNELS ((size_t)RMT_CHANNEL_MAX)
   #if defined(CONFIG_IDF_TARGET_ESP32C3)    // 2 RMT, 6 LEDC, only has 1 I2S but NPB does not support it ATM

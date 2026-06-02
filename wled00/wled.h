@@ -169,13 +169,15 @@
 //#define FASTLED_INTERNAL //remove annoying pragma messages
 //#define USE_GET_MILLISECOND_TIMER
 //#include "FastLED.h"
-#include "src/dependencies/fastled_slim/fastled_slim.h"
 // fastled sin16 replacement
 #ifdef sin16
   #undef sin16
 #endif
 #define sin16(x) sin16_t(x)
 #define cos16(x) cos16_t(x)
+#define sin8(x) sin8_t(x)
+#define cos8(x) cos8_t(x)
+#include "src/dependencies/fastled_slim/fastled_slim.h"
 #include "const.h"
 #include "colors.h"
 #include "fcn_declare.h"

@@ -376,61 +376,6 @@ uint16_t crc16(const unsigned char* data_p, size_t length) {
   return crc;
 }
 
-// FastLED Reference
-// -----------------
-// The following beat functions derived from FastLED @ 3.6.0 (https://github.com/FastLED/FastLED) are licensed under the MIT license
-// See src/dependencies/fastled_slim/LICENSE.txt for details
-
-// Generates a 16-bit "sawtooth" wave at a given BPM, with BPM specified in Q8.8 fixed-point format:
-// for 120 BPM it would be 120*256 = 30720. If you just want to specify "120", use beat16() or beat8().
-// timebase is the time offset of the wave from the millis() timer
-uint16_t beat88(accum88 beats_per_minute_88, uint32_t timebase) {
-  return ((millis() - timebase) * beats_per_minute_88 * 280) >> 16;
-}
-
-// Generates a 16-bit "sawtooth" wave at a given BPM
-uint16_t beat16(uint16_t beats_per_minute, uint32_t timebase) {
-  if (beats_per_minute < 256) beats_per_minute <<= 8;
-  return beat88(beats_per_minute, timebase);
-}
-
-/// Generates an 8-bit "sawtooth" wave at a given BPM
-uint8_t beat8(uint16_t beats_per_minute, uint32_t timebase) {
-  return beat16(beats_per_minute, timebase) >> 8;
-}
-
-// Generates a 16-bit sine wave at a given BPM that oscillates within a given range. see fastled for details.
-uint16_t beatsin88_t(accum88 beats_per_minute_88, uint16_t lowest, uint16_t highest, uint32_t timebase, uint16_t phase_offset)
-{
-    uint16_t beat = beat88( beats_per_minute_88, timebase);
-    uint16_t beatsin (sin16_t( beat + phase_offset) + 32768);
-    uint16_t rangewidth = highest - lowest;
-    uint16_t scaledbeat = scale16( beatsin, rangewidth);
-    uint16_t result = lowest + scaledbeat;
-    return result;
-}
-
-// Generates a 16-bit sine wave at a given BPM that oscillates within a given range. see fastled for details.
-uint16_t beatsin16_t(accum88 beats_per_minute, uint16_t lowest, uint16_t highest, uint32_t timebase, uint16_t phase_offset)
-{
-    uint16_t beat = beat16( beats_per_minute, timebase);
-    uint16_t beatsin = (sin16_t( beat + phase_offset) + 32768);
-    uint16_t rangewidth = highest - lowest;
-    uint16_t scaledbeat = scale16( beatsin, rangewidth);
-    uint16_t result = lowest + scaledbeat;
-    return result;
-}
-
-// Generates an 8-bit sine wave at a given BPM that oscillates within a given range. see fastled for details.
-uint8_t beatsin8_t(accum88 beats_per_minute, uint8_t lowest, uint8_t highest, uint32_t timebase, uint8_t phase_offset)
-{
-    uint8_t beat = beat8( beats_per_minute, timebase);
-    uint8_t beatsin = sin8_t( beat + phase_offset);
-    uint8_t rangewidth = highest - lowest;
-    uint8_t scaledbeat = scale8( beatsin, rangewidth);
-    uint8_t result = lowest + scaledbeat;
-    return result;
-}
 
 static const char s_ledmap_tmpl[] PROGMEM = "ledmap%d.json";
 // enumerate all ledmapX.json files on FS and extract ledmap names if existing
@@ -679,14 +624,13 @@ void *allocate_buffer(size_t size, uint32_t type) {
  * Note: optimized for speed and to mimic fastled inoise functions, not for accuracy or best randomness
  */
 #define PERLIN_SHIFT 1
+#define PERLIN_MASK ((1<<(PERLIN_SHIFT+1)) - 1)
 
 // calculate gradient for corner from hash value
 static inline __attribute__((always_inline)) int32_t hashToGradient(uint32_t h) {
-  // using more steps yields more "detailed" perlin noise but looks less like the original fastled version (adjust PERLIN_SHIFT to compensate, also changes range and needs proper adustment)
-  // return (h & 0xFF) - 128; // use PERLIN_SHIFT 7
-  // return (h & 0x0F) - 8; // use PERLIN_SHIFT 3
-  // return (h & 0x07) - 4; // use PERLIN_SHIFT 2
-  return (h & 0x03) - 2; // use PERLIN_SHIFT 1 -> closest to original fastled version
+  // using more steps yields more "detailed" perlin noise but looks less like the original fastled version
+  // (adjust PERLIN_SHIFT to compensate, also changes range and needs proper adustment)
+  return (h & PERLIN_MASK) - (1<<PERLIN_SHIFT); // PERLIN_SHIFT 1 -> closest to original fastled version
 }
 
 // Gradient functions for 1D, 2D and 3D Perlin noise  note: forcing inline produces smaller code and makes it 3x faster!
@@ -847,4 +791,21 @@ uint8_t perlin8(uint16_t x, uint16_t y) {
 
 uint8_t perlin8(uint16_t x, uint16_t y, uint16_t z) {
   return (((perlin3D_raw((uint32_t)x << 8, (uint32_t)y << 8, (uint32_t)z << 8, true) * 2015) >> 10) + 33168) >> 8; //scale to 16 bit, offset, then scale to 8bit
+}
+
+namespace PRNG {
+  uint16_t seed = 0x1234;
+
+  uint16_t random16() {
+      uint32_t s = seed;
+      s *= 0x9E37;
+      s ^= s >> 11;
+      seed = (s & 0xFFFF) ^ (s >> 16);
+      return seed;
+  }
+  uint16_t random16(uint16_t lim) { return ((uint32_t)random16() * lim) >> 16; }
+  uint16_t random16(uint16_t min, uint16_t lim) { uint16_t delta = lim - min; return random16(delta) + min; }
+  uint8_t random8() { return random16() & 0xFF; }
+  uint8_t random8(uint8_t lim) { return (uint8_t)(((uint16_t)random8() * lim) >> 8); }
+  uint8_t random8(uint8_t min, uint8_t lim) { uint8_t delta = lim - min; return random8(delta) + min; }
 }

@@ -1,5 +1,22 @@
 #include "fastled_slim.h"
 
+// Forward declaration of Arduino function 'millis'.
+extern "C" {
+  uint32_t millis();
+}
+#define GET_MILLIS millis
+
+// WLED's implementation of fast trigonometric funtions
+uint16_t sin16_t(uint16_t);
+uint16_t cos16_t(uint16_t);
+uint16_t sin8_t(uint8_t);
+uint16_t cos8_t(uint8_t);
+#define sin16_C sin16_t
+#define cos16_C cos16_t
+#define sin8_C sin8_t
+#define cos8_C cos8_t
+
+
 // Code originally from FastLED version 3.6.0. Optimized for WLED use by @dedehai
 // Licensed unter MIT license, see LICENSE.txt for details
 
@@ -193,6 +210,41 @@ void fill_gradient_RGB(CRGB* colors, uint32_t num, const CRGB& c1, const CRGB& c
   fill_gradient_RGB(colors, twothirds, c3,      last, c4);
 }
 
+// 1:1 replacement of fastled function optimized for ESP, slightly faster, more accurate and uses less flash (~ -200bytes)
+// Palette (CRGBPalette16) is constructed from 16 CRGB elements and can produce 255 individual color entries which may be blended.
+// Blending also occurs between the 16th and 1st elements when blendType is LINEARBLEND, producing wrap-around palette.
+// If you do not want wrap-around, use LINEARBLEND_NOWRAP which effectively reduces color entris count to 240.
+// If you do not want any blending at all, use NOBLEND which effectively reduces color entries count to 16.
+CRGB __attribute__((optimize("O2"))) ColorFromPalette(const CRGBPalette16& pal, uint8_t index, uint8_t brightness, TBlendType blendType) {
+  if (blendType == LINEARBLEND_NOWRAP) {
+    index = (index*241) >> 8; // Blend range is affected by lo4 blend of values, remap to avoid wrapping
+  }
+  unsigned hi4 = (index & 0xF0) >> 4;
+  unsigned lo4 = (index & 0x0F);
+  const CRGB* entry = (CRGB*)&(pal[0]) + hi4;
+  unsigned red1   = entry->r;
+  unsigned green1 = entry->g;
+  unsigned blue1  = entry->b;
+  if (lo4 && blendType != NOBLEND) {
+    if (hi4 == 15) entry = &(pal[0]);
+    else ++entry;
+    unsigned f2 = (lo4 << 4) + 1; // +1 so we scale by 256 as a max value, then result can just be shifted by 8
+    unsigned f1 = (257 - f2); // f2 is 1 minimum, so this is 256 max
+    // actually color_blend(c1, c2, lo4<<4);
+    red1   = (red1   * f1 + entry->r * f2) >> 8;
+    green1 = (green1 * f1 + entry->g * f2) >> 8;
+    blue1  = (blue1  * f1 + entry->b * f2) >> 8;
+  }
+  if (brightness < 255) { // note: zero checking could be done to return black but that is hardly ever used so it is omitted
+    // actually color_fade(c1, brightness)
+    uint32_t scale = brightness + 1; // adjust for rounding (bitshift)
+    red1   = (red1   * scale) >> 8;
+    green1 = (green1 * scale) >> 8;
+    blue1  = (blue1  * scale) >> 8;
+  }
+  return CRGB(red1, green1, blue1);
+}
+
 // palette blending
 void nblendPaletteTowardPalette(CRGBPalette16& current, CRGBPalette16& target, uint8_t maxChanges) {
   uint8_t* p1;
@@ -237,6 +289,13 @@ uint8_t ease8InOutQuad(uint8_t i)
   return (i & 0x80) ? (255 - jj) : jj;
 }
 
+uint8_t ease8InOutApprox(uint8_t i) {
+  if (i <   64) return i >> 1;  // 0.5 slope
+  if (i >= 192) return 255 - ((255-i)>>1);
+  i -= 64;
+  return (i + (i>>1)) + 32;     // 1.5 slope
+}
+
 // triangular wave generator
 uint8_t triwave8(uint8_t in) {
   if (in & 0x80) in = 255 - in;
@@ -256,4 +315,55 @@ uint8_t quadwave8(uint8_t in) {
 // cubic waveform generator. Spends visibly more time at the limits than "sine" does.
 uint8_t cubicwave8(uint8_t in) {
   return ease8InOutCubic(triwave8(in));
+}
+
+// Generates a 16-bit "sawtooth" wave at a given BPM, with BPM specified in Q8.8 fixed-point format:
+// for 120 BPM it would be 120*256 = 30720. If you just want to specify "120", use beat16() or beat8().
+// timebase is the time offset of the wave from the millis() timer
+uint16_t beat88(accum88 beats_per_minute_88, uint32_t timebase) {
+  return ((GET_MILLIS() - timebase) * beats_per_minute_88 * 280) >> 16;
+}
+
+// Generates a 16-bit "sawtooth" wave at a given BPM
+uint16_t beat16(uint16_t beats_per_minute, uint32_t timebase) {
+  if (beats_per_minute < 256) beats_per_minute <<= 8;
+  return beat88(beats_per_minute, timebase);
+}
+
+/// Generates an 8-bit "sawtooth" wave at a given BPM
+uint8_t beat8(uint16_t beats_per_minute, uint32_t timebase) {
+  return beat16(beats_per_minute, timebase) >> 8;
+}
+
+// Generates a 16-bit sine wave at a given BPM that oscillates within a given range. see fastled for details.
+uint16_t beatsin88_t(accum88 beats_per_minute_88, uint16_t lowest, uint16_t highest, uint32_t timebase, uint16_t phase_offset)
+{
+    uint16_t beat = beat88( beats_per_minute_88, timebase);
+    uint16_t beatsin (sin16_C( beat + phase_offset) + 32768);
+    uint16_t rangewidth = highest - lowest;
+    uint16_t scaledbeat = scale16( beatsin, rangewidth);
+    uint16_t result = lowest + scaledbeat;
+    return result;
+}
+
+// Generates a 16-bit sine wave at a given BPM that oscillates within a given range. see fastled for details.
+uint16_t beatsin16_t(accum88 beats_per_minute, uint16_t lowest, uint16_t highest, uint32_t timebase, uint16_t phase_offset)
+{
+    uint16_t beat = beat16( beats_per_minute, timebase);
+    uint16_t beatsin = (sin16_C( beat + phase_offset) + 32768);
+    uint16_t rangewidth = highest - lowest;
+    uint16_t scaledbeat = scale16( beatsin, rangewidth);
+    uint16_t result = lowest + scaledbeat;
+    return result;
+}
+
+// Generates an 8-bit sine wave at a given BPM that oscillates within a given range. see fastled for details.
+uint8_t beatsin8_t(accum88 beats_per_minute, uint8_t lowest, uint8_t highest, uint32_t timebase, uint8_t phase_offset)
+{
+    uint8_t beat = beat8( beats_per_minute, timebase);
+    uint8_t beatsin = sin8_C( beat + phase_offset);
+    uint8_t rangewidth = highest - lowest;
+    uint8_t scaledbeat = scale8( beatsin, rangewidth);
+    uint8_t result = lowest + scaledbeat;
+    return result;
 }

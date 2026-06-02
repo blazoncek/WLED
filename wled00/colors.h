@@ -37,12 +37,8 @@ inline uint32_t color_blend16(uint32_t c1, uint32_t c2, uint16_t b) { return col
 [[gnu::hot]] void fast_color_add(uint32_t &c1, uint32_t c2, uint8_t scale = 255);
 [[gnu::hot]] void fast_color_scale(uint32_t &c1, uint8_t scale);
 [[gnu::hot, gnu::pure]] uint32_t color_fade(uint32_t c1, uint8_t amount, bool video=false);
-#if !defined(FASTLED_SLIM) || !defined(FASTLED_VERSION)
-inline uint8_t scale8(uint8_t i, uint8_t scale) { return (uint16_t(i) * (1 + scale)) >> 8; }
-#endif
 
 // palette functions
-[[gnu::hot, gnu::pure]] CRGBA ColorFromPaletteWLED(const CRGBPalette16 &pal, uint8_t index, uint8_t brightness = (uint8_t)255U, TBlendType blendType = LINEARBLEND);
 CRGBPalette16 generateHarmonicRandomPalette(const CRGBPalette16 &basepalette);
 CRGBPalette16 generateRandomPalette();
 void loadCustomPalettes();

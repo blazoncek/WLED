@@ -1012,7 +1012,7 @@ void serializePalettes(JsonObject root, int page)
     JsonArray curPalette = palettes.createNestedArray(String(palIndex));
     switch (i) {
       case 0: //default palette
-        setPaletteColors(curPalette, PartyColors_p);
+        setPaletteColors(curPalette, *fastledPalettes[0]);
         break;
       case 1: //random
         for (int j = 0; j < 4; j++) curPalette.add("r");
