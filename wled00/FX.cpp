@@ -67,30 +67,6 @@ static int8_t tristate_square8(uint8_t x, uint8_t pulsewidth, uint8_t attdec) {
   return 0;
 }
 
-#ifndef FASTLED_SLIM
-static uint16_t triwave16(uint16_t in) {
-  if (in < 0x8000) return in *2;
-  return 0xFFFF - (in - 0x8000)*2;
-}
-
-// copied 1:1 from FastLED (FastLED/src/internal/lib8tion.h) to avoid dependency
-static uint8_t ease8InOutAppox(uint8_t i) {
-  if (i <   64) return i >> 1;  // 0.5 slope
-  if (i >= 192) return 255 - ((255-i)>>1);
-  i -= 64;
-  return (i + (i>>1)) + 32;     // 1.5 slope
-}
-
-static uint8_t qsub8(uint8_t i, uint8_t j) {
-  return (i > j) ? i - j : 0;
-}
-
-static uint8_t qadd8(uint8_t i, uint8_t j) {
-  uint16_t t = (uint16_t)i + (uint16_t)j;
-  if (t > 255) t = 255;
-  return t;
-}
-#endif
 
 // effect functions
 

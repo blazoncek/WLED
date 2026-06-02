@@ -584,6 +584,7 @@ __attribute__((always_inline)) inline bool operator!= (const CRGB& lhs, const CR
 class CRGBPalette16 {
 public:
   CRGB entries[16];
+
   CRGBPalette16() {
     memset(entries, 0, sizeof(entries)); // default constructor: set all to black
   }
@@ -600,9 +601,10 @@ public:
   };
 
   // Copy constructor
-  CRGBPalette16(const CRGBPalette16& rhs) {
-    memmove((void*)&(entries[0]), &(rhs.entries[0]), sizeof(entries));
-  }
+  CRGBPalette16(const CRGBPalette16& rhs) = default;
+  //CRGBPalette16(const CRGBPalette16& rhs) {
+  //  memmove((void*)&(entries[0]), &(rhs.entries[0]), sizeof(entries));
+  //}
 
   // Create palette from array of CRGB colors
   CRGBPalette16(const CRGB rhs[16]) {
@@ -610,10 +612,11 @@ public:
   }
 
   // Copy assignment operator
-  CRGBPalette16& operator=(const CRGBPalette16& rhs) {
-    memmove((void*)&(entries[0]), &(rhs.entries[0]), sizeof(entries));
-    return *this;
-  }
+  CRGBPalette16& operator=(const CRGBPalette16& rhs) = default;
+  //CRGBPalette16& operator=(const CRGBPalette16& rhs) {
+  //  memmove((void*)&(entries[0]), &(rhs.entries[0]), sizeof(entries));
+  //  return *this;
+  //}
 
   // Create palette from array of CRGB colors
   CRGBPalette16& operator=(const CRGB rhs[16]) {
@@ -655,27 +658,17 @@ public:
   }
 
   // Array subscript operator
-  inline CRGB& operator[](uint8_t x) __attribute__((always_inline)) {
+  inline CRGB& operator[](size_t x) __attribute__((always_inline)) {
     return entries[x];
   }
 
   // Array subscript operator (const)
-  inline const CRGB& operator[](uint8_t x) const __attribute__((always_inline)) {
+  inline const CRGB& operator[](size_t x) const __attribute__((always_inline)) {
     return entries[x];
-  }
-
-  // Array subscript operator
-  inline CRGB& operator[](int x) __attribute__((always_inline)) {
-    return entries[(uint8_t)x];
-  }
-
-  // Array subscript operator (const)
-  inline const CRGB& operator[](int x) const __attribute__((always_inline)) {
-    return entries[(uint8_t)x];
   }
 
   // Get the underlying pointer to the CRGB entries making up the palette
-  operator CRGB*() {
+  inline operator CRGB*() {
     return &(entries[0]);
   }
 

@@ -246,23 +246,21 @@ CRGB __attribute__((optimize("O2"))) ColorFromPalette(const CRGBPalette16& pal, 
 }
 
 // palette blending
-void nblendPaletteTowardPalette(CRGBPalette16& current, CRGBPalette16& target, uint8_t maxChanges) {
+void nblendPaletteTowardPalette(CRGBPalette16& current, const CRGBPalette16& target, uint8_t maxChanges) {
   uint8_t* p1;
   uint8_t* p2;
-  uint32_t changes = 0;
+  size_t changes = 0;
   p1 = (uint8_t*)current.entries;
   p2 = (uint8_t*)target.entries;
-  const uint32_t totalChannels = sizeof(CRGBPalette16);
-  for (uint32_t i = 0; i < totalChannels; ++i) {
+  const size_t totalChannels = sizeof(CRGBPalette16);
+  for (size_t i = 0; i < totalChannels; ++i) {
     if (p1[i] == p2[i]) continue; // if the values are equal, no changes are needed
-    if (p1[i] < p2[i]) { ++p1[i]; ++changes; } // if the current value is less than the target, increase it by one
+    if (p1[i] < p2[i]) ++p1[i]; // if the current value is less than the target, increase it by one
     if (p1[i] > p2[i]) { // if the current value is greater than the target, increase it by one (or two if it's still greater).
-      --p1[i]; ++changes;
-      if (p1[i] > p2[i])
-        --p1[i];
+      --p1[i];
+      if (p1[i] > p2[i]) --p1[i];
     }
-    if(changes >= maxChanges)
-      break;
+    if (++changes >= maxChanges) break;
   }
 }
 
