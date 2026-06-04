@@ -62,8 +62,8 @@ void fill_gradient_RGB(CRGB* colors, uint32_t startpos, CRGB startcolor, uint32_
 void fill_gradient_RGB(CRGB* colors, uint32_t num, const CRGB& c1, const CRGB& c2);
 void fill_gradient_RGB(CRGB* colors, uint32_t num, const CRGB& c1, const CRGB& c2, const CRGB& c3);
 void fill_gradient_RGB(CRGB* colors, uint32_t num, const CRGB& c1, const CRGB& c2, const CRGB& c3, const CRGB& c4);
-[[gnu::hot, gnu::pure]] CRGB ColorFromPalette(const CRGBPalette16 &pal, uint8_t index, uint8_t brightness = (uint8_t)255U, TBlendType blendType = LINEARBLEND);
-[[gnu::pure]] void nblendPaletteTowardPalette(CRGBPalette16& current, CRGBPalette16& target, uint8_t maxChanges);
+[[gnu::hot]] CRGB ColorFromPalette(const CRGBPalette16 &pal, uint8_t index, uint8_t brightness = (uint8_t)255U, TBlendType blendType = LINEARBLEND);
+void nblendPaletteTowardPalette(CRGBPalette16& current, const CRGBPalette16& target, uint8_t maxChanges);
 
 uint8_t ease8InOutCubic(uint8_t i);
 uint16_t ease16InOutCubic(uint16_t i);
