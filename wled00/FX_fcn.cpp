@@ -1450,6 +1450,13 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
   const size_t  matrixSize = Segment::maxWidth * Segment::maxHeight;
   const size_t  startIndx  = XY(topSegment.start, topSegment.startY);
   const size_t  stopIndx   = startIndx + length;
+  // if we are in live (mainSegmentOnly or override) mode and arlsDisableGammaCorrection is true we need to apply gamma to non-main segments
+  // (realtimeLock() will set gamma32Func to nullGamma32 so bus will not apply gamma correction)
+  // fix for wled#5661
+  const bool    applyGamma = realtimeMode                                                   // are we in realtime mode
+                          && arlsDisableGammaCorrection                                     // does setting prevent gamma to be applied on bus level
+                          && gammaCorrectCol                                                // do we even have gamma correction
+                          && (&topSegment != &_segments[_mainSegment] || realtimeOverride); // is this a non-main segment or we have override
   const unsigned progress  = topSegment.progress();
   const unsigned progInv   = 0xFFFFU - progress;
   const uint8_t  opacity   = topSegment.currentBri(); // returns transitioned opacity for style FADE
@@ -1782,6 +1789,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       // c_a is lacking white channel, we will try to add it back for Solid/Static effect where it is most likely missing
       uint32_t ct = hasWhite ? c_a.color32 : c_a.color32 & 0xFFFFFF;
       o  = hasWhite ? o : (o * (c_a.a + 1)) >> 8; // combine segment opacity with pixel opacity (c_a.a is alpha channel)
+      if (applyGamma) ct = NeoGammaWLEDMethod::Correct32(ct); // gamma32Func is nullGamma32() so we must use regular gamma function
       // expand pixel
       const unsigned groupLen = topSegment.groupLength();
       if (groupLen == 1) {
@@ -1887,6 +1895,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       o = hasWhite ? o : (o * (c_a.a + 1)) >> 8; // combine segment opacity with pixel opacity (c_a.a is alpha channel)
       // set all the pixels in the group
       const int maxI = std::min(i + topSegment.grouping, length); // make sure to not go beyond physical length
+      if (applyGamma) c = NeoGammaWLEDMethod::Correct32(c); // gamma32Func is nullGama32() so we must use regular gamma function
       while (i < maxI) setMirroredPixel(i++, c, o);
     }
   }
@@ -1914,8 +1923,9 @@ void WS2812FX::show() {
     _pixelCCT = static_cast<uint8_t*>(allocate_buffer(totalLen * sizeof(uint8_t), BFRALLOC_PREFER_PSRAM)); // allocate CCT buffer if necessary
   if (_pixelCCT) memset(_pixelCCT, 127, totalLen); // set neutral (50:50) CCT
 
-  if (realtimeMode == REALTIME_MODE_INACTIVE || useMainSegmentOnly || realtimeOverride > REALTIME_OVERRIDE_NONE) {
-    // clear frame buffer
+  // if we are in live mode we don't do segment blending unless useMainSegmentOnly is on or override is on
+  if (realtimeMode == REALTIME_MODE_INACTIVE || useMainSegmentOnly || realtimeOverride) {
+    // clear frame buffer (if not it will allow strange result if topmost segment doesn't use Top/Default blend mode)
     for (size_t i = 0; i < totalLen; i++) _pixels[i] = BLACK; // memset(_pixels, 0, sizeof(uint32_t) * getLengthTotal());
     // blend all segments into (cleared) buffer
     for (Segment &seg : _segments) if (seg.isActive() && (seg.on || seg.isInTransition())) {
