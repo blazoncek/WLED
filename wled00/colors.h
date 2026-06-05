@@ -40,7 +40,7 @@ inline uint8_t scale8(uint8_t i, uint8_t scale) { return (uint16_t(i) * (1 + sca
 #endif
 
 // palette functions
-[[gnu::hot, gnu::pure]] CRGBA ColorFromPaletteWLED(const CRGBPalette16 &pal, uint8_t index, uint8_t brightness = (uint8_t)255U, TBlendType blendType = LINEARBLEND);
+[[gnu::hot]] CRGBA ColorFromPaletteWLED(const CRGBPalette16 &pal, uint8_t index, uint8_t brightness = (uint8_t)255U, TBlendType blendType = LINEARBLEND);
 CRGBPalette16 generateHarmonicRandomPalette(const CRGBPalette16 &basepalette);
 CRGBPalette16 generateRandomPalette();
 void loadCustomPalettes();

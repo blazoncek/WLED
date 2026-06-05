@@ -216,10 +216,10 @@ void registerUsermods();
 #define inoise8 perlin8   // fastled legacy alias
 #define inoise16 perlin16 // fastled legacy alias
 #define hex2int(a) (((a)>='0' && (a)<='9') ? (a)-'0' : ((a)>='A' && (a)<='F') ? (a)-'A'+10 : ((a)>='a' && (a)<='f') ? (a)-'a'+10 : 0)
-[[gnu::pure]] int getNumVal(const String& req, uint16_t pos);
+int getNumVal(const String& req, uint16_t pos);
 void parseNumber(const char* str, byte& val, byte minv=0, byte maxv=255);
 bool getVal(const JsonVariant &elem, byte& val, byte minv=0, byte maxv=255); // getVal supports inc/decrementing and random ("X~Y(r|~[w][-][Z])" form)
-[[gnu::pure]] bool getBoolVal(const JsonVariant &elem, bool dflt);
+bool getBoolVal(const JsonVariant &elem, bool dflt);
 bool updateVal(const char* req, const char* key, byte& val, byte minv=0, byte maxv=255);
 size_t printSetFormCheckbox(Print& settingsScript, const char* key, int val);
 size_t printSetFormValue(Print& settingsScript, const char* key, int val);
@@ -227,7 +227,7 @@ size_t printSetFormValue(Print& settingsScript, const char* key, const char* val
 size_t printSetFormIndex(Print& settingsScript, const char* key, int index);
 size_t printSetIdHTML(Print& settingsScript, const char* key, const char* val);
 //void prepareHostname(char* hostname, size_t maxLen = 32);
-[[gnu::pure]] bool isAsterisksOnly(const char* str, byte maxLen);
+bool isAsterisksOnly(const char* str, byte maxLen);
 bool requestJSONBufferLock(uint8_t module=255);
 void releaseJSONBufferLock();
 uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLen);
