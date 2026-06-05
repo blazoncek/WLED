@@ -770,6 +770,7 @@ static uint8_t __portal[HUB75_PIN_COUNT]    PROGMEM = { 42, 41, 40, 38, 39, 37, 
 static uint8_t __moonhub[HUB75_PIN_COUNT]   PROGMEM = {  1,  5,  6,  7, 13,  9, 16, 48, 47, 21, 38,  8,  4, 18};
 static uint8_t __s3generic[HUB75_PIN_COUNT] PROGMEM = {  1,  2, 42, 41, 40, 39, 45, 48, 47, 21, 38,  8,  3, 18};
 static uint8_t __hd_wf2[HUB75_PIN_COUNT]    PROGMEM = {  2,  6, 10,  3,  7, 11, 39, 38, 37, 36, 21, 33, 35, 34};
+static uint8_t __seengreat[HUB75_PIN_COUNT] PROGMEM = { 18,  8, 17, 16,  1, 15,  7, 48,  6, 47,  2, 21,  4,  5};
 #elif defined(CONFIG_IDF_TARGET_ESP32S2)
 static uint8_t __s2drive[HUB75_PIN_COUNT]   PROGMEM = {  2,  6,  3,  4,  8,  5, 39, 38, 37, 36, 12, 33, 35, 34};
 #elif defined(CONFIG_IDF_TARGET_ESP32)
@@ -793,6 +794,9 @@ static const uint8_t * const getHub75Pins(uint8_t type, uint8_t *dest = nullptr)
       break;
     case TYPE_HUB75HD_WF2:
       b = __hd_wf2;
+      break;
+    case TYPE_HUB75SEENGREAT:
+      b = __seengreat;
       break;
 #elif defined(CONFIG_IDF_TARGET_ESP32S2)
     case TYPE_HUB75MATRIX_S2DRIVE:
@@ -869,9 +873,9 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   }
 
   // check for too many pixels & reduce panel count if necessary
-  // ESP32: MAX_LEDS (8192) will consume 32k for strip LED buffer + 32k for (1) segment buffer + 8k for dirty bits = 72k RAM!!!
-  // S3: MAX_LEDS (16384) will consume 64k for strip LED buffer + 64k for (1) segment buffer + 16k for dirty bits = 144k RAM!!!
-  // S2: MAX_LEDS (2048) will consume 8k for strip LED buffer + 8k for (1) segment buffer + 1k for dirty bits = 17k RAM!!!
+  // ESP32: MAX_LEDS (8192) will consume 32k for strip LED buffer + 32k for (1) segment buffer = 64k RAM!!!
+  // S3: MAX_LEDS (16384) will consume 64k for strip LED buffer + 64k for (1) segment buffer = 128k RAM!!!
+  // S2: MAX_LEDS (2048) will consume 8k for strip LED buffer + 8k for (1) segment buffer = 16k RAM!!!
   // all will also need driver's internal buffers (12-bit, 8-bit, 4-bit or 3-bit depth)
   while (mxconfig.mx_height * mxconfig.mx_width * mxconfig.chain_length > MAX_LEDS) {
     mxconfig.chain_length--;
@@ -890,26 +894,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     else if (mxconfig.chain_length * mxconfig.mx_width > 64)  mxconfig.setPixelColorDepthBits(4);
   }
 #endif
-/*
-  switch (_type) {
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
-    case TYPE_HUB75MATRIX_PORTAL:
-    case TYPE_HUB75MATRIX_MOONHUB:
-    case TYPE_HUB75MATRIX_S3:
-#elif defined(CONFIG_IDF_TARGET_ESP32S2)
-    case TYPE_HUB75MATRIX_S2DRIVE:
-#elif defined(CONFIG_IDF_TARGET_ESP32)
-    case TYPE_HUB75MATRIX_FORUM:
-    case TYPE_HUB75MATRIX_TRINITY:
-#endif
-    case TYPE_HUB75MATRIX_CUSTOM:
-      getHub75Pins(_type, (uint8_t*)&(mxconfig.gpio));
-      break;
-    default:
-      DEBUGBUS_PRINTLN(F("Unknown HUB75 matrix type. Aborting!"));
-      return;
-  }
-*/
+
   if (getHub75Pins(_type, (uint8_t*)&(mxconfig.gpio)) == nullptr) {
     DEBUGBUS_PRINTLN(F("Failed to get HUB75 matrix pin configuration. Aborting!"));
     return;
@@ -1126,6 +1111,7 @@ std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
     {TYPE_HUB75MATRIX_MOONHUB, "H", PSTR("HUB75 (Moonhub T7 S3)")},
     {TYPE_HUB75MATRIX_S3,      "H", PSTR("HUB75 (S3 with PSRAM)")},
     {TYPE_HUB75HD_WF2,         "H", PSTR("HUB75 (Huidu HD-WF2)")},
+    {TYPE_HUB75SEENGREAT,      "H", PSTR("HUB75 (Seengreat v2)")},
 #elif defined(CONFIG_IDF_TARGET_ESP32S2)
     {TYPE_HUB75MATRIX_S2DRIVE, "H", PSTR("HUB75 (S2 Drive P4)")},
 #elif defined(CONFIG_IDF_TARGET_ESP32)
@@ -1144,7 +1130,7 @@ std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
   return types;
 }
 
-uint8_t BusHub75Matrix::_customPins[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // placeholder for custom pin configuration
+uint8_t BusHub75Matrix::_customPins[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // placeholder for custom pin configuration (filled in beginStrip())
 #endif // WLED_ENABLE_HUB75MATRIX
 
 
