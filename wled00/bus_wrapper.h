@@ -6,12 +6,15 @@
 #include "NeoPixelBus.h"
 
 //Hardware SPI Pins
+#define P_8266_HS_MISO 12
 #define P_8266_HS_MOSI 13
 #define P_8266_HS_CLK  14
+#define P_32_HS_MISO   12
 #define P_32_HS_MOSI   13
 #define P_32_HS_CLK    14
-#define P_32_VS_MOSI   23
-#define P_32_VS_CLK    18
+#define P_32_VS_MISO   19 // HW_PIN_MISOSPI
+#define P_32_VS_MOSI   23 // HW_PIN_MOSISPI
+#define P_32_VS_CLK    18 // HW_PIN_CLOCKSPI
 
 //The dirty list of possible bus types. Quite a lot...
 #define I_NONE 0
@@ -215,6 +218,7 @@ class PolyBus {
     #ifdef ESP8266
     dotStar_strip->Begin();
     #else
+    if (miso == -1 && (mosi == P_32_VS_MISO || sck == P_32_VS_MISO || mosi == P_32_HS_MISO || sck == P_32_HS_MISO)) miso = 127;  // see wled#5672 & wled#5670
     if (sck == -1 && mosi == -1) dotStar_strip->Begin();
     else                         dotStar_strip->Begin(sck, miso, mosi, ss);
     #endif
