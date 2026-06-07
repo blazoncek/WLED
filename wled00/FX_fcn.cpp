@@ -629,7 +629,7 @@ Segment &Segment::setPalette(uint8_t pal) {
   if (pal <= 255-customPalettes.size() && pal > FIXED_PALETTE_COUNT) pal = 0; // not built in palette or custom palette
   if (pal != palette) {
     DEBUGFX_PRINTF_P(PSTR("- Starting palette transition: %d\n"), pal);
-    startTransition(strip.getTransition(), transitionStyle != TRANSITION_FADE); // start transition prior to change (no need to copy segment)
+    startTransition(strip.getTransition(), transitionStyle != TRANSITION_FADE || pal == 0 || palette == 0); // start transition prior to change
     palette = pal;
     stateChanged = true; // send UDP/WS broadcast
   }
@@ -1284,11 +1284,7 @@ void WS2812FX::finalizeInit() {
   loadCustomPalettes(); // (re)load all custom palettes
   DEBUG_PRINTLN(F("Loading custom ledmaps"));
   deserializeMap();     // (re)load default ledmap (will also setUpMatrix() if ledmap does not exist)
-
-  // allocate frame buffer after matrix has been set up (gaps!)
-  // use IRAM/PSRAM if available: there is no measurable perfomance impact between PSRAM and DRAM on S2/S3 with QSPI PSRAM for this buffer
-  p_free(_pixels);
-  _pixels = static_cast<uint32_t*>(allocate_buffer(getLengthTotal() * sizeof(uint32_t), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+  reallocatePixelBuffer();  // fix for wled#5669
   DEBUG_PRINTF_P(PSTR("strip buffer %uB @ %p\n"), getLengthTotal() * sizeof(uint32_t), _pixels);
   DEBUG_PRINTF_P(PSTR("Heap after strip init: %uB\n"), getFreeHeapSize());
 }
@@ -1465,9 +1461,10 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
   const unsigned orgTS     = transitionStyle;
   if (width*height == 1) transitionStyle = TRANSITION_FADE; // disable style for single pixel segments (use fade instead)
 
-#ifndef ESP8266
+#ifdef WLED_ENABLE_FASTPATH
   // fast path (by @dedehai): handle the default case - no transitions, no grouping/spacing, no mirroring, no CCT
-  // TODO: crashes in topSegment.getPixelColorRaw() on ESP8266 (even when index is not OOB) after WiFi starts connecting
+  // TODO: crashes in topSegment.getPixelColorRaw() on ESP8266 & C3 (even when index is not OOB) after WiFi starts connecting
+  // S3 will sometimes display corrupt buffer. These point to OOB access somehow
   if (!topSegment.isInTransition() && topSegment.groupLength() == 1 && !topSegment.mirror && !topSegment.mirror_y) {
   #ifndef WLED_DISABLE_2D
     // 2D fast path
@@ -2146,6 +2143,10 @@ void WS2812FX::resetSegments() {
 
 void WS2812FX::makeAutoSegments(bool forceReset) {
   if (isServicing()) return;
+
+  // restart runtime so that ever effect starts from beginning
+  for (Segment &seg : _segments) seg.markForReset().resetIfRequired();
+
   if (autoSegments) { //make one segment per bus
     unsigned segStarts[MAX_NUM_SEGMENTS] = {0};
     unsigned segStops [MAX_NUM_SEGMENTS] = {0};

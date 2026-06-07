@@ -6342,6 +6342,7 @@ uint16_t mode_2Dwavingcell() {
 }
 static const char _data_FX_MODE_2DWAVINGCELL[] PROGMEM = "Waving Cell@!,,Amplitude 1,Amplitude 2,Amplitude 3;;!;2";
 
+
 /*
 // Minesweeper
 // by @stepko https://github.com/St3p40 (c)2025 [https://editor.soulmatelights.com/gallery/3238-minesweeper]
@@ -6443,6 +6444,7 @@ uint16_t mode_2Dminesweeper() {
 static const char _data_FX_MODE_2DMINESWEEPER[] PROGMEM = "Minesweeper@;;;2";
 */
 
+
 /*
 /  Perlin Noise 3D effect - a Perlin noise Landscape
 *   Created by Stein (https://editor.soulmatelights.com/gallery/815-perlins-noise-3d)
@@ -6450,82 +6452,198 @@ static const char _data_FX_MODE_2DMINESWEEPER[] PROGMEM = "Minesweeper@;;;2";
 *   Speed slider is for color changing speed
 *   Intensity slider is for zooming in/out (Perlin scaling)
 *   Custom1 slider is the X/Y multiplier/skewing
+*   Custom2 slider is the rotation speed
 *   Custom3 slider is the scape shifting/moving speed
 *   Check1 checkbox will randomize shifting/moving directions
 */
 uint16_t mode_2D_perlinscape() {
+  struct NoiseFlowData {
+    int16_t offsetX;
+    int16_t offsetY;
+    int8_t deltaX;
+    int8_t deltaY;
+    uint32_t nextBlob;
+    uint32_t nextFlow;
+  };
+
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static();  // not a 2D set-up
-  if (!SEGENV.allocateData(4 * sizeof(int32_t) + 2 * sizeof(uint32_t))) return mode_static();
+  if (!SEGENV.allocateData(sizeof(NoiseFlowData))) return mode_static();
 
-  const unsigned width  = SEG_W;
-  const unsigned height = SEG_H;
+  const int      width  = SEG_W;
+  const int      height = SEG_H;
   const unsigned zoom   = SEGMENT.intensity + 1;                                  // divide by 64 to get actual zoom level (1/64 - 4; ~ 0.015x - 4x)
-  const unsigned Xmult  = SEGMENT.custom1 > 128 ? SEGMENT.custom1 : 128;          // skew X dimension
-  const unsigned Ymult  = SEGMENT.custom1 < 128 ? (255 - SEGMENT.custom1) : 128;  // skew Y dimension
+  const int      Xmult  = SEGMENT.custom1 > 128 ? SEGMENT.custom1 : 128;          // skew X dimension
+  const int      Ymult  = SEGMENT.custom1 < 128 ? (255 - SEGMENT.custom1) : 128;  // skew Y dimension
 
-  int32_t  &offsetX  = *(reinterpret_cast<int32_t*>(SEGENV.data                       ));
-  int32_t  &offsetY  = *(reinterpret_cast<int32_t*>(SEGENV.data  +     sizeof(int32_t)));
-  int32_t  &deltaX   = *(reinterpret_cast<int32_t*>(SEGENV.data  + 2 * sizeof(int32_t)));
-  int32_t  &deltaY   = *(reinterpret_cast<int32_t*>(SEGENV.data  + 3 * sizeof(int32_t)));
-  uint32_t &nextFlip = *(reinterpret_cast<uint32_t*>(SEGENV.data + 4 * sizeof(int32_t)));
-  uint32_t &nextBlob = *(reinterpret_cast<uint32_t*>(SEGENV.data + 4 * sizeof(int32_t) + sizeof(uint32_t)));
-  uint16_t &z        = SEGENV.aux0;
+  const unsigned blobTick = (3 * FRAMETIME_FIXED + (255 - SEGMENT.speed));
+  const unsigned flowTick = (FRAMETIME_FIXED * (32 - SEGMENT.custom3));
+
+  NoiseFlowData &data = *(reinterpret_cast<NoiseFlowData*>(SEGENV.data));
+  uint16_t &z = SEGENV.aux0;
 
   if (SEGENV.call == 0) {
     SEGENV.step = strip.now + hw_random16(5000, 10000); // next random direction update
-    offsetX = 0;
-    offsetY = 0;
-    deltaX  = 1;
-    deltaY  = 1;
-    nextBlob = strip.now + 100;
-    nextFlip = strip.now + 45;
+    data.offsetX = 0;
+    data.offsetY = 0;
+    data.deltaX  = 1;
+    data.deltaY  = 1;
+    data.nextBlob = strip.now + blobTick;
+    data.nextFlow = strip.now + flowTick;
   }
 
   // every now and then change move direction and speed
   if (strip.now > SEGENV.step) {
-    if (SEGMENT.check1) {
+    if (SEGMENT.check2) {
       constexpr int scroll = 2;
-      deltaX += hw_random8(0, 5) - 2;
-      deltaX = constrain(deltaX, -scroll, scroll);
-      deltaY += hw_random8(0, 5) - 2;
-      deltaY = constrain(deltaY, -scroll, scroll);
+      data.deltaX += hw_random8(5) - 2; // -2 .. +2
+      data.deltaX = constrain(data.deltaX, -scroll, scroll);
+      data.deltaY += hw_random8(5) - 2; // -2 .. +2
+      data.deltaY = constrain(data.deltaY, -scroll, scroll);
     }
     SEGENV.step = strip.now + hw_random16(5000, 10000);
   }
 
   // increase hue and Perlin elevation every ~100 ms
-  if (nextBlob < strip.now) {
+  if (data.nextBlob < strip.now) {
     z++;
-    nextBlob = strip.now + (3 * FRAMETIME_FIXED + (255 - SEGMENT.speed));
+    data.nextBlob = strip.now + blobTick;
   }
   // move offset every ~45ms
-  if (nextFlip < strip.now) {
-    offsetX += deltaX;
-    offsetY += deltaY;
-    nextFlip = strip.now + (FRAMETIME_FIXED * (32 - SEGMENT.custom3));
+  if (data.nextFlow < strip.now) {
+    data.offsetX += data.deltaX;
+    data.offsetY += data.deltaY;
+    data.nextFlow = strip.now + flowTick;
   }
 
-  for (unsigned x = 0; x < width; x++) {
-    for (unsigned y = 0; y < height; y++) {
-      uint16_t tX = x * zoom * Xmult / 255 + offsetX;
-      uint16_t tY = y * zoom * Ymult / 255 + offsetY;
+  const int timeBase = strip.now / map(SEGMENT.custom2, 1, 255, 5000, 250);
+  const int cosT = SEGMENT.custom2 ? cos8_t(timeBase) : 255;
+  const int sinT = SEGMENT.custom2 ? sin8_t(timeBase) : 0;
+  const int xC = width / 2;
+  const int yC = height / 2;
+
+  for (int x = 0; x < width; x++) {
+    int dx = x - xC;
+    for (int y = 0; y < height; y++) {
+      int dy = y - yC;
+      // rotate coordinates
+      int rx = (cosT * dx - sinT * dy) / 255 + xC;
+      int ry = (sinT * dx + cosT * dy) / 255 + yC;
+      uint16_t tX = rx * zoom * Xmult / 255 + data.offsetX;
+      uint16_t tY = ry * zoom * Ymult / 255 + data.offsetY;
       // raw RGB mode
       uint8_t h = z + inoise8(tX, tY, z);
-      uint8_t s = inoise8(tX, tY + z);
-      uint8_t v = qadd8(64,inoise8(tX + z, tY));
       CRGBA color;
       if (SEGMENT.palette) {
         // Palette mode (i.e. not a Default palette)
-        color = SEGMENT.color_from_palette(h, false, PALETTE_FIXED, 255, v).desaturate(255-s);
+        color = SEGMENT.color_from_palette(h, false, PALETTE_FIXED, 255);
       } else {
-        color = CHSV32(h, qadd8(16,s), v);
+        color = CHSV32(h, 255, 255);
+      }
+      if (SEGMENT.check1) {
+        uint8_t s = qadd8(32,inoise8(tX, tY + z));
+        uint8_t v = qadd8(64,inoise8(tX + z, tY));
+        color.setOpacity(v).desaturate(255-s);
       }
       SEGMENT.setPixelColorXY(x, y, color);
     }
   }
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DPERLINSCAPE[] PROGMEM = "Perlinscape@!,Zoom,Skew,,Move,Random;;!;2;sx=64,c3=15,o1=1";
+static const char _data_FX_MODE_2DPERLINSCAPE[] PROGMEM = "Perlinscape@!,Zoom,Skew,Rotate,Move,S/V,Random;;!;2;sx=92,c2=0,c3=15,o1=0,o2=1";
+
+
+// 2D Flow - rippling flow-like effect
+// source code: https://github.com/AlexGyver/GyverLamp/blob/master/firmware/GyverLamp_v1.5.5/noiseEffects.ino
+// https://editor.soulmatelights.com/gallery/user/125-testtestru
+// Adapted for WLED by Blaz Kristan (@blazoncek)
+uint16_t mode_2Dflow() {
+  struct NoiseData {
+    uint16_t x;
+    uint16_t y;
+    uint16_t z;
+    uint8_t *noise;
+  };
+
+  const unsigned width  = SEG_W;
+  const unsigned height = SEG_H;
+  const unsigned maxDim = max(width, height);
+
+  if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static();  // not a 2D set-up
+  if (!SEGENV.allocateData(sizeof(NoiseData) + maxDim*maxDim)) return mode_static();
+
+  const unsigned speed = SEGMENT.speed + 1;             // 1-256
+  const unsigned scale = (SEGMENT.intensity >> 1) + 32; // 32-159
+
+  NoiseData &data = *(reinterpret_cast<NoiseData*>(SEGMENT.data));
+  data.noise = SEGMENT.data + sizeof(NoiseData);  // noise data trails NoiseData structure
+  uint16_t &ihue = SEGENV.aux0;
+
+  if (SEGENV.call == 0) {
+    data.x = 0;
+    data.y = 0;
+    data.z = 0;
+    for (unsigned i = 0; i < maxDim*maxDim; i++) data.noise[i] = 0;
+    SEGENV.step = strip.now + (257 - speed) * FRAMETIME_FIXED / 10;
+  }
+
+  uint8_t dataSmoothing = 0;
+  if (speed < 50) {
+    dataSmoothing = 200 - (speed * 4);
+  }
+
+  for (unsigned i = 0; i < maxDim; i++) {
+    unsigned ioffset = scale * i / 2;
+    for (unsigned j = 0; j < maxDim; j++) {
+      unsigned joffset = scale * j / 2;
+
+      uint8_t tmp = inoise8(data.x + ioffset, data.y + joffset, data.z);
+
+      tmp = qsub8(tmp, 16);
+      tmp = qadd8(tmp, scale8(tmp, 39));
+
+      if (dataSmoothing) {
+        uint8_t olddata = data.noise[i*maxDim + j];
+        uint8_t newdata = scale8(olddata, dataSmoothing) + scale8(tmp, 255 - dataSmoothing);
+        tmp = newdata;
+      }
+
+      data.noise[i*maxDim + j] = tmp;
+    }
+  }
+
+  if (strip.now > SEGENV.step) {
+    data.z += 4;
+    // apply slow drift to X and Y, just for visual variation.
+    data.x += 2;
+    data.y += 1;
+    SEGENV.step = strip.now + (257 - speed) * FRAMETIME_FIXED / 10;
+  }
+
+  for (uint8_t i = 0; i < width; i++) {
+    for (uint8_t j = 0; j < height; j++) {
+      uint8_t index = data.noise[j*maxDim + i];
+      uint8_t bri = data.noise[i*maxDim + j];
+      // if this palette is a 'loop', add a slowly-changing base value
+      if (SEGMENT.check1) {
+        index += ihue;
+      }
+      // brighten up, as the color palette itself often contains the
+      // light/dark dynamic range desired
+      if (bri > 127) {
+        bri = 255;
+      } else {
+        bri = scale8(bri * 2, bri * 2);
+      }
+      //CRGBA color = ColorFromPalette(SEGPALETTE, index, bri, LINEARBLEND_NOWRAP);      
+      CRGBA color = SEGMENT.color_from_palette(index, false, PALETTE_FIXED, 0, bri);      
+      SEGMENT.setPixelColorXY(i, j, color);
+    }
+  }
+  ihue += 1;
+
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_2DFLOW[] PROGMEM = "Flow 2D@!,Scale,,,,Hue shift;;!;2;pal=12,sx=64,o1=1";
 
 
 ////////////////////////////////////////////
@@ -9011,6 +9129,7 @@ void WS2812FX::setupEffectData() {
   */
   // --- 2D  effects ---
 #ifndef WLED_DISABLE_2D
+  addEffect(FX_MODE_2DFLOW, &mode_2Dflow, _data_FX_MODE_2DFLOW);
   addEffect(FX_MODE_2DPLASMAROTOZOOM, &mode_2Dplasmarotozoom, _data_FX_MODE_2DPLASMAROTOZOOM);
   addEffect(FX_MODE_2DSPACESHIPS, &mode_2Dspaceships, _data_FX_MODE_2DSPACESHIPS);
   addEffect(FX_MODE_2DCRAZYBEES, &mode_2Dcrazybees, _data_FX_MODE_2DCRAZYBEES);
