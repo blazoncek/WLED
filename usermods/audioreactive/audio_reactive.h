@@ -73,7 +73,8 @@
 class AudioReactive;                            // forward declaration
 
 static volatile bool disableSoundProcessing = false;  // if true, sound processing (FFT, filters, AGC) will be suspended. "volatile" as its shared between tasks.
-static uint8_t audioSyncEnabled = 0;            // bit field: bit 0 - send, bit 1 - receive (config value)
+static volatile bool updateIsRunning = false;   // true during OTA.
+static volatile uint8_t audioSyncEnabled = 0;   // bit field: bit 0 - send, bit 1 - receive (config value)
 static bool udpSyncConnected = false;           // UDP connection status -> true if connected to multicast group
 
 // audioreactive variables
@@ -131,9 +132,9 @@ constexpr float MAX_FREQ_LOG10 = 4.04238f;    // log10(MAX_FREQUENCY)
 constexpr float MAX_FREQUENCY = SAMPLE_RATE/2.0f; // sample frequency / 2 (as per Nyquist criterion)
 
 // peak detection
-static void autoResetPeak(void);     // peak auto-reset function
+static void autoResetPeak();     // peak auto-reset function
 #ifdef ARDUINO_ARCH_ESP32
-static void detectSamplePeak(void);  // peak detection function (needs scaled FFT results in vReal[]) - no used for 8266 receive-only mode
+static void detectSamplePeak();  // peak detection function (needs scaled FFT results in vReal[]) - no used for 8266 receive-only mode
 
 // use audio source class (ESP32 specific)
 #include "audio_source.h"
@@ -264,7 +265,7 @@ static void FFTcode(void * parameter)
                         // taskYIELD(), yield(), vTaskDelay() and esp_task_wdt_feed() didn't seem to work.
 
     // Don't run FFT computing code if we're in Receive mode or in realtime mode
-    if (disableSoundProcessing || (audioSyncEnabled & 0x02)) {
+    if (disableSoundProcessing || updateIsRunning || (audioSyncEnabled & 0x02) /*|| (realtimeOverride == REALTIME_OVERRIDE_NONE && (realtimeMode && !useMainSegmentOnly))*/) {
       vTaskDelayUntil( &xLastWakeTime, xFrequency);        // release CPU, and let I2S fill its buffers
       continue;
     }
@@ -537,7 +538,7 @@ static void postProcessFFTResults(bool noiseGateOpen, int numberOfChannels) // p
 ////////////////////
 
 // peak detection is called from FFT task when vReal[] contains valid FFT results
-static void detectSamplePeak(void) {
+static void detectSamplePeak() {
   bool havePeak = false;
   // softhack007: this code continuously triggers while amplitude in the selected bin is above a certain threshold. So it does not detect peaks - it detects high activity in a frequency bin.
   // Poor man's beat detection by seeing if sample > Average + some value.
@@ -556,7 +557,7 @@ static void detectSamplePeak(void) {
 
 #endif
 
-static void autoResetPeak(void) {
+static void autoResetPeak() {
   uint16_t MinShowDelay = MAX(50, strip.getMinShowDelay());  // Fixes private class variable compiler error. Unsure if this is the correct way of fixing the root problem. -THATDONFC
   if (millis() - timeOfPeak > MinShowDelay) {          // Auto-reset of samplePeak after a complete frame has passed.
     samplePeak = false;
@@ -668,7 +669,7 @@ static void simulateSound() {
 #define FX_MODE_PARTICLESGEQ           142
 #define FX_MODE_PARTICLECENTERGEQ      151
 
-static uint16_t mode_static(void) {
+static uint16_t mode_static() {
   SEGMENT.fill(SEGCOLOR(0));
   return FRAMETIME;
 }
@@ -676,7 +677,7 @@ static uint16_t mode_static(void) {
 /////////////////////////////////
 //     * Ripple Peak           //
 /////////////////////////////////
-static uint16_t mode_ripplepeak(void) {                // * Ripple peak. By Andrew Tuline.
+static uint16_t mode_ripplepeak() {                // * Ripple peak. By Andrew Tuline.
                                                           // This currently has no controls.
   #define MAXSTEPS 16                                     // Case statement wouldn't allow a variable.
   //4 bytes
@@ -752,7 +753,7 @@ typedef struct Gravity {
 ///////////////////////
 //   * GRAVCENTER    //
 ///////////////////////
-static uint16_t mode_gravcenter(void) {                // Gravcenter. By Andrew Tuline.
+static uint16_t mode_gravcenter() {                // Gravcenter. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
 
   const unsigned dataSize = sizeof(gravity);
@@ -794,7 +795,7 @@ static const char _data_FX_MODE_GRAVCENTER[] PROGMEM = "Gravcenter@Rate of fall,
 ///////////////////////
 //   * GRAVCENTRIC   //
 ///////////////////////
-static uint16_t mode_gravcentric(void) {                     // Gravcentric. By Andrew Tuline.
+static uint16_t mode_gravcentric() {                     // Gravcentric. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
 
   unsigned dataSize = sizeof(gravity);
@@ -837,7 +838,7 @@ static const char _data_FX_MODE_GRAVCENTRIC[] PROGMEM = "Gravcentric@Rate of fal
 ///////////////////////
 //   * GRAVIMETER    //
 ///////////////////////
-static uint16_t mode_gravimeter(void) {                // Gravmeter. By Andrew Tuline.
+static uint16_t mode_gravimeter() {                // Gravmeter. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
 
   unsigned dataSize = sizeof(gravity);
@@ -877,7 +878,7 @@ static const char _data_FX_MODE_GRAVIMETER[] PROGMEM = "Gravimeter@Rate of fall,
 //////////////////////
 //   * JUGGLES      //
 //////////////////////
-static uint16_t mode_juggles(void) {                   // Juggles. By Andrew Tuline.
+static uint16_t mode_juggles() {                   // Juggles. By Andrew Tuline.
   SEGMENT.fade_out(224); // 6.25%
   uint8_t my_sampleAgc = fmax(fmin(volumeSmth, 255.0), 0);
 
@@ -894,7 +895,7 @@ static const char _data_FX_MODE_JUGGLES[] PROGMEM = "Juggles@!,# of balls;!,!;!;
 //////////////////////
 //   * MATRIPIX     //
 //////////////////////
-static uint16_t mode_matripix(void) {                  // Matripix. By Andrew Tuline.
+static uint16_t mode_matripix() {                  // Matripix. By Andrew Tuline.
   // effect can work on single pixels, we just lose the shifting effect
   uint8_t secondHand = micros()/(256-SEGMENT.speed)/500 % 16;
   if(SEGENV.aux0 != secondHand) {
@@ -917,7 +918,7 @@ static const char _data_FX_MODE_MATRIPIX[] PROGMEM = "Matripix@!,Brightness;!,!;
 //////////////////////
 //   * MIDNOISE     //
 //////////////////////
-static uint16_t mode_midnoise(void) {                  // Midnoise. By Andrew Tuline.
+static uint16_t mode_midnoise() {                  // Midnoise. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
   // Changing xdist to SEGENV.aux0 and ydist to SEGENV.aux1.
   SEGMENT.fade_out(SEGMENT.speed);
@@ -946,7 +947,7 @@ static const char _data_FX_MODE_MIDNOISE[] PROGMEM = "Midnoise@Fade rate,Max. le
 //   * NOISEFIRE    //
 //////////////////////
 // I am the god of hellfire. . . Volume (only) reactive fire routine. Oh, look how short this is.
-static uint16_t mode_noisefire(void) {                 // Noisefire. By Andrew Tuline.
+static uint16_t mode_noisefire() {                 // Noisefire. By Andrew Tuline.
   CRGBPalette16 myPal = CRGBPalette16(CHSV(0,255,2),    CHSV(0,255,4),    CHSV(0,255,8), CHSV(0, 255, 8),  // Fire palette definition. Lower value = darker.
                                       CHSV(0, 255, 16), CRGB::Red,        CRGB::Red,     CRGB::Red,
                                       CRGB::DarkOrange, CRGB::DarkOrange, CRGB::Orange,  CRGB::Orange,
@@ -970,7 +971,7 @@ static const char _data_FX_MODE_NOISEFIRE[] PROGMEM = "Noisefire@!,!;;;01v;m12=2
 ///////////////////////
 //   * Noisemeter    //
 ///////////////////////
-static uint16_t mode_noisemeter(void) {                // Noisemeter. By Andrew Tuline.
+static uint16_t mode_noisemeter() {                // Noisemeter. By Andrew Tuline.
   //uint8_t fadeRate = map(SEGMENT.speed,0,255,224,255);
   uint8_t fadeRate = map(SEGMENT.speed,0,255,200,254);
   SEGMENT.fade_out(fadeRate);
@@ -996,7 +997,7 @@ static const char _data_FX_MODE_NOISEMETER[] PROGMEM = "Noisemeter@Fade rate,Wid
 //////////////////////
 //   * PIXELWAVE    //
 //////////////////////
-static uint16_t mode_pixelwave(void) {                 // Pixelwave. By Andrew Tuline.
+static uint16_t mode_pixelwave() {                 // Pixelwave. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
   // even with 1D effect we have to take logic for 2D segments for allocation as fill_solid() fills whole segment
   uint8_t secondHand = micros()/(256-SEGMENT.speed)/500+1 % 16;
@@ -1024,7 +1025,7 @@ typedef struct Plasphase {
   int16_t    thatphase;
 } plasphase;
 
-static uint16_t mode_plasmoid(void) {                  // Plasmoid. By Andrew Tuline.
+static uint16_t mode_plasmoid() {                  // Plasmoid. By Andrew Tuline.
   // even with 1D effect we have to take logic for 2D segments for allocation as fill_solid() fills whole segment
   if (!SEGENV.allocateData(sizeof(plasphase))) return mode_static(); //allocation failed
   Plasphase* plasmoip = reinterpret_cast<Plasphase*>(SEGENV.data);
@@ -1054,7 +1055,7 @@ static const char _data_FX_MODE_PLASMOID[] PROGMEM = "Plasmoid@Phase,# of pixels
 //   * PUDDLEPEAK    //
 ///////////////////////
 // Andrew's crappy peak detector. If I were 40+ years younger, I'd learn signal processing.
-static uint16_t mode_puddlepeak(void) {                // Puddlepeak. By Andrew Tuline.
+static uint16_t mode_puddlepeak() {                // Puddlepeak. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
 
   unsigned size = 0;
@@ -1088,11 +1089,11 @@ static const char _data_FX_MODE_PUDDLEPEAK[] PROGMEM = "Puddlepeak@Fade rate,Pud
 //////////////////////
 //   * PUDDLES      //
 //////////////////////
-static uint16_t mode_puddles(void) {                   // Puddles. By Andrew Tuline.
+static uint16_t mode_puddles() {                   // Puddles. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
   unsigned size = 0;
   uint8_t fadeVal = map(SEGMENT.speed, 0, 255, 224, 254);
-  unsigned pos = random16(SEGLEN);                        // Set a random starting position.
+  unsigned pos = hw_random16(SEGLEN);                        // Set a random starting position.
 
   SEGMENT.fade_out(fadeVal);
 
@@ -1113,7 +1114,7 @@ static const char _data_FX_MODE_PUDDLES[] PROGMEM = "Puddles@Fade rate,Puddle si
 //////////////////////
 //     * PIXELS     //
 //////////////////////
-static uint16_t mode_pixels(void) {                    // Pixels. By Andrew Tuline.
+static uint16_t mode_pixels() {                    // Pixels. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
 
   if (!SEGENV.allocateData(32*sizeof(uint8_t))) return mode_static(); //allocation failed
@@ -1141,7 +1142,7 @@ static const char _data_FX_MODE_PIXELS[] PROGMEM = "Pixels@Fade rate,# of pixels
 //////////////////////
 //    ** Blurz      //
 //////////////////////
-static uint16_t mode_blurz(void) {                    // Blurz. By Andrew Tuline.
+static uint16_t mode_blurz() {                    // Blurz. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
   // even with 1D effect we have to take logic for 2D segments for allocation as fill_solid() fills whole segment
   const unsigned cycleTime = 5 + 50*(255-SEGMENT.speed)/SEGLEN; // SPEED_FORMULA_L
@@ -1172,7 +1173,7 @@ static const char _data_FX_MODE_BLURZ[] PROGMEM = "Blurz@Fade rate,Blur;!,Color 
 /////////////////////////
 //   ** DJLight        //
 /////////////////////////
-static uint16_t mode_DJLight(void) {                   // Written by ??? Adapted by Will Tatam.
+static uint16_t mode_DJLight() {                   // Written by ??? Adapted by Will Tatam.
   if (SEGLEN <= 1) return mode_static();
   // No need to prevent from executing on single led strips, only mid will be set (mid = 0)
   const int mid = SEGLEN / 2;
@@ -1197,7 +1198,7 @@ static const char _data_FX_MODE_DJLIGHT[] PROGMEM = "DJ Light@Speed;;;01f;m12=2,
 ////////////////////
 //   ** Freqmap   //
 ////////////////////
-static uint16_t mode_freqmap(void) {                   // Map FFT_MajorPeak to SEGLEN. Would be better if a higher framerate.
+static uint16_t mode_freqmap() {                   // Map FFT_MajorPeak to SEGLEN. Would be better if a higher framerate.
   if (SEGLEN <= 1) return mode_static();
   // Start frequency = 60 Hz and log10(60) = 1.78
   // End frequency = MAX_FREQUENCY in Hz and lo10(MAX_FREQUENCY) = MAX_FREQ_LOG10
@@ -1225,7 +1226,7 @@ static const char _data_FX_MODE_FREQMAP[] PROGMEM = "Freqmap@Fade rate,Starting 
 ///////////////////////
 //   ** Freqmatrix   //
 ///////////////////////
-static uint16_t mode_freqmatrix(void) {                // Freqmatrix. By Andreas Pleschung.
+static uint16_t mode_freqmatrix() {                // Freqmatrix. By Andreas Pleschung.
 
   uint8_t secondHand = micros()/(256-SEGMENT.speed)/500 % 16;
   if(SEGENV.aux0 != secondHand) {
@@ -1270,7 +1271,7 @@ static const char _data_FX_MODE_FREQMATRIX[] PROGMEM = "Freqmatrix@Speed,Sound e
 // End frequency = 5120 Hz and lo10(5120) = 3.71
 //  SEGMENT.speed select faderate
 //  SEGMENT.intensity select colour index
-static uint16_t mode_freqpixels(void) {                // Freqpixel. By Andrew Tuline.
+static uint16_t mode_freqpixels() {                // Freqpixel. By Andrew Tuline.
 
   // this code translates to speed * (2 - speed/255) which is a) speed*2 or b) speed (when speed is 255)
   // and since fade_out() can only take 0-255 it will behave incorrectly when speed > 127
@@ -1308,7 +1309,7 @@ static const char _data_FX_MODE_FREQPIXELS[] PROGMEM = "Freqpixels@Fade rate,Sta
 //
 // As a compromise between speed and accuracy we are currently sampling with 10240Hz, from which we can then determine with a 512bin FFT our max frequency is 5120Hz.
 // Depending on the music stream you have you might find it useful to change the frequency mapping.
-static uint16_t mode_freqwave(void) {                  // Freqwave. By Andreas Pleschung.
+static uint16_t mode_freqwave() {                  // Freqwave. By Andreas Pleschung.
 
   uint8_t secondHand = micros()/(256-SEGMENT.speed)/500 % 16;
   if(SEGENV.aux0 != secondHand) {
@@ -1347,7 +1348,7 @@ static const char _data_FX_MODE_FREQWAVE[] PROGMEM = "Freqwave@Speed,Sound effec
 ///////////////////////
 //    ** Gravfreq    //
 ///////////////////////
-static uint16_t mode_gravfreq(void) {                  // Gravfreq. By Andrew Tuline.
+static uint16_t mode_gravfreq() {                  // Gravfreq. By Andrew Tuline.
   if (SEGLEN <= 1) return mode_static();
   unsigned dataSize = sizeof(gravity);
   if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
@@ -1390,7 +1391,7 @@ static const char _data_FX_MODE_GRAVFREQ[] PROGMEM = "Gravfreq@Rate of fall,Sens
 //////////////////////
 //   ** Noisemove   //
 //////////////////////
-static uint16_t mode_noisemove(void) {                 // Noisemove.    By: Andrew Tuline
+static uint16_t mode_noisemove() {                 // Noisemove.    By: Andrew Tuline
 
   int fadeoutDelay = (256 - SEGMENT.speed) / 96;
   if ((fadeoutDelay <= 1 ) || ((SEGENV.call % fadeoutDelay) == 0)) SEGMENT.fadeToBlackBy(4+ SEGMENT.speed/4);
@@ -1411,7 +1412,7 @@ static const char _data_FX_MODE_NOISEMOVE[] PROGMEM = "Noisemove@Move speed,Fade
 //////////////////////
 //   ** Rocktaves   //
 //////////////////////
-static uint16_t mode_rocktaves(void) {                 // Rocktaves. Same note from each octave is same colour.    By: Andrew Tuline
+static uint16_t mode_rocktaves() {                 // Rocktaves. Same note from each octave is same colour.    By: Andrew Tuline
 
   SEGMENT.fadeToBlackBy(16);                              // Just in case something doesn't get faded.
 
@@ -1444,7 +1445,7 @@ static const char _data_FX_MODE_ROCKTAVES[] PROGMEM = "Rocktaves@;!,!;!;01f;m12=
 //   ** Waterfall    //
 ///////////////////////
 // Combines peak detection with FFT_MajorPeak and FFT_Magnitude.
-static uint16_t mode_waterfall(void) {                   // Waterfall. By: Andrew Tuline
+static uint16_t mode_waterfall() {                   // Waterfall. By: Andrew Tuline
 
   // effect can work on single pixels, we just lose the shifting effect
   if (SEGENV.call == 0) {
@@ -1486,7 +1487,7 @@ static const char _data_FX_MODE_WATERFALL[] PROGMEM = "Waterfall@!,Adjust color,
 //    * 2D Swirl       //
 /////////////////////////
 // By: Mark Kriegsman https://gist.github.com/kriegsman/5adca44e14ad025e6d3b , modified by Andrew Tuline
-static uint16_t mode_2DSwirl(void) {
+static uint16_t mode_2DSwirl() {
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
 
   const int cols = SEG_W;
@@ -1521,7 +1522,7 @@ static const char _data_FX_MODE_2DSWIRL[] PROGMEM = "Swirl@!,Sensitivity,Blur;,B
 //    * 2D Waverly     //
 /////////////////////////
 // By: Stepko, https://editor.soulmatelights.com/gallery/652-wave , modified by Andrew Tuline
-static uint16_t mode_2DWaverly(void) {
+static uint16_t mode_2DWaverly() {
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
 
   const int cols = SEG_W;
@@ -1551,7 +1552,7 @@ static const char _data_FX_MODE_2DWAVERLY[] PROGMEM = "Waverly@Amplification,Sen
 /////////////////////////
 //     ** 2D GEQ       //
 /////////////////////////
-static uint16_t mode_2DGEQ(void) { // By Will Tatam. Code reduction by Ewoud Wijma.
+static uint16_t mode_2DGEQ() { // By Will Tatam. Code reduction by Ewoud Wijma.
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
 
   const int NUM_BANDS = map(SEGMENT.custom1, 0, 255, 1, 16);
@@ -1607,7 +1608,7 @@ static const char _data_FX_MODE_2DGEQ[] PROGMEM = "GEQ@Fade speed,Ripple decay,#
 /////////////////////////
 //  ** 2D Funky plank  //
 /////////////////////////
-static uint16_t mode_2DFunkyPlank(void) {              // Written by ??? Adapted by Will Tatam.
+static uint16_t mode_2DFunkyPlank() {              // Written by ??? Adapted by Will Tatam.
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
 
   const int cols = SEG_W;
@@ -1688,7 +1689,7 @@ static uint8_t akemi[] PROGMEM = {
   0,0,0,0,0,0,0,0,0,0,0,0,0,3,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 };
 
-static uint16_t mode_2DAkemi(void) {
+static uint16_t mode_2DAkemi() {
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
 
   const int cols = SEG_W;
@@ -1707,7 +1708,7 @@ static uint16_t mode_2DAkemi(void) {
     CRGBA color;
     CRGBA soundColor = CRGB::Orange;
     CRGBA faceColor  = SEGMENT.color_wheel(counter);
-    CRGBA armsAndLegsColor = SEGCOLOR(1) > 0 ? SEGCOLOR(1) : 0xFFE0A0; //default warmish white 0xABA8FF; //0xFF52e5;//
+    CRGBA armsAndLegsColor = SEGCOLOR(1) != BLACK ? SEGCOLOR(1) : 0xFFE0A0; //default warmish white 0xABA8FF; //0xFF52e5;//
     uint8_t ak = pgm_read_byte_near(akemi + ((y * 32)/rows) * 32 + (x * 32)/cols); // akemi[(y * 32)/rows][(x * 32)/cols]
     switch (ak) {
       case 3: armsAndLegsColor.r *= lightFactor;  armsAndLegsColor.g *= lightFactor;  armsAndLegsColor.b *= lightFactor;  color = armsAndLegsColor; break; //light arms and legs 0x9B9B9B
@@ -1716,7 +1717,7 @@ static uint16_t mode_2DAkemi(void) {
       case 6: faceColor.r *= lightFactor;  faceColor.g *= lightFactor;  faceColor.b *= lightFactor;  color=faceColor; break; //light face 0x31AAFF
       case 5: faceColor.r *= normalFactor; faceColor.g *= normalFactor; faceColor.b *= normalFactor; color=faceColor; break; //normal face 0x0094FF
       case 4: color = faceColor; break; //dark face 0x007DC6
-      case 7: color = SEGCOLOR(2) > 0 ? SEGCOLOR(2) : 0xFFFFFF; break; //eyes and mouth default white
+      case 7: color = SEGCOLOR(2) != BLACK ? SEGCOLOR(2) : 0xFFFFFF; break; //eyes and mouth default white
       case 8: if (base > 0.4) {soundColor.r *= base; soundColor.g *= base; soundColor.b *= base; color=soundColor;} else color = armsAndLegsColor; break;
       default: color = BLACK; break;
     }
@@ -1752,7 +1753,7 @@ static const char _data_FX_MODE_2DAKEMI[] PROGMEM = "Akemi@Color speed,Dance;Hea
   Uses palette for particle color
   by DedeHai (Damian Schneider)
 */
-uint16_t mode_particleGEQ(void) {
+uint16_t mode_particleGEQ() {
   ParticleSystem2D *PartSys = nullptr;
 
   if (SEGMENT.call == 0) { // initialization
@@ -1824,7 +1825,7 @@ static const char _data_FX_MODE_PARTICLEGEQ[] PROGMEM = "PS GEQ 2D@Speed,Intensi
   by DedeHai (Damian Schneider)
 */
 #define NUMBEROFSOURCES 16
-uint16_t mode_particlecenterGEQ(void) {
+uint16_t mode_particlecenterGEQ() {
   ParticleSystem2D *PartSys = nullptr;
   uint8_t numSprays;
   uint32_t i;
@@ -1897,7 +1898,7 @@ static const char _data_FX_MODE_PARTICLECIRCULARGEQ[] PROGMEM = "PS GEQ Nova@Spe
   by DedeHai (Damian Schneider)
 */
 /*
-uint16_t mode_particle1DGEQ(void) {
+uint16_t mode_particle1DGEQ() {
   ParticleSystem1D *PartSys = nullptr;
   uint32_t numSources;
   uint32_t i;
@@ -1968,7 +1969,7 @@ static const char _data_FX_MODE_PS1DGEQ[] PROGMEM = "PS GEQ 1D@Speed,!,Size,Blur
   by DedeHai (Damian Schneider)
 */
 /*
-uint16_t mode_particle1DsonicStream(void) {
+uint16_t mode_particle1DsonicStream() {
   ParticleSystem1D *PartSys = nullptr;
 
   if (SEGMENT.call == 0) { // initialization
@@ -2069,7 +2070,7 @@ static const char _data_FX_MODE_PS1DSONICSTREAM[] PROGMEM = "PS Sonic Stream@!,!
   by DedeHai (Damian Schneider)
 */
 /*
-uint16_t mode_particle1DsonicBoom(void) {
+uint16_t mode_particle1DsonicBoom() {
   ParticleSystem1D *PartSys = nullptr;
   if (SEGMENT.call == 0) { // initialization
     if (!initParticleSystem1D(PartSys, 1, 255, 0, true)) // init, no additional data needed
@@ -2240,8 +2241,6 @@ class AudioReactive : public Usermod {
     const uint16_t delayMs = 10;  // I don't want to sample too often and overload WLED
     uint16_t audioSyncPort= 11988;// default port for UDP sound sync
 
-    bool updateIsRunning = false; // true during OTA.
-
 #ifdef ARDUINO_ARCH_ESP32
     // used for AGC
     int      last_soundAgc = -1;   // used to detect AGC mode change (for resetting AGC internal error buffers)
@@ -2277,10 +2276,10 @@ class AudioReactive : public Usermod {
     static const char UDP_SYNC_HEADER_v1[];
 
     // private methods
-    void removeAudioPalettes(void);
-    void createAudioPalettes(void);
+    void removeAudioPalettes();
+    void createAudioPalettes();
     CRGBA getCRGBForBand(int x, int pal);
-    void fillAudioPalettes(void);
+    void fillAudioPalettes();
 
     ////////////////////
     // Debug support  //
@@ -2521,7 +2520,7 @@ class AudioReactive : public Usermod {
      * does not affect FFTResult[] or volumeRaw ( = sample or rawSampleAgc) 
     */
     // effects: Gravimeter, Gravcenter, Gravcentric, Noisefire, Plasmoid, Freqpixels, Freqwave, Gravfreq, (2D Swirl, 2D Waverly)
-    void limitSampleDynamics(void) {
+    void limitSampleDynamics() {
       const float bigChange = 196.0f;                  // just a representative number - a large, expected sample value
       static unsigned long last_time = 0;
       static float last_volumeSmth = 0.0f;
@@ -2553,14 +2552,14 @@ class AudioReactive : public Usermod {
     //////////////////////
 
     // try to establish UDP sound sync connection
-    void connectUDPSoundSync(void) {
+    void connectUDPSoundSync() {
       // This function tries to establish a UDP sync connection if needed
       // necessary as we also want to transmit in "AP Mode", but the standard "connected()" callback only reacts on STA connection
       static unsigned long last_connection_attempt = 0;
 
-      if ((audioSyncPort <= 0) || ((audioSyncEnabled & 0x03) == 0)) return;  // Sound Sync not enabled
+      if (audioSyncPort <= 0 || !audioSyncEnabled) return;                   // Sound Sync not enabled
       if (udpSyncConnected) return;                                          // already connected
-      if (!(apActive || interfacesInited)) return;                           // neither AP nor other connections availeable
+      if (!(apActive || interfacesInited)) return;                           // neither AP nor other connections available
       if (millis() - last_connection_attempt < 15000) return;                // only try once in 15 seconds
       if (updateIsRunning) return; 
 
@@ -2812,6 +2811,14 @@ class AudioReactive : public Usermod {
       #endif
 
       switch (dmType) {
+        case 0: // dummy "network receive only" mode
+          DEBUGSR_PRINT(F("AR: Network receive mode only"));
+          if (audioSource) delete audioSource;
+          audioSource = nullptr;
+          //disableSoundProcessing = true;
+          audioSyncEnabled = 2; // force udp sound receive mode (has the same effect as disableSoundProcessing=true as far as FFT goes)
+          break;
+
         case 1:
           DEBUGSR_PRINT(F("AR: I2S Microphone - ")); DEBUGSR_PRINTLN(F(I2S_MIC_CHANNEL_TEXT));
           audioSource = new(std::nothrow) I2SSource(SAMPLE_RATE, BLOCK_SIZE);
@@ -2857,26 +2864,25 @@ class AudioReactive : public Usermod {
           if (audioSource) audioSource->initialize(i2swsPin, i2ssdPin, i2sckPin, mclkPin);
           break;
 
-        case 0:
         default:
           DEBUGSR_PRINTLN(F("AR: Input disabled."));
+          if (audioSource) delete audioSource;
           audioSource = nullptr;
           break;
       }
+      DEBUGSR_PRINTF_P(PSTR("AR: GPIO selected: %d, %d, %d, %d\n"), (int)i2swsPin, (int)i2ssdPin, (int)i2sckPin, (int)mclkPin);
       delay(250); // give microphone enough time to initialise
 #endif
 
       if (enabled) onUpdateBegin(false);                 // create FFT task, and initialize network
 
 #ifdef ARDUINO_ARCH_ESP32
-      if (FFT_Task == nullptr) enabled = false;          // FFT task creation failed
-      disableSoundProcessing = !(audioSource && audioSource->isInitialized());
-      if (!(audioSource && audioSource->isInitialized())) {
-        // audio source failed to initialize. Still stay "enabled", as there might be input arriving via UDP Sound Sync 
-        DEBUGSR_PRINTLN(F("AR: Failed to initialize sound input driver. Please check input PIN settings."));
+      disableSoundProcessing = audioSource && !audioSource->isInitialized();
+      if (FFT_Task == nullptr && !disableSoundProcessing && !(audioSyncEnabled & 0x02)) {
+        // audio source failed to initialize
+        //enabled = false;    // FFT task creation failed but source created
+        DEBUGSR_PRINTLN(F("AR: Failed to initialize sound input driver and/or FFT task."));
       }
-#else
-      disableSoundProcessing = !enabled;                 // all good - enable audio processing
 #endif
       if (enabled) connectUDPSoundSync();
       if (enabled && addPalettes) createAudioPalettes();
@@ -2920,7 +2926,6 @@ class AudioReactive : public Usermod {
       static unsigned long lastUMRun = millis();
 
       if (!enabled) {
-        disableSoundProcessing = true;   // keep processing suspended (FFT task)
         simulateSound();
         lastUMRun = millis();            // update time keeping
         return;
@@ -2928,37 +2933,8 @@ class AudioReactive : public Usermod {
       // We cannot wait indefinitely before processing audio data
       if (strip.isUpdating() && (millis() - lastUMRun < 2)) return;   // be nice, but not too nice
 
-      // suspend local sound processing when "real time mode" is active (E131, UDP, ADALIGHT, ARTNET)
-      if (  (realtimeOverride == REALTIME_OVERRIDE_NONE)  // please add other overrides here if needed
-          &&( (realtimeMode == REALTIME_MODE_GENERIC)
-            ||(realtimeMode == REALTIME_MODE_E131)
-            ||(realtimeMode == REALTIME_MODE_UDP)
-            ||(realtimeMode == REALTIME_MODE_ADALIGHT)
-            ||(realtimeMode == REALTIME_MODE_ARTNET) ) )  // please add other modes here if needed
-      {
-        #if defined(WLED_DEBUG_USERMODS) && defined(SR_DEBUG)
-        if ((disableSoundProcessing == false) && (audioSyncEnabled == 0)) {  // we just switched to "disabled"
-          DEBUGSR_PRINTLN(F("[AR userLoop]  realtime mode active - audio processing suspended."));
-          DEBUGSR_PRINTF_P(PSTR("               RealtimeMode = %d; RealtimeOverride = %d\n"), int(realtimeMode), int(realtimeOverride));
-        }
-        #endif
-        disableSoundProcessing = true;
-      } else {
-        #if defined(WLED_DEBUG_USERMODS) && defined(SR_DEBUG)
-        if ((disableSoundProcessing == true) && (audioSyncEnabled == 0) && audioSource && audioSource->isInitialized()) {    // we just switched to "enabled"
-          DEBUGSR_PRINTLN(F("[AR userLoop]  realtime mode ended - audio processing resumed."));
-          DEBUGSR_PRINTF_P(PSTR("               RealtimeMode = %d; RealtimeOverride = %d\n"), int(realtimeMode), int(realtimeOverride));
-        }
-        #endif
-        if ((disableSoundProcessing == true) && (audioSyncEnabled == 0)) lastUMRun = millis();  // just left "realtime mode" - update timekeeping
-        disableSoundProcessing = false;
-      }
-
-      if (audioSyncEnabled & 0x02) disableSoundProcessing = true;   // make sure everything is disabled IF in audio Receive mode
-      if (audioSyncEnabled & 0x01) disableSoundProcessing = false;  // keep running audio IF we're in audio Transmit mode
-
 #ifdef ARDUINO_ARCH_ESP32
-      if (!(audioSource && audioSource->isInitialized())) disableSoundProcessing = true;  // no audio source
+      //if (audioSource && audioSource->isInitialized() && (audioSyncEnabled & 0x01)) disableSoundProcessing = false;  // keep running audio IF we're in audio Transmit mode
 
       // Only run the sampling code IF we're not in Receive mode or realtime mode
       if (!(audioSyncEnabled & 0x02) && !disableSoundProcessing) {
@@ -3075,8 +3051,7 @@ class AudioReactive : public Usermod {
   #if defined(WLED_DEBUG_USERMODS) && defined(SR_DEBUG)
       fftTime = sampleTime = 0;
   #endif
-      // gracefully suspend FFT task (if running)
-      disableSoundProcessing = true;
+      updateIsRunning = init;
 
       // reset sound data
       micDataReal = 0.0f;
@@ -3117,14 +3092,11 @@ class AudioReactive : public Usermod {
           );
       }
       micDataReal = 0.0f;                     // just to be sure
-      if (enabled) disableSoundProcessing = false;
-      updateIsRunning = init;
     }
 #else // reduced function for 8266
     void onUpdateBegin(bool init)
     {
-      // gracefully suspend audio (if running)
-      disableSoundProcessing = true;
+      updateIsRunning = init;
       // reset sound data
       volumeRaw = 0; volumeSmth = 0;
       for(int i=(init?0:1); i<NUM_GEQ_CHANNELS; i+=2) fftResult[i] = 16; // make a tiny pattern
@@ -3137,8 +3109,6 @@ class AudioReactive : public Usermod {
           receivedFormat = 0;
         }
       }
-      if (enabled) disableSoundProcessing = init; // init = true means that OTA is just starting --> don't process audio
-      updateIsRunning = init;
     }
 #endif
 
@@ -3189,7 +3159,7 @@ class AudioReactive : public Usermod {
           uiDomString += inputLevel;
           uiDomString += F(" /><div class=\"sliderdisplay\"></div></div></div>"); //<output class=\"sliderbubble\"></output>
           infoArr.add(uiDomString);
-        } 
+        }
 #endif
         // The following can be used for troubleshooting user errors and is so not enclosed in #ifdef WLED_DEBUG_USERMODS
 
@@ -3215,11 +3185,7 @@ class AudioReactive : public Usermod {
           // Analog or I2S digital input
           if (audioSource && (audioSource->isInitialized())) {
             // audio source successfully configured
-            //if (audioSource->getType() == AudioSource::Type_I2SAdc) {
-            //  infoArr.add(F("ADC analog")); // no longer supported
-            //} else {
-              infoArr.add(dmType == 5 ? F("PDM digital") : F("I2S digital"));
-            //}
+            infoArr.add(dmType == 5 ? F("PDM digital") : F("I2S digital"));
             // input level or "silence"
             if (maxSample5sec > 1.0f) {
               float my_usage = 100.0f * (maxSample5sec / 255.0f);
@@ -3292,6 +3258,28 @@ class AudioReactive : public Usermod {
         DEBUGSR_PRINTF("AR FFT time     : %5.2f ms\n", float(fftTime)/100.0f);
   #endif
 #endif
+      } else {
+        infoArr = user.createNestedArray(F("Simulation"));
+        uiDomString = F("<select class=\"sel-sg\" onchange=\"requestJson({'");
+        uiDomString += FPSTR(_name);
+        uiDomString += F("':{'");
+        uiDomString += FPSTR(_soundSim);
+        uiDomString += F("':parseInt(this.value)}});\">");
+        for (int i = 0; i < (int)UMS_count; i++) {
+          char option[64];
+          const char *txt;
+          switch (i) {
+            default:
+            case 0: txt = PSTR("BeatSin");    break;
+            case 1: txt = PSTR("WeWillRock"); break;
+            case 2: txt = PSTR("10/13");      break;
+            case 3: txt = PSTR("14/3");       break;
+          }
+          snprintf_P(option, sizeof(option), PSTR("<option value=\"%d\"%s>%s</option>"), i, i == (int)simulationId ? PSTR(" selected") : "", txt);
+          uiDomString += option;
+        }
+        uiDomString += F("</select>");
+        infoArr.add(uiDomString);
       }
     }
 
@@ -3308,6 +3296,11 @@ class AudioReactive : public Usermod {
         usermod = root.createNestedObject(FPSTR(_name));
       }
       usermod["on"] = enabled;
+      #ifdef ARDUINO_ARCH_ESP32
+      if (!enabled) {
+        usermod[FPSTR(_soundSim)] = (int)simulationId;
+      }
+      #endif
     }
 
 
@@ -3323,28 +3316,33 @@ class AudioReactive : public Usermod {
       if (!usermod.isNull()) {
         if (usermod[FPSTR(_enabled)].is<bool>()) {
           enabled = usermod[FPSTR(_enabled)].as<bool>();
-          if (prevEnabled != enabled) onUpdateBegin(!enabled);
-          if (addPalettes) {
+          if (prevEnabled != enabled) {
+            onUpdateBegin(!enabled);  // create/destroy FFT task
             // add/remove custom/audioreactive palettes
-            if (prevEnabled && !enabled) removeAudioPalettes();
-            if (!prevEnabled && enabled) createAudioPalettes();
+            removeAudioPalettes();
+            createAudioPalettes();
           }
         }
-#ifdef ARDUINO_ARCH_ESP32
+        #ifdef ARDUINO_ARCH_ESP32
         if (usermod[FPSTR(_inputLvl)].is<int>()) {
           inputLevel = min(255,max(0,usermod[FPSTR(_inputLvl)].as<int>()));
         }
-#endif
+        #endif
+        if (usermod[FPSTR(_soundSim)].is<int>()) {
+          simulationId = (soundSimulations_t)min(3,max(0,usermod[FPSTR(_soundSim)].as<int>()));
+        }
       }
       if (root.containsKey(F("rmcpal")) && root[F("rmcpal")].as<bool>()) {
         // handle removal of custom palettes from JSON call so we don't break things
+        // actual custom palette removal is done *after* usermod's readFromJsonState() is called
         removeAudioPalettes();
       }
     }
 
     void onStateChange(uint8_t callMode) override {
-      if (initDone && enabled && addPalettes && palettes==0 && customPalettes.size()<10) {
+      if (initDone) {
         // if palettes were removed during JSON call re-add them
+        // "rmcpal" on its own will not trigger stateChanged but any other change may, so eventually palettes will be re-added
         createAudioPalettes();
       }
     }
@@ -3437,10 +3435,9 @@ class AudioReactive : public Usermod {
      */
     bool readFromConfig(JsonObject& root) override
     {
+      DEBUGSR_PRINTLN(F("AR: Reading config."));
       JsonObject top = root[FPSTR(_name)];
       bool configComplete = !top.isNull();
-      bool oldEnabled = enabled;
-      bool oldAddPalettes = addPalettes;
 
       configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled);
       configComplete &= getJsonValue(top[FPSTR(_addPalettes)], addPalettes);
@@ -3472,9 +3469,9 @@ class AudioReactive : public Usermod {
 
       if (initDone) {
         // add/remove custom/audioreactive palettes
-        if ((oldAddPalettes && !addPalettes) || (oldAddPalettes && !enabled)) removeAudioPalettes();
-        if ((addPalettes && !oldAddPalettes && enabled) || (addPalettes && !oldEnabled && enabled)) createAudioPalettes();
-      } // else setup() will create palettes
+        removeAudioPalettes();
+        createAudioPalettes();
+      } // else setup() will create palettes otherwise they would be removed by loading custom palettes
       return configComplete;
     }
 
@@ -3489,7 +3486,7 @@ class AudioReactive : public Usermod {
       uiScript.print(F("addOption(dd,'14/3',3);"));
 #ifdef ARDUINO_ARCH_ESP32
       uiScript.print(F("dd=addDropdown(ux,'digitalmic:type');"));
-      uiScript.print(F("addOption(dd,'Input disabled',0);"));
+      uiScript.print(F("addOption(dd,'None - network receive',0);"));
       uiScript.print(F("addOption(dd,'Generic I2S',1);"));
       uiScript.print(F("addOption(dd,'ES7243',2);"));
       uiScript.print(F("addOption(dd,'SPH0654',3);"));
@@ -3498,7 +3495,7 @@ class AudioReactive : public Usermod {
       uiScript.print(F("addOption(dd,'Generic PDM',5);"));
       #endif
       uiScript.print(F("addOption(dd,'ES8388',6);"));
-    
+
       uiScript.print(F("dd=addDropdown(ux,'config:AGC');"));
       uiScript.print(F("addOption(dd,'Off',0);"));
       uiScript.print(F("addOption(dd,'Normal',1);"));
@@ -3562,7 +3559,7 @@ class AudioReactive : public Usermod {
     }
 };
 
-void AudioReactive::removeAudioPalettes(void) {
+void AudioReactive::removeAudioPalettes() {
   DEBUGSR_PRINTLN(F("Removing audio palettes."));
   while (palettes>0) {
     customPalettes.pop_back();
@@ -3572,9 +3569,9 @@ void AudioReactive::removeAudioPalettes(void) {
   DEBUGSR_PRINT(F("Total # of palettes: ")); DEBUGSR_PRINTLN(customPalettes.size());
 }
 
-void AudioReactive::createAudioPalettes(void) {
+void AudioReactive::createAudioPalettes() {
   DEBUGSR_PRINT(F("Total # of palettes: ")); DEBUGSR_PRINTLN(customPalettes.size());
-  if (palettes) return;
+  if (palettes || !addPalettes || !enabled) return;
   DEBUGSR_PRINTLN(F("Adding audio palettes."));
   for (int i=0; i<MAX_PALETTES; i++)
     if (customPalettes.size() < 10) {
