@@ -1319,7 +1319,7 @@ void WS2812FX::service() {
         // Effect blending
         uint16_t prog = seg.progress();
         // rely on segment's pixel buffer to maintain pixel values if effect function is not called
-        if (mustUpdate || nowUp > seg.next_time) {
+        if (mustUpdate || nowUp >= seg.next_time) {
           seg.beginDraw(prog);                // set up parameters for get/setPixelColor() (will also blend colors and palette if blend style is FADE)
           _currentSegment = &seg;             // set current segment for effect functions (SEGMENT & SEGENV)
           // workaround for on/off transition to respect blending style
@@ -1332,7 +1332,7 @@ void WS2812FX::service() {
         if (segO && segO->isActive() && (seg.mode != segO->mode || transitionStyle != TRANSITION_FADE ||
             (segO->name != seg.name && segO->name && seg.name && strncmp(segO->name, seg.name, WLED_MAX_SEGNAME_LEN) != 0))) {
           // rely on old segment's pixel buffer to maintain pixel values if effect function is not called
-          if (mustUpdate || nowUp > segO->next_time) {
+          if (mustUpdate || nowUp >= segO->next_time) {
             segO->beginDraw(prog);            // set up palette & colors (also sets draw dimensions), parent segment has transition progress
             _currentSegment = segO;           // set current segment
             segO->next_time = nowUp + (*_mode[segO->mode])();  // run old mode
