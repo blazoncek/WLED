@@ -191,22 +191,30 @@ void WLED::loop()
   }
 
   // LED settings need to be saved, re-init busses
-  if (doInit & INIT_BUS) {
-    doInit = 0;
-    DEBUG_PRINTLN(F("Re-init busses."));
+  if (doInit) {
     bool aligned = strip.checkSegmentAlignment(); //see if old segments match old bus(ses)
-    strip.finalizeInit(); // will create buses and also load default ledmap if present (fixing 2D if needed)
+    if (doInit & INIT_BUS) {
+      doInit &= ~INIT_BUS;
+      DEBUG_PRINTLN(F("Re-init busses."));
+      strip.finalizeInit(); // will create buses and also load default ledmap if present (fixing 2D if needed)
+      doSerializeConfig = true;
+    }
+    if (doInit & INIT_2D) {
+      // 2D needs to be reinitilaised if configuration was changed
+      doInit &= ~INIT_2D;
+      DEBUG_PRINTLN(F("Re-init 2D."));
+      unsigned oldLen = strip.getLengthTotal();
+      strip.deserializeMap(); // (re)load default ledmap (will also setUpMatrix() if ledmap does not exist)
+      if (oldLen != strip.getLengthTotal()) strip.reallocatePixelBuffer();  // fix for wled#5669
+    }
     if (aligned) strip.makeAutoSegments();
     else strip.fixInvalidSegments();
-    doSerializeConfig = true;
-  } else if (doInit & INIT_2D) {
-    // 2D needs to be reinitilaised if configuration was changed via /json/cfg endpoint (not needed if done via set.cpp)
-    doInit &= ~INIT_2D;
-    strip.deserializeMap(); // (re)load default ledmap (will also setUpMatrix() if ledmap does not exist)
   }
   // new ledmap was requested via JSON
   if (loadLedmap >= 0) {
+    unsigned oldLen = strip.getLengthTotal();
     strip.deserializeMap(loadLedmap);
+    if (oldLen != strip.getLengthTotal()) strip.reallocatePixelBuffer(); // fix for wled#5669
     loadLedmap = -1;
   }
   yield();
@@ -536,6 +544,9 @@ void WLED::setup()
   initIR();
   DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 #endif
+
+  // Seed PRNG functions with an esp random value, which already works properly at this point.
+  PRNG::setSeed(hw_random16());
 
   #if WLED_WATCHDOG_TIMEOUT > 0
   enableWatchdog();

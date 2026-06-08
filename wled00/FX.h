@@ -245,7 +245,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_TWINKLEUP              106
 #define FX_MODE_NOISEPAL               107
 #define FX_MODE_SINEWAVE               108
-//#define FX_MODE_PHASEDNOISE            109  // candidate for removal (use Phased with check 1)
+#define FX_MODE_2DFLOW                 109  // was Phased Noise
 #define FX_MODE_FLOW                   110
 #define FX_MODE_CHUNCHUN               111
 #define FX_MODE_DANCING_SHADOWS        112
@@ -874,6 +874,13 @@ class WS2812FX {
       setTargetFps(unsigned fps),
       setupEffectData(),                          // add default effects to the list; defined in FX.cpp
       waitForIt();                                // wait until frame is over (service() has finished or time for 1 frame has passed)
+
+    inline void reallocatePixelBuffer() {
+      // allocate frame buffer after matrix has been set up (gaps!)
+      // use IRAM/PSRAM if available: there is no measurable perfomance impact between PSRAM and DRAM on S2/S3 with QSPI PSRAM for this buffer
+      p_free(_pixels);
+      _pixels = static_cast<uint32_t*>(allocate_buffer(getLengthTotal() * sizeof(uint32_t), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+    }
 
     inline void setPixelColor(unsigned n, uint32_t c) const   { if (n < getLengthTotal()) _pixels[n] = c; }  // paints absolute strip pixel with index n and color c
     inline void resetTimebase()                               { timebase = 0UL - millis(); }

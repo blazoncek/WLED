@@ -629,7 +629,7 @@ Segment &Segment::setPalette(uint8_t pal) {
   if (pal <= 255-customPalettes.size() && pal > FIXED_PALETTE_COUNT) pal = 0; // not built in palette or custom palette
   if (pal != palette) {
     DEBUGFX_PRINTF_P(PSTR("- Starting palette transition: %d\n"), pal);
-    startTransition(strip.getTransition(), transitionStyle != TRANSITION_FADE); // start transition prior to change (no need to copy segment)
+    startTransition(strip.getTransition(), transitionStyle != TRANSITION_FADE || pal == 0 || palette == 0); // start transition prior to change
     palette = pal;
     stateChanged = true; // send UDP/WS broadcast
   }
@@ -1284,11 +1284,7 @@ void WS2812FX::finalizeInit() {
   loadCustomPalettes(); // (re)load all custom palettes
   DEBUG_PRINTLN(F("Loading custom ledmaps"));
   deserializeMap();     // (re)load default ledmap (will also setUpMatrix() if ledmap does not exist)
-
-  // allocate frame buffer after matrix has been set up (gaps!)
-  // use IRAM/PSRAM if available: there is no measurable perfomance impact between PSRAM and DRAM on S2/S3 with QSPI PSRAM for this buffer
-  p_free(_pixels);
-  _pixels = static_cast<uint32_t*>(allocate_buffer(getLengthTotal() * sizeof(uint32_t), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+  reallocatePixelBuffer();  // fix for wled#5669
   DEBUG_PRINTF_P(PSTR("strip buffer %uB @ %p\n"), getLengthTotal() * sizeof(uint32_t), _pixels);
   DEBUG_PRINTF_P(PSTR("Heap after strip init: %uB\n"), getFreeHeapSize());
 }
@@ -1450,6 +1446,13 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
   const size_t  matrixSize = Segment::maxWidth * Segment::maxHeight;
   const size_t  startIndx  = XY(topSegment.start, topSegment.startY);
   const size_t  stopIndx   = startIndx + length;
+  // if we are in live (mainSegmentOnly or override) mode and arlsDisableGammaCorrection is true we need to apply gamma to non-main segments
+  // (realtimeLock() will set gamma32Func to nullGamma32 so bus will not apply gamma correction)
+  // fix for wled#5661
+  const bool    applyGamma = realtimeMode                                                   // are we in realtime mode
+                          && arlsDisableGammaCorrection                                     // does setting prevent gamma to be applied on bus level
+                          && gammaCorrectCol                                                // do we even have gamma correction
+                          && (&topSegment != &_segments[_mainSegment] || realtimeOverride); // is this a non-main segment or we have override
   const unsigned progress  = topSegment.progress();
   const unsigned progInv   = 0xFFFFU - progress;
   const uint8_t  opacity   = topSegment.currentBri(); // returns transitioned opacity for style FADE
@@ -1458,9 +1461,10 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
   const unsigned orgTS     = transitionStyle;
   if (width*height == 1) transitionStyle = TRANSITION_FADE; // disable style for single pixel segments (use fade instead)
 
-#ifndef ESP8266
+#ifdef WLED_ENABLE_FASTPATH
   // fast path (by @dedehai): handle the default case - no transitions, no grouping/spacing, no mirroring, no CCT
-  // TODO: crashes in topSegment.getPixelColorRaw() on ESP8266 (even when index is not OOB) after WiFi starts connecting
+  // TODO: crashes in topSegment.getPixelColorRaw() on ESP8266 & C3 (even when index is not OOB) after WiFi starts connecting
+  // S3 will sometimes display corrupt buffer. These point to OOB access somehow
   if (!topSegment.isInTransition() && topSegment.groupLength() == 1 && !topSegment.mirror && !topSegment.mirror_y) {
   #ifndef WLED_DISABLE_2D
     // 2D fast path
@@ -1782,6 +1786,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       // c_a is lacking white channel, we will try to add it back for Solid/Static effect where it is most likely missing
       uint32_t ct = hasWhite ? c_a.color32 : c_a.color32 & 0xFFFFFF;
       o  = hasWhite ? o : (o * (c_a.a + 1)) >> 8; // combine segment opacity with pixel opacity (c_a.a is alpha channel)
+      if (applyGamma) ct = NeoGammaWLEDMethod::Correct32(ct); // gamma32Func is nullGamma32() so we must use regular gamma function
       // expand pixel
       const unsigned groupLen = topSegment.groupLength();
       if (groupLen == 1) {
@@ -1887,6 +1892,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       o = hasWhite ? o : (o * (c_a.a + 1)) >> 8; // combine segment opacity with pixel opacity (c_a.a is alpha channel)
       // set all the pixels in the group
       const int maxI = std::min(i + topSegment.grouping, length); // make sure to not go beyond physical length
+      if (applyGamma) c = NeoGammaWLEDMethod::Correct32(c); // gamma32Func is nullGama32() so we must use regular gamma function
       while (i < maxI) setMirroredPixel(i++, c, o);
     }
   }
@@ -1914,8 +1920,9 @@ void WS2812FX::show() {
     _pixelCCT = static_cast<uint8_t*>(allocate_buffer(totalLen * sizeof(uint8_t), BFRALLOC_PREFER_PSRAM)); // allocate CCT buffer if necessary
   if (_pixelCCT) memset(_pixelCCT, 127, totalLen); // set neutral (50:50) CCT
 
-  if (realtimeMode == REALTIME_MODE_INACTIVE || useMainSegmentOnly || realtimeOverride > REALTIME_OVERRIDE_NONE) {
-    // clear frame buffer
+  // if we are in live mode we don't do segment blending unless useMainSegmentOnly is on or override is on
+  if (realtimeMode == REALTIME_MODE_INACTIVE || useMainSegmentOnly || realtimeOverride) {
+    // clear frame buffer (if not it will allow strange result if topmost segment doesn't use Top/Default blend mode)
     for (size_t i = 0; i < totalLen; i++) _pixels[i] = BLACK; // memset(_pixels, 0, sizeof(uint32_t) * getLengthTotal());
     // blend all segments into (cleared) buffer
     for (Segment &seg : _segments) if (seg.isActive() && (seg.on || seg.isInTransition())) {
@@ -2136,6 +2143,10 @@ void WS2812FX::resetSegments() {
 
 void WS2812FX::makeAutoSegments(bool forceReset) {
   if (isServicing()) return;
+
+  // restart runtime so that ever effect starts from beginning
+  for (Segment &seg : _segments) seg.markForReset().resetIfRequired();
+
   if (autoSegments) { //make one segment per bus
     unsigned segStarts[MAX_NUM_SEGMENTS] = {0};
     unsigned segStops [MAX_NUM_SEGMENTS] = {0};
