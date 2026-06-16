@@ -3,6 +3,13 @@
 #ifndef WLED_NETWORK_H
 #define WLED_NETWORK_H
 
+#ifdef ARDUINO_ARCH_ESP32
+// Declare internal Arduino library function to work around the fact that WiFi.setHostname() does not propagate the
+// hostname to the network interface if it's been previously used.  The underlying ESP-IDF layer supports this just
+// fine; it's an oversight in the Arduino layer that we can work around by calling the internal function directly.
+esp_err_t set_esp_interface_hostname(esp_interface_t interface, const char * hostname);
+#endif
+
 #ifndef WLED_DISABLE_ESPNOW
 typedef struct {
   char    magic[4];     // enough to store "WLED"

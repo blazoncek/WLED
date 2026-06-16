@@ -73,7 +73,8 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
   #ifdef WLED_USE_ETHERNET
     ETH.setHostname(hostName);
   #endif
-    WiFi.setHostname(hostName);
+    WiFi.setHostname(hostName); // Sets the hostName in the wifi lib; does not necessarily propagate it to the network interface
+    set_esp_interface_hostname(ESP_IF_WIFI_STA, hostName); // ensure hostName propagates to network interface for DHCP and mDNS
 #else
     WiFi.hostname(hostName);
 #endif

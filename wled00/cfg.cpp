@@ -162,7 +162,8 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   // apply WiFi options from above (regardless of fromFS or not)
 #ifdef ARDUINO_ARCH_ESP32
   WiFi.setSleep(!noWifiSleep);
-  WiFi.setHostname(hostName);
+  WiFi.setHostname(hostName); // Sets the hostName in the wifi lib; does not necessarily propagate it to the network interface
+  set_esp_interface_hostname(ESP_IF_WIFI_STA, hostName); // ensure hostName propagates to network interface for DHCP and mDNS
 #else
   WiFi.setPhyMode(force802_3g ? WIFI_PHY_MODE_11G : WIFI_PHY_MODE_11N);
   wifi_set_sleep_type((noWifiSleep) ? NONE_SLEEP_T : MODEM_SLEEP_T);
