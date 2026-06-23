@@ -263,6 +263,15 @@
 			rPS(sel, presetOpts, "data-preset");
 		}
 	}
+	function TZ()
+	{
+		zones.forEach((n,i)=>{
+			let o = cE("option");
+			o.value = i;
+			o.text = n;
+			d.Sf["TZ"].appendChild(o);
+		});
+	}
 	function Wd()
 	{
 		for (i=0; i<timerCount; i++) {

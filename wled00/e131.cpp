@@ -255,18 +255,19 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol) {
   { //DDP
     realtimeIP = clientIP;
     int lastPushSeq = e131LastSequenceNumber[0];
-    //reject late packets belonging to previous frame (assuming 4 packets max. before push)
+    int sn = p->sequenceNum & 0xF;
+    // reject late packets belonging to previous frame (assuming 9 packets max. before push (max ~4300 pixels))
     if (e131SkipOutOfSequence && lastPushSeq) {
-      int sn = p->sequenceNum & 0xF;
       if (sn) {
-        if (lastPushSeq > 5) {
-          if (sn > (lastPushSeq -5) && sn < lastPushSeq) return;
+        if (lastPushSeq > 8) {
+          if (sn > (lastPushSeq - 8) && sn < lastPushSeq) return;
         } else {
-          if (sn > (10 + lastPushSeq) || sn < lastPushSeq) return;
+          if (sn > (15 - lastPushSeq) || sn < lastPushSeq) return;
         }
       }
     }
-    unsigned ddpChannelsPerLed = ((p->dataType & 0b00111000)>>3 == 0b011) ? 4 : 3; // data type 0x1B (formerly 0x1A) is RGBW (type 3, 8 bit/channel)
+    if (!(p->dataType == DDP_TYPE_RGBW32 || p->dataType == DDP_TYPE_RGB24) && p->destination != 1) return; // only RGB or RGBW supported and default device ID
+    unsigned ddpChannelsPerLed = 3 + (p->dataType == DDP_TYPE_RGBW32); // data type 0x1B (formerly 0x1A) is RGBW (type 3, 8 bit/channel)
     uint32_t start =  htonl(p->channelOffset) / ddpChannelsPerLed;
     start += DMXAddress / ddpChannelsPerLed;
     unsigned stop = start + htons(p->dataLen) / ddpChannelsPerLed;
@@ -284,7 +285,6 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol) {
     ddpSeenPush |= push;
     if (!ddpSeenPush || push) { // if we've never seen a push, or this is one, render display
       e131NewData = true;
-      int sn = p->sequenceNum & 0xF;
       if (sn) e131LastSequenceNumber[0] = sn;
     }
     return;

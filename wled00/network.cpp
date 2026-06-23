@@ -302,6 +302,16 @@ void fillStr2MAC(uint8_t *mac, const char *str) {
   for (int i = 0; i < 6; i++) { *--mac = MAC & 0xFF; MAC >>= 8; }
 }
 
+#ifdef ARDUINO_ARCH_ESP32
+// Shim class to allow access to protected members of WiFiScanClass so we can extend the timeout
+namespace {
+  struct WifiScanAccessor : public WiFiScanClass {
+      static uint32_t& scanStarted() { return WiFiScanClass::_scanStarted; }
+      static uint32_t& scanTimeout() { return WiFiScanClass::_scanTimeout; }
+      static uint16_t& scanCount()  { return WiFiScanClass::_scanCount; };
+  };
+}
+#endif
 
 #ifndef WLED_DISABLE_ESPNOW
 void initESPNow(bool resetAP) {
@@ -389,28 +399,39 @@ int findWiFi(bool doScan) {
 
   if (doScan || status == WIFI_SCAN_FAILED) {
     DEBUG_PRINTF_P(PSTR("WiFi: Scan started. @ %lus\n"), millis()/1000);
-    WiFi.scanNetworks(true);  // start scanning in asynchronous mode (will delete old scan)
-  } else if (status > 0) {    // status contains number of found networks (including duplicate SSIDs with different BSSID)
+    WiFi.disconnect(); // make sure we're not trying to reconnect to a network while scanning
+    status = WiFi.scanNetworks(true);  // start scanning in asynchronous mode (will delete old scan)
+#ifdef ARDUINO_ARCH_ESP32    
+    // the Arduino core can be overly aggressive with its scan timeout if we're busy with the CPU.  Be more generous.
+    if (status == WIFI_SCAN_RUNNING) {
+      WifiScanAccessor::scanTimeout() += 5000;
+    }
+#endif
+  }
+  
+  if (status >= 0) {   // status contains number of found networks (including duplicate SSIDs with different BSSID)
     DEBUG_PRINTF_P(PSTR("WiFi: Found %d SSIDs. @ %lus\n"), status, millis()/1000);
     int rssi = -9999;
     int selected = selectedWiFi;
     for (int o = 0; o < status; o++) {
       DEBUG_PRINTF_P(PSTR(" SSID: %s (BSSID: %s) RSSI: %ddB\n"), WiFi.SSID(o).c_str(), WiFi.BSSIDstr(o).c_str(), WiFi.RSSI(o));
-      for (unsigned n = 0; n < multiWiFi.size(); n++)
+      for (unsigned n = 0; n < multiWiFi.size(); n++) {
         if (!strcmp(WiFi.SSID(o).c_str(), multiWiFi[n].clientSSID)) {
           bool foundBSSID = memcmp(multiWiFi[n].bssid, WiFi.BSSID(o), 6) == 0;
           // find the WiFi with the strongest signal (but keep priority of entry if signal difference is not big)
-          if (foundBSSID || ((int)n < selected && WiFi.RSSI(o) > rssi-10) || WiFi.RSSI(o) > rssi) {
+          // essentially give a bonus to higher priority wifis
+          if (foundBSSID || ((WiFi.RSSI(o) + ((int)n < selected ? 10 : 0)) > rssi)) {
             rssi = foundBSSID ? 0 : WiFi.RSSI(o); // RSSI is only ever negative
             selected = n;
           }
           break;
         }
+      }
     }
     DEBUG_PRINTF_P(PSTR("WiFi: Selected SSID: %s RSSI: %ddB\n"), multiWiFi[selected].clientSSID, rssi);
     return selected+1;
   }
-  //DEBUG_PRINT(F("WiFi scan running."));
+  //DEBUG_PRINTF_P(PSTR("WiFi scan running: %d. @ %lus\n"), status, millis()/1000);
   return status; // scan is still running or there was an error
 }
 
@@ -476,6 +497,12 @@ void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
       // followed by IDLE and SCAN_DONE
       DEBUG_PRINTF_P(PSTR("WiFi-E: Connected! @ %lus\n"), millis()/1000);
+      #ifdef ARDUINO_ARCH_ESP32
+      esp_wifi_set_storage(WIFI_STORAGE_RAM); // disable further updates of NVM credentials to prevent wear on flash (same as WiFi.persistent(false) but updates immediately, arduino wifi deficiency workaround)
+      #endif
+      #ifdef WLED_DEBUG
+      WiFi.printDiag(DEBUGOUT);
+      #endif
       wasConnected = true;
       #ifndef WLED_DISABLE_ESPNOW
       heartbeatESPNow = 0;

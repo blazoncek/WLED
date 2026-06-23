@@ -8,6 +8,7 @@
 	<script>
 	var umCfg = {};
 	var pins = [], pinO = [], owner;
+	var max_gpio = 50, um_p = [], rsvd = [], ro_gpio = [];
 	var urows;
 	var numM = 0;
 	function S() {
@@ -33,16 +34,12 @@
 			if (urows==="") urows = "Usermods configuration not found.<br>Press <i>Save</i> to initialize defaults.";
 			gId("um").innerHTML = urows;
 			loadJS(getURL('/settings/s.js?p=8'), false, ()=>{
-				d.max_gpio = 50;
-				d.um_p = [];
-				d.rsvd = [];
-				d.ro_gpio = [];
-				d.extra = [];
+				d.extra = []; // used in Rotary encoder
 			}, ()=>{
-				for (let r of d.rsvd) { pins.push(r); pinO.push("rsvd"); } // reserved pins
-				if (d.um_p[0]==-1) d.um_p.shift();	// remove filler
-				d.Sf.SDA.max = d.Sf.SCL.max = d.Sf.MOSI.max = d.Sf.SCLK.max = d.Sf.MISO.max = d.max_gpio;
-				//for (let i of d.getElementsByTagName("input")) if (i.type === "number" && i.name.replace("[]","").substr(-3) === "pin") i.max = d.max_gpio;
+				for (let r of rsvd) { pins.push(r); pinO.push("rsvd"); } // reserved pins
+				if (um_p[0]==-1) um_p.shift();	// remove filler
+				d.Sf.SDA.max = d.Sf.SCL.max = d.Sf.MOSI.max = d.Sf.SCLK.max = d.Sf.MISO.max = max_gpio;
+				//for (let i of d.getElementsByTagName("input")) if (i.type === "number" && i.name.replace("[]","").substr(-3) === "pin") i.max = max_gpio;
 				pinDD(); // convert INPUT to SELECT for pins
 			});	// If we set async false, file is loaded and executed, then next statement is processed
 		})
@@ -60,7 +57,7 @@
 			for (var i=0; i<pins.length; i++) {
 				if (k==pinO[i]) continue;
 				if (o.value==pins[i] && pinO[i]==="if") { o.style.color="lime"; break; }
-				if (o.value==pins[i] || o.value<-1 || o.value>d.max_gpio-1) { o.style.color="red"; break; } else o.style.color=d.ro_gpio.some((e)=>e==parseInt(o.value,10))?"orange":"#fff";
+				if (o.value==pins[i] || o.value<-1 || o.value>max_gpio-1) { o.style.color="red"; break; } else o.style.color=ro_gpio.some((e)=>e==parseInt(o.value,10))?"orange":"#fff";
 			}
 		} else {
 			switch (o.name) {
@@ -74,7 +71,7 @@
 			for (var i=0; i<pins.length; i++) {
 				//if (k==pinO[i]) continue; // same owner
 				if (o.value==pins[i] && pinO[i]==="if") { o.style.color="tomato"; break; }
-				if (o.value==pins[i] || o.value<-1 || o.value>d.max_gpio-1) { o.style.color="red"; break; } else o.style.color=d.ro_gpio.some((e)=>e==parseInt(o.value,10))?"orange":"#fff";
+				if (o.value==pins[i] || o.value<-1 || o.value>max_gpio-1) { o.style.color="red"; break; } else o.style.color=ro_gpio.some((e)=>e==parseInt(o.value,10))?"orange":"#fff";
 			}
 		}
 		*/
@@ -128,7 +125,7 @@
 				case "number":
 					c = `value="${o}"`;
 					if (f.substr(-3)==="pin") {
-						c += ` max="${d.max_gpio-1}" min="-1" class="s"`;
+						c += ` max="${max_gpio-1}" min="-1" class="s pin"`;
 						t = "int";
 					} else {
 						c += ' step="any" class="xxl"';
@@ -146,45 +143,43 @@
 		}
 	}
 	function pinDD() {
-		for (let i of d.Sf.elements) {
-			if (i.type === "number" && (i.name.includes("pin") || ["SDA","SCL","MOSI","MISO","SCLK"].includes(i.name))) { //select all pin select elements
-				let v = parseInt(i.value);
-				let sel = addDD(i.name,0);
-				for (var j = -1; j < d.max_gpio; j++) {
-					if (d.rsvd.includes(j)) continue;
-					let foundPin = pins.indexOf(j);
-					let txt = (j === -1) ? "unused" : `${j}`;
-					if (foundPin >= 0 && j !== v) txt += ` ${pinO[foundPin]=="if"?"global":pinO[foundPin]}`; // already reserved pin
-					if (d.ro_gpio.includes(j)) txt += " (R/O)";
-					let opt = addO(sel, txt, j);
-					if (j === v) opt.selected = true; // this is "our" pin
-					else if (pins.includes(j)) opt.disabled = true; // someone else's pin
-				}
-				let um = i.name.split(":")[0];
-				d.extra.forEach((o)=>{
-					if (o[um] && o[um].pin) o[um].pin.forEach((e)=>{
-						let opt = addO(sel,e[0],e[1]);
-						if (e[1]==v) opt.selected = true;
-					});
-				});
+		qSA('input.pin[type="number"]').forEach((i) => {
+			let v = parseInt(i.value);
+			let sel = addDD(i.name,0);
+			for (var j = -1; j < max_gpio; j++) {
+				if (rsvd.includes(j)) continue;
+				let foundPin = pins.indexOf(j);
+				let txt = (j === -1) ? "unused" : `${j}`;
+				if (foundPin >= 0 && j !== v) txt += ` ${pinO[foundPin]=="if"?"global":pinO[foundPin]}`; // already reserved pin
+				if (ro_gpio.includes(j)) txt += " (R/O)";
+				let opt = addO(sel, txt, j);
+				if (j === v) opt.selected = true; // this is "our" pin
+				else if (pins.includes(j)) opt.disabled = true; // someone else's pin
 			}
-		}
+			let um = i.name.split(":")[0];
+			d.extra.forEach((o)=>{
+				if (o[um] && o[um].pin) o[um].pin.forEach((e)=>{
+					let opt = addO(sel,e[0],e[1]);
+					if (e[1]==v) opt.selected = true;
+				});
+			});
+		});
 	}
 	function UI(e) {
 		// update changed select options across all usermods
 		let oldV = parseInt(e.dataset.val);
 		e.dataset.val = e.value;
 		let txt = e.name.split(":")[e.name.split(":").length-2];
-		let selects = qSA("select[class='pin']");
-		for (let sel of selects) {
-			if (sel == e) continue
+		qSA("select[class='pin']").forEach((sel)=>{
+			if (sel == e) return;
+			if (["SDA","SCL","MOSI","MISO","SCLK"].includes(sel.name)) txt = "I2C/SPI";
 			Array.from(sel.options).forEach((i)=>{
 				if (!(i.value==oldV || i.value==e.value)) return;
 				if (i.value == -1) {
 					i.text = "unused";
 					return
 				}
-				if (i.value<100) { // TODO remove this hack and use d.extra
+				if (i.value<100) { // TODO remove this hack and use extra
 					i.text = i.value;
 					if (i.value==oldV) {
 						i.disabled = false;
@@ -193,10 +188,10 @@
 						i.disabled = true;
 						i.text += ` ${txt}`;
 					}
-					if (d.ro_gpio.includes(parseInt(i.value))) i.text += " (R/O)";
+					if (ro_gpio.includes(parseInt(i.value))) i.text += " (R/O)";
 				}
 			});
-		}
+		});
 	}
 	// https://stackoverflow.com/questions/39729741/javascript-change-input-text-to-select-option
 	function addDD(um,fld) {
@@ -205,7 +200,7 @@
 			if (fld.includes("pin")) sel.classList.add("pin");
 			um += ":"+fld;
 		} else if (typeof(fld) === "number") sel.classList.add("pin"); // a hack to add a class
-		let arr = d.getElementsByName(um);
+		let arr = gEBN(um);
 		let idx = arr[0].type==="hidden"?1:0; // ignore hidden field
 		if (arr.length > 1+idx) {
 			// we have array of values (usually pins)
@@ -251,7 +246,7 @@
 	var addOption = addO; // backwards compatibility
 	// https://stackoverflow.com/questions/26440494/insert-text-after-this-input-element-with-javascript
 	function addI(name,el,txt, txt2="") {
-		let obj = d.getElementsByName(name);
+		let obj = gEBN(name);
 		if (!obj.length) return;
 		if (typeof el === "string" && obj[0]) obj[0].placeholder = el;
 		else if (obj[el]) {
@@ -283,14 +278,14 @@
 		<h2>Usermod Setup</h2>
 		Global I<sup>2</sup>C GPIOs (HW)<br>
 		<i class="warn">(change requires reboot!)</i><br>
-		SDA:<input type="number" min="-1" max="48" name="SDA" onchange="check(this,'if')" class="s" placeholder="SDA">
-		SCL:<input type="number" min="-1" max="48" name="SCL" onchange="check(this,'if')" class="s" placeholder="SCL">
+		SDA:<input type="number" min="-1" max="48" name="SDA" onchange="check(this,'if')" class="s pin" placeholder="SDA">
+		SCL:<input type="number" min="-1" max="48" name="SCL" onchange="check(this,'if')" class="s pin" placeholder="SCL">
 		<hr class="sml">
 		Global SPI GPIOs (HW)<br>
 		<i class="warn">(only changable on ESP32, change requires reboot!)</i><br>
-		MOSI:<input type="number" min="-1" max="48" name="MOSI" onchange="check(this,'if')" class="s" placeholder="MOSI">
-		MISO:<input type="number" min="-1" max="48" name="MISO" onchange="check(this,'if')" class="s" placeholder="MISO">
-		SCLK:<input type="number" min="-1" max="48" name="SCLK" onchange="check(this,'if')" class="s" placeholder="SCLK">
+		MOSI:<input type="number" min="-1" max="48" name="MOSI" onchange="check(this,'if')" class="s pin" placeholder="MOSI">
+		MISO:<input type="number" min="-1" max="48" name="MISO" onchange="check(this,'if')" class="s pin" placeholder="MISO">
+		SCLK:<input type="number" min="-1" max="48" name="SCLK" onchange="check(this,'if')" class="s pin" placeholder="SCLK">
 		<hr class="sml">
 		Reboot after save? <input type="checkbox" name="RBT"><br>
 		<div id="um">Loading settings...</div>

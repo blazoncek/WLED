@@ -19,18 +19,14 @@ class NeoGammaWLEDMethod {
   public:
     static inline uint8_t Correct(uint8_t value)        { return gammaT[value]; };  // apply Gamma to single channel
     [[gnu::hot]] static uint32_t Correct32(uint32_t color);                         // apply Gamma to RGBW32 color (WLED specific, not used by NPB)
-    [[gnu::hot]] static uint32_t inverseGamma32(uint32_t color);                    // apply inverse Gamma to RGBW32 color
     static void calcGammaTable(float gamma);                                        // re-calculates & fills gamma tables
     static inline uint8_t rawGamma8(uint8_t val)        { return gammaT[val]; }     // get value from Gamma table (WLED specific, not used by NPB)
-    static inline uint8_t rawInverseGamma8(uint8_t val) { return gammaT_inv[val]; } // get value from inverse Gamma table (WLED specific, not used by NPB)
   private:
-    static uint8_t gammaT[];
-    static uint8_t gammaT_inv[];
+    static uint8_t gammaT[256];
 };
 #define gamma32(c) NeoGammaWLEDMethod::Correct32(c)
 #define gamma8(c)  NeoGammaWLEDMethod::rawGamma8(c)
-#define gamma32inv(c) NeoGammaWLEDMethod::inverseGamma32(c)
-#define gamma8inv(c)  NeoGammaWLEDMethod::rawInverseGamma8(c)
+uint32_t nullGamma32(uint32_t);
 
 // addidion, blending & scaling
 [[gnu::hot, gnu::pure]] uint32_t color_blend(uint32_t c1, uint32_t c2 , uint8_t blend);
@@ -44,7 +40,7 @@ inline uint8_t scale8(uint8_t i, uint8_t scale) { return (uint16_t(i) * (1 + sca
 #endif
 
 // palette functions
-[[gnu::hot, gnu::pure]] CRGBA ColorFromPaletteWLED(const CRGBPalette16 &pal, uint8_t index, uint8_t brightness = (uint8_t)255U, TBlendType blendType = LINEARBLEND);
+[[gnu::hot]] CRGBA ColorFromPaletteWLED(const CRGBPalette16 &pal, uint8_t index, uint8_t brightness = (uint8_t)255U, TBlendType blendType = LINEARBLEND);
 CRGBPalette16 generateHarmonicRandomPalette(const CRGBPalette16 &basepalette);
 CRGBPalette16 generateRandomPalette();
 void loadCustomPalettes();
@@ -151,6 +147,9 @@ struct CRGBA {
   inline CRGBA& fadeToBlackBy(uint8_t amount) { return nscale8(255 - amount); }
 
   inline uint8_t getAverageLight() const { return (uint16_t(r) + uint16_t(g) + uint16_t(b)) * uint16_t(a) / (3*255); }
+  inline uint8_t getPureValue() const { return (unsigned(r) * 77 + unsigned(g) * 150 + unsigned(b) * 29) >> 8; }
+
+  CRGBA&  desaturate(uint8_t amount);
 
   // custom operators to shorten code (see: https://en.cppreference.com/w/cpp/language/operators.html for friend operators)
 

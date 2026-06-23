@@ -23,7 +23,7 @@ static inline constexpr int32_t limitSpeed(const int32_t speed) {
 
 // calculate the delta speed (dV) value and update the counter for force calculation (is used several times, function saves on codesize)
 // force is in 3.4 fixedpoint notation, +/-127
-[[gnu::pure]] static int32_t calcForce_dv(const int8_t force, uint8_t &counter) {
+static int32_t calcForce_dv(const int8_t force, uint8_t &counter) {
   int32_t dv = 0;
   if (force != 0) {
     // for small forces, need to use a delay counter
@@ -41,7 +41,7 @@ static inline constexpr int32_t limitSpeed(const int32_t speed) {
 }
 
 // check if particle is out of bounds and wrap it around if required, returns false if out of bounds
-[[gnu::pure]] static bool checkBoundsAndWrap(int32_t &position, int32_t max, const int32_t particleRadius, const bool wrap) {
+static bool checkBoundsAndWrap(int32_t &position, int32_t max, const int32_t particleRadius, const bool wrap) {
   if ((uint32_t)position > (uint32_t)max) { // check if particle reached an edge
     if (wrap) {
       max++; // max is either maxX or maxY, need to increase by one for wrapping calculation

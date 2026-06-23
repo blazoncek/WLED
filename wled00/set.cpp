@@ -31,6 +31,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
         if (n >= multiWiFi.size()) multiWiFi.emplace_back(); // expand vector by one
         char oldSSID[33]; strcpy(oldSSID, multiWiFi[n].clientSSID);
         char oldPass[65]; strcpy(oldPass, multiWiFi[n].clientPass);
+        uint8_t oldBSSID[6]; memcpy(oldBSSID, multiWiFi[n].bssid, 6);  // save old BSSID
 
         strlcpy(multiWiFi[n].clientSSID, request->arg(cs).c_str(), 33);
         if (strlen(oldSSID) == 0 || !strncmp(multiWiFi[n].clientSSID, oldSSID, 32)) {
@@ -41,6 +42,9 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
           forceReconnect = true;
         }
         fillStr2MAC(multiWiFi[n].bssid, request->arg(bs).c_str());
+        if (memcmp(oldBSSID, multiWiFi[n].bssid, 6) != 0) {  // check if BSSID changed
+          forceReconnect = true;
+        }
         for (size_t i = 0; i < 4; i++) {
           ip[3] = 48+i;
           gw[3] = 48+i;
@@ -69,7 +73,8 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
   #ifdef WLED_USE_ETHERNET
     ETH.setHostname(hostName);
   #endif
-    WiFi.setHostname(hostName);
+    WiFi.setHostname(hostName); // Sets the hostName in the wifi lib; does not necessarily propagate it to the network interface
+    set_esp_interface_hostname(ESP_IF_WIFI_STA, hostName); // ensure hostName propagates to network interface for DHCP and mDNS
 #else
     WiFi.hostname(hostName);
 #endif
@@ -92,6 +97,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     #ifdef ARDUINO_ARCH_ESP32
     int tx = request->arg(F("TX")).toInt();
     txPower = min(max(tx, (int)WIFI_POWER_2dBm), (int)WIFI_POWER_19_5dBm);
+    WiFi.setTxPower(wifi_power_t(txPower)); // must set when WiFi is already started
     #endif
 
     force802_3g = request->hasArg(F("FG"));
@@ -146,7 +152,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       }
     }
 
-    unsigned colorOrder, type, skip, awmode, channelSwap, maPerLed;
+    unsigned colorOrder, type, skip, awmode, channelSwap, maPerLed, scale;
     unsigned length, start, maMax;
     uint8_t pins[5] = {255, 255, 255, 255, 255};
     String text;
@@ -182,6 +188,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       char la[4] = "LA"; la[2] = offset+s; la[3] = 0; //LED mA
       char ma[4] = "MA"; ma[2] = offset+s; ma[3] = 0; //max mA
       char hs[4] = "HS"; hs[2] = offset+s; hs[3] = 0; //hostname (for network types, custom text for others)
+      char bf[4] = "BF"; bf[2] = offset+s; bf[3] = 0; //brightness factor
       if (!request->hasArg(lp)) {
         DEBUG_PRINTF_P(PSTR("# of buses: %d\n"), s);
         break;
@@ -201,6 +208,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
         break;  // no parameter
       }
       awmode = request->arg(aw).toInt();
+      scale = max(1, min(255, (int)request->arg(bf).toInt()));
       uint16_t freq = request->arg(sp).toInt();
       if (Bus::isPWM(type)) {
         switch (freq) {
@@ -220,6 +228,15 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
           case 3 : freq = 10000; break;
           case 4 : freq = 20000; break;
         }
+      } else if (Bus::isHub75(type)) {
+        switch (freq) {
+          default:
+          case 0 : // fallthrough
+          case 1 : freq =  8000; break; // 8 MHz see HUB75_I2S_CFG::clk_speed
+          case 2 : // fallthrough
+          case 3 : freq = 16000; break;
+          case 4 : freq = 20000; break;
+        }
       } else {
         freq = 0;
       }
@@ -236,7 +253,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       text = request->arg(hs).substring(0,31);
       // actual finalization is done in WLED::loop() (removing old busses and adding new)
       // this may happen even before this loop is finished so we do "doInitBusses" after the loop
-      busConfigs.emplace_back(type, pins, start, length, colorOrder | (channelSwap<<4), request->hasArg(cv), skip, awmode, freq, maPerLed, maMax, text);
+      busConfigs.emplace_back(type, pins, start, length, colorOrder | (channelSwap<<4), request->hasArg(cv), skip, awmode, freq, maPerLed, maMax, text, scale);
       busesChanged = true;
     }
     //doInitBusses = busesChanged; // we will do that below to ensure all input data is processed
@@ -279,6 +296,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     }
     rlyMde = (bool)request->hasArg(F("RM"));
     rlyOpenDrain = (bool)request->hasArg(F("RO"));
+    rlyDelay = max(min(request->arg(F("RD")).toInt() / 10, 250L), 0L);
 
     disablePullUp = (bool)request->hasArg(F("IP"));
     touchThreshold = request->arg(F("TT")).toInt();
@@ -356,6 +374,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       gammaCorrectCol = false;
     }
     NeoGammaWLEDMethod::calcGammaTable(gammaCorrectVal); // fill look-up tables
+    if (!realtimeMode) gamma32Func = gammaCorrectCol ? NeoGammaWLEDMethod::Correct32 : nullGamma32;
 
     t = request->arg(F("TD")).toInt();
     if (t >= 0) transitionDelayDefault = t;
@@ -414,6 +433,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     notifyButton = request->hasArg(F("SB"));
     notifyAlexa = request->hasArg(F("SA"));
     notifyHue = request->hasArg(F("SH"));
+    notifyMQTT = request->hasArg(F("SM"));
 
     t = request->arg(F("UR")).toInt();
     if ((t>=0) && (t<30)) udpNumRetries = t;
@@ -830,11 +850,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     strip.panel.shrink_to_fit();  // release unused memory
     // we are changing matrix/ledmap geometry which *will* affect existing segments
     // since we are not in loop() context we must make sure that effects are not running
-    strip.suspend();
-    strip.waitForIt();
-    strip.deserializeMap(); // (re)load default ledmap (will also setUpMatrix() if ledmap does not exist)
-    strip.makeAutoSegments(true); // force re-creation of segments
-    strip.resume();
+    doInit |= INIT_2D;  // fix for wled#5669
   }
   #endif
 
@@ -921,7 +937,7 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
   if (pos > 0) {
     spcI = std::max(0,getNumVal(req, pos));
   }
-  strip.suspend(); // must suspend strip operations before changing geometry
+  strip.suspend().waitForIt(); // must suspend strip operations before changing geometry
   selseg.setGeometry(startI, stopI, grpI, spcI, UINT16_MAX, startY, stopY, selseg.map1D2D);
   strip.resume();
 
@@ -1143,8 +1159,8 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
     nightlightActive = false; //always disable nightlight when toggling
     switch (getNumVal(req, pos))
     {
-      case 0: if (bri != 0){briLast = bri; bri = 0;} break; //off, only if it was previously on
-      case 1: if (bri == 0) bri = briLast; break; //on, only if it was previously off
+      case 0: if (bri != 0) toggleOnOff(); break; //off, only if it was previously on
+      case 1: if (bri == 0) toggleOnOff(); break; //on, only if it was previously off
       default: toggleOnOff(); //toggle
     }
   }
@@ -1237,7 +1253,7 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
   if (!apply) return true; // when called by JSON API, do not call colorUpdated() here
 
   pos = req.indexOf(F("&NN")); //do not send UDP notifications this time
-  stateUpdated((pos > 0) ? CALL_MODE_NO_NOTIFY : CALL_MODE_DIRECT_CHANGE);
+  stateUpdated((request == nullptr) || (pos > 0) ? CALL_MODE_NO_NOTIFY : CALL_MODE_DIRECT_CHANGE);
 
   // internal call, does not send XML response
   pos = req.indexOf(F("IN"));

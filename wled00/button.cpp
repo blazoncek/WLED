@@ -20,7 +20,7 @@ void shortPressAction(uint8_t b)
   if (!buttons[b].macroButton) {
     switch (b) {
       case 0: toggleOnOff(); stateUpdated(CALL_MODE_BUTTON); break;
-      case 1: ++effectCurrent %= strip.getModeCount(); stateChanged = true; colorUpdated(CALL_MODE_BUTTON); break;
+      case 1: ++effectCurrent %= strip.getModeCount(); colorUpdated(CALL_MODE_BUTTON); break;
     }
   } else {
     applyPreset(buttons[b].macroButton, CALL_MODE_BUTTON_PRESET);
@@ -213,7 +213,10 @@ void handleAnalog(uint8_t b)
         briLast = bri;
         bri = 0;
       } else {
-        if (bri == 0) strip.restartRuntime();
+        if (bri == 0) {
+          strip.restartRuntime(); // switching from Off to On requires effects to be restarted
+          toggleRelay(true); // needed for switching on relay early enough
+        }
         bri = aRead;
       }
     } else if (buttons[b].macroDoublePress == 249) {
@@ -225,7 +228,7 @@ void handleAnalog(uint8_t b)
     } else if (buttons[b].macroDoublePress == 247) {
       // selected palette
       effectPalette = map(aRead, 0, 252, 0, getPaletteCount()-1);
-      effectPalette = constrain(effectPalette, 0, getPaletteCount()-1);  // map is allowed to "overshoot", so we need to contrain the result
+      effectPalette = constrain(effectPalette, 0, getPaletteCount()-1);  // map is allowed to "overshoot", so we need to constrain the result
     } else if (buttons[b].macroDoublePress == 200) {
       // primary color, hue, full saturation
       colorHStoRGB(aRead*256, 255, colPri);
@@ -241,8 +244,6 @@ void handleAnalog(uint8_t b)
         //seg.setOpacity(aRead);
         //seg.setOption(SEG_OPTION_ON, true); // on (use transition)
       }
-      // this will notify clients of update (websockets,mqtt,etc)
-      updateInterfaces(CALL_MODE_BUTTON);
     }
   } else {
     DEBUG_PRINTLN(F("Analog: No action"));
@@ -250,6 +251,7 @@ void handleAnalog(uint8_t b)
     // we can either trigger a preset depending on the level (between short and long entries)
     // or use it for RGBW direct control
   }
+  // this will notify clients of update (websockets,mqtt,etc)
   colorUpdated(CALL_MODE_BUTTON);
 }
 
@@ -327,6 +329,7 @@ void handleButton()
           DEBUG_PRINTLN(F("Factory Reset triggered by button."));
           WLED_FS.format();
           doReboot = true;
+          doSerializeConfig = false;
         } else {
           WLED::instance().initAP(true);
         }
@@ -354,38 +357,6 @@ void handleButton()
   }
   if (now - lastAnalogRead > ANALOG_BTN_READ_CYCLE) {
     lastAnalogRead = now;
-  }
-}
-
-// handleIO() happens *after* handleTransitions() (see wled.cpp) which may change bri/briT but *before* strip.service()
-// where actual LED painting occurrs
-// this is important for relay control and in the event of turning off on-board LED
-void handleIO()
-{
-  handleButton();
-
-  // if we want to control on-board LED (ESP8266) or relay we have to do it here as the final show() may not happen until
-  // next loop() cycle
-  if (strip.getBrightness()) {
-    lastOnTime = millis();
-    if (offMode) {
-      BusManager::on();
-      if (rlyPin>=0) {
-        pinMode(rlyPin, rlyOpenDrain ? OUTPUT_OPEN_DRAIN : OUTPUT);
-        digitalWrite(rlyPin, rlyMde);
-      }
-      offMode = false;
-    }
-  } else if (millis() - lastOnTime > 600 && !strip.needsUpdate()) {
-    // for turning LED or relay off we need to wait until strip no longer needs updates (strip.trigger())
-    if (!offMode) {
-      BusManager::off();
-      if (rlyPin>=0) {
-        pinMode(rlyPin, rlyOpenDrain ? OUTPUT_OPEN_DRAIN : OUTPUT);
-        digitalWrite(rlyPin, !rlyMde);
-      }
-      offMode = true;
-    }
   }
 }
 

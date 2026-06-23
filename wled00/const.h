@@ -73,11 +73,27 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
   #define WLED_PIN ""
 #endif
 
+// Hardware and pin config
 #ifndef BTNPIN
   #define BTNPIN 0
 #endif
 #ifndef BTNTYPE
   #define BTNTYPE BTN_TYPE_PUSH
+#endif
+#ifndef RLYPIN
+  #define RLYPIN -1
+#endif
+#ifndef RLYMDE
+  #define RLYMDE true
+#endif
+#ifndef RLYODRAIN
+  #define RLYODRAIN false
+#endif
+#ifndef IRPIN
+  #define IRPIN -1
+#endif
+#ifndef IRTYPE
+  #define IRTYPE 0
 #endif
 
 //increase if you need more
@@ -97,6 +113,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #ifdef ESP8266
   #define WLED_MAX_DIGITAL_CHANNELS 3
   #define WLED_MAX_ANALOG_CHANNELS 5
+  #define WLED_MAX_RMT_CHANNELS 0
   #define WLED_MIN_VIRTUAL_BUSSES 3         // no longer used for bus creation but used to distinguish S2/S3 in UI
   #define WLED_MAX_TIMERS 16                // reduced limit for ESP8266 due to memory constraints
 #else
@@ -104,6 +121,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
     #include "driver/ledc.h"
   #endif
   #define WLED_MAX_ANALOG_CHANNELS (LEDC_CHANNEL_MAX*LEDC_SPEED_MODE_MAX)
+  #define WLED_MAX_RMT_CHANNELS ((size_t)RMT_CHANNEL_MAX)
   #if defined(CONFIG_IDF_TARGET_ESP32C3)    // 2 RMT, 6 LEDC, only has 1 I2S but NPB does not support it ATM
     #define WLED_MAX_DIGITAL_CHANNELS 2
     //#define WLED_MAX_ANALOG_CHANNELS 6
@@ -113,15 +131,18 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
     #define WLED_MAX_DIGITAL_CHANNELS 12    // x4 RMT + x1/x8 I2S0
     //#define WLED_MAX_ANALOG_CHANNELS 8
     #define WLED_MIN_VIRTUAL_BUSSES 4       // no longer used for bus creation but used to distinguish S2/S3 in UI
+    #define MAX_I2S_LEDS 300
   #elif defined(CONFIG_IDF_TARGET_ESP32S3)  // 4 RMT, 8 LEDC, has 2 I2S but NPB supports parallel x8 LCD on I2S1
     #define WLED_MAX_DIGITAL_CHANNELS 12    // x4 RMT + x8 I2S-LCD
     //#define WLED_MAX_ANALOG_CHANNELS 8
     #define WLED_MIN_VIRTUAL_BUSSES 6       // no longer used for bus creation but used to distinguish S2/S3 in UI
-  #else
+    #define MAX_I2S_LEDS 1000
+    #else
     // the last digital bus (I2S0) will prevent Audioreactive usermod from functioning
     #define WLED_MAX_DIGITAL_CHANNELS 16    // x1/x8 I2S1 + x8 RMT
     //#define WLED_MAX_ANALOG_CHANNELS 16
     #define WLED_MIN_VIRTUAL_BUSSES 6       // no longer used for bus creation but used to distinguish S2/S3 in UI
+    #define MAX_I2S_LEDS 600
   #endif
   #define WLED_MAX_TIMERS 64                // maximum number of timers
 #endif
@@ -143,11 +164,18 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #endif
 
 #ifndef WLED_MAX_BUTTONS
-  #define WLED_MAX_BUTTONS 32
+  #if WLED_NUM_PINS > 32
+    #define WLED_MAX_BUTTONS 32
+  #else
+    #define WLED_MAX_BUTTONS (WLED_NUM_PINS-1)
+  #endif
 #else
   #if WLED_MAX_BUTTONS < 2
     #undef WLED_MAX_BUTTONS
     #define WLED_MAX_BUTTONS 2
+  #elif WLED_MAX_BUTTONS >= WLED_NUM_PINS
+    #undef WLED_MAX_BUTTONS
+    #define WLED_MAX_BUTTONS (WLED_NUM_PINS-1)
   #endif
 #endif
 
@@ -261,7 +289,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #define CALL_MODE_NOTIFICATION   3     //caused by incoming notification (UDP or DMX preset)
 #define CALL_MODE_NIGHTLIGHT     4     //nightlight progress
 #define CALL_MODE_NO_NOTIFY      5     //change state but do not send notifications (UDP)
-#define CALL_MODE_FX_CHANGED     6     //no longer used
+#define CALL_MODE_MQTT           6     //change initiated via MQTT
 #define CALL_MODE_HUE            7
 #define CALL_MODE_PRESET_CYCLE   8     //no longer used
 #define CALL_MODE_BLYNK          9     //no longer used
@@ -306,78 +334,6 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #define DMX_MODE_EFFECT_SEGMENT   8            //trigger standalone effects of WLED (15 channels per segment)
 #define DMX_MODE_EFFECT_SEGMENT_W 9            //trigger standalone effects of WLED (18 channels per segment)
 #define DMX_MODE_PRESET           10           //apply presets (1 channel)
-
-//Light capability byte (unused) 0bRCCCTTTT
-//bits 0/1/2/3: specifies a type of LED driver. A single "driver" may have different chip models but must have the same protocol/behavior
-//bits 4/5/6: specifies the class of LED driver - 0b000 (dec. 0-15)  unconfigured/reserved
-//                                              - 0b001 (dec. 16-31) digital (data pin only)
-//                                              - 0b010 (dec. 32-47) analog (PWM)
-//                                              - 0b011 (dec. 48-63) digital (data + clock / SPI)
-//                                              - 0b100 (dec. 64-79) unused/reserved
-//                                              - 0b101 (dec. 80-95) virtual network busses
-//                                              - 0b110 (dec. 96-111) unused/reserved
-//                                              - 0b111 (dec. 112-127) unused/reserved
-//bit 7 is reserved and set to 0
-
-#define TYPE_NONE                 0            //light is not configured
-#define TYPE_RESERVED             1            //unused. Might indicate a "virtual" light
-//Digital types (data pin only) (16-39)
-#define TYPE_DIGITAL_MIN         16            // first usable digital type
-#define TYPE_WS2812_1CH          18            //white-only chips (1 channel per IC) (unused)
-#define TYPE_WS2812_1CH_X3       19            //white-only chips (3 channels per IC)
-#define TYPE_WS2812_2CH_X3       20            //CCT chips (1st IC controls WW + CW of 1st zone and CW of 2nd zone, 2nd IC controls WW of 2nd zone and WW + CW of 3rd zone)
-#define TYPE_WS2812_WWA          21            //amber + warm + cold white
-#define TYPE_WS2812_RGB          22
-#define TYPE_GS8608              23            //same driver as WS2812, but will require signal 2x per second (else displays test pattern)
-#define TYPE_WS2811_400KHZ       24            //half-speed WS2812 protocol, used by very old WS2811 units
-#define TYPE_TM1829              25
-#define TYPE_UCS8903             26
-#define TYPE_APA106              27
-#define TYPE_FW1906              28            //RGB + CW + WW + unused channel (6 channels per IC)
-#define TYPE_UCS8904             29            //first RGBW digital type (hardcoded in busmanager.cpp, memUsage())
-#define TYPE_SK6812_RGBW         30
-#define TYPE_TM1814              31
-#define TYPE_WS2805              32            //RGB + WW + CW
-#define TYPE_TM1914              33            //RGB
-#define TYPE_SM16825             34            //RGB + WW + CW
-#define TYPE_WS281X_DUAL         35            //dual WS28XX chip setup (RGB + W00)
-#define TYPE_DIGITAL_MAX         39            // last usable digital type
-//"Analog" types (40-47)
-#define TYPE_ONOFF               40            //binary output (relays etc.; NOT PWM)
-#define TYPE_ANALOG_MIN          41            // first usable analog type
-#define TYPE_ANALOG_1CH          41            //single channel PWM. Uses value of brightest RGBW channel
-#define TYPE_ANALOG_2CH          42            //analog WW + CW
-#define TYPE_ANALOG_3CH          43            //analog RGB
-#define TYPE_ANALOG_4CH          44            //analog RGBW
-#define TYPE_ANALOG_5CH          45            //analog RGB + WW + CW
-#define TYPE_ANALOG_6CH          46            //analog RGB + A + WW + CW
-#define TYPE_ANALOG_MAX          47            // last usable analog type
-//Digital types (data + clock / SPI) (48-63)
-#define TYPE_2PIN_MIN            48
-#define TYPE_WS2801              50
-#define TYPE_APA102              51
-#define TYPE_LPD8806             52
-#define TYPE_P9813               53
-#define TYPE_LPD6803             54
-#define TYPE_HD108               55
-#define TYPE_2PIN_MAX            63
-//Network types (master broadcast) (80-95)
-#define TYPE_VIRTUAL_MIN         80
-#define TYPE_NET_DDP_RGB         80            //network DDP RGB bus (master broadcast bus)
-#define TYPE_NET_E131_RGB        81            //network E131 RGB bus (master broadcast bus, unused)
-#define TYPE_NET_ARTNET_RGB      82            //network ArtNet RGB bus (master broadcast bus, unused)
-#define TYPE_NET_DDP_RGBW        88            //network DDP RGBW bus (master broadcast bus)
-#define TYPE_NET_ARTNET_RGBW     89            //network ArtNet RGB bus (master broadcast bus, unused)
-#define TYPE_VIRTUAL_MAX         95
-
-//Color orders
-#define COL_ORDER_GRB             0           //GRB(w),defaut
-#define COL_ORDER_RGB             1           //common for WS2811
-#define COL_ORDER_BRG             2
-#define COL_ORDER_RBG             3
-#define COL_ORDER_BGR             4
-#define COL_ORDER_GBR             5
-#define COL_ORDER_MAX             5
 
 //ESP-NOW
 #define ESP_NOW_STATE_UNINIT       0
@@ -509,19 +465,23 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
     #define MAX_LEDS 2048 //due to memory constraints S2
   #elif defined(CONFIG_IDF_TARGET_ESP32C3)
     #define MAX_LEDS 4096
-  #else
+  #elif defined(CONFIG_IDF_TARGET_ESP32S3)
     #define MAX_LEDS 16384
+  #else
+    #define MAX_LEDS 8192
   #endif
 #endif
 
 #ifndef MAX_LED_MEMORY
   #ifdef ESP8266
-    #define MAX_LED_MEMORY 4096
+    #define MAX_LED_MEMORY 5120
   #else
     #if defined(ARDUINO_ARCH_ESP32S2)
       #define MAX_LED_MEMORY 16384
     #elif defined(ARDUINO_ARCH_ESP32C3)
       #define MAX_LED_MEMORY 32768
+    #elif defined(ARDUINO_ARCH_ESP32S3)
+      #define MAX_LED_MEMORY 131072
     #else
       #define MAX_LED_MEMORY 65536
     #endif

@@ -162,8 +162,8 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   // apply WiFi options from above (regardless of fromFS or not)
 #ifdef ARDUINO_ARCH_ESP32
   WiFi.setSleep(!noWifiSleep);
-  WiFi.setHostname(hostName);
-  WiFi.setTxPower(wifi_power_t(txPower));
+  WiFi.setHostname(hostName); // Sets the hostName in the wifi lib; does not necessarily propagate it to the network interface
+  set_esp_interface_hostname(ESP_IF_WIFI_STA, hostName); // ensure hostName propagates to network interface for DHCP and mDNS
 #else
   WiFi.setPhyMode(force802_3g ? WIFI_PHY_MODE_11G : WIFI_PHY_MODE_11N);
   wifi_set_sleep_type((noWifiSleep) ? NONE_SLEEP_T : MODEM_SLEEP_T);
@@ -224,14 +224,14 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     int s = 0;  // bus iterator
     for (JsonObject elm : ins) {
       if (s >= WLED_MAX_BUSSES) break; // only counts physical buses
-      uint8_t pins[5] = {255, 255, 255, 255, 255};
+      uint8_t pins[OUTPUT_MAX_PINS] = {255, 255, 255, 255, 255};
       JsonArray pinArr = elm["pin"];
       if (pinArr.size() == 0) continue;
       //pins[0] = pinArr[0];
       unsigned i = 0;
       for (int p : pinArr) {
         pins[i++] = p;
-        if (i>4) break;
+        if (i >= OUTPUT_MAX_PINS) break; // max pins reached ignore the rest
       }
       uint16_t length = elm["len"] | 1;
       uint8_t colorOrder = (int)elm[F("order")]; // contains white channel swap option in upper nibble
@@ -243,6 +243,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       bool refresh = elm["ref"] | false;
       uint16_t freqkHz = elm[F("freq")] | 0;  // will be in kHz for DotStar and Hz for PWM
       uint8_t AWmode = elm[F("rgbwm")] | (Bus::getGlobalAWMode() == AW_GLOBAL_DISABLED ? RGBW_MODE_MANUAL_ONLY : Bus::getGlobalAWMode());
+      uint8_t scale = elm[F("bf")] | 100;
       uint8_t maPerLed = elm[F("ledma")] | LED_MILLIAMPS_DEFAULT;
       uint16_t maMax = elm[F("maxpwr")] | 0; // maMax > 0 means per bus PP-ABL is enabled (bus has its own maximum allowable current)
       // To disable brightness limiter we either set output max current to 0 or single LED current to 0
@@ -252,7 +253,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       }
       ledType |= refresh << 7; // hack bit 7 to indicate strip requires off refresh
       String host = elm[F("text")] | String();
-      busConfigs.emplace_back(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz, maPerLed, maMax, host);
+      busConfigs.emplace_back(ledType, pins, start, length, colorOrder, reversed, skipFirst, AWmode, freqkHz, maPerLed, maMax, host, scale);
       doInit |= INIT_BUS;  // finalization done in beginStrip()
       if (!Bus::isVirtual(ledType)) s++; // have as many virtual buses as you want
     }
@@ -274,7 +275,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 
     unsigned pinsIndex = 0;
     for (unsigned i = 0; i < WLED_MAX_BUSSES; i++) {
-      uint8_t defPin[OUTPUT_MAX_PINS];
+      std::vector<uint8_t> defPin;
       // if we have less types than requested outputs and they do not align, use last known type to set current type
       unsigned dataType = defDataTypes[(i < defNumTypes) ? i : defNumTypes -1];
       unsigned busPins = Bus::getNumberOfPins(dataType);
@@ -283,9 +284,8 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       if (pinsIndex + busPins > defNumPins) break;
 
       // Assign all pins first so we can check for conflicts on this bus
-      for (unsigned j = 0; j < busPins && j < OUTPUT_MAX_PINS; j++) defPin[j] = defDataPins[pinsIndex + j];
-
-      for (unsigned j = 0; j < busPins && j < OUTPUT_MAX_PINS; j++) {
+      for (unsigned j = 0; j < busPins; j++) defPin.push_back(defDataPins[pinsIndex + j]);
+      for (unsigned j = 0; j < busPins; j++) {
         bool validPin = true;
         // When booting without config (1st boot) we need to make sure GPIOs defined for LED output don't clash with hardware
         // i.e. DEBUG (GPIO1), DMX (2), SPI RAM/FLASH (16&17 on ESP32-WROVER/PICO), read/only pins, etc.
@@ -335,7 +335,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       unsigned start = 0;
       // analog always has length 1
       if (Bus::isPWM(dataType) || Bus::isOnOff(dataType)) count = 1;
-      busConfigs.emplace_back(dataType, defPin, start, count, DEFAULT_LED_COLOR_ORDER, false, 0, RGBW_MODE_MANUAL_ONLY, 0);
+      busConfigs.emplace_back(dataType, static_cast<uint8_t*>(&defPin[0]), start, count, DEFAULT_LED_COLOR_ORDER, false, 0, RGBW_MODE_MANUAL_ONLY, 0);
       doInit |= INIT_BUS;  // finalization done in beginStrip()
     }
   }
@@ -503,6 +503,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   if (relay.containsKey("rev")) {
     rlyMde = !relay["rev"];
   }
+  rlyDelay = relay[F("delay")] | rlyDelay;
 
   CJSON(serialBaud, hw[F("baud")]);
   if (serialBaud < 96 || serialBaud > 15000) serialBaud = 1152;
@@ -560,6 +561,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     gammaCorrectCol = false;
   }
   NeoGammaWLEDMethod::calcGammaTable(gammaCorrectVal); // fill look-up tables
+  gamma32Func = gammaCorrectCol ? NeoGammaWLEDMethod::Correct32 : nullGamma32;
 
   JsonObject light_tr = light["tr"];
   int tdd = light_tr["dur"] | -1;
@@ -608,6 +610,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   CJSON(notifyButton, if_sync_send["btn"]);
   CJSON(notifyAlexa, if_sync_send["va"]);
   CJSON(notifyHue, if_sync_send["hue"]);
+  CJSON(notifyMQTT, if_sync_send["mqtt"]);
   CJSON(syncGroups, if_sync_send["grp"]);
   if (if_sync_send[F("twice")]) udpNumRetries = 1; // import setting from 0.13 and earlier
   CJSON(udpNumRetries, if_sync_send["ret"]);
@@ -959,15 +962,16 @@ void serializeConfig() {
     ins["start"]   = bus->getStart();
     ins["len"]     = bus->getLength();
     JsonArray ins_pin = ins.createNestedArray("pin");
-    uint8_t pins[5];
-    uint8_t nPins = bus->getPins(pins);
-    for (int i = 0; i < nPins; i++) ins_pin.add(pins[i]);
+    uint8_t nPins  = bus->getPins();
+    uint8_t pins[nPins]; bus->getPins(pins);
+    for (int i = 0; i < nPins; i++) ins_pin.add(pins[i]); // may add more than OUTPUT_MAX_PINS but that's ok (ignored on load), needed for UM pin checking
     ins[F("order")]  = bus->getColorOrder();
     ins["rev"]       = bus->isReversed();
     ins[F("skip")]   = bus->skippedLeds();
     ins["type"]      = bus->getType() & 0x7F;
     ins["ref"]       = bus->isOffRefreshRequired();
     ins[F("rgbwm")]  = bus->getAutoWhiteMode();
+    ins[F("bf")]     = bus->getBrightnessFactor();
     ins[F("freq")]   = bus->getFrequency();
     ins[F("maxpwr")] = bus->getMaxCurrent();
     ins[F("ledma")]  = bus->getLEDCurrent();
@@ -1017,6 +1021,7 @@ void serializeConfig() {
   hw_relay["pin"] = rlyPin;
   hw_relay["rev"] = !rlyMde;
   hw_relay[F("odrain")] = rlyOpenDrain;
+  hw_relay[F("delay")] = rlyDelay;
 
   hw[F("baud")] = serialBaud;
 
@@ -1083,6 +1088,7 @@ void serializeConfig() {
   if_sync_send["btn"] = notifyButton;
   if_sync_send["va"] = notifyAlexa;
   if_sync_send["hue"] = notifyHue;
+  if_sync_send["mqtt"] = notifyMQTT;
   if_sync_send["grp"] = syncGroups;
   if_sync_send["ret"] = udpNumRetries;
 

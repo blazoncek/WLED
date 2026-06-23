@@ -20,7 +20,6 @@ void longPressAction(uint8_t b=0);
 void doublePressAction(uint8_t b=0);
 bool isButtonPressed(uint8_t b=0);
 void handleButton();
-void handleIO();
 void touchButtonISR();
 
 //cfg.cpp
@@ -106,14 +105,15 @@ bool getJsonValue(const JsonVariant& element, DestType& destination, const Defau
 void setValuesFromSegment(uint8_t s);
 #define setValuesFromMainSeg()          setValuesFromSegment(strip.getMainSegmentId())
 #define setValuesFromFirstSelectedSeg() setValuesFromSegment(strip.getFirstSelectedSegId())
-void toggleOnOff();
-void applyBri();
-void applyFinalBri();
+void toggleOnOff(); // starts on/off transition
+void applyBri(); // applies briT to strip
+void applyFinalBri(); // updates global briXxx variables and forces strip update
 void applyValuesToSelectedSegs();
 void colorUpdated(byte callMode);
 void stateUpdated(byte callMode);
 void updateInterfaces(uint8_t callMode);
-void handleTransitions();
+void handleBrightness();
+void toggleRelay(bool on);
 void handleNightlight();
 
 #ifdef WLED_ENABLE_LOXONE
@@ -222,7 +222,7 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply=tru
 //udp.cpp
 void notify(byte callMode, bool followUp=false);
 uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const uint8_t *buffer, uint8_t bri=255, bool isRGBW=false);
-void realtimeLock(uint32_t timeoutMs, byte md = REALTIME_MODE_GENERIC);
+void realtimeLock(uint32_t timeoutMs = UINT32_MAX, byte md = REALTIME_MODE_GENERIC);
 void exitRealtime();
 void handleNotifications();
 void setRealtimePixel(uint16_t i, byte r, byte g, byte b, byte w);
@@ -230,21 +230,6 @@ void refreshNodeList();
 void sendSysInfoUDP();
 void espNowSentCB(uint8_t* address, uint8_t status);
 void espNowReceiveCB(uint8_t* address, uint8_t* data, uint8_t len, signed int rssi, bool broadcast);
-
-//network.cpp
-bool initEthernet(); // result is informational
-int  getSignalQuality(int rssi);
-IPAddress resolveHostname(const String& hostname, bool useMDNS = true);
-void fillMAC2Str(char *str, const uint8_t *mac);
-void fillStr2MAC(uint8_t *mac, const char *str);
-#ifndef WLED_DISABLE_ESPNOW
-void initESPNow(bool resetAP = false);
-void stopESPNow();
-void sendESPNowHeartBeat();
-#endif
-int  findWiFi(bool doScan = false);
-bool isWiFiConfigured();
-void WiFiEvent(WiFiEvent_t event);
 
 //usermods_list.cpp
 void registerUsermods();
@@ -259,10 +244,10 @@ void registerUsermods();
 #define inoise8 perlin8   // fastled legacy alias
 #define inoise16 perlin16 // fastled legacy alias
 #define hex2int(a) (((a)>='0' && (a)<='9') ? (a)-'0' : ((a)>='A' && (a)<='F') ? (a)-'A'+10 : ((a)>='a' && (a)<='f') ? (a)-'a'+10 : 0)
-[[gnu::pure]] int getNumVal(const String& req, uint16_t pos);
+int getNumVal(const String& req, uint16_t pos);
 void parseNumber(const char* str, byte& val, byte minv=0, byte maxv=255);
-bool getVal(JsonVariant elem, byte& val, byte minv=0, byte maxv=255); // getVal supports inc/decrementing and random ("X~Y(r|~[w][-][Z])" form)
-[[gnu::pure]] bool getBoolVal(const JsonVariant &elem, bool dflt);
+bool getVal(const JsonVariant &elem, byte& val, byte minv=0, byte maxv=255); // getVal supports inc/decrementing and random ("X~Y(r|~[w][-][Z])" form)
+bool getBoolVal(const JsonVariant &elem, bool dflt);
 bool updateVal(const char* req, const char* key, byte& val, byte minv=0, byte maxv=255);
 size_t printSetFormCheckbox(Print& settingsScript, const char* key, int val);
 size_t printSetFormValue(Print& settingsScript, const char* key, int val);
@@ -270,7 +255,7 @@ size_t printSetFormValue(Print& settingsScript, const char* key, const char* val
 size_t printSetFormIndex(Print& settingsScript, const char* key, int index);
 size_t printSetIdHTML(Print& settingsScript, const char* key, const char* val);
 //void prepareHostname(char* hostname, size_t maxLen = 32);
-[[gnu::pure]] bool isAsterisksOnly(const char* str, byte maxLen);
+bool isAsterisksOnly(const char* str, byte maxLen);
 bool requestJSONBufferLock(uint8_t module=255);
 void releaseJSONBufferLock();
 uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLen);
@@ -397,6 +382,20 @@ uint32_t sqrt32_bw(uint32_t x);
 #define fmod_t fmodf
 #define floor_t floorf
 */
+
+// PRNG for 16bit and 8bit random numbers used by some effects (fastled replacement)
+namespace PRNG {
+  extern uint16_t seed;
+
+  inline void setSeed(uint16_t s) { seed = s; }
+  inline uint16_t getSeed() { return seed; }
+  uint16_t random16();
+  uint16_t random16(uint16_t lim);
+  uint16_t random16(uint16_t min, uint16_t lim);
+  uint8_t random8();
+  uint8_t random8(uint8_t lim);
+  uint8_t random8(uint8_t min, uint8_t lim);
+}
 
 //wled_serial.cpp
 void handleSerial();

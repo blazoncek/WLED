@@ -72,10 +72,14 @@ class Usermod {
     virtual void readFromJsonState(JsonObject& obj) {}                       // process JSON messages received from web server
     virtual void addToConfig(JsonObject& obj) {}                             // add JSON entries that go to cfg.json
     virtual bool readFromConfig(JsonObject& obj) { return true; }            // Note as of 2021-06 readFromConfig() now needs to return a bool, see usermod_v2_example.h
+    #ifndef WLED_DISABLE_MQTT
     virtual void onMqttConnect(bool sessionPresent) {}                       // fired when MQTT connection is established (so usermod can subscribe)
     virtual bool onMqttMessage(char* topic, char* payload) { return false; } // fired upon MQTT message received (wled topic)
     virtual bool publishMqtt() { return false; }                             // fired upon MQTT publish
+    #endif
+    #ifndef WLED_DISABLE_ESPNOW
     virtual bool onEspNowMessage(uint8_t* sender, uint8_t* payload, uint8_t len) { return false; } // fired upon ESP-NOW message received
+    #endif
     virtual void onUpdateBegin(bool) {}                                      // fired prior to and after unsuccessful firmware update
     virtual void onStateChange(uint8_t mode) {}                              // fired upon WLED state change
     virtual uint16_t getId() {return USERMOD_ID_UNSPECIFIED;}

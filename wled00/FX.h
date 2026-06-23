@@ -38,7 +38,7 @@
   #define DEBUGFX_PRINTF_P(x...)
 #endif
 
-#define DEFAULT_BRIGHTNESS (uint8_t)127
+#define DEFAULT_BRIGHTNESS (uint8_t)128
 #define DEFAULT_MODE       (uint8_t)0
 #define DEFAULT_SPEED      (uint8_t)128
 #define DEFAULT_INTENSITY  (uint8_t)128
@@ -245,7 +245,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_TWINKLEUP              106
 #define FX_MODE_NOISEPAL               107
 #define FX_MODE_SINEWAVE               108
-//#define FX_MODE_PHASEDNOISE            109  // candidate for removal (use Phased with check 1)
+#define FX_MODE_2DFLOW                 109  // was Phased Noise
 #define FX_MODE_FLOW                   110
 #define FX_MODE_CHUNCHUN               111
 #define FX_MODE_DANCING_SHADOWS        112
@@ -253,7 +253,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_2DPLASMAROTOZOOM       114  // was Candy Cane prior to 0.14 (use Chase 2)
 #define FX_MODE_BLENDS                 115
 #define FX_MODE_TV_SIMULATOR           116
-//#define FX_MODE_DYNAMIC_SMOOTH         117  // candidate for removal (check3 in dynamic)
+#define FX_MODE_2DPERLINSCAPE          117  // was Dynamic Smooth (use Dynamic with check 3)
 #define FX_MODE_SHIMMER                161  // gap fill, non SR 1D effect
 
 // new 0.14 2D effects
@@ -358,33 +358,33 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define MODE_COUNT                     187  // includes audioreactive modes
 
 
-#define BLEND_STYLE_FADE            0x00  // universal
-#define BLEND_STYLE_FAIRY_DUST      0x01  // universal
-#define BLEND_STYLE_SWIPE_RIGHT     0x02  // 1D or 2D
-#define BLEND_STYLE_SWIPE_LEFT      0x03  // 1D or 2D
-#define BLEND_STYLE_OUTSIDE_IN      0x04  // 1D or 2D
-#define BLEND_STYLE_INSIDE_OUT      0x05  // 1D or 2D
-#define BLEND_STYLE_SWIPE_UP        0x06  // 2D
-#define BLEND_STYLE_SWIPE_DOWN      0x07  // 2D
-#define BLEND_STYLE_OPEN_H          0x08  // 2D
-#define BLEND_STYLE_OPEN_V          0x09  // 2D
-#define BLEND_STYLE_SWIPE_TL        0x0A  // 2D
-#define BLEND_STYLE_SWIPE_TR        0x0B  // 2D
-#define BLEND_STYLE_SWIPE_BR        0x0C  // 2D
-#define BLEND_STYLE_SWIPE_BL        0x0D  // 2D
-#define BLEND_STYLE_CIRCULAR_OUT    0x0E  // 2D
-#define BLEND_STYLE_CIRCULAR_IN     0x0F  // 2D
+#define TRANSITION_FADE            0x00  // universal
+#define TRANSITION_FAIRY_DUST      0x01  // universal
+#define TRANSITION_SWIPE_RIGHT     0x02  // 1D or 2D
+#define TRANSITION_SWIPE_LEFT      0x03  // 1D or 2D
+#define TRANSITION_OUTSIDE_IN      0x04  // 1D or 2D
+#define TRANSITION_INSIDE_OUT      0x05  // 1D or 2D
+#define TRANSITION_SWIPE_UP        0x06  // 2D
+#define TRANSITION_SWIPE_DOWN      0x07  // 2D
+#define TRANSITION_OPEN_H          0x08  // 2D
+#define TRANSITION_OPEN_V          0x09  // 2D
+#define TRANSITION_SWIPE_TL        0x0A  // 2D
+#define TRANSITION_SWIPE_TR        0x0B  // 2D
+#define TRANSITION_SWIPE_BR        0x0C  // 2D
+#define TRANSITION_SWIPE_BL        0x0D  // 2D
+#define TRANSITION_CIRCULAR_OUT    0x0E  // 2D
+#define TRANSITION_CIRCULAR_IN     0x0F  // 2D
 // as there are many push variants to optimise if statements they are groupped together
-#define BLEND_STYLE_PUSH_RIGHT      0x10  // 1D or 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_LEFT       0x11  // 1D or 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_UP         0x12  // 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_DOWN       0x13  // 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_TL         0x14  // 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_TR         0x15  // 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_BR         0x16  // 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_BL         0x17  // 2D (& 0b00010000)
-#define BLEND_STYLE_PUSH_MASK       0x10
-#define BLEND_STYLE_COUNT           18
+#define TRANSITION_PUSH_RIGHT      0x10  // 1D or 2D (& 0b00010000)
+#define TRANSITION_PUSH_LEFT       0x11  // 1D or 2D (& 0b00010000)
+#define TRANSITION_PUSH_UP         0x12  // 2D (& 0b00010000)
+#define TRANSITION_PUSH_DOWN       0x13  // 2D (& 0b00010000)
+#define TRANSITION_PUSH_TL         0x14  // 2D (& 0b00010000)
+#define TRANSITION_PUSH_TR         0x15  // 2D (& 0b00010000)
+#define TRANSITION_PUSH_BR         0x16  // 2D (& 0b00010000)
+#define TRANSITION_PUSH_BL         0x17  // 2D (& 0b00010000)
+#define TRANSITION_PUSH_MASK       0x10
+#define TRANSITION_COUNT           18
 
 #define BLEND_MODE_COUNT            20    // number of blending modes (see Segment::blendMode)
 
@@ -396,7 +396,8 @@ typedef enum mapping1D2D {
   M12_pBar = 1,
   M12_pArc = 2,
   M12_pCorner = 3,
-  M12_sPinwheel = 4
+  M12_sPinwheel = 4,
+  M12_maxMapping = 7
 } mapping1D2D_t;
 
 class WS2812FX;
@@ -484,30 +485,25 @@ class Segment {
     static CRGBPalette16 _newRandomPalette;   // target random palette
     static uint16_t      _lastPaletteChange;  // last random palette change time (in seconds)
     static uint16_t      _nextPaletteBlend;   // next due time for random palette morph (in millis())
-    static bool          _modeBlend;          // mode/effect blending semaphore
     // clipping rectangle used for blending
     static uint16_t      _clipStart, _clipStop;
     static uint8_t       _clipStartY, _clipStopY;
 
-    // transition data, holds values during transition (76 bytes/28 bytes)
+    // transition data, holds values during transition (76 bytes)
     struct Transition {
       Segment      *_oldSegment;          // previous segment environment (may be nullptr if effect did not change)
       unsigned long _start;               // must accommodate millis()
       CRGBA         _colors[NUM_COLORS];  // current colors
-      #ifndef WLED_SAVE_RAM
-      CRGBPalette16 _palT;                // temporary palette (slowly being morphed from old to new)
-      #endif
+      CRGBPalette16 _palT;                // temporary palette (slowly being morphed from old to new; 48 bytes)
       uint16_t      _dur;                 // duration of transition in ms
-      uint16_t      _progress;            // transition progress (0-65535); pre-calculated from _start & _dur in updateTransitionProgress()
+      uint16_t      _progress;            // transition progress (0-65535); pre-calculated from _start & _dur in handleTransition()
       uint8_t       _prevPaletteBlends;   // number of previous palette blends (there are max 255 blends possible)
       uint8_t       _palette, _bri, _cct; // palette ID, brightness and CCT at the start of transition (brightness will be 0 if segment was off)
       Transition(uint16_t dur=750)
       : _oldSegment(nullptr)
       , _start(millis())
       , _colors{0,0,0}
-      #ifndef WLED_SAVE_RAM
       , _palT(CRGBPalette16(CRGB::Black))
-      #endif
       , _dur(dur)
       , _progress(0)
       , _prevPaletteBlends(0)
@@ -516,7 +512,7 @@ class Segment {
       , _cct(0)
       {}
       ~Transition() {
-        //DEBUGFX_PRINTF_P(PSTR("-- Destroying transition: %p\n"), this);
+        DEBUGFX_PRINTF_P(PSTR("-- Destroying transition: %p\n"), this);
         if (_oldSegment) delete _oldSegment;
       }
     } *_t;
@@ -544,18 +540,18 @@ class Segment {
 
     // transition functions
     void stopTransition();                  // ends transition mode by destroying transition structure (does nothing if not in transition)
-    void updateTransitionProgress() const;  // sets transition progress (0-65535) based on time passed since transition start
     inline void handleTransition() {
-      updateTransitionProgress();
-      if (isInTransition() && progress() == 0xFFFFU) stopTransition();
+      if (isInTransition()) {
+        unsigned diff = millis() - _t->_start;
+        if (_t->_dur > 0 && diff < _t->_dur) _t->_progress = diff * 0xFFFFU / _t->_dur;
+        else                                 _t->_progress = 0xFFFFU;
+        if (_t->_progress == 0xFFFFU) stopTransition();
+      }
     }
-    inline uint16_t progress() const          { return isInTransition() ? _t->_progress : 0xFFFFU; } // relies on handleTransition()/updateTransitionProgress() to update progression variable
+    inline uint16_t progress() const          { return isInTransition() ? _t->_progress : 0xFFFFU; } // relies on handleTransition() to update progression variable
     inline Segment *getOldSegment() const     { return isInTransition() ? _t->_oldSegment : nullptr; }
 
-    inline static void modeBlend(bool blend)  { Segment::_modeBlend = blend; }
-    inline static void setClippingRect(int startX, int stopX, int startY = 0, int stopY = 1) { _clipStart = startX; _clipStop = stopX; _clipStartY = startY; _clipStopY = stopY; };
-    inline static bool isPreviousMode()       { return Segment::_modeBlend; }    // needed for determining CCT/opacity during non-BLEND_STYLE_FADE transition
-
+    static void setClippingRect(int startX, int stopX, int startY = 0, int stopY = 1);
     static void handleRandomPalette();
 
   public:
@@ -684,9 +680,10 @@ class Segment {
       */
     inline Segment &markForReset() { reset = true; return *this; }  // setOption(SEG_OPTION_RESET, true)
 
-    void startTransition(uint16_t dur, bool segmentCopy = true);    // transition has to start before actual segment values change
-    uint8_t  currentCCT() const; // current segment's CCT (blended while in transition)
-    uint8_t  currentBri() const; // current segment's opacity/brightness (blended while in transition)
+    void    startTransition(uint16_t dur, bool segmentCopy = true); // transition has to start before actual segment values change
+    uint8_t currentCCT() const; // current segment's CCT (blended while in transition)
+    uint8_t currentBri() const; // current segment's opacity/brightness (blended while in transition)
+    bool    needsUpdate(unsigned long time) const;  // is it time for segment to be updated?
 
     // 1D strip
     uint16_t virtualLength() const;
@@ -719,7 +716,7 @@ class Segment {
                                                                                 { addPixelColor(n, CRGBA(r,g,b), preserveCR); }
     inline void fadePixelColor(uint16_t n, uint8_t fade) const                  { setPixelColor(n, getPixelColor(n).nscale8_video(fade)); }
     [[gnu::hot]] CRGBA color_from_palette(uint16_t, bool mapping, bool moving, uint8_t mcol, uint8_t pbri = 255) const;
-    inline CRGBA color_wheel(uint8_t pos) const                                 { return color_from_palette(pos, false, false, 255); };
+    inline CRGBA color_wheel(uint8_t pos) const                                 { return color_from_palette(pos, false, true, 255); };
     // 2D matrix
     unsigned virtualWidth()  const;       // segment width in virtual pixels (accounts for groupping and spacing)
     unsigned virtualHeight() const;       // segment height in virtual pixels (accounts for groupping and spacing)
@@ -735,10 +732,6 @@ class Segment {
     [[gnu::hot]] void setPixelColorXY(int x, int y, CRGBA c) const; // set relative pixel within segment with color
     inline void setPixelColorXY(unsigned x, unsigned y, CRGBA c) const                  { setPixelColorXY(int(x), int(y), c); }
     inline void setPixelColorXY(int x, int y, byte r, byte g, byte b, byte w = 0) const { setPixelColorXY(x, y, CRGBA(r,g,b)); }
-    #ifdef WLED_USE_AA_PIXELS
-    void setPixelColorXY(float x, float y, CRGBA c, bool aa = true) const;
-    inline void setPixelColorXY(float x, float y, byte r, byte g, byte b, byte w = 0, bool aa = true) const { setPixelColorXY(x, y, RGBW32(r,g,b,w), aa); }
-    #endif
     [[gnu::hot]] bool isPixelXYClipped(int x, int y) const;
     [[gnu::hot]] CRGBA getPixelColorXY(int x, int y) const;
     // 2D support functions
@@ -766,10 +759,6 @@ class Segment {
     inline void setPixelColorXY(int x, int y, CRGBA c) const                            { setPixelColor(x, c); }
     inline void setPixelColorXY(unsigned x, unsigned y, CRGBA c) const                  { setPixelColor(int(x), c); }
     inline void setPixelColorXY(int x, int y, byte r, byte g, byte b, byte w = 0) const { setPixelColor(x, CRGBA(r,g,b)); }
-    #ifdef WLED_USE_AA_PIXELS
-    inline void setPixelColorXY(float x, float y, CRGBA c, bool aa = true) const        { setPixelColor(x, c, aa); }
-    inline void setPixelColorXY(float x, float y, byte r, byte g, byte b, byte w = 0, bool aa = true) { setPixelColor(x, CRGBA(r,g,b), aa); }
-    #endif
     inline bool isPixelXYClipped(int x, int y) const                                    { return isPixelClipped(x); }
     inline CRGBA getPixelColorXY(int x, int y) const                                    { return getPixelColor(x); }
     inline void blendPixelColorXY(uint16_t x, uint16_t y, CRGBA c, uint8_t blend) const { blendPixelColor(x, c, blend); }
@@ -886,7 +875,13 @@ class WS2812FX {
       setupEffectData(),                          // add default effects to the list; defined in FX.cpp
       waitForIt();                                // wait until frame is over (service() has finished or time for 1 frame has passed)
 
-    void setRealtimePixelColor(unsigned i, uint32_t c);
+    inline void reallocatePixelBuffer() {
+      // allocate frame buffer after matrix has been set up (gaps!)
+      // use IRAM/PSRAM if available: there is no measurable perfomance impact between PSRAM and DRAM on S2/S3 with QSPI PSRAM for this buffer
+      p_free(_pixels);
+      _pixels = static_cast<uint32_t*>(allocate_buffer(getLengthTotal() * sizeof(uint32_t), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+    }
+
     inline void setPixelColor(unsigned n, uint32_t c) const   { if (n < getLengthTotal()) _pixels[n] = c; }  // paints absolute strip pixel with index n and color c
     inline void resetTimebase()                               { timebase = 0UL - millis(); }
     inline void setPixelColor(unsigned n, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0) const
@@ -898,8 +893,8 @@ class WS2812FX {
     inline void setTransition(uint16_t t)                     { _transitionDur = t; } // sets transition time (in ms)
     inline void appendSegment(uint16_t start=0, uint16_t stop=DEFAULT_LED_COUNT, uint16_t startY = 0, uint16_t stopY = 1)
                                                               { if (_segments.size() < getMaxSegments()) _segments.emplace_back(start,stop,startY,stopY); }
-    inline void suspend()                                     { _suspend = true; }    // will suspend (and canacel) strip.service() execution
-    inline void resume()                                      { _suspend = false; }   // will resume strip.service() execution
+    inline WS2812FX& suspend()                                { _suspend = true; return *this; }  // will suspend (and canacel) strip.service() execution
+    inline void      resume()                                 { _suspend = false; }               // will resume strip.service() execution
 
     void calcMilliAmpsAvg();
     void restartRuntime();

@@ -185,15 +185,17 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   if (seg.mirror_y != mirror_y || seg.transpose != transpose) seg.markForReset();
   #endif
 
-  int len = (stop > start) ? stop - start : 1;
-  int offset = elem[F("of")] | INT32_MAX;
-  if (offset != INT32_MAX) {
-    int offsetAbs = abs(offset);
-    if (offsetAbs > len - 1) offsetAbs %= len;
-    if (offset < 0) offsetAbs = len - offsetAbs;
-    of = offsetAbs;
+  if (stop > start) {
+    int len = stop - start;
+    int offset = elem[F("of")] | INT32_MAX;
+    if (offset != INT32_MAX) {
+      int offsetAbs = abs(offset);
+      offsetAbs %= len;
+      if (offset < 0) of = len - offsetAbs;
+      else            of = offsetAbs;
+    }
+    if (of > len - 1) of = len - 1;
   }
-  if (stop > start && of > len -1) of = len -1;
 
   if (newSeg || !strip.isServicing()) {
     // update new segment or segment not being serviced
@@ -397,16 +399,19 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   netDebugEnabled = root[F("debug")] | netDebugEnabled;
   #endif
 
+  // on/off & brightness logic
   bool onBefore = bri;
+
   getVal(root["bri"], bri);
   if (bri != briOld) stateChanged = true;
 
   bool on = root["on"] | (bri > 0);
   if (!on != !bri) toggleOnOff();
 
-  if (root["on"].is<const char*>() && root["on"].as<const char*>()[0] == 't') {
+  if (root["on"].is<const char*>() && tolower(root["on"].as<const char*>()[0]) == 't') {
     if (onBefore || !bri) toggleOnOff(); // do not toggle off again if just turned on by bri (makes e.g. "{"on":"t","bri":32}" work)
   }
+  if (!onBefore && on) toggleRelay(on);  // must toggle relay manually
 
   if (bri && !onBefore) { // unfreeze all segments when turning on
     for (size_t s=0; s < strip.getSegmentsNum(); s++) {
@@ -426,8 +431,8 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     }
   }
 
-  blendingStyle = root[F("bs")] | blendingStyle;
-  blendingStyle &= 0x1F;
+  transitionStyle = root[F("bs")] | transitionStyle;
+  transitionStyle &= 0x1F;
 
   // temporary transition (applies only once)
   tr = root[F("tt")] | -1;
@@ -477,20 +482,23 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     if (root["live"].as<bool>()) {
       jsonTransitionOnce = true;
       strip.setTransition(0);
-      realtimeLock(65000);
+      realtimeLock(); // infinite lock
     } else {
       exitRealtime();
       strip.setTransition(transitionDelay);
     }
   }
 
+  if (root[F("rSeg")] | false) root["seg"] = "r"; // make it compatible with wled#5696
   int it = 0;
   JsonVariant segVar = root["seg"];
   if (!segVar.isNull()) {
     // we may be called during strip.service() so we must not modify segments while effects are executing
-    strip.suspend();
-    strip.waitForIt();
-    if (segVar.is<JsonObject>()) {
+    strip.suspend().waitForIt();
+    if (segVar.is<const char *>() && tolower(segVar.as<const char *>()[0]) == 'r') {
+      strip.makeAutoSegments(true);
+      stateChanged = true;
+    } else if (segVar.is<JsonObject>()) {
       int id = segVar["id"] | -1;
       //if "seg" is not an array and ID not specified, apply to all selected/checked segments
       if (id < 0) {
@@ -511,6 +519,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
         if (deserializeSegment(elem, it++, presetId) && !elem["stop"].isNull() && elem["stop"]==0) deleted++;
       }
       if (strip.getSegmentsNum() > 3 && deleted >= strip.getSegmentsNum()/2U) strip.purgeSegments(); // batch deleting more than half segments
+      if (deleted) stateChanged = true; // if we only deleted segments we still need to set stateChanged
     }
     strip.resume();
   }
@@ -529,9 +538,9 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   // HTTP API commands (must be handled before "ps")
   const char* httpwin = root["win"];
   if (httpwin) {
-    String apireq = "win"; apireq += '&'; // reduce flash string usage
+    String apireq = "win"; apireq += '&'; // reduce RAM string usage
     apireq += httpwin;
-    handleSet(nullptr, apireq, false);    // may set stateChanged
+    handleSet(nullptr, apireq, false);    // calls stateUpdated(CALL_MODE_NO_NOTIFY)
   }
 
   // Applying preset from JSON API has 2 cases: a) "pd" AKA "preset direct" and b) "ps" AKA "preset select"
@@ -550,7 +559,8 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     if (root["win"].isNull() && getVal(root["ps"], presetCycCurr, 1, 250) && presetCycCurr > 0 && presetCycCurr < 251 && presetCycCurr != currentPreset) {
       DEBUG_PRINTF_P(PSTR("Preset select: %d\n"), presetCycCurr);
       // b) preset ID only or preset that does not change state (use embedded cycling limits if they exist in getVal())
-      applyPreset(presetCycCurr, callMode); // async load from file system (only preset ID was specified)
+      //    boot preset may contain "ps":"1~5r" to select random preset in such case we will change callMode from INIT to DIRECT_CHANGE to prevent recursion
+      applyPreset(presetCycCurr, callMode == CALL_MODE_INIT ? CALL_MODE_DIRECT_CHANGE : callMode); // async load from file system (only preset ID was specified)
       return stateResponse;
     } else presetCycCurr = currentPreset; // restore presetCycCurr
   }
@@ -676,9 +686,9 @@ void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segme
 {
   if (includeBri) {
     root["on"] = (bri > 0);
-    root["bri"] = briLast;
+    root["bri"] = bri > 0 ? bri : briLast;
     root[F("transition")] = transitionDelay/100; //in 100ms
-    root[F("bs")] = blendingStyle;
+    root[F("bs")] = transitionStyle;
   }
 
   if (!forPreset) {
@@ -695,7 +705,7 @@ void serializeState(JsonObject root, bool forPreset, bool includeBri, bool segme
     nl["dur"] = nightlightDelayMins;
     nl["mode"] = nightlightMode;
     nl[F("tbri")] = nightlightTargetBri;
-    nl[F("rem")] = nightlightActive ? (int)(nightlightDelayMs - (millis() - nightlightStartTime)) / 1000 : -1; // seconds remaining
+    nl[F("rem")] = nightlightActive ? (nightlightDelayMins * 60000U - (millis() - nightlightStartTime)) / 1000 : -1; // seconds remaining
 
     JsonObject udpn = root.createNestedObject("udpn");
     udpn[F("send")] = sendNotificationsRT;
@@ -1259,9 +1269,9 @@ bool serveLiveLeds(AsyncWebServerRequest* request, uint32_t wsClient)
     uint8_t g = G(c);
     uint8_t b = B(c);
     uint8_t w = W(c);
-    r = scale8(qadd8(w, r), strip.getBrightness()); //R, add white channel to RGB channels as a simple RGBW -> RGB map
-    g = scale8(qadd8(w, g), strip.getBrightness()); //G
-    b = scale8(qadd8(w, b), strip.getBrightness()); //B
+    r = bri ? qadd8(w, r) : 0; //R, add white channel to RGB channels as a simple RGBW -> RGB map
+    g = bri ? qadd8(w, g) : 0; //G
+    b = bri ? qadd8(w, b) : 0; //B
     buf += sprintf_P(buf, PSTR("\"%06X\","), RGBW32(r,g,b,0));
   }
   buf--;  // remove last comma

@@ -28,6 +28,9 @@ static const char s_notimplemented[] PROGMEM = "Not implemented";
 static const char s_accessdenied[]   PROGMEM = "Access Denied";
 static const char _common_js[]       PROGMEM = "/common.js";
 
+static String messageHead, messageSub;
+static byte optionType;
+
 //Is this an IP?
 static bool isIp(const String &str) {
   for (size_t i = 0; i < str.length(); i++) {
@@ -181,6 +184,12 @@ static void handleUpload(AsyncWebServerRequest *request, const String& filename,
     if (isFinal) request->send(401, FPSTR(CONTENT_TYPE_PLAIN), FPSTR(s_unlock_cfg));
     return;
   }
+/*
+  if (filename.indexOf(F("wsec.json")) >= 0) { // prevent overwrite of passwords
+    request->send(403, FPSTR(CONTENT_TYPE_PLAIN), FPSTR(s_accessdenied));
+    return;
+  }
+*/
   if (!index) {
     String finalname = filename;
     if (finalname.charAt(0) != '/') {
@@ -197,13 +206,14 @@ static void handleUpload(AsyncWebServerRequest *request, const String& filename,
   if (isFinal) {
     request->_tempFile.close();
     if (filename.indexOf(F("cfg.json")) >= 0) { // check for filename with or without slash
-      doReboot = true;
       request->send(200, FPSTR(CONTENT_TYPE_PLAIN), F("Configuration restore successful.\nRebooting..."));
+      doReboot = true;
     } else {
       if (filename.indexOf(F("palette")) >= 0 && filename.indexOf(F(".json")) >= 0) loadCustomPalettes();
       request->send(200, FPSTR(CONTENT_TYPE_PLAIN), F("File Uploaded!"));
     }
     cacheInvalidate++;
+    updateFSInfo(); // refresh memory usage info
   }
 }
 

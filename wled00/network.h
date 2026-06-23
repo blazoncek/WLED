@@ -3,6 +3,13 @@
 #ifndef WLED_NETWORK_H
 #define WLED_NETWORK_H
 
+#ifdef ARDUINO_ARCH_ESP32
+// Declare internal Arduino library function to work around the fact that WiFi.setHostname() does not propagate the
+// hostname to the network interface if it's been previously used.  The underlying ESP-IDF layer supports this just
+// fine; it's an oversight in the Arduino layer that we can work around by calling the internal function directly.
+esp_err_t set_esp_interface_hostname(esp_interface_t interface, const char * hostname);
+#endif
+
 #ifndef WLED_DISABLE_ESPNOW
 typedef struct {
   char    magic[4];     // enough to store "WLED"
@@ -18,6 +25,10 @@ typedef struct {
   uint32_t time;        // may be used for time synchronisation (NOTE: time_t varies in size on ESP32 and ESP8266)
   uint8_t  reserved[7]; // 7 bytes reserved for future use
 } __attribute__((packed, aligned(1))) EspNowBeacon;
+
+void initESPNow(bool resetAP = false);
+void stopESPNow();
+void sendESPNowHeartBeat();
 #endif
 
 typedef struct WiFiConfig {
@@ -66,5 +77,14 @@ extern const ethernet_settings ethernetBoards[];
 #define WLED_ETH_RSVD_PINS_COUNT 6
 extern const managed_pin_type esp32_nonconfigurable_ethernet_pins[WLED_ETH_RSVD_PINS_COUNT];
 #endif
+
+bool initEthernet(); // result is informational
+int  getSignalQuality(int rssi);
+IPAddress resolveHostname(const String& hostname, bool useMDNS = true);
+void fillMAC2Str(char *str, const uint8_t *mac);
+void fillStr2MAC(uint8_t *mac, const char *str);
+int  findWiFi(bool doScan = false);
+bool isWiFiConfigured();
+void WiFiEvent(WiFiEvent_t event);
 
 #endif // WLED_NETWORK_H

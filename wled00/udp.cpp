@@ -29,6 +29,7 @@ void notify(byte callMode, bool followUp)
     case CALL_MODE_HUE:           if (!notifyHue)    return; break;
     case CALL_MODE_PRESET_CYCLE:  if (!notifyDirect) return; break;
     case CALL_MODE_ALEXA:         if (!notifyAlexa)  return; break;
+    case CALL_MODE_MQTT:          if (!notifyMQTT)   return; break;
     default: return;
   }
   byte udpOut[WLEDPACKETSIZE];  //TODO: optimize size to use only active segments
@@ -254,7 +255,7 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
     // are we syncing bounds and slave has more active segments than master?
     if (receiveSegmentBounds && numSrcSegs < strip.getActiveSegmentsNum()) {
       DEBUG_PRINTLN(F("Removing excessive segments."));
-      strip.suspend(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
+      strip.suspend().waitForIt(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
       for (size_t i=strip.getSegmentsNum(); i>numSrcSegs && i>0; i--) {
         Segment &seg = strip.getSegment(i-1);
         if (seg.isActive()) seg.deactivate(); // delete segment
@@ -264,6 +265,7 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
     size_t inactiveSegs = 0;
     for (size_t i = 0; i < numSrcSegs && i < WS2812FX::getMaxSegments(); i++) {
       unsigned ofs = 41 + i*udpIn[40]; //start of segment offset byte
+      if (ofs + 36 > UDP_IN_MAXSIZE) break; // avoid reading outside of UDP packet (wrong data?)
       unsigned id = udpIn[0 +ofs];
       DEBUG_PRINTF_P(PSTR("UDP segment received: %u\n"), id);
       if      (id >  strip.getSegmentsNum()) break;
@@ -294,7 +296,7 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
       uint16_t offset = (udpIn[7+ofs] << 8 | udpIn[8+ofs]);
       if (!receiveSegmentOptions) {
         DEBUG_PRINTF_P(PSTR("Set segment w/o options: %d [%d,%d;%d,%d]\n"), id, (int)start, (int)stop, (int)startY, (int)stopY);
-        strip.suspend(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
+        strip.suspend().waitForIt(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
         selseg.setGeometry(start, stop, selseg.grouping, selseg.spacing, offset, startY, stopY, selseg.map1D2D);
         strip.resume();
         continue; // we do receive bounds, but not options
@@ -336,12 +338,12 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
       }
       if (receiveSegmentBounds) {
         DEBUG_PRINTF_P(PSTR("Set segment w/ options: %d [%d,%d;%d,%d]\n"), id, (int)start, (int)stop, (int)startY, (int)stopY);
-        strip.suspend(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
+        strip.suspend().waitForIt(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
         selseg.setGeometry(start, stop, udpIn[5+ofs], udpIn[6+ofs], offset, startY, stopY, selseg.map1D2D);
         strip.resume();
       } else {
         DEBUG_PRINTF_P(PSTR("Set segment grouping: %d [%d,%d]\n"), id, (int)udpIn[5+ofs], (int)udpIn[6+ofs]);
-        strip.suspend(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
+        strip.suspend().waitForIt(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
         selseg.setGeometry(selseg.start, selseg.stop, udpIn[5+ofs], udpIn[6+ofs], selseg.offset, selseg.startY, selseg.stopY, selseg.map1D2D);
         strip.resume();
       }
@@ -421,22 +423,26 @@ void realtimeLock(uint32_t timeoutMs, byte md)
     // if strip is off (bri==0) and not already in RTM
     if (briT == 0) {
       strip.setBrightness(briLast, true);
+      toggleRelay(true);  // switch relay on (needs to be done here)
+      rlyStartTime = 0;   // ignore relay delay if WARLS/Adalight/realtime active
     }
   }
 
   if (realtimeTimeout != UINT32_MAX) {
-    realtimeTimeout = (timeoutMs == 255001 || timeoutMs == 65000) ? UINT32_MAX : millis() + timeoutMs;
+    realtimeTimeout = (timeoutMs == UINT32_MAX) ? UINT32_MAX : millis() + timeoutMs;
   }
   realtimeMode = md;
 
   if (realtimeOverride) return;
   if (arlsForceMaxBri) strip.setBrightness(255, true);
+  if (arlsDisableGammaCorrection) gamma32Func = nullGamma32; // no gamma correction from live sources (have gamma applied)
   if (briT > 0 && md == REALTIME_MODE_GENERIC) strip.show();
 }
 
 void exitRealtime() {
   if (!realtimeMode) return;
   if (realtimeOverride == REALTIME_OVERRIDE_ONCE) realtimeOverride = REALTIME_OVERRIDE_NONE;
+  if (arlsDisableGammaCorrection) gamma32Func = gammaCorrectCol ? NeoGammaWLEDMethod::Correct32 : nullGamma32; // restore gamma correction function
   strip.setBrightness(bri, true);
   realtimeTimeout = 0; // cancel realtime mode immediately
   realtimeMode = REALTIME_MODE_INACTIVE; // inform UI immediately
@@ -508,8 +514,8 @@ void handleNotifications()
       }
       if (useMainSegmentOnly) strip.trigger();
       else                    strip.show();
-      return;
     }
+    return;
   }
 
   localIP = Network.localIP();
@@ -563,16 +569,16 @@ void handleNotifications()
 
   if (!receiveDirect) return;
 
-  //TPM2.NET
+  //TPM2.NET https://gist.github.com/jblang/89e24e2655be6c463c56
   if (udpIn[0] == 0x9c)
   {
-    //WARNING: this code assumes that the final TMP2.NET payload is evenly distributed if using multiple packets (ie. frame size is constant)
-    //if the number of LEDs in your installation doesn't allow that, please include padding bytes at the end of the last packet
+    // WARNING: this code assumes that the TMP2.NET payload is evenly distributed if using multiple packets (ie. frame size is constant)
+    // if the number of LEDs in your installation doesn't allow that, please include padding bytes at the end of the last packet
     byte tpmType = udpIn[1];
     if (tpmType == 0xaa) { //TPM2.NET polling, expect answer
       sendTPM2Ack(); return;
     }
-    if (tpmType != 0xda) return; //return if notTPM2.NET data
+    if (tpmType != 0xda || packetSize < 7 || udpIn[packetSize-1] != 0x36) return; //return if not TPM2.NET data (we don't handle Commands i.e. 0xC0)
 
     realtimeIP = (isSupp) ? notifier2Udp.remoteIP() : notifierUdp.remoteIP();
     realtimeLock(realtimeTimeoutMs, REALTIME_MODE_TPM2NET);
@@ -583,10 +589,18 @@ void handleNotifications()
     byte packetNum = udpIn[4]; //starts with 1!
     byte numPackets = udpIn[5];
 
+    // if we missed a packet or we are past last packet (malformed payload) just abort
+    if (tpmPacketCount < packetNum || tpmPacketCount > numPackets) {
+      tpmPacketCount = 0;
+      return;
+    }
+
     unsigned id = (tpmPayloadFrameSize/3)*(packetNum-1); //start LED
     unsigned totalLen = strip.getLengthTotal();
-    for (size_t i = 6; i < tpmPayloadFrameSize + 4U && id < totalLen; i += 3, id++) {
-      setRealtimePixel(id, udpIn[i], udpIn[i+1], udpIn[i+2], 0);
+    size_t currentFrameSize = min(packetSize - 7, (size_t)tpmPayloadFrameSize);
+    for (size_t i = 0; i < currentFrameSize && id < totalLen; i += 3, id++) {
+      size_t ofs = 6 + i;
+      setRealtimePixel(id, udpIn[ofs], udpIn[ofs+1], udpIn[ofs+2], 0);
     }
     if (tpmPacketCount == numPackets) { //reset packet count and show if all packets were received
       tpmPacketCount = 0;
@@ -607,7 +621,7 @@ void handleNotifications()
       realtimeTimeout = 0; // cancel realtime mode immediately
       return;
     } else {
-      realtimeLock(udpIn[1]*1000 +1, REALTIME_MODE_UDP);
+      realtimeLock(udpIn[1]==255 ? UINT32_MAX : udpIn[1]*1000, REALTIME_MODE_UDP); // 255 == infinite lock
     }
     if (realtimeOverride) return;
 
@@ -670,8 +684,13 @@ void handleNotifications()
 
 void setRealtimePixel(uint16_t i, byte r, byte g, byte b, byte w)
 {
-  unsigned pix = i + arlsOffset;
-  strip.setRealtimePixelColor(pix, RGBW32(r,g,b,w));
+  if (realtimeMode == REALTIME_MODE_INACTIVE) return;
+  i += arlsOffset;
+  if (useMainSegmentOnly) {
+    strip.getMainSegment().setPixelColor(i, CRGBA(r,g,b,w));
+  } else {
+    strip.setPixelColor(i, RGBW32(r,g,b,w));
+  }
 }
 
 /*********************************************************************************************\
@@ -818,7 +837,7 @@ uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const
         if (currentPacket == (packetCount - 1U)) {
           // last packet, set the push flag
           // TODO: determine if we want to send an empty push packet to each destination after sending the pixel data
-          flags = DDP_FLAGS1_VER1 | DDP_FLAGS1_PUSH;
+          flags |= DDP_FLAGS1_PUSH;
           if (channelCount % DDP_CHANNELS_PER_PACKET) {
             packetSize = channelCount % DDP_CHANNELS_PER_PACKET;
           }
@@ -827,7 +846,7 @@ uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const
         // write the header
         /*0*/ddpUdp.write(flags);
         /*1*/ddpUdp.write(sequenceNumber++ & 0x0F); // sequence may be unnecessary unless we are sending twice (as requested in Sync settings)
-        /*2*/ddpUdp.write(isRGBW ?  DDP_TYPE_RGBW32 : DDP_TYPE_RGB24);
+        /*2*/ddpUdp.write(isRGBW ? DDP_TYPE_RGBW32 : DDP_TYPE_RGB24);
         /*3*/ddpUdp.write(DDP_ID_DISPLAY);
         // data offset in bytes, 32-bit number, MSB first
         /*4*/ddpUdp.write(0xFF & (channel >> 24));

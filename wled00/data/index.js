@@ -679,10 +679,10 @@ function parseInfo(i) {
 	isM = mw>0 && mh>0;
 	if (!isM) {
 		gId("filter2D").classList.add('hide');
-		qSA('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='none';});
+		qSA('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='none';o.hidden=true;o.disabled=true;});
 	} else {
 		gId("filter2D").classList.remove('hide');
-		qSA('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='';});
+		qSA('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='';o.hidden=false;o.disabled=false;});
 	}
 	gId("updBt").style.display = (i.opt & 1) ? '':'none';
 }
@@ -1904,11 +1904,12 @@ function makeSeg()
 					`<td><input class="segn" id="seg${lu}eY" type="number" min="0" max="${mh}" value="${isM?mh:1}" oninput="updateLen(${lu})" onkeydown="segEnter(${lu})"></td>`+
 				`</tr>`+
 			`</table>`+
-			`<div class="h" id="seg${lu}len">${ledCount - ns} LEDs</div>`+
+			`<div class="h" id="seg${lu}len"></div>`+
 			`<div class="c"><button class="btn btn-p" onclick="resetUtil()">Cancel</button></div>`+
 		`</div>`+
 	`</div>`;
 	gId('segutil').innerHTML = cn;
+	updateLen(lu);
 }
 
 function resetUtil(off=false)
@@ -2838,6 +2839,7 @@ function rSegs()
 	cnfrS = false;
 	bt.style.color = "var(--c-f)";
 	bt.innerHTML = "Reset segments";
+	/* old way, didn't respect Make segments for each output
 	var obj = {"seg":[{"start":0,"stop":ledCount,"sel":true}]};
 	if (isM) {
 		obj.seg[0].stop = mw;
@@ -2846,6 +2848,8 @@ function rSegs()
 	}
 	for (let i=1; i<=lSeg; i++) obj.seg.push({"stop":0});
 	requestJson(obj);
+	*/
+	requestJson({"seg":"r"});
 }
 
 function loadPalettesData(callback = null)

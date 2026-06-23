@@ -336,12 +336,13 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       char la[4] = "LA"; la[2] = offset+s; la[3] = 0; //LED current
       char ma[4] = "MA"; ma[2] = offset+s; ma[3] = 0; //max per-port PSU current
       char hs[4] = "HS"; hs[2] = offset+s; hs[3] = 0; //hostname (for network types, custom text for others)
+      char bf[4] = "BF"; bf[2] = offset+s; bf[3] = 0; //brightness factor
       settingsScript.print(F("addLEDs(1);"));
       uint8_t pins[5];
       int nPins = bus->getPins(pins);
-      for (int i = 0; i < nPins; i++) {
+      for (int i = 0; i < std::min(nPins,OUTPUT_MAX_PINS); i++) { // max 5 pins supported (Hub75 will report more)
         lp[1] = '0'+i;
-        if (PinManager::isPinOk(pins[i]) || bus->isVirtual()) printSetFormValue(settingsScript,lp,pins[i]);
+        if (PinManager::isPinOk(pins[i]) || bus->isVirtual() || bus->isUsermod() || bus->isHub75()) printSetFormValue(settingsScript,lp,pins[i]);
       }
       printSetFormValue(settingsScript,lc,bus->getLength());
       printSetFormValue(settingsScript,lt,bus->getType());
@@ -371,11 +372,19 @@ void getSettingsJS(byte subPage, Print& settingsScript)
           case 10000 : speed = 3; break;
           case 20000 : speed = 4; break;
         }
+      } else if (bus->isHub75()) {
+        switch (speed) {
+          default:
+          case  8000 : speed = 0; break;
+          case 16000 : speed = 2; break;
+          case 20000 : speed = 4; break;
+        }
       }
       printSetFormValue(settingsScript,sp,speed);
       printSetFormValue(settingsScript,la,bus->getLEDCurrent());
       printSetFormValue(settingsScript,ma,bus->getMaxCurrent());
       printSetFormValue(settingsScript,hs,bus->getCustomText().c_str());
+      printSetFormValue(settingsScript,bf,bus->getBrightnessFactor());
       sumMa += bus->getMaxCurrent();
     }
     // strip.milliAmpsMax > 0 means per strip ABL is enabled
@@ -411,6 +420,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormValue(settingsScript,PSTR("RL"),rlyPin);
     printSetFormCheckbox(settingsScript,PSTR("RM"),rlyMde);
     printSetFormCheckbox(settingsScript,PSTR("RO"),rlyOpenDrain);
+    printSetFormValue(settingsScript,PSTR("RD"),rlyDelay*10);
     for (const auto &button : buttons) {
       settingsScript.printf_P(PSTR("addBtn(%d,%d);"), button.pin, button.type);
     }
@@ -452,6 +462,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormCheckbox(settingsScript,PSTR("SD"),notifyDirect);
     printSetFormCheckbox(settingsScript,PSTR("SB"),notifyButton);
     printSetFormCheckbox(settingsScript,PSTR("SH"),notifyHue);
+    printSetFormCheckbox(settingsScript,PSTR("SM"),notifyMQTT);
     printSetFormValue(settingsScript,PSTR("UR"),udpNumRetries);
 
     printSetFormCheckbox(settingsScript,PSTR("NL"),nodeListEnabled);
