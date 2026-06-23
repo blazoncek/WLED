@@ -15,6 +15,7 @@ function isN(n)     { return !isNaN(parseFloat(n)) && isFinite(n); } // isNumber
 // https://stackoverflow.com/questions/3885817/how-do-i-check-that-a-number-is-float-or-integer
 function isF(n)     { return n === +n && n !== (n|0); } // isFloat
 function isI(n)     { return n === +n && n === (n|0); } // isInteger
+function chrID(x)   { return String.fromCharCode((x<10?48:55)+x); }
 function toggle(el) { gId(el).classList.toggle("hide"); let n = gId('No'+el); if (n) n.classList.toggle("hide"); }
 function tooltip(cont=null) {
 	qSA((cont?cont+" ":"")+"[title]").forEach((element)=>{

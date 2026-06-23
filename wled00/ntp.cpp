@@ -532,8 +532,7 @@ void checkTimers()
     lastTimerMinute = minute(localTime);
     if (!hour(localTime) && minute(localTime)==1) calculateSunriseAndSunset();
     DEBUG_PRINTF_P(PSTR("Local time: %02d:%02d\n"), hour(localTime), minute(localTime));
-    for (size_t i = 0; i < timers.size(); i++) {
-      const Timer& t = timers[i];
+    for (const Timer& t : timers) {
       if (!t.isEnabled()) continue;
       time_t tt = 0;
       if (t.isSunrise()) {
@@ -560,7 +559,7 @@ void checkTimers()
         #ifdef WLED_DEBUG
         if (t.isSunrise()) DEBUG_PRINTF_P(PSTR("Sunrise timer %d offset %d\n"), t.preset, t.minute);
         else if (t.isSunset()) DEBUG_PRINTF_P(PSTR("Sunset timer %d offset %d\n"), t.preset, t.minute);
-        else DEBUG_PRINTF_P(PSTR("Timer %d: preset %d\n"), i, t.preset);
+        else DEBUG_PRINTF_P(PSTR("Timer preset %d\n"), t.preset);
         #endif
       }
     }
