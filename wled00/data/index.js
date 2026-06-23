@@ -2838,6 +2838,7 @@ function rSegs()
 	cnfrS = false;
 	bt.style.color = "var(--c-f)";
 	bt.innerHTML = "Reset segments";
+	/* old way, didn't respect Make segments for each output
 	var obj = {"seg":[{"start":0,"stop":ledCount,"sel":true}]};
 	if (isM) {
 		obj.seg[0].stop = mw;
@@ -2846,6 +2847,8 @@ function rSegs()
 	}
 	for (let i=1; i<=lSeg; i++) obj.seg.push({"stop":0});
 	requestJson(obj);
+	*/
+	requestJson({"seg":"r"});
 }
 
 function loadPalettesData(callback = null)

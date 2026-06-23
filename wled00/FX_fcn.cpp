@@ -2135,7 +2135,7 @@ Segment& WS2812FX::getSegment(unsigned id) {
 // loop() context
 void WS2812FX::resetSegments() {
   if (isServicing()) return;
-  _segments.clear();          // destructs all Segment as part of clearing
+  _segments.clear();          // destructs all Segment as part of clearing (including transitions)
   _segments.emplace_back(0, isMatrix ? Segment::maxWidth : _length, 0, isMatrix ? Segment::maxHeight : 1);
   _segments.shrink_to_fit();  // just in case ...
   _mainSegment = 0;
@@ -2144,8 +2144,8 @@ void WS2812FX::resetSegments() {
 void WS2812FX::makeAutoSegments(bool forceReset) {
   if (isServicing()) return;
 
-  // restart runtime so that ever effect starts from beginning
-  for (Segment &seg : _segments) seg.markForReset().resetIfRequired();
+  // restart runtime so that every effect starts from beginning
+  //for (Segment &seg : _segments) seg.markForReset().resetIfRequired();
 
   if (autoSegments) { //make one segment per bus
     unsigned segStarts[MAX_NUM_SEGMENTS] = {0};
@@ -2185,7 +2185,7 @@ void WS2812FX::makeAutoSegments(bool forceReset) {
       s++;
     }
 
-    _segments.clear();
+    _segments.clear();    // calls destructor for each segment (which will also destroy transition)
     _segments.reserve(s); // prevent reallocations
     // there is always at least one segment (but we need to differentiate between 1D and 2D)
     #ifndef WLED_DISABLE_2D

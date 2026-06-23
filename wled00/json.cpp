@@ -489,12 +489,16 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     }
   }
 
+  if (root[F("rSeg")] | false) root["seg"] = "r"; // make it compatible with wled#5696
   int it = 0;
   JsonVariant segVar = root["seg"];
   if (!segVar.isNull()) {
     // we may be called during strip.service() so we must not modify segments while effects are executing
     strip.suspend().waitForIt();
-    if (segVar.is<JsonObject>()) {
+    if (segVar.is<const char *>() && tolower(segVar.as<const char *>()[0]) == 'r') {
+      strip.makeAutoSegments(true);
+      stateChanged = true;
+    } else if (segVar.is<JsonObject>()) {
       int id = segVar["id"] | -1;
       //if "seg" is not an array and ID not specified, apply to all selected/checked segments
       if (id < 0) {
@@ -515,6 +519,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
         if (deserializeSegment(elem, it++, presetId) && !elem["stop"].isNull() && elem["stop"]==0) deleted++;
       }
       if (strip.getSegmentsNum() > 3 && deleted >= strip.getSegmentsNum()/2U) strip.purgeSegments(); // batch deleting more than half segments
+      if (deleted) stateChanged = true; // if we only deleted segments we still need to set stateChanged
     }
     strip.resume();
   }
