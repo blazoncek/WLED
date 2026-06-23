@@ -1904,11 +1904,12 @@ function makeSeg()
 					`<td><input class="segn" id="seg${lu}eY" type="number" min="0" max="${mh}" value="${isM?mh:1}" oninput="updateLen(${lu})" onkeydown="segEnter(${lu})"></td>`+
 				`</tr>`+
 			`</table>`+
-			`<div class="h" id="seg${lu}len">${ledCount - ns} LEDs</div>`+
+			`<div class="h" id="seg${lu}len"></div>`+
 			`<div class="c"><button class="btn btn-p" onclick="resetUtil()">Cancel</button></div>`+
 		`</div>`+
 	`</div>`;
 	gId('segutil').innerHTML = cn;
+	updateLen(lu);
 }
 
 function resetUtil(off=false)
