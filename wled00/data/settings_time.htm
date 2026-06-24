@@ -10,8 +10,8 @@
 	var ms=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 	var timerCount = 0;
 	var maxTimers = 64;
-	var presets = {};
-	var sortedPresetOptions = '';
+	var presets = [];
+	var sPO = '';
 	const TIMER_SUNRISE = 255;
 	const TIMER_SUNSET = 254;
 	const TIMER_WEEKDAYS_ALL = 255;
@@ -26,42 +26,56 @@
 		if (loc) d.Sf.action = getURL('/settings/time');
 	}
 	function populatePresets(fromls) {
-		let json = null;
 		if (fromls) {
 			try {
-				json = JSON.parse(localStorage.getItem("wledP"));
+				let json = JSON.parse(localStorage.getItem("wledP"));
+				onPresetsLoaded(json);
+				return;
 			} catch (e) {}
 		}
-		if (!json) {
-			fetch(getURL(`/presets.json`), {
-				method: 'get'
-			})
-			.then(res => {
-				if (!res.ok) showToast("Error loading presets.", true);
-				return res.json();
-			})
-			.then(json => {
-				onPresetsLoaded(json);
-			})
-			.catch((error)=>{
-				showToast("Loading presets failed.", true);
-			});
-		}
+		fetch(getURL(`/presets.json`), {
+			method: 'get'
+		})
+		.then(res => {
+			if (!res.ok) showToast("Error loading presets.", true);
+			return res.json();
+		})
+		.then(json => {
+			onPresetsLoaded(json);
+		})
+		.catch((error)=>{
+			showToast("Loading presets failed.", true);
+		});
 	}
 	function onPresetsLoaded(json) {
-		presets = json;
-		delete presets["0"];
-		bSPO();
+		let sortByName = true;
+		presets = Object.entries(json);
+		presets.shift();
+		try {
+			let cfg = JSON.parse(localStorage.getItem('wledUiCfg'));
+			sortByName = !cfg.comp.idsort;
+		} catch (e) {}
+		if (sortByName) {
+			presets.sort((a,b)=>{
+				let nameA = (a[1].n || ("Preset " + a[0])).toLowerCase();
+				let nameB = (b[1].n || ("Preset " + b[0])).toLowerCase();
+				return nameA.localeCompare(nameB);
+			});
+		} else {
+			presets.sort((a,b)=> parseInt(a[0]) - parseInt(b[0]));
+		}
+		bSPO(sortByName);
 		pMP();
 		rTOPO();
 		rBPO();
 	}
-	function bSPO() { // buildSortedPresetOptions
-		sortedPresetOptions = '';
-		for (var p of Object.entries(presets)) {
+	function bSPO(sortByName = false) { // build sPO
+		sPO = '';
+		for (var p of presets) {
 			var id = p[0];
 			var name = p[1].n || ("Preset " + id);
-			sortedPresetOptions += `<option value="${id}">${id}: ${name}</option>`;
+			let txt = sortByName ? `${name} : ${id}` : `${id} : ${name}`;
+			sPO += `<option value="${id}">${txt}</option>`;
 		}
 	}
 	function sPSV(sel, value, attrName) { // setPresetSelectValue
@@ -113,7 +127,7 @@
 		var dow = weekdays >> 1;
 		var container = gId("TMT").querySelector("table");
 		var hourVal = isSpecial ? 0 : hour;
-		var presetOpts = '<option value="0">Delete Timer</option>' + sortedPresetOptions;
+		var presetOpts = '<option value="0">Delete Timer</option>' + sPO;
 
 		var weekdayTable = '<table class="tw"><tr><th>M</th><th>T</th><th>W</th><th>T</th><th>F</th><th>S</th><th>S</th></tr><tr>';
 		for (j=1;j<8;j++) weekdayTable += `<td><input id="W${i}${j}" type="checkbox" ${(dow>>(j-1))&1?'checked':''}></td>`;
@@ -183,7 +197,7 @@ ${dateRange}
 		}
 	}
 	function pMP() { // populateMacroPresets
-		var presetOpts = '<option value="0">Default Action (0)</option>' + sortedPresetOptions;
+		var presetOpts = '<option value="0">Default Action (0)</option>' + sPO;
 		var fields = ['A0','A1','MC','MN'];
 		for (var f of fields) {
 			var inp = gN(f);
@@ -205,7 +219,7 @@ ${dateRange}
 		}
 	}
 	function rTOPO() { // refreshTimerPresetOptions
-		var presetOpts = '<option value="0">Delete Timer</option>' + sortedPresetOptions;
+		var presetOpts = '<option value="0">Delete Timer</option>' + sPO;
 		for (var i=0; i<timerCount; i++) {
 			var sel = gId("T"+i);
 			if (!sel) continue;
@@ -234,7 +248,7 @@ ${dateRange}
 		}
 	}
 	function rBPO() { // refreshButtonPresetOptions
-		var presetOpts = '<option value="0">Default Action (0)</option>' + sortedPresetOptions;
+		var presetOpts = '<option value="0">Default Action (0)</option>' + sPO;
 		var analogOpts = bAO();
 		var container = gId("macros");
 		if (!container) return;
@@ -276,7 +290,7 @@ ${dateRange}
 	function addBRow(i,p,l,d,t) {
 		if (t===undefined) t = 0;
 		var b = chrID(i);
-		var presetOpts = '<option value="0">Default Action (0)</option>' + sortedPresetOptions;
+		var presetOpts = '<option value="0">Default Action (0)</option>' + sPO;
 		var typeName = btnTypeName(t);
 		var buttonBlock = document.createElement('div');
 		buttonBlock.className = 'bb';
@@ -395,12 +409,7 @@ ${dateRange}
 		Countdown Goal:<br>
 		Date:&nbsp;<nowrap>20<input name="CY" class="xs" type="number" min="0" max="99" required>-<input name="CI" class="xs" type="number" min="1" max="12" required>-<input name="CD" class="xs" type="number" min="1" max="31" required></nowrap><br>
 		Time:&nbsp;<nowrap><input name="CH" class="xs" type="number" min="0" max="23" required>:<input name="CM" class="xs" type="number" min="0" max="59" required>:<input name="CS" class="xs" type="number" min="0" max="59" required></nowrap><br>
-		<h3>Macro presets</h3>
-		Sort Dropdowns: <input type="radio" id="sortById" name="sortOrder" onchange="updateSort(false)" checked><label for="sortById">by ID</label> <input type="radio" id="sortByName" name="sortOrder" onchange="updateSort(true)"><label for="sortByName">by name</label><br>
-		<b>Macros have moved!</b><br>
-		<i>Presets now also can be used as macros to save both JSON and HTTP API commands.<br>
-		Just enter the preset ID below!</i>
-		<i>Use 0 for the default action instead of a preset</i><br>
+		<h3>Presets</h3>
 		Alexa On/Off Preset: <input name="A0" class="m" type="number" min="0" max="250" required> <input name="A1" class="m" type="number" min="0" max="250" required><br>
 		Countdown-Over Preset: <input name="MC" class="m" type="number" min="0" max="250" required><br>
 		Timed-Light-Over Presets: <input name="MN" class="m" type="number" min="0" max="250" required><br>
