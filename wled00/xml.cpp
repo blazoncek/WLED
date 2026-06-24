@@ -588,15 +588,15 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormValue(settingsScript,PSTR("MN"),macroNl);
     int i = 0;
     for (const auto &button : buttons) {
-      settingsScript.printf_P(PSTR("addRow(%d,%d,%d,%d,%d);"), i++, button.macroButton, button.macroLongPress, button.macroDoublePress, button.type);
+      settingsScript.printf_P(PSTR("addBRow(%d,%d,%d,%d,%d);"), i++, button.macroButton, button.macroLongPress, button.macroDoublePress, button.type);
     }
 
     settingsScript.printf_P(PSTR("maxTimers=%d;"), WLED_MAX_TIMERS);
     if (timers.empty()) {
-      settingsScript.print(F("addTimerRow();"));
+      settingsScript.print(F("addTRow();"));
     } else {
       for (const Timer& timer : timers) {
-        settingsScript.printf_P(PSTR("addTimerRow(%d,%d,%d,%d,%d,%d,%d,%d);"),
+        settingsScript.printf_P(PSTR("addTRow(%d,%d,%d,%d,%d,%d,%d,%d);"),
                                timer.hour, timer.minute, timer.preset, timer.weekdays,
                                timer.monthStart, timer.dayStart, timer.monthEnd, timer.dayEnd);
       }

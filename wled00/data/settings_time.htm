@@ -95,7 +95,7 @@
 		timerCount = 0;
 		gId("TMT").innerHTML = "<table><thead><tr><th>En.</th><th>Type</th><th>Hour</th><th>Minute</th><th>Preset</th><th></th></tr></thead></table>";
 	}
-	function addTimerRow(hour, minute, preset, weekdays, monthStart, dayStart, monthEnd, dayEnd) {
+	function addTRow(hour, minute, preset, weekdays, monthStart, dayStart, monthEnd, dayEnd) {
 		if (timerCount >= maxTimers) return;
 		var i = timerCount++;
 		var isSunrise = (hour === TIMER_SUNRISE);
@@ -131,7 +131,7 @@
 <input id="W${i}0" type="checkbox" ${enabled ? "checked" : ""}>
 </td>
 <td>
-<select id="TS${i}" class="s" onchange="TT(${i})">
+<select id="TS${i}" class="m" onchange="TT(${i})">
 <option value="0" ${!isSpecial ? "selected" : ""}>Regular</option>
 <option value="${TIMER_SUNRISE}" ${isSunrise ? "selected" : ""}>Sunrise</option>
 <option value="${TIMER_SUNSET}" ${isSunset ? "selected" : ""}>Sunset</option>
@@ -273,7 +273,7 @@ ${dateRange}
 		if (d.Sf.LTR.value==="S") { d.Sf.LT.value = -1*parseFloat(d.Sf.LT.value); }
 		if (d.Sf.LNR.value==="W") { d.Sf.LN.value = -1*parseFloat(d.Sf.LN.value); }
 	}
-	function addRow(i,p,l,d,t) {
+	function addBRow(i,p,l,d,t) {
 		if (t===undefined) t = 0;
 		var b = chrID(i);
 		var presetOpts = '<option value="0">Default Action (0)</option>' + sortedPresetOptions;
