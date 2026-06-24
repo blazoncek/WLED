@@ -721,11 +721,12 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   if (!timersArray.isNull()) {
     clearTimers();
     for (JsonObject timer : timersArray) {
+      uint8_t p = timer[F("macro")] | 0;
+      if (p == 0) continue;
       uint8_t h = timer[F("hour")] | 0;
       int8_t m = timer[F("min")] | 0;
-      uint8_t p = timer[F("macro")] | 0;
       uint8_t dow = timer[F("dow")] | 127;
-      uint8_t wd = (dow << 1) | ((timer[F("en")] | 0) ? 1 : 0);
+      uint8_t wd = (dow << 1) | ((timer["en"] | 0) ? 1 : 0);
       uint8_t ms = 1, me = 12, ds = 1, de = 31;
       JsonObject start = timer[F("start")];
       if (!start.isNull()) {
@@ -1179,20 +1180,19 @@ void serializeConfig() {
   ol[F("osec")] = analogClockSecondsTrail;
   ol[F("osb")] = analogClockSolidBlack;
 
-  JsonObject timers = root.createNestedObject(F("timers"));
+  JsonObject timers_obj = root.createNestedObject(F("timers"));
 
-  JsonObject cntdwn = timers.createNestedObject(F("cntdwn"));
+  JsonObject cntdwn = timers_obj.createNestedObject(F("cntdwn"));
   JsonArray goal = cntdwn.createNestedArray(F("goal"));
   goal.add(countdownYear); goal.add(countdownMonth); goal.add(countdownDay);
   goal.add(countdownHour); goal.add(countdownMin); goal.add(countdownSec);
   cntdwn["macro"] = macroCountdown;
 
-  JsonArray timers_ins = timers.createNestedArray("ins");
-  for (size_t i = 0; i < ::timers.size(); i++) {
-    const Timer& t = ::timers[i];
-    if (t.preset == 0 && t.hour == 0 && t.minute == 0) continue;
+  JsonArray timers_ins = timers_obj.createNestedArray("ins");
+  for (const Timer& t : timers) {
+    if (t.preset == 0) continue;
     JsonObject ti = timers_ins.createNestedObject();
-    ti[F("en")] = t.isEnabled() ? 1 : 0;
+    ti["en"] = t.isEnabled() ? 1 : 0;
     ti[F("hour")] = t.hour;
     ti[F("min")] = t.minute;
     ti[F("macro")] = t.preset;

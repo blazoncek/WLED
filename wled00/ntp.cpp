@@ -692,66 +692,55 @@ void setTimeFromAPI(uint32_t timein) {
 
 void addTimer(uint8_t preset, uint8_t hour, int8_t minute, uint8_t weekdays,
               uint8_t monthStart, uint8_t monthEnd, uint8_t dayStart, uint8_t dayEnd) {
-  if (hour > 24 && hour != TH_SUNSET && hour != TH_SUNRISE) {
-    DEBUG_PRINTLN(F("Timer: Invalid hour value"));
+  if (timers.size() >= WLED_MAX_TIMERS) {
+    DEBUG_PRINTLN(F("Timer: Maximum number of timers reached"));
     return;
   }
   if (hour == TH_SUNRISE || hour == TH_SUNSET) {
     if (minute < -120 || minute > 120) {
       DEBUG_PRINTLN(F("Timer: Clamping sunrise/sunset offset to [-120,120]"));
-      if (minute < -120) minute = -120;
-      else if (minute > 120) minute = 120;
+      minute = constrain(minute, -120, 120);
     }
   } else {
+    if (hour > 24) {
+      DEBUG_PRINTLN(F("Timer: Invalid hour value"));
+      return;
+    }
     if (minute < 0 || minute > 59) {
       DEBUG_PRINTLN(F("Timer: Invalid minute value"));
       return;
     }
   }
-  if ((monthStart != 0 && monthStart > 12) ||
-      (monthEnd != 0 && monthEnd > 12)) {
+  if (monthStart > 12 || monthEnd > 12) {
     DEBUG_PRINTLN(F("Timer: Invalid month range"));
     return;
   }
-  if ((dayStart != 0 && dayStart > 31) ||
-      (dayEnd != 0 && dayEnd > 31)) {
+  int maxSDay = 31;
+  int maxEDay = 31;
+  switch (monthStart) {
+    case  2: maxSDay = 29; break;
+    case  4:
+    case  6:
+    case  9:
+    case 11: maxSDay = 30; break;
+  }
+  switch (monthEnd) {
+    case  2: maxEDay = 29; break;
+    case  4:
+    case  6:
+    case  9:
+    case 11: maxEDay = 30; break;
+  }
+  if (dayStart > maxSDay || dayEnd > maxEDay) {
     DEBUG_PRINTLN(F("Timer: Invalid day range"));
     return;
   }
-  if (timers.size() >= WLED_MAX_TIMERS) {
-    DEBUG_PRINTLN(F("Timer: Maximum number of timers reached"));
-    return;
-  }
-  Timer t(preset, hour, minute, weekdays, monthStart, monthEnd, dayStart, dayEnd);
-  timers.push_back(t);
+  timers.emplace_back(preset, hour, minute, weekdays, monthStart, monthEnd, dayStart, dayEnd);
   DEBUG_PRINTF("Timer added: preset=%d, hour=%d, minute=%d, count=%d\n", preset, hour, minute, timers.size());
-}
-
-void removeTimer(size_t index) {
-  if (index < timers.size()) {
-    timers.erase(timers.begin() + index);
-    DEBUG_PRINTF("Timer removed at index %d, count=%d\n", index, timers.size());
-  }
 }
 
 void clearTimers() {
   timers.clear();
+  timers.shrink_to_fit();
   DEBUG_PRINTLN(F("All timers cleared"));
 }
-
-size_t getTimerCount() {
-  return timers.size();
-}
-
-void compactTimers() {
-  for (size_t i = 0; i < timers.size();) {
-    const Timer& t = timers[i];
-    if (t.preset == 0) {
-      timers.erase(timers.begin() + i);
-    } else {
-      ++i;
-    }
-  }
-  timers.shrink_to_fit();
-}
-

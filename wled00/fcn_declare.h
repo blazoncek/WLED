@@ -164,10 +164,7 @@ struct Timer {
 
 void addTimer(uint8_t preset, uint8_t hour, int8_t minute, uint8_t weekdays,
               uint8_t monthStart = 1, uint8_t monthEnd = 12, uint8_t dayStart = 1, uint8_t dayEnd = 31);
-void removeTimer(size_t index);
 void clearTimers();
-size_t getTimerCount();
-void compactTimers();
 
 //overlay.cpp
 void handleOverlayDraw();
