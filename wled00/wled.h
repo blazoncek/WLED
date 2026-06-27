@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2606020
+#define VERSION 2606270
 #else
 #define VERSION BUILD
 #endif
@@ -687,7 +687,6 @@ WLED_GLOBAL Toki toki _INIT(Toki());
 WLED_GLOBAL size_t fsBytesUsed _INIT(0);
 WLED_GLOBAL size_t fsBytesTotal _INIT(0);
 WLED_GLOBAL unsigned long presetsModifiedTime _INIT(0L);
-WLED_GLOBAL bool doCloseFile _INIT(false);
 
 // presets
 WLED_GLOBAL byte currentPreset _INIT(0);

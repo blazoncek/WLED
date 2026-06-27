@@ -153,9 +153,9 @@ void handlePlaylist() {
       if (playlistRepeat == 1) { //stop if all repetitions are done
         unloadPlaylist();
         if (parentPlaylistPresetId > 0) {
-          applyPresetFromPlaylist(parentPlaylistPresetId); // reload previous playlist (unfortunately asynchronous)
+          doApplyPreset(parentPlaylistPresetId, CALL_MODE_DIRECT_CHANGE); // reload previous playlist
           parentPlaylistPresetId = 0; // reset previous playlist but do not reset Index or Repeat (they will be loaded & reset in loadPlaylist())
-        } else if (playlistEndPreset) applyPresetFromPlaylist(playlistEndPreset);
+        } else if (playlistEndPreset) doApplyPreset(playlistEndPreset, CALL_MODE_DIRECT_CHANGE);
         return;
       }
       if (playlistRepeat > 1) playlistRepeat--; // decrease repeat count on each index reset if not an endless playlist
@@ -166,7 +166,7 @@ void handlePlaylist() {
     jsonTransitionOnce = true;
     strip.setTransition(playlistEntries[playlistIndex].tr * 100);
     playlistEntryDur = playlistEntries[playlistIndex].dur > 0 ? playlistEntries[playlistIndex].dur : UINT16_MAX;
-    applyPresetFromPlaylist(playlistEntries[playlistIndex].preset);
+    doApplyPreset(playlistEntries[playlistIndex].preset, CALL_MODE_DIRECT_CHANGE);
     doAdvancePlaylist = false;
   }
 }

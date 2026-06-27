@@ -94,10 +94,12 @@ void WLED::loop()
   //handle still pending interface update
   updateInterfaces(interfaceUpdateCallMode);
 
-  if (doCloseFile) {
-    closeFile();
+  if (!presetNeedsSaving()) {
+    handlePlaylist();
     yield();
   }
+  handlePresets();
+  yield();
 
   #if defined(WLED_DEBUG) && defined(WLED_DEBUG_STATS)
   stripMillis = millis();
@@ -116,13 +118,6 @@ void WLED::loop()
     handleHue();
     yield();
     #endif
-
-    if (!presetNeedsSaving()) {
-      handlePlaylist();
-      yield();
-    }
-    handlePresets();
-    yield();
 
     if (!offMode || strip.isOffRefreshRequired() || strip.needsUpdate())
       strip.service();

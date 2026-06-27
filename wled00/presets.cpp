@@ -120,17 +120,8 @@ void initPresetsFile()
   f.close();
 }
 
-bool applyPresetFromPlaylist(byte index)
-{
-  DEBUG_PRINTF_P(PSTR("Request to apply preset: %d\n"), index);
-  presetToApply = index;
-  callModeToApply = CALL_MODE_DIRECT_CHANGE;
-  return true;
-}
-
 bool applyPreset(byte index, byte callMode)
 {
-  unloadPlaylist(); // applying a preset unloads the playlist (#3827)
   DEBUG_PRINTF_P(PSTR("Request to apply preset: %u\n"), index);
   presetToApply = index;
   callModeToApply = callMode;
@@ -149,22 +140,24 @@ void applyPresetWithFallback(uint8_t index, uint8_t callMode, uint8_t effectID, 
 void handlePresets()
 {
   // handlePreset() is called from loop(), so there is no need to suspend strip
-  byte presetErrFlag = ERR_NONE;
   if (presetToSave) {
     doSaveState();
-    return;
+  } else {    
+    if (presetToApply) { // preset waiting to apply
+      if (doApplyPreset(presetToApply, callModeToApply)) {
+        presetToApply = 0; //clear request for preset
+        callModeToApply = CALL_MODE_INIT;
+      }
+    }
   }
+}
 
-  if (presetToApply == 0 || !requestJSONBufferLock(9)) return; // no preset waiting to apply, or JSON buffer is already allocated, return to loop until free
+bool doApplyPreset(uint8_t tmpPreset, uint8_t tmpMode)
+{
+  if (!requestJSONBufferLock(9)) return false; // JSON buffer is already allocated
 
   bool changePreset = false;
-  uint8_t tmpPreset = presetToApply; // store temporary since deserializeState() may call applyPreset()
-  uint8_t tmpMode   = callModeToApply;
-
-  JsonObject fdo;
-
-  presetToApply = 0; //clear request for preset
-  callModeToApply = CALL_MODE_INIT;
+  byte presetErrFlag = ERR_NONE;
 
   DEBUG_PRINTF_P(PSTR("Applying preset: %u\n"), (unsigned)tmpPreset);
 
@@ -181,7 +174,7 @@ void handlePresets()
   {
   presetErrFlag = readObjectFromFileUsingId(getPresetsFileName(tmpPreset < 255), tmpPreset, pDoc) ? ERR_NONE : ERR_FS_PLOAD;
   }
-  fdo = pDoc->as<JsonObject>();
+  JsonObject fdo = pDoc->as<JsonObject>();
 
   // only reset errorflag if previous error was preset-related
   if ((errorFlag == ERR_NONE) || (errorFlag == ERR_FS_PLOAD)) errorFlag = presetErrFlag;
@@ -189,11 +182,13 @@ void handlePresets()
   //HTTP API commands
   const char* httpwin = fdo["win"];
   if (httpwin) {
+    if (currentPlaylist && fdo["win"].as<String>().indexOf(F("NP")) < 0) unloadPlaylist(); // #5703
     String apireq = "win"; apireq += '&'; // reduce RAM string usage
     apireq += httpwin;
     handleSet(nullptr, apireq, false);    // may call applyPreset() via PL=
     setValuesFromFirstSelectedSeg();      // fills legacy values
   } else {
+    if (currentPlaylist && fdo[F("np")].isNull()) unloadPlaylist(); // applying a preset unloads the playlist (#3827 & #5703)
     // remove load request for presets to prevent recursive crash, except if:
     // - called by button preset which contains preset cycling string "1~5~"
     // - or boot preset (i.e. with preset chaining like {"lor":2,"udpn":{"send":true},"MultiRelay":{"relay":1,"on":true},"ps":"1~5r"})
@@ -216,6 +211,7 @@ void handlePresets()
   #endif
 
   releaseJSONBufferLock();
+  return true;
 }
 
 //called from handleSet(PS=) [network callback (sObj is empty)], IR (irrational) [loop context] and deserializeState() [network callback]

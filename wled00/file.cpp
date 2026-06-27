@@ -42,17 +42,6 @@ static volatile size_t knownLargestSpace = MAX_SPACE;
 
 static File f; // don't export to other cpp files
 
-//wrapper to find out how long closing takes
-void closeFile() {
-  #ifdef WLED_DEBUG_FS
-    DEBUGFS_PRINT(F("Close -> "));
-    uint32_t s = millis();
-  #endif
-  f.close();
-  DEBUGFS_PRINTF("took %lu ms\n", millis() - s);
-  doCloseFile = false;
-}
-
 //find() that reads and buffers data from file stream in 256-byte blocks.
 //Significantly faster, f.find(key) can take SECONDS for multi-kB files
 static bool bufferedFind(const char *target, bool fromStart = true) {
@@ -186,7 +175,7 @@ static void writeSpace(size_t l)
   if (knownLargestSpace < l) knownLargestSpace = l;
 }
 
-static bool appendObjectToFile(const char* key, const JsonDocument* content, uint32_t s, uint32_t contentLen = 0)
+static bool appendObjectToFileAndClose(const char* key, const JsonDocument* content, uint32_t s, uint32_t contentLen = 0)
 {
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINTLN(F("Append"));
@@ -198,7 +187,7 @@ static bool appendObjectToFile(const char* key, const JsonDocument* content, uin
   if (f.size() < 3) f.print(F("{\"0\":{}}"));
 
   if (content->isNull()) {
-    doCloseFile = true;
+    f.close();
     return true; //nothing  to append
   }
 
@@ -210,7 +199,7 @@ static bool appendObjectToFile(const char* key, const JsonDocument* content, uin
     f.print(key);
     serializeJson(*content, f);
     DEBUGFS_PRINTF("Inserted, took %lu ms (total %lu)", millis() - s1, millis() - s);
-    doCloseFile = true;
+    f.close();
     return true;
   }
 
@@ -221,7 +210,7 @@ static bool appendObjectToFile(const char* key, const JsonDocument* content, uin
 
   if (f.size() + 9000 > (fsBytesTotal - fsBytesUsed)) { //make sure there is enough space to at least copy the file once
     errorFlag = ERR_FS_QUOTA;
-    doCloseFile = true;
+    f.close();
     return false;
   }
 
@@ -255,8 +244,7 @@ static bool appendObjectToFile(const char* key, const JsonDocument* content, uin
   //Append object
   serializeJson(*content, f);
   f.write('}');
-
-  doCloseFile = true;
+  f.close();
   DEBUGFS_PRINTF("Appended, took %lu ms (total %lu)", millis() - s1, millis() - s);
   return true;
 }
@@ -270,8 +258,6 @@ bool writeObjectToFileUsingId(const char* file, uint16_t id, const JsonDocument*
 
 bool writeObjectToFile(const char* file, const char* key, const JsonDocument* content)
 {
-  if (doCloseFile) closeFile();
-
   uint32_t s = 0; //timing
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINTF("Write to %s with key %s >>>\n", file, (key==nullptr)?"nullptr":key);
@@ -289,7 +275,7 @@ bool writeObjectToFile(const char* file, const char* key, const JsonDocument* co
 
   if (!bufferedFind(key)) //key does not exist in file
   {
-    return appendObjectToFile(key, content, s);
+    return appendObjectToFileAndClose(key, content, s);
   }
 
   //an object with this key already exists, replace or delete it
@@ -325,10 +311,10 @@ bool writeObjectToFile(const char* file, const char* key, const JsonDocument* co
     if (pos > 3) pos--; //also delete leading comma if not first object
     f.seek(pos);
     writeSpace(pos2 - pos);
-    if (contentLen) return appendObjectToFile(key, content, s, contentLen);
+    if (contentLen) return appendObjectToFileAndClose(key, content, s, contentLen);
   }
 
-  doCloseFile = true;
+  f.close();
   DEBUGFS_PRINTF("Replaced/deleted, took %lu ms\n", millis() - s);
   return true;
 }
@@ -343,7 +329,6 @@ bool readObjectFromFileUsingId(const char* file, uint16_t id, JsonDocument* dest
 //if the key is a nullptr, deserialize entire object
 bool readObjectFromFile(const char* file, const char* key, JsonDocument* dest, const JsonDocument* filter)
 {
-  if (doCloseFile) closeFile();
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINTF("Read from %s with key %s >>>\n", file, (key==nullptr)?"nullptr":key);
     uint32_t s = millis();
