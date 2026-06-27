@@ -96,33 +96,44 @@ void presetWithFallback(uint8_t presetID, uint8_t effectID, uint8_t paletteID) {
 }
 
 // this function follows the same principle as decodeIRJson()
-static bool remoteJson(int button)
+static bool remoteJson(uint32_t button)
 {
-  char objKey[10];
+  char objKey[16];
+  char fileName[16];
   bool parsed = false;
 
-  unsigned long maxWait = millis() + strip.getFrameTime();
+  unsigned long maxWait = millis() + 2*strip.getFrameTime();
   while (strip.isUpdating() && millis() < maxWait) delay(1); // wait for strip to finish updating, accessing FS during sendout causes glitches
 
-  if (!requestJSONBufferLock(22)) return false;
-
   sprintf_P(objKey, PSTR("\"%d\":"), button);
+  strcpy_P(fileName, PSTR("/remote.json"));
 
-  // attempt to read command from remote.json
-  readObjectFromFile(PSTR("/remote.json"), objKey, pDoc);
-  JsonObject fdo = pDoc->as<JsonObject>();
-  if (fdo.isNull()) {
-    // the received button does not exist
-    //if (!WLED_FS.exists(F("/remote.json"))) errorFlag = ERR_FS_RMLOAD; //warn if file itself doesn't exist
-    releaseJSONBufferLock();
-    return parsed;
+  File f = WLED_FS.open(fileName, "r");
+  if (!f) {
+    DEBUG_PRINTLN(F("Opening remote.json failed."));
+    //errorFlag = ERR_FS_RMLOAD; //warn if remote file itself doesn't exist
+    return false;
   }
 
-  String cmdStr = fdo["cmd"].as<String>();
-  JsonObject jsonCmdObj = fdo["cmd"]; //object
+  PSRAMDynamicJsonDocument doc(4096);   // should be adequate for regular/most common IR commands (but not for i.e. entire preset)
+  StaticJsonDocument<200> filter;
+  filter[objKey]["cmd"] = true;
+  filter[objKey]["rpt"] = true;
+  filter[objKey]["PL"] = true;
+  filter[objKey]["FX"] = true;
+  filter[objKey]["FP"] = true;
 
-  if (jsonCmdObj.isNull())  // we could also use: fdo["cmd"].is<String>()
-  {
+  // attempt to read command from remote.json
+  DeserializationError retCode = deserializeJson(doc, f, DeserializationOption::Filter(filter));
+  f.close();
+  if (retCode != DeserializationError::Ok) return parsed;
+
+  JsonObject fdo = doc.as<JsonObject>();
+  if (fdo[objKey].isNull()) return parsed;  //the received code does not exist
+
+  JsonObject jsonCmdObj = fdo[objKey]["cmd"]; //object
+  if (jsonCmdObj.isNull()) {
+    String cmdStr = fdo[objKey]["cmd"].as<String>();
     if (cmdStr.startsWith("!")) {
       // call limited set of C functions
       if (cmdStr.startsWith(F("!incBri"))) {
@@ -132,9 +143,9 @@ static bool remoteJson(int button)
         brightnessDown();
         parsed = true;
       } else if (cmdStr.startsWith(F("!presetF"))) { //!presetFallback
-        uint8_t p1 = fdo["PL"] | 1;
-        uint8_t p2 = fdo["FX"] | hw_random8(strip.getModeCount() -1);
-        uint8_t p3 = fdo["FP"] | 0;
+        uint8_t p1 = fdo[objKey]["PL"] | 1;
+        uint8_t p2 = fdo[objKey]["FX"] | hw_random8(strip.getModeCount() -1);
+        uint8_t p3 = fdo[objKey]["FP"] | 0;
         presetWithFallback(p1, p2, p3);
         parsed = true;
       }
@@ -158,7 +169,6 @@ static bool remoteJson(int button)
     deserializeState(jsonCmdObj, CALL_MODE_BUTTON);
     parsed = true;
   }
-  releaseJSONBufferLock();
   return parsed;
 }
 

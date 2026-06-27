@@ -549,36 +549,39 @@ Sample:
 */
 static void decodeIRJson(uint32_t code)
 {
-  char objKey[10];
+  char objKey[16];
   char fileName[16];
-  String cmdStr;
-  JsonObject fdo;
-  JsonObject jsonCmdObj;
-
-  if (!requestJSONBufferLock(13)) return;
-
   sprintf_P(objKey, PSTR("\"0x%lX\":"), (unsigned long)code);
-  strcpy_P(fileName, PSTR("/ir.json")); // for FS.exists()
+  strcpy_P(fileName, PSTR("/ir.json"));
 
-  // attempt to read command from ir.json
-  // this may fail for two reasons: ir.json does not exist or IR code not found
-  // if the IR code is not found readObjectFromFile() will clean() doc JSON document
-  // so we can differentiate between the two
-  readObjectFromFile(fileName, objKey, pDoc);
-  fdo = pDoc->as<JsonObject>();
-  lastValidCode = 0;
-  if (fdo.isNull()) {
-    //the received code does not exist
-    if (!WLED_FS.exists(fileName)) errorFlag = ERR_FS_IRLOAD; //warn if IR file itself doesn't exist
-    releaseJSONBufferLock();
+  File f = WLED_FS.open(fileName, "r");
+  if (!f) {
+    DEBUG_PRINTLN(F("Opening ir.json failed."));
+    errorFlag = ERR_FS_IRLOAD; //warn if IR file itself doesn't exist
     return;
   }
 
-  cmdStr = fdo["cmd"].as<String>();
-  jsonCmdObj = fdo["cmd"]; //object
+  PSRAMDynamicJsonDocument doc(4096);   // should be adequate for regular/most common IR commands (but not for i.e. entire preset)
+  StaticJsonDocument<200> filter;
+  filter[objKey]["cmd"] = true;
+  filter[objKey]["rpt"] = true;
+  filter[objKey]["PL"] = true;
+  filter[objKey]["FX"] = true;
+  filter[objKey]["FP"] = true;
 
-  if (jsonCmdObj.isNull())  // we could also use: fdo["cmd"].is<String>()
-  {
+  // attempt to read command from ir.json
+  DeserializationError retCode = deserializeJson(doc, f, DeserializationOption::Filter(filter));
+  f.close();
+  if (retCode != DeserializationError::Ok) return;
+
+  JsonObject fdo = doc.as<JsonObject>();
+  if (fdo[objKey].isNull()) return;  //the received code does not exist
+
+  lastValidCode = 0;
+
+  JsonObject jsonCmdObj = fdo[objKey]["cmd"]; //object
+  if (jsonCmdObj.isNull()) {
+    String cmdStr = fdo[objKey]["cmd"].as<String>();
     if (cmdStr.startsWith("!")) {
       // call limited set of C functions
       if (cmdStr.startsWith(F("!incBri"))) {
@@ -590,16 +593,16 @@ static void decodeIRJson(uint32_t code)
         decBrightness();
         stateUpdated(CALL_MODE_BUTTON_PRESET);
       } else if (cmdStr.startsWith(F("!presetF"))) { //!presetFallback
-        uint8_t p1 = fdo["PL"] | 1;
-        uint8_t p2 = fdo["FX"] | hw_random8(strip.getModeCount() -1);
-        uint8_t p3 = fdo["FP"] | 0;
+        uint8_t p1 = fdo[objKey]["PL"] | 1;
+        uint8_t p2 = fdo[objKey]["FX"] | hw_random8(strip.getModeCount() -1);
+        uint8_t p3 = fdo[objKey]["FP"] | 0;
         presetFallback(p1, p2, p3);
         stateUpdated(CALL_MODE_BUTTON_PRESET);
       }
     } else {
       // HTTP API command
       String apireq = "win"; apireq += '&';                        // reduce RAM string usage
-      if (cmdStr.indexOf("~") > 0 || fdo["rpt"]) lastValidCode = code; // repeatable action
+      if (cmdStr.indexOf("~") > 0 || fdo[objKey]["rpt"]) lastValidCode = code; // repeatable action
       if (!cmdStr.startsWith(apireq)) cmdStr = apireq + cmdStr;    // if no "win&" prefix
       if (!irApplyToAllSelected && cmdStr.indexOf(F("SS="))<0) {
         char tmp[10];
@@ -611,7 +614,7 @@ static void decodeIRJson(uint32_t code)
       notify(CALL_MODE_BUTTON_PRESET);                             // since notifications are not sent in handleSet()
     }
   } else {
-    // command is JSON object
+    // command is JSON object (limited to small set of keys to fit into 4k document)
     if (jsonCmdObj[F("psave")].isNull()) {
       if (irApplyToAllSelected && jsonCmdObj["seg"].is<JsonArray>()) {
         JsonObject seg = jsonCmdObj["seg"][0];                    // take 1st segment from array and use it to apply to all selected segments
@@ -624,10 +627,9 @@ static void decodeIRJson(uint32_t code)
       char pname[33];
       sprintf_P(pname, PSTR("IR Preset %d"), psave);
       fdo.clear();
-      if (psave > 0 && psave < 251) savePreset(psave, pname, fdo);
+      if (psave > 0 && psave < 251) savePreset(psave, pname, fdo);  // saves current state asynchronously (empty fdo)
     }
   }
-  releaseJSONBufferLock();
 }
 
 static void applyRepeatActions()
