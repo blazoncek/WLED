@@ -182,13 +182,13 @@ bool doApplyPreset(uint8_t tmpPreset, uint8_t tmpMode)
   //HTTP API commands
   const char* httpwin = fdo["win"];
   if (httpwin) {
-    if (currentPlaylist && fdo["win"].as<String>().indexOf(F("NP")) < 0) unloadPlaylist(); // #5703
+    if (currentPlaylist && presetToApply && fdo["win"].as<String>().indexOf(F("NP")) < 0) unloadPlaylist(); // presetToApply>0  means we are not called from playlist; #5703
     String apireq = "win"; apireq += '&'; // reduce RAM string usage
     apireq += httpwin;
     handleSet(nullptr, apireq, false);    // may call applyPreset() via PL=
     setValuesFromFirstSelectedSeg();      // fills legacy values
   } else {
-    if (currentPlaylist && fdo[F("np")].isNull()) unloadPlaylist(); // applying a preset unloads the playlist (#3827 & #5703)
+    if (currentPlaylist && presetToApply && fdo[F("np")].isNull()) unloadPlaylist(); // applying a preset unloads the playlist if not called from playlist (#3827 & #5703)
     // remove load request for presets to prevent recursive crash, except if:
     // - called by button preset which contains preset cycling string "1~5~"
     // - or boot preset (i.e. with preset chaining like {"lor":2,"udpn":{"send":true},"MultiRelay":{"relay":1,"on":true},"ps":"1~5r"})
