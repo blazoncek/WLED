@@ -22,7 +22,7 @@ var fxdata = [];
 var pJson = {}; // array of presets
 var plJson = {}; // array of playlists
 var pN = "", pI = 0, pNum = 0;
-var pmt = 1, pmtLS = 0, pmtLast = 0;
+var pmt = 1, pmtLS = 0, pmtLast = 0; // presetModifiedTime : 0 unmodified since boot, >0 actual Toki time in seconds
 var lastinfo = {};
 var isM = false, mw = 0, mh=0;
 var ws, wsRpt=0;
