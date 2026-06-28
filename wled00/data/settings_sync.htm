@@ -30,15 +30,24 @@
 		gId("GS").value=a;
 		gId("GR").value=b;
 	}
-	function SP(){var p = d.Sf.DI.value; gId("xp").style.display = (p > 0)?"none":"block"; if (p > 0) d.Sf.EP.value = p;}
-	function SetVal(){switch(parseInt(d.Sf.EP.value)){case 5568: d.Sf.DI.value = 5568; break; case 6454: d.Sf.DI.value = 6454; break; case 4048: d.Sf.DI.value = 4048; break; }; SP();FC();}
-	function S(){
+	function SP() {
+		var p = d.Sf.DI.value;
+		gId("xp").style.display = (p > 0) ? "none" : "block";
+		if (p > 0) d.Sf.EP.value = p;
+	}
+	function SetVal() {
+		switch(parseInt(d.Sf.EP.value)) {
+			case 5568: d.Sf.DI.value = 5568; break;
+			case 6454: d.Sf.DI.value = 6454; break;
+			case 4048: d.Sf.DI.value = 4048; break;
+		};
+		SP();
+		FC();
+	}
+	function S() {
 		getLoc();
 		loadJS(getURL('/settings/s.js?p=4'), false, undefined, ()=>{SetVal();});	// If we set async false, file is loaded and executed, then next statement is processed
 		if (loc) d.Sf.action = getURL('/settings/sync');
-	}
-	function getURL(path) {
-		return (loc ? locproto + "//" + locip : "") + path;
 	}
 	</script>
 	<style>@import url("style.css");</style>
@@ -51,6 +60,7 @@
 </div>
 <h2>Sync setup</h2>
 <h3>WLED Broadcast</h3>
+<input type="checkbox" name="SS"> Enable Sync Send at start-up<br>
 UDP Port: <input name="UP" type="number" min="1" max="65535" class="d5" required><br>
 2nd Port: <input name="U2" type="number" min="1" max="65535" class="d5" required><br>
 <div id="NoESPNOW" class="hide">
@@ -97,11 +107,12 @@ Use ESP-NOW sync: <input type="checkbox" name="EN"><br><i>(in AP mode or no WiFi
 		<td><input type="checkbox" id="R8" name="R8"></td>
 	</tr>
 </table>
+<hr class="sml">
 <h3>Receive</h3>
 <nowrap><input type="checkbox" name="RB">Brightness,</nowrap> <nowrap><input type="checkbox" name="RC">Color,</nowrap> <nowrap><input type="checkbox" name="RX">Effects,</nowrap> <nowrap>and <input type="checkbox" name="RP">Palette</nowrap><br>
-<input type="checkbox" name="SO"> Segment options, <input type="checkbox" name="SG"> bounds
+(apply to all selected segments <input type="checkbox" name="RA">)<br>
+Segment: <input type="checkbox" name="SO"> options, <input type="checkbox" name="SG"> bounds
 <h3>Send</h3>
-Enable Sync on start: <input type="checkbox" name="SS"><br>
 ... on direct change: <input type="checkbox" name="SD"><br>
 ... on button or IR: <input type="checkbox" name="SB"><br>
 ... on Alexa change: <input type="checkbox" name="SA"><br>

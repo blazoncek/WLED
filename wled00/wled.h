@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2606270
+#define VERSION 2606280
 #else
 #define VERSION BUILD
 #endif
@@ -560,6 +560,7 @@ WLED_GLOBAL byte notificationSentCallMode _INIT(CALL_MODE_INIT);
 WLED_GLOBAL uint8_t notificationCount _INIT(0);
 WLED_GLOBAL uint8_t syncGroups    _INIT(0x01);                // sync send groups this instance syncs to (bit mapped)
 WLED_GLOBAL uint8_t receiveGroups _INIT(0x01);                // sync receive groups this instance belongs to (bit mapped)
+WLED_GLOBAL bool receiveApplyToAllSelected     _INIT(false);      // when sender has less segments than receivers and receiveSegmentOptions is unselected, propagate to all selected segments instead of main segment only
 WLED_GLOBAL bool receiveNotificationBrightness _INIT(true);       // apply brightness from incoming notifications
 WLED_GLOBAL bool receiveNotificationColor      _INIT(true);       // apply color
 WLED_GLOBAL bool receiveNotificationEffects    _INIT(true);       // apply effects setup

@@ -602,6 +602,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   CJSON(receiveGroups, if_sync_recv["grp"]);
   CJSON(receiveSegmentOptions, if_sync_recv["seg"]);
   CJSON(receiveSegmentBounds, if_sync_recv["sb"]);
+  CJSON(receiveApplyToAllSelected, if_sync_recv["all"]);
 
   JsonObject if_sync_send = if_sync[F("send")];
   CJSON(sendNotifications, if_sync_send["en"]);

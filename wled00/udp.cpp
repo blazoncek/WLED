@@ -218,37 +218,74 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
     if (!(receiveGroups & 0x01)) return;
   } else if (!(receiveGroups & udpIn[36])) return;
 
-  bool someSel = (receiveNotificationBrightness || receiveNotificationColor || receiveNotificationEffects || receiveNotificationPalette);
-
   // set transition time before making any segment changes
   if (version > 3) {
     jsonTransitionOnce = true;
     strip.setTransition(((udpIn[17] << 0) & 0xFF) + ((udpIn[18] << 8) & 0xFF00));
   }
 
-  //apply colors from notification to main segment, only if not syncing full segments
-  if ((receiveNotificationColor || !someSel) && (version < 11 || !receiveSegmentOptions)) {
-    // primary color, only apply white if intented (version > 0)
-    strip.getMainSegment().setColor(0, RGBW32(udpIn[3], udpIn[4], udpIn[5], (version > 0) ? udpIn[10] : 0));
-    if (version > 1) {
-      strip.getMainSegment().setColor(1, RGBW32(udpIn[12], udpIn[13], udpIn[14], udpIn[15])); // secondary color
-    }
-    if (version > 6) {
-      strip.getMainSegment().setColor(2, RGBW32(udpIn[20], udpIn[21], udpIn[22], udpIn[23])); // tertiary color
-      if (version > 9 && udpIn[37] < 255) { // valid CCT/Kelvin value
-        unsigned cct = udpIn[38];
-        if (udpIn[37] > 0) { //Kelvin
-          cct |= (udpIn[37] << 8);
-        }
-        strip.setCCT(cct);
+  const bool someSel = (receiveNotificationBrightness || receiveNotificationColor || receiveNotificationEffects || receiveNotificationPalette);
+  const bool applyToAll = (version < 11 || !receiveSegmentOptions || receiveApplyToAllSelected);
+
+  //apply colors from notification to main or all selected segments
+  if ((receiveNotificationColor || !someSel) && applyToAll) {
+    if (receiveApplyToAllSelected) {
+      for (size_t i = 0; i < strip.getSegmentsNum(); i++) {
+        Segment& seg = strip.getSegment(i);
+        if (!seg.isActive() || !seg.isSelected()) continue;
+        // apply colors to all selected segments, not just the main segment (e.g. so Solid effect syncs everywhere)
+        seg.setColor(0, RGBW32(udpIn[3], udpIn[4], udpIn[5], (version > 0) ? udpIn[10] : 0));
+        if (version > 1) seg.setColor(1, RGBW32(udpIn[12], udpIn[13], udpIn[14], udpIn[15]));
+        if (version > 6) seg.setColor(2, RGBW32(udpIn[20], udpIn[21], udpIn[22], udpIn[23]));
       }
+    } else {
+      // primary color, only apply white if intented (version > 0)
+      strip.getMainSegment().setColor(0, RGBW32(udpIn[3], udpIn[4], udpIn[5], (version > 0) ? udpIn[10] : 0));
+      if (version > 1) strip.getMainSegment().setColor(1, RGBW32(udpIn[12], udpIn[13], udpIn[14], udpIn[15])); // secondary color
+      if (version > 6) strip.getMainSegment().setColor(2, RGBW32(udpIn[20], udpIn[21], udpIn[22], udpIn[23])); // tertiary color
     }
+    if (version > 9 && udpIn[37] < 255) { // valid CCT/Kelvin value
+      unsigned cct = udpIn[38];
+      if (udpIn[37] > 0) { //Kelvin
+        cct |= (udpIn[37] << 8);
+      }
+      strip.setCCT(cct);
+    }
+    stateChanged = true;
   }
 
-  bool timebaseUpdated = false;
   //apply effects from notification
-  bool applyEffects = (receiveNotificationEffects || !someSel);
+  const bool applyEffects = (receiveNotificationEffects || !someSel);
   if (applyEffects && currentPlaylist >= 0) unloadPlaylist();
+
+  // simple effect sync, applies to main or all selected segments
+  if ((applyEffects || receiveNotificationPalette) && applyToAll) {
+    if (receiveApplyToAllSelected) {
+      for (size_t i = 0; i < strip.getSegmentsNum(); i++) {
+        Segment& seg = strip.getSegment(i);
+        if (!seg.isActive() || !seg.isSelected()) continue;
+        if (applyEffects) {
+          seg.setMode(udpIn[8]);
+          seg.speed = udpIn[9];
+          if (version > 2) seg.intensity = udpIn[16];
+        }
+        if (version > 4 && receiveNotificationPalette) seg.setPalette(udpIn[19]);
+      }
+    } else {
+      if (applyEffects) {
+        strip.getMainSegment().setMode(udpIn[8]);
+        strip.getMainSegment().speed = udpIn[9];
+        if (version > 2) strip.getMainSegment().intensity = udpIn[16];
+      }
+      if (version > 4 && receiveNotificationPalette) strip.getMainSegment().setPalette(udpIn[19]);
+    }
+    stateChanged = true;
+  }
+
+  // individual segment sync
+  // NOTE: if sender has less segments than receiver the above code will apply basic parameters
+  // to all selected segments if so chosen by receiveApplyToAllSelected
+  // and the following code will overwrite those parameters for segments present on both sender and receiver
   if (version > 10 && (receiveSegmentOptions || receiveSegmentBounds)) {
     unsigned numSrcSegs = udpIn[39];
     DEBUG_PRINTF_P(PSTR("UDP segments: %d\n"), numSrcSegs);
@@ -351,21 +388,7 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
     stateChanged = true;
   }
 
-  // simple effect sync, applies to all selected segments
-  if ((applyEffects || receiveNotificationPalette) && (version < 11 || !receiveSegmentOptions)) {
-    for (size_t i = 0; i < strip.getSegmentsNum(); i++) {
-      Segment& seg = strip.getSegment(i);
-      if (!seg.isActive() || !seg.isSelected()) continue;
-      if (applyEffects) {
-        seg.setMode(udpIn[8]);
-        seg.speed = udpIn[9];
-        if (version > 2) seg.intensity = udpIn[16];
-      }
-      if (version > 4 && receiveNotificationPalette) seg.setPalette(udpIn[19]);
-    }
-    stateChanged = true;
-  }
-
+  bool timebaseUpdated = false;
   if (applyEffects && version > 5) {
     uint32_t t = (udpIn[25] << 24) | (udpIn[26] << 16) | (udpIn[27] << 8) | (udpIn[28]);
     t += PRESUMED_NETWORK_DELAY; //adjust trivially for network delay
