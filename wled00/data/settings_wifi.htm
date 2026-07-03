@@ -9,7 +9,7 @@
 		var scanLoops = 0, preScanSSID = "";
 		var maxNetworks = 3;
 		function N() {
-			const button = gId("scan");
+			let button = gId("scan");
 			button.disabled = true;
 			button.textContent = "Scanning...";
 
@@ -56,12 +56,8 @@
 						select.setAttribute("onchange", "T(this)");
 						preScanSSID = input.value;
 
-						for (let i = 0; i < select.children.length; i++) {
-							select.removeChild(select.children[i]);
-						}
-
 						for (let i = 0; i < networks.length; i++) {
-							const option = cE("option");
+							let option = cE("option");
 
 							option.setAttribute("value", networks[i].ssid);
 							option.textContent = `${networks[i].ssid} (${networks[i].rssi} dBm)`; // [${networks[i].bssid.replaceAll(':','')}]
@@ -73,7 +69,7 @@
 
 							select.appendChild(option);
 						}
-						const option = cE("option");
+						let option = cE("option");
 
 						option.setAttribute("value", "!Cs");
 						option.textContent = "Other network...";
