@@ -144,7 +144,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
     #define WLED_MIN_VIRTUAL_BUSSES 6       // no longer used for bus creation but used to distinguish S2/S3 in UI
     #define MAX_I2S_LEDS 600
   #endif
-  #define WLED_MAX_TIMERS 64                // maximum number of timers
+  #define WLED_MAX_TIMERS 32                // maximum number of timers
 #endif
 // WLED_MAX_BUSSES was used to define the size of busses[] array which is no longer needed
 // instead it will help determine max number of buses that can be defined at compile time

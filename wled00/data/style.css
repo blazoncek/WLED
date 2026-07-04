@@ -124,9 +124,14 @@ td input[type="checkbox"] {
 input[type=file] {
   font-size: 16px
 }
-select.el, select.pin {
+select.pin {
   max-width: 150px;
-  text-overflow: ellipsis;
+}
+select.el {
+  max-width: 200px;
+}
+select.el, select.pin {
+    text-overflow: ellipsis;
 }
 tr {
   line-height: 100%;
@@ -142,9 +147,9 @@ td {
   cursor:pointer
 }
 /* Timer layout - tmc=container, tb=block, tm=main, ts=section, tf=field, tfe=enabled field, te=expanded, tw=weekdays, tdr=daterange, tdf=date from/to, tc=calendar, twd=weekday text */
-.tmc{display:flex;flex-direction:column;gap:12px;max-width:640px;margin:0 auto}
+.tmc{display:flex;flex-direction:column;gap:12px;max-width:460px;margin:0 auto}
 .tmc td{padding:0;margin:0;}
-.tb{background:#282828;border:2px solid #333;border-radius:8px;padding:12px}
+.tb{background:#282828;border:2px solid #333;border-radius:8px;padding:12px;margin-bottom:8px;}
 .tm{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
 .ts{display:flex;flex-wrap:nowrap;gap:8px;align-items:flex-end}
 .ts1{flex:1 0 28%;min-width:160px}
@@ -166,7 +171,7 @@ td {
 .bc{display:flex;flex-wrap:wrap;gap:16px;justify-content:center;margin:16px auto;max-width:640px;}
 .bb{background:#282828;border:2px solid #333;border-radius:8px;padding:12px;min-width:200px;flex:1 1 auto;max-width:300px}
 .bh{font-weight:bold;font-size:1.1em;margin-bottom:12px;color:#28f;text-align:center}
-.bs{display:flex;flex-direction:column;gap:8px}
+.bs{display:flex;flex-direction:column;gap:4px}
 .ba{display:flex;flex-direction:column;gap:4px}
 .ba label{font-size:.9em;color:#aaa;text-align:left}
 .ba select{width:100%}

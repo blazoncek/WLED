@@ -569,7 +569,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     char k[5]; k[4] = 0;
     for (int ti = 0; ti < (int)WLED_MAX_TIMERS; ti++) {
       if (ti < 10) {
-        k[1] = ti + 48;
+        k[1] = '0' + ti;
         k[2] = 0;
       } else {
         k[1] = '0' + (ti / 10);

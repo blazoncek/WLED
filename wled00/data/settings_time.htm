@@ -12,6 +12,7 @@
 	var maxTimers = 64;
 	var presets = [];
 	var sPO = '';
+	const defOpt = '<option value="0">Default Action (0)</option>';
 	const TIMER_SUNRISE = 255;
 	const TIMER_SUNSET = 254;
 	const TIMER_WEEKDAYS_ALL = 255;
@@ -19,10 +20,6 @@
 	function S() {
 		getLoc();
 		populatePresets(true);
-		loadJS(getURL('/settings/s.js?p=5'), false, ()=>{BTa();}, ()=>{
-			updLatLon();
-			Cs();
-		});
 		if (loc) d.Sf.action = getURL('/settings/time');
 	}
 	function populatePresets(fromls) {
@@ -64,38 +61,30 @@
 		} else {
 			presets.sort((a,b)=> parseInt(a[0]) - parseInt(b[0]));
 		}
-		bSPO(sortByName);
-		pMP();
-		rTOPO();
-		rBPO();
-	}
-	function bSPO(sortByName = false) { // build sPO
 		sPO = '';
 		for (var p of presets) {
 			var id = p[0];
 			var name = p[1].n || ("Preset " + id);
-			let txt = sortByName ? `${name} : ${id}` : `${id} : ${name}`;
+			let txt = sortByName ? `${name} (${id})` : `(${id}) ${name}`;
 			sPO += `<option value="${id}">${txt}</option>`;
 		}
+		// after presets are loaded (and array populated) we will load settings parameters
+		loadJS(getURL('/settings/s.js?p=5'), false, ()=>{
+			BTa();	// buildTable
+			pMP();  // populateMacroPresets
+			rTPO(); // refreshTimerPresetOptions
+			rBPO(); // refreshButtonPresetOptions
+		}, ()=>{
+			updLatLon();
+			Cs();   // show/hide overlay
+		});
 	}
-	function sPSV(sel, value, attrName) { // setPresetSelectValue
-		var v = (value === undefined || value === null || value === "") ? "0" : String(value);
-		sel.setAttribute(attrName, v);
-		sel.value = v;
-		if (sel.value === "") sel.value = "0";
-	}
-	function rPS(sel, presetOpts, attrName) { // refreshPresetSelect
-		var currentVal = sel.value;
-		var initialVal = sel.getAttribute(attrName);
-		var val = currentVal;
-		if ((val === "" || val === "0") && initialVal !== null && initialVal !== "" && initialVal !== "0") {
-			val = initialVal;
-		}
-		if (val === "") val = "0";
+	function sPSV(sel, presetOpts, value) { // setPresetSelectValue
 		sel.innerHTML = presetOpts;
-		sel.value = val;
-		if (sel.value === "" && initialVal !== null && initialVal !== "") sel.value = initialVal;
-		if (sel.value === "") sel.value = "0";
+		if (!(value === undefined || value === null || value === "")) {
+			sel.value = String(value);
+		}
+		if (sel.value === "") sel.selectedIndex = 0;
 	}
 	function expand(o,i)
 	{
@@ -107,27 +96,19 @@
 	function BTa()
 	{
 		timerCount = 0;
-		gId("TMT").innerHTML = "<table><thead><tr><th>En.</th><th>Type</th><th>Hour</th><th>Minute</th><th>Preset</th><th></th></tr></thead></table>";
+		gId("TMT").innerHTML = "<table><thead><tr><th>En.</th><th>Hour</th><th>Minute</th><th>Preset</th><th></th></tr></thead><tbody></tbody></table>";
 	}
-	function addTRow(hour, minute, preset, weekdays, monthStart, dayStart, monthEnd, dayEnd) {
+	function addTRow(hour=0, minute=0, preset=0, weekdays=TIMER_WEEKDAYS_ALL, monthStart=1, dayStart=1, monthEnd=12, dayEnd=31) { // addTimerRow
 		if (timerCount >= maxTimers) return;
 		var i = timerCount++;
 		var isSunrise = (hour === TIMER_SUNRISE);
 		var isSunset = (hour === TIMER_SUNSET);
 		var isSpecial = isSunrise || isSunset;
-		if (hour === undefined) hour = 0;
-		if (minute === undefined) minute = 0;
-		if (preset === undefined) preset = 0;
-		if (weekdays === undefined) weekdays = TIMER_WEEKDAYS_ALL;
-		if (monthStart === undefined) monthStart = 1;
-		if (dayStart === undefined) dayStart = 1;
-		if (monthEnd === undefined) monthEnd = 12;
-		if (dayEnd === undefined) dayEnd = 31;
+		if (preset == 0) preset = presets?.[0]?.at(0) ? presets?.[0]?.at(0) : "0";
 		var enabled = weekdays & 1;
 		var dow = weekdays >> 1;
-		var container = gId("TMT").querySelector("table");
+		var container = gId("TMT").querySelector("table tbody");
 		var hourVal = isSpecial ? 0 : hour;
-		var presetOpts = '<option value="0">Delete Timer</option>' + sPO;
 
 		var weekdayTable = '<table class="tw"><tr><th>M</th><th>T</th><th>W</th><th>T</th><th>F</th><th>S</th><th>S</th></tr><tr>';
 		for (j=1;j<8;j++) weekdayTable += `<td><input id="W${i}${j}" type="checkbox" ${(dow>>(j-1))&1?'checked':''}></td>`;
@@ -139,91 +120,79 @@
 		for (j=0;j<12;j++) dateRange += `<option value="${j+1}" ${monthEnd==j+1?'selected':''}>${ms[j]}</option>`;
 		dateRange += `</select><input name="E${i}" class="xs" type="number" min="1" max="31" value="${dayEnd}"></span></div>`;
 
+		let timerHours = '';
+		for (let i = 0; i < 24; i++) timerHours += `<option value="${i}" ${!isSpecial && hour == i ? "selected" : ""}>${i}</option>`;
+
 		var timerMain = `<tr>
 <td>
 <input name="W${i}" id="W${i}" type="hidden">
 <input id="W${i}0" type="checkbox" ${enabled ? "checked" : ""}>
 </td>
 <td>
-<select id="TS${i}" class="m" onchange="TT(${i})">
-<option value="0" ${!isSpecial ? "selected" : ""}>Regular</option>
+<select name="H${i}" id="H${i}" class="m" onchange="TT(${i})">${timerHours}
+<option value="24" ${!isSpecial && hour == 24 ? "selected" : ""}>Hourly</option>
 <option value="${TIMER_SUNRISE}" ${isSunrise ? "selected" : ""}>Sunrise</option>
 <option value="${TIMER_SUNSET}" ${isSunset ? "selected" : ""}>Sunset</option>
-</select><br>
+</select>
 </td>
-<td><input ${isSpecial ? "" : 'name="H'+i+'"'} id="H${i}" class="s" type="number" min="0" max="24" value="${hourVal}" ${isSpecial ? "disabled" : ""}></td>
 <td><input name="N${i}" id="N${i}" class="l" type="number" min="${isSpecial ? -120 : 0}" max="${isSpecial ? 120 : 59}" value="${minute}"></td>
-<td><select name="T${i}" id="T${i}" class="el">${presetOpts}</select></td>
-<td><div id="CB${i}" onclick="expand(this,${i})" class="cal">&#128197;</div></td>
+<td><select name="T${i}" id="T${i}" class="el">${sPO}</select></td>
+<td><div id="CB${i}" onclick="expand(this,${i})" title="Date range" class="cal">&#128197;</div></td>
 </tr>`;
 
-		var timerExpanded = `<tr>
-<td colspan="6">
-<div id="WD${i}" style="display:none;background-color:#444;">
-<hr>Run on weekdays
-${weekdayTable}
-${dateRange}
-<hr>
-</div>
-</td>
-</tr>`;
+		var timerExpanded = `<tr><td colspan="5"><div id="WD${i}" class="tb" style="display:none">Run on weekdays ${weekdayTable} ${dateRange}</div></td></tr>`;
 
 		container.insertAdjacentHTML("beforeend", timerMain + timerExpanded);
+		if (dow!=127 || monthStart!=1 || monthEnd!=12 || dayStart!=1 || dayEnd!=31) expand(gId(`CB${i}`), i);
+		uTRB();
 		var timerPresetSel = gId("T"+i);
-		sPSV(timerPresetSel, preset, "data-preset");
+		sPSV(timerPresetSel, sPO, preset);
+	}
+	function remTRow() { // removeTimerRow
+		var t = gId("TMT").querySelector("table tbody")
+		if (timerCount) {
+			t.deleteRow(-1); // DOW, month, day
+			t.deleteRow(-1); // en., hour, minute, preset
+		}
+		timerCount--;
+		uTRB();
+	}
+	function uTRB() { // updateTimerRowButtons
+		gId("addTR").style.display = timerCount >= maxTimers ? "none" : "";
+		gId("remTR").style.display = timerCount <= 0 ? "none"  :"";
 	}
 	function TT(i) {
-		var sel = gId("TS"+i);
-		var hour = gId("H"+i);
-		var min = gId("N"+i);
-		var isSpecial = sel.value != 0;
-		hour.disabled = isSpecial;
-		if (isSpecial) {
-			// Save current hour value before switching to sunrise/sunset
-			hour.setAttribute("data-regular-hour", hour.value);
-			hour.removeAttribute("name");
-			min.min = -120;
-			min.max = 120;
-		} else {
-			// Restore saved hour value when switching back to regular
-			var savedHour = hour.getAttribute("data-regular-hour");
-			if (savedHour !== null && savedHour !== "") {
-				hour.value = savedHour;
-			}
-			hour.setAttribute("name", "H"+i);
-			min.min = 0;
-			min.max = 59;
-			if (min.value < 0 || min.value > 59) min.value = 0;
-		}
+		var hour = parseInt(gId("H"+i).value);
+		var minE = gId("N"+i);
+		var isSpecial = (hour === TIMER_SUNRISE) || (hour === TIMER_SUNSET);
+		minE.min = isSpecial ? -120 :  0;
+		minE.max = isSpecial ?  120 : 59;
+		if (!isSpecial && (minE.value < 0 || minE.value > 59)) minE.value = 0;
 	}
 	function pMP() { // populateMacroPresets
-		var presetOpts = '<option value="0">Default Action (0)</option>' + sPO;
+		var presetOpts = defOpt + sPO;
 		var fields = ['A0','A1','MC','MN'];
 		for (var f of fields) {
 			var inp = gN(f);
 			if (!inp) continue;
-			var val = inp.getAttribute("data-preset-value");
-			if (val === null || val === "") val = inp.value;
+			var val = inp.value;
 			if (inp.tagName === "SELECT") {
-				sPSV(inp, val, "data-preset-value");
-				rPS(inp, presetOpts, "data-preset-value");
+				sPSV(inp, presetOpts, val);
 			} else {
 				var sel = document.createElement('select');
 				sel.name = f;
 				sel.className = inp.className;
 				sel.required = inp.required;
-				sPSV(sel, val, "data-preset-value");
-				rPS(sel, presetOpts, "data-preset-value");
+				sPSV(sel, presetOpts, val);
 				inp.parentNode.replaceChild(sel, inp);
 			}
 		}
 	}
-	function rTOPO() { // refreshTimerPresetOptions
-		var presetOpts = '<option value="0">Delete Timer</option>' + sPO;
+	function rTPO() { // refreshTimerPresetOptions
 		for (var i=0; i<timerCount; i++) {
 			var sel = gId("T"+i);
 			if (!sel) continue;
-			rPS(sel, presetOpts, "data-preset");
+			sPSV(sel, sPO);
 		}
 	}
 	function bAO() { // buildAnalogOptions: analog functions + per-segment opacity (segment 0 included; MD=0 => segment 0)
@@ -248,7 +217,7 @@ ${dateRange}
 		}
 	}
 	function rBPO() { // refreshButtonPresetOptions
-		var presetOpts = '<option value="0">Default Action (0)</option>' + sPO;
+		var presetOpts = defOpt + sPO;
 		var analogOpts = bAO();
 		var container = gId("macros");
 		if (!container) return;
@@ -257,11 +226,10 @@ ${dateRange}
 		for (var sel of sels) {
 			var bb = sel.closest ? sel.closest(".bb") : null;
 			var t = bb ? parseInt(bb.getAttribute("data-btype")||"0",10) : 0;
-			rPS(sel, isAnalogBtn(t) ? analogOpts : presetOpts, "data-preset");
+			sPSV(sel, isAnalogBtn(t) ? analogOpts : presetOpts);
 		}
 	}
-	function TZ()
-	{
+	function TZ() {
 		zones.forEach((n,i)=>{
 			let o = cE("option");
 			o.value = i;
@@ -269,8 +237,7 @@ ${dateRange}
 			d.Sf["TZ"].appendChild(o);
 		});
 	}
-	function Wd()
-	{
+	function Wd() {
 		for (i=0; i<timerCount; i++) {
 			var m=1, val=0;
 			for(j=0;j<8;j++) { val+=gId(("W"+i)+j).checked*m; m*=2;}
@@ -297,21 +264,17 @@ ${dateRange}
 		buttonBlock.setAttribute('data-btype', t); // read back by rBPO() to rebuild selects correctly
 		if (isAnalogBtn(t)) {
 			// analog buttons: MD holds the function/segment; short/long press are unused (firmware defaults missing MP/ML to 0)
-			buttonBlock.innerHTML = `
-<div class="bh">Analog ${i} - ${typeName}</div>
+			buttonBlock.innerHTML = `<div class="bh">Analog ${i} - ${typeName}</div>
 <div class="bs">
 <div class="ba">
 <label>Analog function</label>
 <select name="MD${b}" class="s" required>${bAO()}</select>
 </div>
-</div>
-<hr style="width:100%;margin:8px 0 0 0;">
-			`;
-			sPSV(buttonBlock.querySelector('select[name="MD'+b+'"]'), String(d), "data-preset");
+</div>`;
+			sPSV(buttonBlock.querySelector('select[name="MD'+b+'"]'), presetOpts, String(d));
 		} else if (isSwitchBtn(t)) {
 			// switches: MP fires on On->Off, ML on Off->On; double press (MD) is unused (firmware defaults missing MD to 0)
-			buttonBlock.innerHTML = `
-<div class="bh">Switch ${i} - ${typeName}</div>
+			buttonBlock.innerHTML = `<div class="bh">Switch ${i} - ${typeName}</div>
 <div class="bs">
 <div class="ba">
 <label>On → Off</label>
@@ -321,18 +284,15 @@ ${dateRange}
 <label>Off → On</label>
 <select name="ML${b}" class="s" required>${presetOpts}</select>
 </div>
-</div>
-<hr style="width:100%;margin:8px 0 0 0;">
-			`;
+</div>`;
 			var switchSels = buttonBlock.querySelectorAll("select");
 			var switchVals = [String(p), String(l)];
 			for (var si=0; si<switchSels.length; si++) {
-				sPSV(switchSels[si], switchVals[si], "data-preset");
+				sPSV(switchSels[si], presetOpts, switchVals[si]);
 			}
 		} else {
 			// pushbuttons: short (MP), long (ML) and double (MD) press
-			buttonBlock.innerHTML = `
-<div class="bh">Button ${i} - ${typeName}</div>
+			buttonBlock.innerHTML = `<div class="bh">Button ${i} - ${typeName}</div>
 <div class="bs">
 <div class="ba">
 <label>Short press</label>
@@ -346,13 +306,11 @@ ${dateRange}
 <label>Double press</label>
 <select name="MD${b}" class="s" required>${presetOpts}</select>
 </div>
-</div>
-<hr style="width:100%;margin:8px 0 0 0;">
-			`;
+</div>`;
 			var buttonSels = buttonBlock.querySelectorAll("select");
 			var buttonVals = [String(p), String(l), String(d)];
 			for (var si=0; si<buttonSels.length; si++) {
-				sPSV(buttonSels[si], buttonVals[si], "data-preset");
+				sPSV(buttonSels[si], presetOpts, buttonVals[si]);
 			}
 		}
 		gId("macros").appendChild(buttonBlock);
@@ -396,6 +354,10 @@ ${dateRange}
 		<button type="button" id="locbtn" onclick="getLatLon()">Get location</button>
 		<div><i>(opens new tab, only works in browser)</i></div>
 		<div id="sun"></div>
+		<h3>Time-triggered presets</h3>
+		<div id="TMT" class="tmc"></div>
+		<button type="button" id="addTR" title="Add timer" onclick="addTRow()">+</button>
+		<button type="button" id="remTR" title="Remove last timer" onclick="remTRow()">-</button>
 		<h3>Clock</h3>
 		Analog Clock overlay: <input type="checkbox" name="OL" onchange="Cs()"><br>
 		<div id="cac">
@@ -409,16 +371,13 @@ ${dateRange}
 		Countdown Goal:<br>
 		Date:&nbsp;<nowrap>20<input name="CY" class="xs" type="number" min="0" max="99" required>-<input name="CI" class="xs" type="number" min="1" max="12" required>-<input name="CD" class="xs" type="number" min="1" max="31" required></nowrap><br>
 		Time:&nbsp;<nowrap><input name="CH" class="xs" type="number" min="0" max="23" required>:<input name="CM" class="xs" type="number" min="0" max="59" required>:<input name="CS" class="xs" type="number" min="0" max="59" required></nowrap><br>
-		<h3>Presets</h3>
-		Alexa On/Off Preset: <input name="A0" class="m" type="number" min="0" max="250" required> <input name="A1" class="m" type="number" min="0" max="250" required><br>
-		Countdown-Over Preset: <input name="MC" class="m" type="number" min="0" max="250" required><br>
-		Timed-Light-Over Presets: <input name="MN" class="m" type="number" min="0" max="250" required><br>
 		<h3>Button actions</h3>
 		<div id="macros" class="bc"></div>
 		<a href="#" onclick="H('/features/macros/#analog-button')">Analog Button setup</a>
-		<h3>Time-controlled presets</h3>
-		<div id="TMT" class="tmc"></div>
-		<button type="button" title="Add timer row" onclick="addTimerRow()">+</button>
+		<h3>Special Presets</h3>
+		Alexa On/Off Preset: <input name="A0" class="m" type="number" min="0" max="250" required> <input name="A1" class="m" type="number" min="0" max="250" required><br>
+		Countdown-Over Preset: <input name="MC" class="m" type="number" min="0" max="250" required><br>
+		Timed-Light-Over Presets: <input name="MN" class="m" type="number" min="0" max="250" required><br>
 		<hr>
 		<button type="button" onclick="B()">Back</button><button type="submit">Save</button>
 	</form>
