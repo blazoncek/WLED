@@ -31,7 +31,6 @@
 		function mustR(t)  { return !!(gT(t).c & 0x20); }           // Off refresh is mandatory
 		function numPins(t){ return Math.max(gT(t).t.length, 1); }  // type length determines number of GPIO pins
 		function numChan(t){ return 3*hasRGB(t) + hasW(t) + hasCCT(t); }
-		function chrID(x)  { return String.fromCharCode((x<10?48:55)+x); }
 		function toNum(c)  { let n=c.charCodeAt(0); return (n>=48 && n<=57)?n-48:(n>=65 && n<=90)?n-55:0; } // convert char (0-9A-Z) to number (0-35)
 		function S() {
 			getLoc();
