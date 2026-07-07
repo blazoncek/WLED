@@ -708,39 +708,53 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
         i2c_scl = -1;
       }
     }
+    bool spiConfigured = spi_mosi > 0 && spi_miso > 0 && spi_sclk > 0;
     int8_t hw_mosi_pin = !request->arg(F("MOSI")).length() ? -1 : (int)request->arg(F("MOSI")).toInt();
     int8_t hw_miso_pin = !request->arg(F("MISO")).length() ? -1 : (int)request->arg(F("MISO")).toInt();
     int8_t hw_sclk_pin = !request->arg(F("SCLK")).length() ? -1 : (int)request->arg(F("SCLK")).toInt();
+    int8_t hw_ssel_pin = !request->arg(F("SSEL")).length() ? -1 : (int)request->arg(F("SSEL")).toInt();
     #ifdef ESP8266
     // cannot change pins on ESP8266
     if (hw_mosi_pin >= 0 && hw_mosi_pin != HW_PIN_DATASPI)  hw_mosi_pin = HW_PIN_DATASPI;
     if (hw_miso_pin >= 0 && hw_miso_pin != HW_PIN_MISOSPI)  hw_mosi_pin = HW_PIN_MISOSPI;
     if (hw_sclk_pin >= 0 && hw_sclk_pin != HW_PIN_CLOCKSPI) hw_sclk_pin = HW_PIN_CLOCKSPI;
+    if (hw_ssel_pin >= 0 && hw_ssel_pin != HW_PIN_SSELSPI)  hw_ssel_pin = HW_PIN_SSELSPI;
     #endif
-    if (spi_mosi != hw_mosi_pin || spi_miso != hw_miso_pin || spi_sclk != hw_sclk_pin) {
+    if (spi_mosi != hw_mosi_pin || spi_miso != hw_miso_pin || spi_sclk != hw_sclk_pin || spi_ssel != hw_ssel_pin) {
       // only if pins changed
-      uint8_t old_spi[3] = { static_cast<uint8_t>(spi_mosi), static_cast<uint8_t>(spi_miso), static_cast<uint8_t>(spi_sclk) };
-      PinManager::deallocateMultiplePins(old_spi, 3, PinOwner::HW_SPI); // just in case deallocation of old pins
-      PinManagerPinType spi[3] = { { hw_mosi_pin, true }, { hw_miso_pin, true }, { hw_sclk_pin, true } };
-      if (hw_mosi_pin >= 0 && hw_sclk_pin >= 0 && PinManager::allocateMultiplePins(spi, 3, PinOwner::HW_SPI)) {
+      if (spiConfigured) {
+        #ifndef ESP8266
+        if (sdCard) SD.end();
+        #endif
+        SPI.end();
+      }
+      uint8_t old_spi[4] = { static_cast<uint8_t>(spi_mosi), static_cast<uint8_t>(spi_miso), static_cast<uint8_t>(spi_sclk), static_cast<uint8_t>(spi_ssel) };
+      PinManager::deallocateMultiplePins(old_spi, 4, PinOwner::HW_SPI); // just in case deallocation of old pins
+      PinManagerPinType spi[4] = { { hw_mosi_pin, true }, { hw_miso_pin, false }, { hw_sclk_pin, true }, { hw_ssel_pin, true } };
+      if (hw_mosi_pin >= 0 && hw_sclk_pin >= 0 && PinManager::allocateMultiplePins(spi, 4, PinOwner::HW_SPI)) {
         spi_mosi = hw_mosi_pin;
         spi_miso = hw_miso_pin;
         spi_sclk = hw_sclk_pin;
-        // no bus re-initialisation as usermods do not get any notification
-        //SPI.end();
+        spi_ssel = hw_ssel_pin;
         #ifdef ESP32
-        //SPI.begin(spi_sclk, spi_miso, spi_mosi);
+        SPI.begin(spi_sclk, spi_miso, spi_mosi, spi_ssel);
         #else
-        //SPI.begin();
+        SPI.begin();
         #endif
       } else {
-        //SPI.end();
         DEBUG_PRINTLN(F("Could not allocate SPI pins."));
         spi_mosi = -1;
         spi_miso = -1;
         spi_sclk = -1;
+        spi_ssel = -1;
       }
     }
+    #ifndef ESP8266
+    else if (sdCard) SD.end();
+    spiConfigured = spi_mosi > 0 && spi_miso > 0 && spi_sclk > 0 && spi_ssel > 0;
+    sdCard = request->hasArg(F("SD")) && spiConfigured;
+    if (sdCard) SD.begin(spi_ssel, SPI);
+    #endif
 
     JsonObject um = pDoc->createNestedObject("um");
 

@@ -509,7 +509,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   if (serialBaud < 96 || serialBaud > 15000) serialBaud = 1152;
   updateBaudRate(serialBaud *100);
 
-  JsonArray hw_if_i2c = hw[F("if")][F("i2c-pin")];
+  JsonArray hw_if_i2c = hw["if"][F("i2c-pin")];
   CJSON(i2c_sda, hw_if_i2c[0]);
   CJSON(i2c_scl, hw_if_i2c[1]);
   PinManagerPinType i2c[2] = { { i2c_sda, true }, { i2c_scl, true } };
@@ -524,14 +524,15 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     i2c_sda = -1;
     i2c_scl = -1;
   }
-  JsonArray hw_if_spi = hw[F("if")][F("spi-pin")];
+  JsonArray hw_if_spi = hw["if"][F("spi-pin")];
   CJSON(spi_mosi, hw_if_spi[0]);
   CJSON(spi_sclk, hw_if_spi[1]);
   CJSON(spi_miso, hw_if_spi[2]);
-  PinManagerPinType spi[3] = { { spi_mosi, true }, { spi_miso, true }, { spi_sclk, true } };
-  if (spi_mosi >= 0 && spi_sclk >= 0 && PinManager::allocateMultiplePins(spi, 3, PinOwner::HW_SPI)) {
+  CJSON(spi_ssel, hw_if_spi[3]);
+  PinManagerPinType spi[4] = { { spi_mosi, true }, { spi_miso, false }, { spi_sclk, true }, { spi_ssel, true } };
+  if (spi_mosi >= 0 && spi_sclk >= 0 && PinManager::allocateMultiplePins(spi, 4, PinOwner::HW_SPI)) {
     #ifdef ESP32
-    SPI.begin(spi_sclk, spi_miso, spi_mosi);  // SPI global uses VSPI on ESP32 and FSPI on C3, S3
+    SPI.begin(spi_sclk, spi_miso, spi_mosi);  // SPI global uses VSPI on ESP32 and FSPI on C3, S3 (don't set SS as it will be set by SD card)
     #else
     SPI.begin();
     #endif
@@ -539,7 +540,14 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     spi_mosi = -1;
     spi_miso = -1;
     spi_sclk = -1;
+    spi_ssel = -1;
   }
+  #ifndef ESP8266
+  bool spiConfigured = spi_mosi > 0 && spi_miso > 0 && spi_sclk > 0 && spi_ssel > 0;
+  CJSON(sdCard, hw["if"][F("spi-sd")]);
+  sdCard = sdCard && spiConfigured;
+  if (sdCard) SD.begin(spi_ssel, SPI);
+  #endif
 
   //int hw_status_pin = hw[F("status")]["pin"]; // -1
 
@@ -1027,14 +1035,18 @@ void serializeConfig() {
 
   hw[F("baud")] = serialBaud;
 
-  JsonObject hw_if = hw.createNestedObject(F("if"));
-  JsonArray hw_if_i2c = hw_if.createNestedArray("i2c-pin");
+  JsonObject hw_if = hw.createNestedObject("if");
+  JsonArray hw_if_i2c = hw_if.createNestedArray(F("i2c-pin"));
   hw_if_i2c.add(i2c_sda);
   hw_if_i2c.add(i2c_scl);
-  JsonArray hw_if_spi = hw_if.createNestedArray("spi-pin");
+  JsonArray hw_if_spi = hw_if.createNestedArray(F("spi-pin"));
   hw_if_spi.add(spi_mosi);
   hw_if_spi.add(spi_sclk);
   hw_if_spi.add(spi_miso);
+  hw_if_spi.add(spi_ssel);
+  #ifndef ESP8266
+  hw_if[F("spi-sd")] = sdCard;
+  #endif
 
   //JsonObject hw_status = hw.createNestedObject("status");
   //hw_status["pin"] = -1;

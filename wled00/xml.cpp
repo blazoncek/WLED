@@ -665,13 +665,19 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormValue(settingsScript,PSTR("MOSI"),spi_mosi);
     printSetFormValue(settingsScript,PSTR("MISO"),spi_miso);
     printSetFormValue(settingsScript,PSTR("SCLK"),spi_sclk);
-    settingsScript.printf_P(PSTR("addInfo('SDA','%d');"
-                 "addInfo('SCL','%d');"
-                 "addInfo('MOSI','%d');"
-                 "addInfo('MISO','%d');"
-                 "addInfo('SCLK','%d');"),
-      HW_PIN_SDA, HW_PIN_SCL, HW_PIN_DATASPI, HW_PIN_MISOSPI, HW_PIN_CLOCKSPI
+    printSetFormValue(settingsScript,PSTR("SSEL"),spi_ssel);
+    settingsScript.printf_P(PSTR("addI('SDA','%d');"
+      "addI('SCL','%d');"
+      "addI('MOSI','%d');"
+      "addI('MISO','%d');"
+      "addI('SCLK','%d');"
+      "addI('SSEL','%d');"),
+      HW_PIN_SDA, HW_PIN_SCL, HW_PIN_DATASPI, HW_PIN_MISOSPI, HW_PIN_CLOCKSPI, HW_PIN_SSELSPI
     );
+    #ifndef ESP8266
+    printSetFormCheckbox(settingsScript,PSTR("SD"),sdCard);
+    settingsScript.print(F("toggle('sd');"));
+    #endif
     UsermodManager::appendConfigData(settingsScript);
   }
 

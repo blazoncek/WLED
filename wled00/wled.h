@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2607050
+#define VERSION 2607070
 #else
 #define VERSION BUILD
 #endif
@@ -125,6 +125,9 @@
 #endif
 #include <Wire.h>
 #include <SPI.h>
+#ifndef ESP8266
+  #include <SD.h>
+#endif
 
 #include "src/dependencies/network/Network.h"
 
@@ -742,13 +745,13 @@ WLED_GLOBAL int8_t i2c_scl  _INIT(-1);
 WLED_GLOBAL int8_t i2c_scl  _INIT(I2CSCLPIN);
 #endif
 
-// global SPI DATA/MOSI pin (used for usermods)
+// global SPI DATA/MOSI/POCI pin (used for usermods)
 #ifndef SPIMOSIPIN
 WLED_GLOBAL int8_t spi_mosi  _INIT(-1);
 #else
 WLED_GLOBAL int8_t spi_mosi  _INIT(SPIMOSIPIN);
 #endif
-// global SPI DATA/MISO pin (used for usermods)
+// global SPI DATA/MISO/PICO pin (used for usermods)
 #ifndef SPIMISOPIN
 WLED_GLOBAL int8_t spi_miso  _INIT(-1);
 #else
@@ -759,6 +762,20 @@ WLED_GLOBAL int8_t spi_miso  _INIT(SPIMISOPIN);
 WLED_GLOBAL int8_t spi_sclk  _INIT(-1);
 #else
 WLED_GLOBAL int8_t spi_sclk  _INIT(SPISCLKPIN);
+#endif
+// global SPI SOURCE SELECT/SS pin (used for SPI SD card)
+#ifndef SPISSELPIN
+WLED_GLOBAL int8_t spi_ssel  _INIT(-1);
+#else
+WLED_GLOBAL int8_t spi_ssel  _INIT(SPISSELPIN);
+#endif
+
+#ifndef ESP8266
+  #if defined(SPIMOSIPIN) && defined(SPIMISOPIN) && defined(SPISCLKPIN) && defined(SPISSELPIN) && defined(WLED_USE_SD_SPI)
+WLED_GLOBAL bool sdCard _INIT(true);
+  #else
+WLED_GLOBAL bool sdCard _INIT(false);
+  #endif
 #endif
 
 // global ArduinoJson buffer

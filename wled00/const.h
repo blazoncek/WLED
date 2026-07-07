@@ -659,6 +659,9 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #ifndef HW_PIN_MISOSPI
   #define HW_PIN_MISOSPI MISO
 #endif
+#ifndef HW_PIN_SSELSPI
+  #define HW_PIN_SSELSPI SS
+#endif
 
 #ifdef WLED_DEBUG_ALL
   #define WLED_DEBUG 1

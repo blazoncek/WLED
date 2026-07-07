@@ -38,7 +38,8 @@
 			}, ()=>{
 				for (let r of rsvd) { pins.push(r); pinO.push("rsvd"); } // reserved pins
 				if (um_p[0]==-1) um_p.shift();	// remove filler
-				d.Sf.SDA.max = d.Sf.SCL.max = d.Sf.MOSI.max = d.Sf.SCLK.max = d.Sf.MISO.max = max_gpio;
+				//d.Sf.SDA.max = d.Sf.SCL.max = d.Sf.MOSI.max = d.Sf.SCLK.max = d.Sf.MISO.max = d.Sf.SSEL.max = max_gpio;
+				onSD();
 				//for (let i of d.getElementsByTagName("input")) if (i.type === "number" && i.name.replace("[]","").substr(-3) === "pin") i.max = max_gpio;
 				pinDD(); // convert INPUT to SELECT for pins
 			});	// If we set async false, file is loaded and executed, then next statement is processed
@@ -66,6 +67,7 @@
 				case "MOSI": break;
 				case "SCLK": break;
 				case "MISO": break;
+				case "SSEL": break;
 				default: return;
 			}
 			for (var i=0; i<pins.length; i++) {
@@ -172,7 +174,7 @@
 		let txt = e.name.split(":")[e.name.split(":").length-2];
 		qSA("select[class='pin']").forEach((sel)=>{
 			if (sel == e) return;
-			if (["SDA","SCL","MOSI","MISO","SCLK"].includes(sel.name)) txt = "I2C/SPI";
+			if (["SDA","SCL","MOSI","MISO","SCLK","SSEL"].includes(sel.name)) txt = "I2C/SPI";
 			Array.from(sel.options).forEach((i)=>{
 				if (!(i.value==oldV || i.value==e.value)) return;
 				if (i.value == -1) {
@@ -245,10 +247,13 @@
 	}
 	var addOption = addO; // backwards compatibility
 	// https://stackoverflow.com/questions/26440494/insert-text-after-this-input-element-with-javascript
-	function addI(name,el,txt, txt2="") {
+	function addI(name, el, txt="", txt2="") {
 		let obj = gEBN(name);
 		if (!obj.length) return;
-		if (typeof el === "string" && obj[0]) obj[0].placeholder = el;
+		if (typeof el === "string" && obj[0]) {
+			obj[0].placeholder = el;
+			obj[0].title = "Default=" + el;
+		}
 		else if (obj[el]) {
 			if (txt!="") obj[el].insertAdjacentHTML('afterend', '&nbsp;'+txt);
 			if (txt2!="") obj[el].insertAdjacentHTML('beforebegin', txt2 + '&nbsp;');  //add pre texts
@@ -262,6 +267,11 @@
 	function svS(e) {
 		e.preventDefault();
 		if (d.Sf.checkValidity()) d.Sf.submit(); //https://stackoverflow.com/q/37323914
+	}
+	function onSD() {
+		const isSD = d.Sf.SD.checked;
+		gId('ss').style.display = isSD ? '' : 'none';
+		if (!isSD) d.Sf.SSEL.value = -1;
 	}
 	</script>
 	<style>@import url("style.css");</style>
@@ -286,6 +296,10 @@
 		MOSI:<input type="number" min="-1" max="48" name="MOSI" onchange="check(this,'if')" class="s pin" placeholder="MOSI">
 		MISO:<input type="number" min="-1" max="48" name="MISO" onchange="check(this,'if')" class="s pin" placeholder="MISO">
 		SCLK:<input type="number" min="-1" max="48" name="SCLK" onchange="check(this,'if')" class="s pin" placeholder="SCLK">
+		<div id="sd" class="hide">
+		Use SPI SD card: <input type="checkbox" name="SD" onchange="onSD()">
+		<span id="ss">SS:<input type="number" min="-1" max="48" name="SSEL" onchange="check(this,'if')" class="s pin" placeholder="SSEL"></span>
+		</div>
 		<hr class="sml">
 		Reboot after save? <input type="checkbox" name="RBT"><br>
 		<div id="um">Loading settings...</div>
