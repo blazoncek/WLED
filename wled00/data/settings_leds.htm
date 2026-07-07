@@ -7,7 +7,7 @@
 	<script src="common.js" async type="text/javascript"></script>
 	<script>
 		var maxB=1,maxD=1,maxA=1,maxV=0,maxM=4000,maxPB=2048,maxL=1664,maxCO=5,maxBT=10; //maximum bytes for LED allocation: 4kB for 8266, 32kB for 32
-		var unqPins = []; // must be global for pinDropdowns()
+		var unqPins = []; // must be global for pinDDs()
 		var customStarts = false, startsDirty = [];
 		var ledTypes = [/*{i:22,c:1,t:"D",n:"WS2812"},{i:42,c:6,t:"AA",n:"PWM CCT"},{i:127,c:6,t:"VVVV",n:"Usermod (virtual)",p:[23,24,25]}*/]; // filled from GetV()
 		var um_p = [], rsvd = [], ro_gpio = [];
@@ -39,7 +39,7 @@
 				setABL();
 				d.Sf.addEventListener("submit", trySubmit);
 				if (um_p[0]==-1) um_p.shift();
-				updateTypeDropdowns();
+				updTDDs();
 			});	// If we set async false, file is loaded and executed, then next statement is processed
 			if (loc) d.Sf.action = getURL('/settings/leds');
 		}
@@ -288,7 +288,7 @@
 // npm run build has trouble minimizing spaces inside string
 				var cn = `<div class="iST" draggable="true" ondragstart="hDS(event)" id="l${s}" style="cursor:grab;">
 <hr class="sml">
-<span id="n${s}">${++i}</span>: <select name="LT${s}" onchange="updateTypeDropdowns(this);UI()"></select><br>
+<span id="n${s}">${++i}</span>: <select name="LT${s}" onchange="updTDDs(this);UI()"></select><br>
 <div id="abl${s}">mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
 <option value="55" selected>55mA (typ. 5V WS281x)</option>
 <option value="35">35mA (eco WS2812)</option>
@@ -342,9 +342,9 @@
 				if (!init) {
 					// we used add button; update available types and select 1st valid
 					sel.selectedIndex = sel.querySelector('option:not([data-type])').index; // select On/Off by default (prevent selecting first type which may be invalid)
-					updateTypeDropdowns(sel);
+					updTDDs(sel);
 					sel.selectedIndex = sel.querySelector('option:not(:disabled)').index; // select 1st valid
-					updateTypeDropdowns(sel); // do it again as type may have changed
+					updTDDs(sel); // do it again as type may have changed
 				}
 			}
 			if (n==-1) {
@@ -568,7 +568,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				}
 			}
 		}
-		function pinDropdowns() {
+		function pinDDs() { // pinDropdowns
 			// construct array of GPIO fields
 			let fields = ["IR","RL"]; // IR & relay
 			//qSA('input[type="number"]:is([name="IR"],[name="RL"])').forEach((e)=>{fields.push(e.name);}); // IR & relay
@@ -579,14 +579,14 @@ Swap: <select id="xw${s}" name="XW${s}">
 				let i = d.Sf[n];
 				if (i.type !== "number") return; // skip non-number fields
 				let v = parseInt(i.value);
-				let sel = addDropdown(i);
+				let sel = addDD(i);
 				for (var j = -1; j < max_gpio; j++) {
 					if (rsvd.includes(j)) continue; // skip reserved pins
 					let foundPin = um_p.includes(j);
 					let txt = (j === -1) ? "unused" : `${j}`;
 					if (foundPin && j !== v) txt += ` used`; // already reserved pin
 					if (ro_gpio.includes(j)) txt += " (R/O)";
-					let opt = addOption(sel, txt, j);
+					let opt = addO(sel, txt, j);
 					if (j === v) opt.selected = true; // this is "our" pin
 					else if (foundPin) opt.disabled = true; // someone else's pin
 				}
@@ -637,7 +637,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 			});
 		}
 		// https://stackoverflow.com/questions/39729741/javascript-change-input-text-to-select-option
-		function addDropdown(inp) {
+		function addDD(inp) {
 			let sel = cE('select');
 			sel.classList.add("pin");
 			sel.classList.add("s");
@@ -658,7 +658,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 			}
 			return null;
 		}
-		function addOption(sel,txt,val) {
+		function addO(sel,txt,val) {
 			if (sel===null) return; // select object missing
 			let opt = cE("option");
 			opt.value = val;
@@ -671,7 +671,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 			return opt;
 		}
 		// dynamically enforce bus type availability based on current usage
-		function updateTypeDropdowns(sel=undefined) {
+		function updTDDs(sel=undefined) { //updateTypeDropdowns
 			const abl = d.Sf.ABL.checked;
 			let LTs = qSA(".iST select[name^=LT]");
 			let digitalB = 0, analogB = 0, twopinB = 0, virtB = 0;
@@ -753,50 +753,50 @@ Swap: <select id="xw${s}" name="XW${s}">
 							if (p == 3 && LK.tagName === "INPUT") {
 								// pin 4 is shift register type for Hub75
 								// this is a hack to allow dropdown selection for Hub75 shift register type (stored in pin 4)
-								LK = addDropdown(LK);
+								LK = addDD(LK);
 								LK.classList.remove("pin");     // not a pin select
 								LK.classList.add("shift");
 								LK.removeAttribute("onchange"); // not a pin select
-								addOption(LK, "SHIFTREG", 0);
-								addOption(LK, "FM6124", 1);
-								addOption(LK, "FM6126A", 2);
-								addOption(LK, "ICN2038S", 3);
-								addOption(LK, "MBI5124", 4);
-								addOption(LK, "SM5266P", 5);
-								addOption(LK, "DP3246/SM5368", 6);
+								addO(LK, "SHIFTREG", 0);
+								addO(LK, "FM6124", 1);
+								addO(LK, "FM6126A", 2);
+								addO(LK, "ICN2038S", 3);
+								addO(LK, "MBI5124", 4);
+								addO(LK, "SM5266P", 5);
+								addO(LK, "DP3246/SM5368", 6);
 							}
 							if (p == 2 && LK.tagName === "INPUT") {
 								// this is a hack to allow dropdown selection
-								LK = addDropdown(LK);           // pin 3 is number of panels for Hub75
+								LK = addDD(LK);           // pin 3 is number of panels for Hub75
 								LK.classList.remove("pin");     // not a pin select
 								LK.classList.add("panel");
-								addOption(LK, "1x1", 1);
-								addOption(LK, "2x1", 2);
-								addOption(LK, "1x2", 13);       // vertical (11 + 2)
+								addO(LK, "1x1", 1);
+								addO(LK, "2x1", 2);
+								addO(LK, "1x2", 13);       // vertical (11 + 2)
 								if (!isS2()) {
-									addOption(LK, "3x1", 3);
-									addOption(LK, "1x3", 14);   // vertical (11 + 3)
-									addOption(LK, "4x1", 4);
-									addOption(LK, "1x4", 15);   // vertical (11 + 4)
-									addOption(LK, "2x2", 5);
+									addO(LK, "3x1", 3);
+									addO(LK, "1x3", 14);   // vertical (11 + 3)
+									addO(LK, "4x1", 4);
+									addO(LK, "1x4", 15);   // vertical (11 + 4)
+									addO(LK, "2x2", 5);
 									if (isS3()) {
-										addOption(LK, "3x2", 6);
-										addOption(LK, "4x2", 8);
-										addOption(LK, "3x3", 9);
-										addOption(LK, "4x3", 12);
-										addOption(LK, "4x4", 16);
+										addO(LK, "3x2", 6);
+										addO(LK, "4x2", 8);
+										addO(LK, "3x3", 9);
+										addO(LK, "4x3", 12);
+										addO(LK, "4x4", 16);
 									}
 								}
 							}
 							if (p < 2 && LK.tagName === "INPUT") {
 								// pin 0 & 1 are panel size
 								// this is a hack to allow dropdown selection
-								LK = addDropdown(LK);
+								LK = addDD(LK);
 								LK.classList.remove("pin");     // not a pin select
 								LK.classList.add("dimension");
-								addOption(LK, "32", 32);
-								addOption(LK, "64", 64);
-								if (p < 1) addOption(LK, "128", 128);
+								addO(LK, "32", 32);
+								addO(LK, "64", 64);
+								if (p < 1) addO(LK, "128", 128);
 							}
 							if (p<3) LK.onchange = ()=>{UI();};
 							break;
@@ -888,7 +888,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				if (!isNet(t) || is8266()) gN("HS"+n).value = "";                           // cleart host field if not network type or ESP8266
 			});
 			// rebuild GPIO dropdowns
-			pinDropdowns();
+			pinDDs();
 			// check if any of unique's pins are already used and disable option
 			let usedPins = [];
 			qSA("select.pin").forEach((s,i)=>{
@@ -942,7 +942,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				If using multiple outputs it is recommended to use per-output limiter.<br>
 				Analog (PWM) and virtual LEDs cannot use automatic brightness limiter.<br></i>
 			<div id="psuMA">Maximum PSU Current: <input name="MA" type="number" class="xl" min="250" max="65500" oninput="UI()" required> mA<br></div>
-			Use per-output limiter: <input type="checkbox" name="PPL" onchange="updateTypeDropdowns();UI()"><br>
+			Use per-output limiter: <input type="checkbox" name="PPL" onchange="updTDDs();UI()"><br>
 			<div id="ppldis" style="display:none;">
 				<i>Make sure you enter correct value for each LED output.<br>
 				If using multiple outputs with only one PSU, distribute its power proportionally amongst outputs.</i><br>
@@ -982,7 +982,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 			Buttons:
 			<div id="btns"></div>
 			<hr class="sml">
-			<button type="button" id="btn+" onclick="addBtn(-1,1);pinDropdowns();UI()">+</button>
+			<button type="button" id="btn+" onclick="addBtn(-1,1);pinDDs();UI()">+</button>
 			<button type="button" id="btn-" onclick="remBtn();UI()">-</button>
 		</div>
 		Disable internal pull-up/down: <input type="checkbox" name="IP"><br>
