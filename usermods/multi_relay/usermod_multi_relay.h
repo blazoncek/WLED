@@ -765,9 +765,9 @@ void MultiRelay::addToConfig(JsonObject &root) {
 }
 
 void MultiRelay::appendConfigData() {
-  oappend(F("addInfo('MultiRelay:PCF8574-address',1,'<i>(not hex!)</i>');"));
-  oappend(F("addInfo('MultiRelay:broadcast-sec',1,'(MQTT message)');"));
-  //oappend(F("addInfo('MultiRelay:relay-0:pin',1,'(use -1 for PCF8574)');"));
+  oappend(F("addI('MultiRelay:PCF8574-address',1,'<i>(not hex!)</i>');"));
+  oappend(F("addI('MultiRelay:broadcast-sec',1,'(MQTT message)');"));
+  //oappend(F("addI('MultiRelay:relay-0:pin',1,'(use -1 for PCF8574)');"));
   oappend(F("d.extra.push({'MultiRelay':{pin:[['P0',100],['P1',101],['P2',102],['P3',103],['P4',104],['P5',105],['P6',106],['P7',107]]}});"));
 }
 

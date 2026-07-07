@@ -192,10 +192,10 @@ void addToConfig(JsonObject& root) override
     void appendConfigData() override
     {
       // dropdown for wakeupPin
-      oappend(SET_F("dd=addDropdown('DeepSleep','gpio');"));
+      oappend(SET_F("dd=addDD('DeepSleep','gpio');"));
       for (int pin = 0; pin < 40; pin++) { // possible pins are in range 0-39
         if (pin_is_valid(pin)) {
-          oappend(SET_F("addOption(dd,'"));
+          oappend(SET_F("addO(dd,'"));
           oappend(String(pin).c_str());
           oappend(SET_F("',"));
           oappend(String(pin).c_str());
@@ -203,13 +203,13 @@ void addToConfig(JsonObject& root) override
         }
       }
 
-      oappend(SET_F("dd=addDropdown('DeepSleep','wakeWhen');"));
-      oappend(SET_F("addOption(dd,'Low',0);"));
-      oappend(SET_F("addOption(dd,'High',1);"));
+      oappend(SET_F("dd=addDD('DeepSleep','wakeWhen');"));
+      oappend(SET_F("addO(dd,'Low',0);"));
+      oappend(SET_F("addO(dd,'High',1);"));
 
-      oappend(SET_F("addInfo('DeepSleep:pull',1,'','-up/down disable: ');")); // first string is suffix, second string is prefix
-      oappend(SET_F("addInfo('DeepSleep:wakeAfter',1,'seconds <i>(0 = never)<i>');"));
-      oappend(SET_F("addInfo('DeepSleep:delaySleep',1,'seconds <i>(0 = sleep at powerup)<i>');")); // first string is suffix, second string is prefix
+      oappend(SET_F("addI('DeepSleep:pull',1,'','-up/down disable: ');")); // first string is suffix, second string is prefix
+      oappend(SET_F("addI('DeepSleep:wakeAfter',1,'seconds <i>(0 = never)<i>');"));
+      oappend(SET_F("addI('DeepSleep:delaySleep',1,'seconds <i>(0 = sleep at powerup)<i>');")); // first string is suffix, second string is prefix
     }
 
     /*

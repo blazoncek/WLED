@@ -760,29 +760,29 @@ void UsermodBME68X::addToConfig(JsonObject& root) {
  * @see UsermodManager::appendConfigData()
  */
 void UsermodBME68X::appendConfigData() {
-	// snprintf_P(charbuffer, 127, PSTR("addInfo('%s:%s',1,'read interval [seconds]');"), UMOD_NAME, _nameInterval); oappend(charbuffer);
-	// snprintf_P(charbuffer, 127, PSTR("addInfo('%s:%s',1,'only if value changes');"), UMOD_NAME, _namePublishChange); oappend(charbuffer);
-	// snprintf_P(charbuffer, 127, PSTR("addInfo('%s:%s',1,'maximum age of a message in seconds');"), UMOD_NAME, _nameMaxAge); oappend(charbuffer);
-	// snprintf_P(charbuffer, 127, PSTR("addInfo('%s:%s',1,'Gas related values are only published after the gas sensor has been calibrated');"), UMOD_NAME, _namePubAfterCalib); oappend(charbuffer);
-	// snprintf_P(charbuffer, 127, PSTR("addInfo('%s:%s',1,'*) Set to minus to deactivate (all sensors)');"), UMOD_NAME, _nameTemp); oappend(charbuffer);
+	// snprintf_P(charbuffer, 127, PSTR("addI('%s:%s',1,'read interval [seconds]');"), UMOD_NAME, _nameInterval); oappend(charbuffer);
+	// snprintf_P(charbuffer, 127, PSTR("addI('%s:%s',1,'only if value changes');"), UMOD_NAME, _namePublishChange); oappend(charbuffer);
+	// snprintf_P(charbuffer, 127, PSTR("addI('%s:%s',1,'maximum age of a message in seconds');"), UMOD_NAME, _nameMaxAge); oappend(charbuffer);
+	// snprintf_P(charbuffer, 127, PSTR("addI('%s:%s',1,'Gas related values are only published after the gas sensor has been calibrated');"), UMOD_NAME, _namePubAfterCalib); oappend(charbuffer);
+	// snprintf_P(charbuffer, 127, PSTR("addI('%s:%s',1,'*) Set to minus to deactivate (all sensors)');"), UMOD_NAME, _nameTemp); oappend(charbuffer);
 
 	/* Dropdown for Celsius/Fahrenheit*/
-	oappend(F("dd=addDropdown('"));
+	oappend(F("dd=addDD('"));
 	oappend(UMOD_NAME);
 	oappend(F("','"));
 	oappend(_nameTempScale);
 	oappend(F("');"));
-	oappend(F("addOption(dd,'Celsius',0);"));
-	oappend(F("addOption(dd,'Fahrenheit',1);"));
+	oappend(F("addO(dd,'Celsius',0);"));
+	oappend(F("addO(dd,'Fahrenheit',1);"));
 
 	/* i²C Address*/
-	oappend(F("dd=addDropdown('"));
+	oappend(F("dd=addDD('"));
 	oappend(UMOD_NAME);
 	oappend(F("','"));
 	oappend(_nameI2CAdr);
 	oappend(F("');"));
-	oappend(F("addOption(dd,'0x76',0x76);"));
-	oappend(F("addOption(dd,'0x77',0x77);"));
+	oappend(F("addO(dd,'0x76',0x76);"));
+	oappend(F("addO(dd,'0x77',0x77);"));
 }
 
 /**

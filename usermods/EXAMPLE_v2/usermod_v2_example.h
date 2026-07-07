@@ -287,11 +287,11 @@ class MyExampleUsermod : public Usermod {
      */
     void appendConfigData() override
     {
-      oappend(F("addInfo('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":great")); oappend(F("',1,'<i>(this is a great config value)</i>');"));
-      oappend(F("addInfo('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":testString")); oappend(F("',1,'enter any string you want');"));
-      oappend(F("dd=addDropdown('")); oappend(String(FPSTR(_name)).c_str()); oappend(F("','testInt');"));
-      oappend(F("addOption(dd,'Nothing',0);"));
-      oappend(F("addOption(dd,'Everything',42);"));
+      oappend(F("addI('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":great")); oappend(F("',1,'<i>(this is a great config value)</i>');"));
+      oappend(F("addI('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":testString")); oappend(F("',1,'enter any string you want');"));
+      oappend(F("dd=addDD('")); oappend(String(FPSTR(_name)).c_str()); oappend(F("','testInt');"));
+      oappend(F("addO(dd,'Nothing',0);"));
+      oappend(F("addO(dd,'Everything',42);"));
     }
 
 

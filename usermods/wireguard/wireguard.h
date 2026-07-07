@@ -54,13 +54,13 @@ class WireguardUsermod : public Usermod {
     }
 
     void appendConfigData() {
-        oappend(F("addInfo('WireGuard:host',1,'Server Hostname');"));           // 0 is field type, 1 is actual field
-        oappend(F("addInfo('WireGuard:port',1,'Server Port');"));               // 0 is field type, 1 is actual field
-        oappend(F("addInfo('WireGuard:ip',1,'Device IP');"));                   // 0 is field type, 1 is actual field
-        oappend(F("addInfo('WireGuard:psk',1,'Pre Shared Key (optional)');"));  // 0 is field type, 1 is actual field
-        oappend(F("addInfo('WireGuard:pem',1,'Private Key');"));                // 0 is field type, 1 is actual field
-        oappend(F("addInfo('WireGuard:pub',1,'Public Key');"));                 // 0 is field type, 1 is actual field
-        oappend(F("addInfo('WireGuard:tz',1,'POSIX timezone string');"));       // 0 is field type, 1 is actual field
+        oappend(F("addI('WireGuard:host',1,'Server Hostname');"));           // 0 is field type, 1 is actual field
+        oappend(F("addI('WireGuard:port',1,'Server Port');"));               // 0 is field type, 1 is actual field
+        oappend(F("addI('WireGuard:ip',1,'Device IP');"));                   // 0 is field type, 1 is actual field
+        oappend(F("addI('WireGuard:psk',1,'Pre Shared Key (optional)');"));  // 0 is field type, 1 is actual field
+        oappend(F("addI('WireGuard:pem',1,'Private Key');"));                // 0 is field type, 1 is actual field
+        oappend(F("addI('WireGuard:pub',1,'Public Key');"));                 // 0 is field type, 1 is actual field
+        oappend(F("addI('WireGuard:tz',1,'POSIX timezone string');"));       // 0 is field type, 1 is actual field
     }
 
     void addToConfig(JsonObject& root) {

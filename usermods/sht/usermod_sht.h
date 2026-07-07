@@ -310,22 +310,22 @@ void ShtUsermod::onMqttConnect(bool sessionPresent) {
  * @return void
  */
 void ShtUsermod::appendConfigData() {
-  oappend(F("dd=addDropdown('"));
+  oappend(F("dd=addDD('"));
   oappend(_name);
   oappend(F("','"));
   oappend(_shtType);
   oappend(F("');"));
-  oappend(F("addOption(dd,'SHT30',0);"));
-  oappend(F("addOption(dd,'SHT31',1);"));
-  oappend(F("addOption(dd,'SHT35',2);"));
-  oappend(F("addOption(dd,'SHT85',3);"));
-  oappend(F("dd=addDropdown('"));
+  oappend(F("addO(dd,'SHT30',0);"));
+  oappend(F("addO(dd,'SHT31',1);"));
+  oappend(F("addO(dd,'SHT35',2);"));
+  oappend(F("addO(dd,'SHT85',3);"));
+  oappend(F("dd=addDD('"));
   oappend(_name);
   oappend(F("','"));
   oappend(_unitOfTemp);
   oappend(F("');"));
-  oappend(F("addOption(dd,'Celsius',0);"));
-  oappend(F("addOption(dd,'Fahrenheit',1);"));
+  oappend(F("addO(dd,'Celsius',0);"));
+  oappend(F("addO(dd,'Fahrenheit',1);"));
 }
 
 /**

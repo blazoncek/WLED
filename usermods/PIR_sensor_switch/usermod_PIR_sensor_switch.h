@@ -505,11 +505,11 @@ void PIRsensorSwitch::addToConfig(JsonObject &root)
 
 void PIRsensorSwitch::appendConfigData()
 {
-  oappend(F("addInfo('PIRsensorSwitch:HA-discovery',1,'HA=Home Assistant');"));     // 0 is field type, 1 is actual field
-  oappend(F("addInfo('PIRsensorSwitch:override',1,'Cancel timer on change');"));    // 0 is field type, 1 is actual field
+  oappend(F("addI('PIRsensorSwitch:HA-discovery',1,'HA=Home Assistant');"));     // 0 is field type, 1 is actual field
+  oappend(F("addI('PIRsensorSwitch:override',1,'Cancel timer on change');"));    // 0 is field type, 1 is actual field
   for (int i = 0; i < PIR_SENSOR_MAX_SENSORS; i++) {
     char str[128];
-    sprintf_P(str, PSTR("addInfo('PIRsensorSwitch:pin[]',%d,'','#%d');"), i, i);
+    sprintf_P(str, PSTR("addI('PIRsensorSwitch:pin[]',%d,'','#%d');"), i, i);
     oappend(str);
   }
 }

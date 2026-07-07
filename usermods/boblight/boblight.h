@@ -305,14 +305,14 @@ class BobLightUsermod : public Usermod {
     }
 
     void appendConfigData() override {
-      //oappend(F("dd=addDropdown('usermod','selectfield');"));
-      //oappend(F("addOption(dd,'1st value',0);"));
-      //oappend(F("addOption(dd,'2nd value',1);"));
-      oappend(F("addInfo('BobLight:top',1,'LEDs');"));                // 0 is field type, 1 is actual field
-      oappend(F("addInfo('BobLight:bottom',1,'LEDs');"));             // 0 is field type, 1 is actual field
-      oappend(F("addInfo('BobLight:left',1,'LEDs');"));               // 0 is field type, 1 is actual field
-      oappend(F("addInfo('BobLight:right',1,'LEDs');"));              // 0 is field type, 1 is actual field
-      oappend(F("addInfo('BobLight:pct',1,'Depth of scan [%]');"));   // 0 is field type, 1 is actual field
+      //oappend(F("dd=addDD('usermod','selectfield');"));
+      //oappend(F("addO(dd,'1st value',0);"));
+      //oappend(F("addO(dd,'2nd value',1);"));
+      oappend(F("addI('BobLight:top',1,'LEDs');"));                // 0 is field type, 1 is actual field
+      oappend(F("addI('BobLight:bottom',1,'LEDs');"));             // 0 is field type, 1 is actual field
+      oappend(F("addI('BobLight:left',1,'LEDs');"));               // 0 is field type, 1 is actual field
+      oappend(F("addI('BobLight:right',1,'LEDs');"));              // 0 is field type, 1 is actual field
+      oappend(F("addI('BobLight:pct',1,'Depth of scan [%]');"));   // 0 is field type, 1 is actual field
     }
 
     void addToConfig(JsonObject& root) override {

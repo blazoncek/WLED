@@ -444,9 +444,9 @@ bool UsermodTemperature::readFromConfig(JsonObject &root) {
 }
 
 void UsermodTemperature::appendConfigData() {
-  oappend(F("addInfo('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":")); oappend(String(FPSTR(_parasite)).c_str());
+  oappend(F("addI('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":")); oappend(String(FPSTR(_parasite)).c_str());
   oappend(F("',1,'<i>(if no Vcc connected)</i>');"));  // 0 is field type, 1 is actual field
-  oappend(F("addInfo('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":")); oappend(String(FPSTR(_parasitePin)).c_str());
+  oappend(F("addI('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":")); oappend(String(FPSTR(_parasitePin)).c_str());
   oappend(F("',1,'<i>(for external MOSFET)</i>');"));  // 0 is field type, 1 is actual field
   oappend(F("dd=addDD('")); oappend(String(FPSTR(_name)).c_str());
   oappend(F("','")); oappend(String(FPSTR(_resolution)).c_str()); oappend(F("');"));
@@ -454,7 +454,7 @@ void UsermodTemperature::appendConfigData() {
   oappend(F("addO(dd,'0.25°C (10-bit)',1);"));
   oappend(F("addO(dd,'0.125°C (11-bit)',2);"));
   oappend(F("addO(dd,'0.0625°C (12-bit)',3);"));
-  oappend(F("addInfo('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":")); oappend(String(FPSTR(_resolution)).c_str());
+  oappend(F("addI('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":")); oappend(String(FPSTR(_resolution)).c_str());
   oappend(F("',1,'<i>(ignored on DS18S20)</i>');"));  // 0 is field type, 1 is actual field
 }
 
