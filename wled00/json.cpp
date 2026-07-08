@@ -839,6 +839,15 @@ void serializeInfo(JsonObject root)
   fs_info["u"] = fsBytesUsed / 1000;
   fs_info["t"] = fsBytesTotal / 1000;
   fs_info[F("pmt")] = presetsModifiedTime;
+  if (sdCard) {
+    JsonObject fs_info_sd = fs_info.createNestedObject(F("sd"));
+    fs_info_sd[F("type")] = SD.cardType();
+    if (SD.cardType() != CARD_NONE) {
+      fs_info_sd[F("size")] = (uint32_t)(SD.cardSize() / 1000000ULL);
+      fs_info_sd["u"] = (uint32_t)(SD.usedBytes() / 1000000ULL);
+      fs_info_sd["t"] = (uint32_t)(SD.totalBytes() / 1000000ULL);
+    }
+  }
 
   root[F("ndc")] = nodeListEnabled ? (int)Nodes.size() : -1;
 
