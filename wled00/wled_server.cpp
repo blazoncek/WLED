@@ -26,10 +26,23 @@ static const char s_unlock_cfg [] PROGMEM = "Please unlock settings using PIN co
 static const char s_rebooting  [] PROGMEM = "Rebooting now...";
 static const char s_notimplemented[] PROGMEM = "Not implemented";
 static const char s_accessdenied[]   PROGMEM = "Access Denied";
+static const char s_wsec[]           PROGMEM = "wsec.json";
+static const char h_cache_control[]  PROGMEM = "Cache-Control";
+static const char h_modified_since[] PROGMEM = "If-Modified-Since";
 static const char _common_js[]       PROGMEM = "/common.js";
+static const char v_edit[]           PROGMEM = "edit";
+static const char v_list[]           PROGMEM = "list";
+static const char v_download[]       PROGMEM = "download";
+static const char v_data[]           PROGMEM = "data";
+static const char v_path[]           PROGMEM = "path";
 
 static String messageHead, messageSub;
 static byte optionType;
+
+static AsyncWebHandler *editHandler = nullptr;
+#ifndef ESP8266
+static AsyncWebHandler *sdHandler   = nullptr;
+#endif
 
 //Is this an IP?
 static bool isIp(const String &str) {
@@ -74,9 +87,9 @@ static void setStaticContentCacheHeaders(AsyncWebServerResponse *response, int c
   #ifndef WLED_DEBUG
   // this header name is misleading, "no-cache" will not disable cache,
   // it just revalidates on every load using the "If-None-Match" header with the last ETag value
-  response->addHeader(F("Cache-Control"), F("no-cache"));
+  response->addHeader(FPSTR(h_cache_control), F("no-cache"));
   #else
-  response->addHeader(F("Cache-Control"), F("no-store,max-age=0"));  // prevent caching if debug build
+  response->addHeader(FPSTR(h_cache_control), F("no-store,max-age=0"));  // prevent caching if debug build
   #endif
   char etag[32];
   generateEtag(etag, eTagSuffix);
@@ -185,7 +198,7 @@ static void handleUpload(AsyncWebServerRequest *request, const String& filename,
     return;
   }
 /*
-  if (filename.indexOf(F("wsec.json")) >= 0) { // prevent overwrite of passwords
+  if (filename.indexOf(FPSTR(s_wsec)) >= 0) { // prevent overwrite of passwords
     request->send(403, FPSTR(CONTENT_TYPE_PLAIN), FPSTR(s_accessdenied));
     return;
   }
@@ -217,22 +230,212 @@ static void handleUpload(AsyncWebServerRequest *request, const String& filename,
   }
 }
 
+// File system editor class: supports custom endpoint
+// Copied from AsyncWebServer's SPIFFSEditor class and adapted for WLED
+class FSEditor : public AsyncWebHandler {
+  private:
+    fs::FS _fs;
+    String _endpoint;
+    //String _username;
+    //String _password;
+    //bool _authenticated;
+    //uint32_t _startTime;
+  public:
+    FSEditor(const fs::FS& fs, const String& endpoint/*, const String& username=String(), const String& password=String()*/);
+    virtual bool canHandle(AsyncWebServerRequest *request) override final;
+    virtual void handleRequest(AsyncWebServerRequest *request) override final;
+    virtual void handleUpload(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) override final;
+    virtual bool isRequestHandlerTrivial() override final {return false;}
+};
+
+// WEB HANDLER IMPLEMENTATION
+FSEditor::FSEditor(const fs::FS& fs, const String& endpoint/*, const String& username, const String& password*/)
+:_fs(fs)
+,_endpoint(endpoint)
+//,_username(username)
+//,_password(password)
+//,_authenticated(false)
+//,_startTime(0)
+{}
+
+bool FSEditor::canHandle(AsyncWebServerRequest *request) {
+  if (request->url().equalsIgnoreCase(_endpoint) && correctPIN) {
+    if (request->method() == HTTP_GET) {
+      if (request->hasParam(FPSTR(v_list)))
+        return true;
+      if (request->hasParam(FPSTR(v_edit))) {
+        if (request->arg(FPSTR(v_edit)).indexOf(FPSTR(s_wsec)) > -1) return false; //make sure wsec.json is not served
+        request->_tempFile = _fs.open(request->arg(FPSTR(v_edit)), "r");
+        if (!request->_tempFile) {
+          return false;
+        }
+#ifdef ESP32
+        if (request->_tempFile.isDirectory()) {
+          request->_tempFile.close();
+          return false;
+        }
+#endif
+      }
+      if (request->hasParam(FPSTR(v_download))) {
+        if (request->arg(FPSTR(v_download)).indexOf(FPSTR(s_wsec)) > -1) return false; //make sure wsec.json is not served
+        request->_tempFile = _fs.open(request->arg(FPSTR(v_download)), "r");
+        if (!request->_tempFile) {
+          return false;
+        }
+#ifdef ESP32
+        if (request->_tempFile.isDirectory()) {
+          request->_tempFile.close();
+          return false;
+        }
+#endif
+      }
+      request->addInterestingHeader(FPSTR(h_modified_since));
+      return true;
+    }
+    else if (request->method() == HTTP_POST)
+      return true;
+    else if (request->method() == HTTP_DELETE)
+      return true;
+    else if (request->method() == HTTP_PUT)
+      return true;
+
+  }
+  return false;
+}
+
+
+void FSEditor::handleRequest(AsyncWebServerRequest *request) {
+  // we don't do athentication in WLED
+  //if (_username.length() && _password.length() && !request->authenticate(_username.c_str(), _password.c_str()))
+  //  return request->requestAuthentication();
+
+  if (request->method() == HTTP_GET) {
+    if (request->hasParam(FPSTR(v_list))) {
+      String path = request->getParam(FPSTR(v_list))->value();
+      #ifdef ESP32
+      File dir = _fs.open(path);
+      #else
+      Dir dir = _fs.openDir(path);
+      #endif
+      path = String();
+      String output = "[";
+      #ifdef ESP32
+      File entry = dir.openNextFile();
+      while (entry) {
+      #else
+      while (dir.next()) {
+        File entry = dir.openFile("r");
+      #endif
+        String fname = entry.name();
+        if (fname.indexOf(FPSTR(s_wsec)) == -1) {
+          if (output != "[") output += ',';
+          output += F("{\"type\":\"file\",\"name\":\"");
+          if (fname[0] != '/') output += '/';
+          output += fname;
+          output += F("\",\"size\":");
+          output += String(entry.size());
+          output += '}';
+        }
+        #ifdef ESP32
+        entry = dir.openNextFile();
+        #else
+        entry.close();
+        #endif
+      }
+      #ifdef ESP32
+      dir.close();
+      #endif
+      output += ']';
+      request->send(200, FPSTR(CONTENT_TYPE_JSON), output);
+      output = String();
+    }
+    else if (request->hasParam(FPSTR(v_edit)) || request->hasParam(FPSTR(v_download))) {
+      request->send(request->_tempFile, request->_tempFile.name(), String(), request->hasParam(FPSTR(v_download)));
+    }
+    else {
+      const char * buildTime = __DATE__ " " __TIME__ " GMT";
+      if (request->header(FPSTR(h_modified_since)).equals(buildTime)) {
+        request->send(304);
+      } else {
+        AsyncWebServerResponse *response = request->beginResponse_P(200, FPSTR(CONTENT_TYPE_HTML), PAGE_edit, PAGE_edit_length);
+        response->addHeader(FPSTR(s_content_enc), F("gzip"));
+        response->addHeader(F("Last-Modified"), buildTime);
+        request->send(response);
+      }
+    }
+  } else if (request->method() == HTTP_DELETE) {
+    if (request->hasParam(FPSTR(v_path), true)) {
+      _fs.remove(request->getParam(FPSTR(v_path), true)->value());
+      request->send(200, "", String(F("DELETE: "))+request->getParam(FPSTR(v_path), true)->value());
+    } else
+      request->send(404);
+  } else if (request->method() == HTTP_POST) {
+    if (request->hasParam(FPSTR(v_data), true, true) && _fs.exists(request->getParam(FPSTR(v_data), true, true)->value()))
+      request->send(200, "", String(F("UPLOADED: "))+request->getParam(FPSTR(v_data), true, true)->value());
+    else
+      request->send(500);
+  } else if (request->method() == HTTP_PUT) {
+    if (request->hasParam(FPSTR(v_path), true)) {
+      String filename = request->getParam(FPSTR(v_path), true)->value();
+      if (_fs.exists(filename)) {
+        request->send(200);
+      } else {
+        File f = _fs.open(filename, "w");
+        if (f) {
+          f.write((uint8_t)0x00);
+          f.close();
+          request->send(200, "", String(F("CREATE: "))+filename);
+        } else {
+          request->send(500);
+        }
+      }
+    } else
+      request->send(400);
+  }
+}
+
+void FSEditor::handleUpload(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
+  if (!correctPIN) {
+    if (final) request->send(401, FPSTR(CONTENT_TYPE_PLAIN), FPSTR(s_unlock_cfg));
+    return;
+  }
+  if (!index) {
+    // we don't do authentication in WLED
+    //if (!_username.length() || request->authenticate(_username.c_str(),_password.c_str())) {
+    //  _authenticated = true;
+      request->_tempFile = _fs.open(filename, "w");
+    //  _startTime = millis();
+    //}
+  }
+  if (/*_authenticated &&*/ request->_tempFile) {
+    if (len) {
+      request->_tempFile.write(data,len);
+    }
+    if (final) {
+      request->_tempFile.close();
+    }
+  }
+}
+
+static const char _edit[] PROGMEM = "/edit";
 void createEditHandler(bool enable) {
   if (editHandler != nullptr) server.removeHandler(editHandler);
+  #ifndef ESP8266
+  if (sdHandler != nullptr) { server.removeHandler(sdHandler); sdHandler = nullptr; }
+  #endif
   if (enable) {
     #ifdef WLED_ENABLE_FS_EDITOR
-      #ifdef ARDUINO_ARCH_ESP32
-      editHandler = &server.addHandler(new SPIFFSEditor(WLED_FS));//http_username,http_password));
-      #else
-      editHandler = &server.addHandler(new SPIFFSEditor("","",WLED_FS));//http_username,http_password));
+      editHandler = &server.addHandler(new FSEditor(WLED_FS, FPSTR(_edit)));//http_username,http_password));
+      #ifndef ESP8266
+      if (sdCard && SD.cardType() != CARD_NONE) sdHandler = &server.addHandler(new FSEditor(SD, "/sd"));//http_username,http_password));
       #endif
     #else
-      editHandler = &server.on(F("/edit"), HTTP_GET, [](AsyncWebServerRequest *request){
+      editHandler = &server.on(FPSTR(_edit), HTTP_GET, [](AsyncWebServerRequest *request){
         serveMessage(request, 501, FPSTR(s_notimplemented), F("The FS editor is disabled in this build."), 254);
       });
     #endif
   } else {
-    editHandler = &server.on(F("/edit"), HTTP_ANY, [](AsyncWebServerRequest *request){
+    editHandler = &server.on(FPSTR(_edit), HTTP_ANY, [](AsyncWebServerRequest *request){
       serveMessage(request, 401, FPSTR(s_accessdenied), FPSTR(s_unlock_cfg), 254);
     });
   }
@@ -453,6 +656,9 @@ void initServer()
     if (!Update.hasError()) Update.write(data, len);
     if (isFinal) {
       if (Update.end(true)) {
+        #ifndef ESP8266
+        if (sdCard) SD.end();
+        #endif
         DEBUG_PRINTLN(F("Update Success"));
       } else {
         DEBUG_PRINTLN(F("Update Failed"));
@@ -526,9 +732,9 @@ void initServer()
       return;
     }
 
-    if(handleSet(request, request->url())) return;
+    if (handleSet(request, request->url())) return;
     #ifndef WLED_DISABLE_ALEXA
-    if(espalexa.handleAlexaApiCall(request)) return;
+    if (espalexa.handleAlexaApiCall(request)) return;
     #endif
     handleStaticContent(request, request->url(), 404, FPSTR(CONTENT_TYPE_HTML), PAGE_404, PAGE_404_length);
   });
@@ -575,7 +781,7 @@ void serveSettingsJS(AsyncWebServerRequest* request)
   }
 
   AsyncResponseStream *response = request->beginResponseStream(FPSTR(CONTENT_TYPE_JAVASCRIPT));
-  response->addHeader(F("Cache-Control"), F("no-store"));
+  response->addHeader(FPSTR(h_cache_control), F("no-store"));
   response->addHeader(F("Expires"), F("0"));
 
   response->print(F("function GetV(){var d=document;"));

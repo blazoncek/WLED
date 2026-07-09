@@ -548,7 +548,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   sdCard = sdCard && spiConfigured;
   if (sdCard) {
     DEBUG_PRINTLN(F("Starting SD card driver."));
-    SD.begin(spi_ssel, SPI);
+    if (!SD.begin(spi_ssel, SPI)) DEBUG_PRINTLN(F("SD card driver failed."));
     #ifdef WLED_DEBUG
     unsigned cardType = SD.cardType();
     switch (cardType) {
@@ -556,26 +556,6 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       case CARD_SD:
       case CARD_SDHC:
       case CARD_MMC:  DEBUG_PRINTF_P(PSTR("SD card present: %u"), cardType); break;
-    }
-    if (cardType != CARD_NONE) {
-      DEBUG_PRINTF_P(PSTR("Listing SD directory: %s\n"), "/");
-      File root = SD.open("/");
-      if (!root) {
-        DEBUG_PRINTLN(F("Failed to open directory"));
-      } else if (!root.isDirectory()) {
-        DEBUG_PRINTLN(F("Not a directory"));
-      } else {
-        File file = root.openNextFile();
-        while (file) {
-          if (file.isDirectory()) {
-            DEBUG_PRINTF_P(PSTR("  DIR : %s\n"), file.name());
-          } else {
-            DEBUG_PRINTF_P(PSTR("  FILE: %s  SIZE: %d\n"), file.name(), file.size());
-          }
-          file = root.openNextFile();
-        }
-        root.close();
-      }
     }
     #endif
   }

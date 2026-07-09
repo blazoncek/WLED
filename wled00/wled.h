@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2607070
+#define VERSION 2607090
 #else
 #define VERSION BUILD
 #endif
@@ -106,16 +106,8 @@
   #include "esp_wifi.h"
   #include <ESPmDNS.h>
   #include <AsyncTCP.h>
-  #if LOROL_LITTLEFS
-    #ifndef CONFIG_LITTLEFS_FOR_IDF_3_2
-      #define CONFIG_LITTLEFS_FOR_IDF_3_2
-    #endif
-    #include <LITTLEFS.h>
-    #define WLED_FS LITTLEFS
-  #else
-    #include <LittleFS.h>
-    #define WLED_FS LittleFS
-  #endif
+  #include <LittleFS.h>
+  #define WLED_FS LittleFS
   #include "esp_task_wdt.h"
 
   #ifndef WLED_DISABLE_ESPNOW
@@ -706,7 +698,6 @@ WLED_GLOBAL AsyncWebSocket ws _INIT({{"/ws"}});
 #ifndef WLED_DISABLE_HUESYNC
 WLED_GLOBAL AsyncClient     *hueClient _INIT(NULL);
 #endif
-WLED_GLOBAL AsyncWebHandler *editHandler _INIT(nullptr);
 
 // udp interface objects
 WLED_GLOBAL WiFiUDP notifierUdp, rgbUdp, notifier2Udp;

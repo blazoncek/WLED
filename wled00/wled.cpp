@@ -32,6 +32,9 @@ void WLED::reset()
     yield();        // enough time to send response to client
   }
   applyBri();
+  #ifndef ESP8266
+  if (sdCard) SD.end();
+  #endif
   DEBUG_PRINTLN(F("WLED RESET"));
   ESP.restart();
 }

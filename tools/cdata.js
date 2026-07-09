@@ -405,6 +405,12 @@ const char PAGE_dmxmap[] PROGMEM = R"=====()=====";
       filter: "html-minify",
     },
     {
+      file: "edit.htm",
+      name: "PAGE_edit",
+      method: "gzip",
+      filter: "html-minify",
+    },
+    {
       file: "404.htm",
       name: "PAGE_404",
       method: "gzip",
