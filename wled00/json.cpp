@@ -839,6 +839,7 @@ void serializeInfo(JsonObject root)
   fs_info["u"] = fsBytesUsed / 1000;
   fs_info["t"] = fsBytesTotal / 1000;
   fs_info[F("pmt")] = presetsModifiedTime;
+#ifndef ESP8266
   if (sdCard) {
     JsonObject fs_info_sd = fs_info.createNestedObject(F("sd"));
     fs_info_sd[F("type")] = SD.cardType();
@@ -848,6 +849,7 @@ void serializeInfo(JsonObject root)
       fs_info_sd["t"] = (uint32_t)(SD.totalBytes() / 1000000ULL);
     }
   }
+#endif
 
   root[F("ndc")] = nodeListEnabled ? (int)Nodes.size() : -1;
 
