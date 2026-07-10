@@ -4121,6 +4121,19 @@ uint16_t mode_washing_machine(void) {
 static const char _data_FX_MODE_WASHING_MACHINE[] PROGMEM = "Washing Machine@!,!;;!";
 
 
+#ifdef WLED_ENABLE_GIF
+/*
+  Image effect
+  Draws a .gif image from filesystem on the matrix/strip
+*/
+uint16_t mode_image(void) {
+  renderImageToSegment(SEGMENT);
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_IMAGE[] PROGMEM = "Image@!,Blur,;;;12;sx=128,ix=0";
+#endif
+
+
 /*
   Blends random colors across palette
   Modified, originally by Mark Kriegsman https://gist.github.com/kriegsman/1f7ccbbfa492a73c015e
@@ -9055,6 +9068,9 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_FAIRY, &mode_fairy, _data_FX_MODE_FAIRY);
   addEffect(FX_MODE_TWO_DOTS, &mode_two_dots, _data_FX_MODE_TWO_DOTS);
   addEffect(FX_MODE_FAIRYTWINKLE, &mode_fairytwinkle, _data_FX_MODE_FAIRYTWINKLE);
+  #ifdef WLED_ENABLE_GIF
+  addEffect(FX_MODE_IMAGE, &mode_image, _data_FX_MODE_IMAGE);
+  #endif
   addEffect(FX_MODE_TRICOLOR_CHASE, &mode_tricolor_chase, _data_FX_MODE_TRICOLOR_CHASE);
   addEffect(FX_MODE_TRICOLOR_WIPE, &mode_tricolor_wipe, _data_FX_MODE_TRICOLOR_WIPE);
   addEffect(FX_MODE_TRICOLOR_FADE, &mode_tricolor_fade, _data_FX_MODE_TRICOLOR_FADE);

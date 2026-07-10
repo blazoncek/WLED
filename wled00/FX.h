@@ -189,7 +189,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_TWO_DOTS                50
 #define FX_MODE_FAIRYTWINKLE            51  //was Two Areas prior to 0.13.0-b6 (use "Two Dots" with full intensity)
 //#define FX_MODE_RUNNING_DUAL            52  // candidate for removal (use Running)
-//#define FX_MODE_HALLOWEEN               53  // removed in 0.14!
+#define FX_MODE_IMAGE                   53  //was Haloween until 0.14
 #define FX_MODE_TRICOLOR_CHASE          54
 #define FX_MODE_TRICOLOR_WIPE           55
 #define FX_MODE_TRICOLOR_FADE           56

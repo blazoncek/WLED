@@ -194,6 +194,9 @@ void Segment::resetIfRequired() {
   if (pixels) for (size_t i = 0; i < length(); i++) pixels[i] = hasWhite() ? BLACK : CRGBA(BLACK); // clear pixel buffer
   next_time = 0; step = 0; call = 0; aux0 = 0; aux1 = 0;
   reset = false;
+  #ifdef WLED_ENABLE_GIF
+  endImagePlayback(this);
+  #endif
 }
 
 CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) {

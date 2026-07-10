@@ -58,6 +58,18 @@ void onHueConnect(void* arg, AsyncClient* client);
 void sendHuePoll();
 void onHueData(void* arg, AsyncClient* client, void *data, size_t len);
 
+//image_loader.cpp
+#ifdef WLED_ENABLE_GIF
+class Segment;
+bool fileSeekCallback(unsigned long position);
+unsigned long filePositionCallback(void);
+int fileReadCallback(void);
+int fileReadBlockCallback(void * buffer, int numberOfBytes);
+int fileSizeCallback(void);
+byte renderImageToSegment(Segment &seg);
+void endImagePlayback(Segment* seg);
+#endif
+
 //improv.cpp
 enum ImprovRPCType {
   Command_Wifi = 0x01,
