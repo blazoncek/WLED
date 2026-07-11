@@ -1,12 +1,14 @@
-<!-- This file has been written by Me-No-Dev
-see https://github.com/me-no-dev/ and is part
-of the sample code of ESPAsyncWebServer
-see https://github.com/me-no-dev/ESPAsyncWebServer -->
+<!-- This file has been originally written by Me-No-Dev (see https://github.com/me-no-dev/) and is part of the sample code of ESPAsyncWebServer (see https://github.com/me-no-dev/ESPAsyncWebServer) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"><!-- prevent too much scaling on mobile -->
+<link rel="shortcut icon" href="favicon.ico">
 <title>FS Editor</title>
 <style type="text/css" media="screen">
+button {
+  margin-right: 4px;
+}
 .cm {
   z-index: 300;
   position: absolute;
@@ -52,7 +54,6 @@ see https://github.com/me-no-dev/ESPAsyncWebServer -->
   -moz-user-select: none;
   -webkit-user-select: none;
   user-select: none;
-  color: #444;
   line-height: 16px;
 }
 .tvu span {
@@ -64,6 +65,10 @@ see https://github.com/me-no-dev/ESPAsyncWebServer -->
   vertical-align: middle;
   background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAABGdBTUEAAK/INwWK6QAAABl0RVh0U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAADoSURBVBgZBcExblNBGAbA2ceegTRBuIKOgiihSZNTcC5LUHAihNJR0kGKCDcYJY6D3/77MdOinTvzAgCw8ysThIvn/VojIyMjIyPP+bS1sUQIV2s95pBDDvmbP/mdkft83tpYguZq5Jh/OeaYh+yzy8hTHvNlaxNNczm+la9OTlar1UdA/+C2A4trRCnD3jS8BB1obq2Gk6GU6QbQAS4BUaYSQAf4bhhKKTFdAzrAOwAxEUAH+KEM01SY3gM6wBsEAQB0gJ+maZoC3gI6iPYaAIBJsiRmHU0AALOeFC3aK2cWAACUXe7+AwO0lc9eTHYTAAAAAElFTkSuQmCC') no-repeat;
   background-position: 0px 0px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+	text-wrap: nowrap;
+  max-width: 132px;
 }
 .tvu span:hover {
   text-decoration: underline;
@@ -90,8 +95,6 @@ see https://github.com/me-no-dev/ESPAsyncWebServer -->
   height:28px;
   line-height: 24px;
   padding-left: 10px;
-  background-color: #444;
-  color:#EEE;
 }
 #tree {
   position: absolute;
@@ -100,6 +103,10 @@ see https://github.com/me-no-dev/ESPAsyncWebServer -->
   left: 0;
   width:160px;
   padding: 8px;
+}
+#uploader, #tree {
+	background-color: #444;
+  color: #EEE;
 }
 #editor, #preview {
   position: absolute;
@@ -153,7 +160,7 @@ function ce(a){
   return document.createElement(a);
 }
 function sortByKey(array, key) {
-  return array.sort(function(a, b) {
+  return array.sort((a, b)=>{
     var x = a[key]; var y = b[key];
     return ((x < y) ? -1 : ((x > y) ? 1 : 0));
   });
@@ -170,7 +177,7 @@ QueuedRequester.prototype = {
     if(!req instanceof Object) return;
     var that = this;
 
-    function ajaxCb(x,d){ return function(){
+    function ajaxCb(x,d){ return ()=>{
       if (x.readyState == 4){
         ge("loader").style.display = "none";
         d.callback(x.status, x.responseText);
@@ -224,6 +231,9 @@ var requests = new QueuedRequester();
 
 function createFileUploader(element, tree, editor){
   var xmlHttp;
+  var back = ce("button");
+  back.innerHTML = 'Back';
+  ge(element).appendChild(back);
   var refresh = ce("button");
   refresh.innerHTML = 'Refresh List';
   ge(element).appendChild(refresh);
@@ -268,22 +278,24 @@ function createFileUploader(element, tree, editor){
     requests.add("PUT", _edit, formData, httpPostProcessRequest);
   }
 
-  mkfile.onclick = function(e){
+  back.onclick = (e)=>{ window.location.href="../"; }
+
+  mkfile.onclick = (e)=>{
     if(path.value.indexOf(".") === -1) return;
     createPath(path.value);
     editor.loadUrl(path.value);
     path.value="/";
   };
 
-  savefile.onclick = function(e){
+  savefile.onclick = (e)=>{
     editor.execCommand('saveCommand');
   };
 
-  refresh.onclick = function(e){
+  refresh.onclick = (e)=>{
     tree.refreshPath(path.value);
   };
 
-  button.onclick = function(e){
+  button.onclick = (e)=>{
     if(input.files.length === 0){
       return;
     }
@@ -295,7 +307,7 @@ function createFileUploader(element, tree, editor){
     var uploadSelect= ge("upload-select");
     uploadSelect.value="";
   };
-  input.onchange = function(e){
+  input.onchange = (e)=>{
     if(input.files.length === 0) return;
     var filename = input.files[0].name;
     var ext = /(?:\.([^.]+))?$/.exec(filename)[1];
@@ -332,13 +344,13 @@ function createTree(element, editor){
     list.appendChild(action);
     if(isImageFile(path)){
       action.innerHTML = "<span>Preview</span>";
-      action.onclick = function(e){
+      action.onclick = (e)=>{
         loadPreview(path);
         if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(el);
       };
     } else if(isTextFile(path)){
       action.innerHTML = "<span>Edit</span>";
-      action.onclick = function(e){
+      action.onclick = (e)=>{
         editor.loadUrl(path);
         if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(el);
       };
@@ -346,14 +358,14 @@ function createTree(element, editor){
     var download = ce("li");
     list.appendChild(download);
     download.innerHTML = "<span>Download</span>";
-    download.onclick = function(e){
+    download.onclick = (e)=>{
       loadDownload(path);
       if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(el);
     };
     var delFile = ce("li");
     list.appendChild(delFile);
     delFile.innerHTML = "<span>Delete</span>";
-    delFile.onclick = function(e){
+    delFile.onclick = (e)=>{
       httpDelete(path);
       if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(el);
     };
@@ -373,7 +385,7 @@ function createTree(element, editor){
     document.body.appendChild(divContext);
     var width = divContext.offsetWidth;
     var height = divContext.offsetHeight;
-    divContext.onmouseout = function(e){
+    divContext.onmouseout = (e)=>{
       if(e.clientX < left || e.clientX > (left + width) || e.clientY < top || e.clientY > (top + height)){
         if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(divContext);
       }
@@ -386,14 +398,14 @@ function createTree(element, editor){
     var label = ce("span");
     label.innerHTML = name;
     leaf.appendChild(label);
-    leaf.onclick = function(e){
+    leaf.onclick = (e)=>{
       if(isTextFile(leaf.id.toLowerCase())){
         editor.loadUrl(leaf.id);
       } else if(isImageFile(leaf.id.toLowerCase())){
         loadPreview(leaf.id);
       }
     };
-    leaf.oncontextmenu = function(e){
+    leaf.oncontextmenu = (e)=>{
       e.preventDefault();
       e.stopPropagation();
       showContextMenu(e, leaf.id, true);
@@ -421,13 +433,13 @@ function createTree(element, editor){
     return /\.(png|jpg|jpeg|gif|bmp|webp)?$/i.test(path)
   }
 
-  this.refreshPath = function(path){
+  this.refreshPath = (path)=>{
     treeRoot.removeChild(treeRoot.childNodes[0]);
     httpGet(treeRoot, "/");
   };
 
   function delCb(path){
-    return function(status, responseText){
+    return (status, responseText)=>{
       if(status != 200){
         alert("ERROR["+status+"]: "+responseText);
       } else {
@@ -445,7 +457,7 @@ function createTree(element, editor){
   }
 
   function getCb(parent, path){
-    return function(status, responseText){
+    return (status, responseText)=>{
       if(status == 200)
         addList(parent, path, JSON.parse(responseText));
     }
@@ -498,17 +510,43 @@ function createEditor(element, file, lang, theme, type){
     if(status != 200) alert("ERROR["+status+"]: "+responseText);
   }
   function httpPost(filename, data, type){
-    if (/json/i.test(type)) try { data = JSON.stringify(JSON.parse(data)); } catch (e) { if (!confirm("Error in JSON.\nSave?")) return; }
+    if (/json/i.test(type)) try { data = JSON.stringify(JSON.parse(data)); } catch (e) { if (!confirm("Error in JSON.\nSave?\n\n"+e)) return; }
     var formData = new FormData();
     formData.append("data", new Blob([data], { type: type }), filename);
     requests.add("POST", _edit, formData, httpPostProcessRequest);
+  }
+  function pJ(json){ // prettyJson
+    try {
+      let obj = JSON.parse(json);
+      // ignore 2d-gapfile (print as-is)
+      if (Array.isArray(obj) && Math.max(...obj) <= 1 && Math.min(...obj) >= -1) return json;
+      // if not a ledmap just pretty normally
+      if (!obj.map || !Array.isArray(obj.map)) return JSON.stringify(obj, null, 2);
+      // process ledmap (organise by width and height)
+      const isSparse = Array.isArray(obj.map[0]); // is it a sparse ledmap?
+      const len = obj.map.length;
+      const width = obj.width || len;
+      const digits = Math.max(...obj.map.flat().map(n => String(n).length)); // max # of digits in an element
+      let rows = [];
+      let i = 0;
+      while (i < len) {
+        const arr = isSparse ? obj.map[i] : obj.map.slice(i, i+width);
+        i += isSparse ? 1 : width;
+        rows.push("    "+(isSparse?'[':'')+arr.map(n => String(n).padStart(digits,' ')).join(', ')+(isSparse?']':'')+(i<len?',':''));
+      }
+      delete obj.map;
+      let pretty = JSON.stringify(obj, null, 2).replace(/\s}$/, ',\n');
+      pretty += [ "  \"map\": [", ...rows, "  ]" ].join("\n") + "\n}\n";
+      return pretty;
+    } catch (e) {
+      return json;
+    }
   }
   function httpGetProcessRequest(status, responseText){
       ge("preview").style.display = "none";
       ge("editor").style.display = "block";
       if(status == 200) {
-        try { responseText = JSON.stringify(JSON.parse(responseText), null, 2); } catch (e) {}
-        editor.setValue(responseText);
+        editor.setValue(pJ(responseText));
       } else
         editor.setValue("");
       editor.clearSelection();
@@ -548,7 +586,7 @@ function createEditor(element, file, lang, theme, type){
       },
       readOnly: false
   });
-  editor.loadUrl = function(filename){
+  editor.loadUrl = (filename)=>{
     var edfname = ge("editor-filename");
     edfname.value=filename;
     file = filename;
@@ -561,7 +599,7 @@ function createEditor(element, file, lang, theme, type){
 }
 function onBodyLoad(){
   var vars = {};
-  var parts = window.location.href.replace(/[?&]+([^=&]+)=([^&]*)/gi, function(m,key,value) { vars[key] = value; });
+  //var parts = window.location.href.replace(/[?&]+([^=&]+)=([^&]*)/gi, (m,key,value)=>{ vars[key] = value; });
   var editor = createEditor("editor", vars.file, vars.lang, vars.theme);
   var tree = createTree("tree", editor);
   createFileUploader("uploader", tree, editor);
@@ -569,7 +607,7 @@ function onBodyLoad(){
   editor.loadUrl(vars.file);
 };
 </script>
-<script id='ace' src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.6/ace.js" type="text/javascript" charset="utf-8"></script>
+<script id='ace' src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.23.4/ace.js" type="text/javascript" charset="utf-8"></script>
 <script>
   if  (typeof ace.edit == "undefined") {
     var script = document.createElement('script');

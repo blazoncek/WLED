@@ -26,6 +26,7 @@ var pmt = 1, pmtLS = 0, pmtLast = 0; // presetModifiedTime : 0 unmodified since 
 var lastinfo = {};
 var isM = false, mw = 0, mh=0;
 var ws, wsRpt=0;
+var _intSSEP = null;
 var cfg = {
 	theme:{base:"dark", bg:{url:"", rnd: false, rndGrayscale: false, rndBlur: false}, alpha:{bg:0.6,tab:0.8}, color:{bg:""}},
 	comp :{colors:{picker: true, rgb: false, quick: true, hex: false},
@@ -1627,7 +1628,8 @@ function setEffectParameters(idx)
 	}
 
 	setSelectedEffectPosition();
-	setInterval(setSelectedEffectPosition,750);
+	if (_intSSEP) clearInterval(_intSSEP);
+	_intSSEP = setInterval(setSelectedEffectPosition,750);
 	// set html color items on/off
 	var cslLabel = '';
 	var sep = '';

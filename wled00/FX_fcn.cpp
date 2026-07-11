@@ -1727,7 +1727,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     for (int r = 0; r < nRows; r++) for (int c = 0; c < nCols; c++) {
       int x = c;            // temporary coordinates (used for "push" transitions and grouping)
       int y = r;            // temporary coordinates (used for "push" transitions and grouping)
-      CRGBA c_a = BLACK;    // source pixel
+      CRGBA c_a = CRGBA(0,0,0,0); // source pixel
       unsigned o = opacity; // source opacity/brightness
 
       // get destination pixel data
@@ -1742,8 +1742,8 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
           // (bri != briT) && !bri => from On to Off
           // (bri != briT) &&  bri => from Off to On
           if ((briOld == 0 || bri == 0)) {
-            if (bri != briT && !bri) c_a = BLACK;
-            if (bri != briT &&  bri) c_b = BLACK;
+            if (bri != briT && !bri) c_a.color32 = BLACK;
+            if (bri != briT &&  bri) c_b.color32 = BLACK;
           }
           c_a.nblend(c_b, (uint16_t)progInv);
         }
@@ -1842,7 +1842,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
 
     for (int k = 0; k < nLen; k++) {
       int i = k;            // temporary index (used for "push" transitions and grouping)
-      CRGBA c_a = BLACK;    // source pixel
+      CRGBA c_a = CRGBA(0,0,0,0); // source pixel
       unsigned o = opacity; // source opacity/brightness
 
       // get destination pixel data
@@ -1855,8 +1855,8 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
           // (bri != briT) && !bri => from On to Off
           // (bri != briT) &&  bri => from Off to On
           if ((briOld == 0 || bri == 0)) {
-            if (bri != briT && !bri) c_a = BLACK;
-            if (bri != briT &&  bri) c_b = BLACK;
+            if (bri != briT && !bri) c_a.color32 = BLACK;
+            if (bri != briT &&  bri) c_b.color32 = BLACK;
           }
           c_a.nblend(c_b, (uint16_t)progInv);
         }

@@ -47,6 +47,9 @@ void toggleOnOff() {
     // we need to switch relay on immediately for delay to work properly
     toggleRelay(true);
   } else {
+    // set all segments to transition otherwise we may get a single-frame blackout (black flash) in non-fade transitions
+    // (race condition bri=0 but segment is not yet in transition yielding empty clipping) wled#5726
+    strip.setTransitionMode(true);
     briLast = bri;
     bri = 0;
     // we will switch off relay in handleBrightness() when transition finishes
