@@ -192,7 +192,7 @@ static String msgProcessor(const String& var)
   return String();
 }
 
-static void handleUpload(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool isFinal) {
+static void handleUpload(fs::FS &_fs, AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool isFinal) {
   if (!correctPIN) {
     if (isFinal) request->send(401, FPSTR(CONTENT_TYPE_PLAIN), FPSTR(s_unlock_cfg));
     return;
@@ -209,7 +209,7 @@ static void handleUpload(AsyncWebServerRequest *request, const String& filename,
       finalname = '/' + finalname; // prepend slash if missing
     }
 
-    request->_tempFile = WLED_FS.open(finalname, "w");
+    request->_tempFile = _fs.open(finalname, "w");
     DEBUG_PRINTF_P(PSTR("Uploading %s\n"), finalname.c_str());
     if (finalname.equals(FPSTR(getPresetsFileName()))) presetsModifiedTime = toki.second();
   }
@@ -220,10 +220,11 @@ static void handleUpload(AsyncWebServerRequest *request, const String& filename,
     request->_tempFile.close();
     if (filename.indexOf(F("cfg.json")) >= 0) { // check for filename with or without slash
       request->send(200, FPSTR(CONTENT_TYPE_PLAIN), F("Configuration restore successful.\nRebooting..."));
+      delay(10); // allow some time for response to be sent
       doReboot = true;
     } else {
       if (filename.indexOf(F("palette")) >= 0 && filename.indexOf(F(".json")) >= 0) loadCustomPalettes();
-      request->send(200, FPSTR(CONTENT_TYPE_PLAIN), F("File Uploaded!"));
+      request->send(200, FPSTR(CONTENT_TYPE_PLAIN), String(F("UPLOADED: "))+filename);
     }
     cacheInvalidate++;
     updateFSInfo(); // refresh memory usage info
@@ -348,11 +349,9 @@ void FSEditor::handleRequest(AsyncWebServerRequest *request) {
       output += ']';
       request->send(200, FPSTR(CONTENT_TYPE_JSON), output);
       output = String();
-    }
-    else if (request->hasParam(FPSTR(v_edit)) || request->hasParam(FPSTR(v_download))) {
+    } else if (request->hasParam(FPSTR(v_edit)) || request->hasParam(FPSTR(v_download))) {
       request->send(request->_tempFile, request->_tempFile.name(), String(), request->hasParam(FPSTR(v_download)));
-    }
-    else {
+    } else {
       const char * buildTime = __DATE__ " " __TIME__ " GMT";
       if (request->header(FPSTR(h_modified_since)).equals(buildTime)) {
         request->send(304);
@@ -363,6 +362,8 @@ void FSEditor::handleRequest(AsyncWebServerRequest *request) {
         request->send(response);
       }
     }
+    // no cache invalidation or change in FS
+    return;
   } else if (request->method() == HTTP_DELETE) {
     if (request->hasParam(FPSTR(v_path), true)) {
       _fs.remove(request->getParam(FPSTR(v_path), true)->value());
@@ -392,29 +393,12 @@ void FSEditor::handleRequest(AsyncWebServerRequest *request) {
     } else
       request->send(400);
   }
+  cacheInvalidate++;
+  updateFSInfo(); // refresh memory usage info
 }
 
 void FSEditor::handleUpload(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
-  if (!correctPIN) {
-    if (final) request->send(401, FPSTR(CONTENT_TYPE_PLAIN), FPSTR(s_unlock_cfg));
-    return;
-  }
-  if (!index) {
-    // we don't do authentication in WLED
-    //if (!_username.length() || request->authenticate(_username.c_str(),_password.c_str())) {
-    //  _authenticated = true;
-      request->_tempFile = _fs.open(filename, "w");
-    //  _startTime = millis();
-    //}
-  }
-  if (/*_authenticated &&*/ request->_tempFile) {
-    if (len) {
-      request->_tempFile.write(data,len);
-    }
-    if (final) {
-      request->_tempFile.close();
-    }
-  }
+  ::handleUpload(_fs, request, filename, index, data, len, final);
 }
 
 static const char _edit[] PROGMEM = "/edit";
@@ -600,8 +584,9 @@ void initServer()
   });
 
   server.on(F("/upload"), HTTP_POST, [](AsyncWebServerRequest *request) {},
-        [](AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data,
-                      size_t len, bool isFinal) {handleUpload(request, filename, index, data, len, isFinal);}
+    [](AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool isFinal) {
+      handleUpload(reinterpret_cast<fs::FS&>(WLED_FS), request, filename, index, data, len, isFinal);
+    }
   );
 
   createEditHandler(correctPIN);
