@@ -106,8 +106,16 @@
   #include "esp_wifi.h"
   #include <ESPmDNS.h>
   #include <AsyncTCP.h>
-  #include <LittleFS.h>
-  #define WLED_FS LittleFS
+  #if LOROL_LITTLEFS
+    #ifndef CONFIG_LITTLEFS_FOR_IDF_3_2
+      #define CONFIG_LITTLEFS_FOR_IDF_3_2
+    #endif
+    #include <LITTLEFS.h>
+    #define WLED_FS LITTLEFS
+  #else
+    #include <LittleFS.h>
+    #define WLED_FS LittleFS
+  #endif
   #include "esp_task_wdt.h"
 
   #ifndef WLED_DISABLE_ESPNOW
