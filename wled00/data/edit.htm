@@ -268,10 +268,8 @@ function createFileUploader(element, tree, editor){
     var formData = new FormData();
     formData.append("path", p);
     requests.add("PUT", _edit, formData, (s,r)=>{
-      if (s != 200)
-        alert("ERROR["+s+"]: "+r);
-      else
-        tree.refreshPath();
+      if (s != 200) alert("ERROR["+s+"]: "+r);
+      else tree.refreshPath();
     });
   }
 
@@ -298,7 +296,10 @@ function createFileUploader(element, tree, editor){
     }
     var formData = new FormData();
     formData.append("data", input.files[0], path.value);
-    requests.add("POST", _edit, formData, (s,r)=>{ if (s != 200) alert("ERROR["+s+"]: "+r); });
+    requests.add("POST", _edit, formData, (s,r)=>{
+      if (s != 200) alert("ERROR["+s+"]: "+r);
+      else tree.refreshPath();
+    });
     var uploadPath= ge("upload-path");
     uploadPath.value="/";
     var uploadSelect= ge("upload-select");
@@ -502,7 +503,9 @@ function createEditor(element, file, lang, theme, type){
     if (/json/i.test(type)) try { data = JSON.stringify(JSON.parse(data)); } catch (e) { if (!confirm("Error in JSON.\nSave?\n\n"+e)) return; }
     var formData = new FormData();
     formData.append("data", new Blob([data], { type: type }), filename);
-    requests.add("POST", _edit, formData, (s,r)=>{ if (s != 200) alert("ERROR["+s+"]: "+r); });
+    requests.add("POST", _edit, formData, (s,r)=>{
+      if (s != 200) alert("ERROR["+s+"]: "+r);
+    });
   }
   function pJ(json){ // prettyJson
     try {
@@ -531,17 +534,14 @@ function createEditor(element, file, lang, theme, type){
       return json;
     }
   }
-  function httpGetProcessRequest(status, responseText){
+  function httpGet(theUrl){
+    requests.add("GET", _edit, { edit: theUrl }, (s, r)=>{
       ge("preview").style.display = "none";
       ge("editor").style.display = "block";
-      if(status == 200) {
-        editor.setValue(pJ(responseText));
-      } else
-        editor.setValue("");
+      if (s == 200) editor.setValue(pJ(r));
+      else editor.setValue("");
       editor.clearSelection();
-  }
-  function httpGet(theUrl){
-      requests.add("GET", _edit, { edit: theUrl }, httpGetProcessRequest);
+    });
   }
 
   if(lang !== "plain") editor.getSession().setMode("ace/mode/"+lang);
