@@ -14,7 +14,7 @@ button {
   position: absolute;
   left: 5px;
   border: 1px solid #444;
-  background-color: #F5F5F5;
+  background-color: #EEE;
   display: none;
   box-shadow: 0 0 10px rgba( 0, 0, 0, .4 );
   font-size: 12px;
@@ -38,7 +38,7 @@ button {
   display: inline-block;
   padding: 6px;
 }
-.cm li:hover { background: #444; }
+.cm li:hover { background-color: #444; }
 .cm li:hover span { color: #EEE; }
 .tvu ul, .tvu li {
   padding: 0;
@@ -126,20 +126,20 @@ button {
   right: 40%;
 }
 .loader {
-    z-index: 10000;
-    border: 8px solid #b5b5b5; /* Grey */
-    border-top: 8px solid #3498db; /* Blue */
-    border-bottom: 8px solid #3498db; /* Blue */
-    border-radius: 50%;
-    width: 240px;
-    height: 240px;
-    animation: spin 2s linear infinite;
-    display:none;
+  z-index: 10000;
+  border: 8px solid #b5b5b5; /* Grey */
+  border-top: 8px solid #3498db; /* Blue */
+  border-bottom: 8px solid #3498db; /* Blue */
+  border-radius: 50%;
+  width: 240px;
+  height: 240px;
+  animation: spin 2s linear infinite;
+  display:none;
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>
 <script>
@@ -161,8 +161,7 @@ function ce(a){
 }
 function sortByKey(array, key) {
   return array.sort((a, b)=>{
-    var x = a[key]; var y = b[key];
-    return ((x < y) ? -1 : ((x > y) ? 1 : 0));
+    return ((a[key] < b[key]) ? -1 : ((a[key] > b[key]) ? 1 : 0));
   });
 }
 
@@ -176,15 +175,6 @@ QueuedRequester.prototype = {
     this.running = true;
     if(!req instanceof Object) return;
     var that = this;
-
-    function ajaxCb(x,d){ return ()=>{
-      if (x.readyState == 4){
-        ge("loader").style.display = "none";
-        d.callback(x.status, x.responseText);
-        if(that.queue.length === 0) that.running = false;
-        if(that.running) that._request(that.queue.shift());
-      }
-    }}
 
     ge("loader").style.display = "block";
 
@@ -202,7 +192,15 @@ QueuedRequester.prototype = {
     }
 
     this.xmlhttp = new XMLHttpRequest();
-    this.xmlhttp.onreadystatechange = ajaxCb(this.xmlhttp, req);
+    this.xmlhttp.onreadystatechange = (e)=>{
+      if (this.xmlhttp.readyState == 4){
+        ge("loader").style.display = "none";
+        req.callback(this.xmlhttp.status, this.xmlhttp.responseText);
+        if(that.queue.length === 0) that.running = false;
+        if(that.running) that._request(that.queue.shift());
+      }
+    };
+
     if(req.method === "GET"){
       this.xmlhttp.open(req.method, req.url+p, true);
       this.xmlhttp.send();
@@ -232,10 +230,10 @@ var requests = new QueuedRequester();
 function createFileUploader(element, tree, editor){
   var xmlHttp;
   var back = ce("button");
-  back.innerHTML = 'Back';
+  back.innerHTML = '&#9204;'; // alt &#x1F519;
   ge(element).appendChild(back);
   var refresh = ce("button");
-  refresh.innerHTML = 'Refresh List';
+  refresh.innerHTML = '&#8635;';
   ge(element).appendChild(refresh);
   var input = ce("input");
   input.type = "file";
@@ -263,19 +261,18 @@ function createFileUploader(element, tree, editor){
   ge(element).appendChild(filename);
 
   var savefile = ce("button");
-  savefile.innerHTML = ' Save ' ;
+  savefile.innerHTML = 'Save' ;
   ge(element).appendChild(savefile);
 
-  function httpPostProcessRequest(status, responseText){
-    if(status != 200)
-      alert("ERROR["+status+"]: "+responseText);
-    else
-      tree.refreshPath(path.value);
-  }
   function createPath(p){
     var formData = new FormData();
     formData.append("path", p);
-    requests.add("PUT", _edit, formData, httpPostProcessRequest);
+    requests.add("PUT", _edit, formData, (s,r)=>{
+      if (s != 200)
+        alert("ERROR["+s+"]: "+r);
+      else
+        tree.refreshPath();
+    });
   }
 
   back.onclick = (e)=>{ window.location.href="../"; }
@@ -292,7 +289,7 @@ function createFileUploader(element, tree, editor){
   };
 
   refresh.onclick = (e)=>{
-    tree.refreshPath(path.value);
+    tree.refreshPath();
   };
 
   button.onclick = (e)=>{
@@ -301,7 +298,7 @@ function createFileUploader(element, tree, editor){
     }
     var formData = new FormData();
     formData.append("data", input.files[0], path.value);
-    requests.add("POST", _edit, formData, httpPostProcessRequest);
+    requests.add("POST", _edit, formData, (s,r)=>{ if (s != 200) alert("ERROR["+s+"]: "+r); });
     var uploadPath= ge("upload-path");
     uploadPath.value="/";
     var uploadSelect= ge("upload-select");
@@ -346,13 +343,13 @@ function createTree(element, editor){
       action.innerHTML = "<span>Preview</span>";
       action.onclick = (e)=>{
         loadPreview(path);
-        if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(el);
+        rmContextMenu();
       };
     } else if(isTextFile(path)){
       action.innerHTML = "<span>Edit</span>";
       action.onclick = (e)=>{
         editor.loadUrl(path);
-        if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(el);
+        rmContextMenu();
       };
     }
     var download = ce("li");
@@ -360,18 +357,23 @@ function createTree(element, editor){
     download.innerHTML = "<span>Download</span>";
     download.onclick = (e)=>{
       loadDownload(path);
-      if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(el);
+      rmContextMenu();
     };
     var delFile = ce("li");
     list.appendChild(delFile);
     delFile.innerHTML = "<span>Delete</span>";
     delFile.onclick = (e)=>{
       httpDelete(path);
-      if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(el);
+      rmContextMenu();
     };
   }
 
+  function rmContextMenu() {
+    Array.from(document.body.getElementsByClassName('cm')).forEach((e)=>document.body.removeChild(e));
+  }
+
   function showContextMenu(event, path, isfile){
+    rmContextMenu();
     var divContext = ce("div");
     var scrollTop = document.body.scrollTop ? document.body.scrollTop : document.documentElement.scrollTop;
     var scrollLeft = document.body.scrollLeft ? document.body.scrollLeft : document.documentElement.scrollLeft;
@@ -387,7 +389,7 @@ function createTree(element, editor){
     var height = divContext.offsetHeight;
     divContext.onmouseout = (e)=>{
       if(e.clientX < left || e.clientX > (left + width) || e.clientY < top || e.clientY > (top + height)){
-        if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(divContext);
+        rmContextMenu();
       }
     };
   }
@@ -419,7 +421,7 @@ function createTree(element, editor){
     parent.appendChild(list);
     var ll = items.length;
     for(var i = 0; i < ll; i++){
-      if(items[i].type === "file")
+      if(items[i].type === "file" && items[i].name.substring(0,1)!==".")
         list.appendChild(createTreeLeaf(path, items[i].name, items[i].size));
     }
 
@@ -433,38 +435,28 @@ function createTree(element, editor){
     return /\.(png|jpg|jpeg|gif|bmp|webp)?$/i.test(path)
   }
 
-  this.refreshPath = (path)=>{
+  this.refreshPath = ()=>{
     treeRoot.removeChild(treeRoot.childNodes[0]);
     httpGet(treeRoot, "/");
   };
-
-  function delCb(path){
-    return (status, responseText)=>{
-      if(status != 200){
-        alert("ERROR["+status+"]: "+responseText);
-      } else {
-        treeRoot.removeChild(treeRoot.childNodes[0]);
-        httpGet(treeRoot, "/");
-      }
-    }
-  }
 
   function httpDelete(filename){
     if (!confirm("Delete?\n"+filename)) return;
     var formData = new FormData();
     formData.append("path", filename);
-    requests.add("DELETE", _edit, formData, delCb(filename));
-  }
-
-  function getCb(parent, path){
-    return (status, responseText)=>{
-      if(status == 200)
-        addList(parent, path, JSON.parse(responseText));
-    }
+    requests.add("DELETE", _edit, formData, (s, r)=>{
+      if (s!=200) alert("ERROR["+s+"]: "+r);
+      else {
+        treeRoot.removeChild(treeRoot.childNodes[0]);
+        httpGet(treeRoot, "/");
+      }
+    });
   }
 
   function httpGet(parent, path){
-    requests.add("GET", _edit, { list: path }, getCb(parent, path));
+    requests.add("GET", _edit, { list: path }, (s, r)=>{
+      if (s==200) addList(parent, path, JSON.parse(r));
+    } );
   }
 
   httpGet(treeRoot, "/");
@@ -506,14 +498,11 @@ function createEditor(element, file, lang, theme, type){
   }
 
   var editor = ace.edit(element);
-  function httpPostProcessRequest(status, responseText){
-    if(status != 200) alert("ERROR["+status+"]: "+responseText);
-  }
   function httpPost(filename, data, type){
     if (/json/i.test(type)) try { data = JSON.stringify(JSON.parse(data)); } catch (e) { if (!confirm("Error in JSON.\nSave?\n\n"+e)) return; }
     var formData = new FormData();
     formData.append("data", new Blob([data], { type: type }), filename);
-    requests.add("POST", _edit, formData, httpPostProcessRequest);
+    requests.add("POST", _edit, formData, (s,r)=>{ if (s != 200) alert("ERROR["+s+"]: "+r); });
   }
   function pJ(json){ // prettyJson
     try {
@@ -610,7 +599,7 @@ function onBodyLoad(){
 <script id='ace' src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.23.4/ace.js" type="text/javascript" charset="utf-8"></script>
 <script>
   if  (typeof ace.edit == "undefined") {
-    var script = document.createElement('script');
+    var script = ce('script');
     script.src = "/ace.js";
     script.async = false;
     document.head.appendChild(script);
