@@ -828,6 +828,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 //, _ledsDirty(nullptr)
 , display(nullptr)
 , virtualDisp(nullptr)
+, _chainType((uint8_t)CHAIN_NONE) // default for quarter-scan panels that do not use chaining
 {
   #ifdef WLED_DEBUG_BUS
   size_t lastHeap = getFreeHeapSize();
@@ -956,9 +957,8 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 
   // for quad-scan panels or 2 or more rows we create a virtual panel that maps to the physical one
   if (_rows > 1 || isOffRefreshRequired()) {  // quarter-scan panels need virtual panel (hijack off-refresh)
-    PANEL_CHAIN_TYPE chainType = CHAIN_NONE;  // default for quarter-scan panels that do not use chaining
-    if (_rows > 1 || _cols > 1) chainType = CHAIN_BOTTOM_LEFT_UP; // CHAIN_TOP_RIGHT_DOWN might be more natural fit
-    virtualDisp = new(std::nothrow) VirtualMatrixPanel((*display), _rows, _cols, dim[0], dim[1], chainType);
+    if (_rows > 1 || _cols > 1) _chainType = bc.pins[4]==255 ? (uint8_t)CHAIN_BOTTOM_LEFT_UP : bc.pins[4]; // CHAIN_TOP_RIGHT_DOWN might be more natural fit
+    virtualDisp = new(std::nothrow) VirtualMatrixPanel((*display), _rows, _cols, dim[0], dim[1], (PANEL_CHAIN_TYPE)_chainType);
     if (virtualDisp) {
       virtualDisp->setRotation(0);
       // adjust scan rate based on height
@@ -1096,7 +1096,7 @@ size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
     pinArray[1] = mxconfig.mx_height; // 16-64
     pinArray[2] = chainLength;        // 1-16 (invalid values: 7, 10, 11)
     pinArray[3] = (uint8_t)mxconfig.driver;
-    pinArray[4] = 255;                // reserved (might be used for brightness limitation)
+    pinArray[4] = _chainType;
     getHub75Pins(_type, &pinArray[5]);// ignoreable extension
   }
   return 5 + HUB75_PIN_COUNT;

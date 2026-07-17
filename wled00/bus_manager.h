@@ -511,6 +511,7 @@ class BusHub75Matrix : public Bus {
     //byte *_ledsDirty;
     MatrixPanel_I2S_DMA *display;
     VirtualMatrixPanel  *virtualDisp;
+    uint8_t _chainType;
     static uint8_t _customPins[14]; // another option would be to allocate memory dynamically (if needed), but this is simpler for now
 };
 #endif
