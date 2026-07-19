@@ -35,12 +35,12 @@ var cfg = {
 };
 // [year, month (0 -> January, 11 -> December), day, duration in days, image url]
 var hol = [
-	[0, 11, 24, 4, "https://aircoookie.github.io/xmas.png"],		// christmas
+	[0, 11, 24, 4, "https://aircoookie.github.io/xmas.png"],        // christmas
 	[0, 2, 17, 1, "https://images.alphacoders.com/491/491123.jpg"], // st. Patrick's day
-	[2026, 3, 5, 2, "https://aircoookie.github.io/easter.png"],		// easter 2025
-	[2027, 2, 28, 2, "https://aircoookie.github.io/easter.png"],	// easter 2027
-	[0, 6, 4, 1, "https://images.alphacoders.com/516/516792.jpg"],	// 4th of July
-	[0, 0, 1, 1, "https://images.alphacoders.com/119/1198800.jpg"]	// new year
+	[2028, 3, 16, 2, "https://aircoookie.github.io/easter.png"],    // easter 2028
+	[2027, 2, 28, 2, "https://aircoookie.github.io/easter.png"],    // easter 2027
+	[0, 6, 4, 1, "https://images.alphacoders.com/516/516792.jpg"],  // 4th of July
+	[0, 0, 1, 1, "https://images.alphacoders.com/119/1198800.jpg"]  // new year
 ];
 
 var cpick = new iro.ColorPicker("#picker", {
@@ -59,6 +59,7 @@ function sCol(na, col) {d.documentElement.style.setProperty(na, col);}
 function gId(c) {return d.getElementById(c);}
 function gEBCN(c) {return d.getElementsByClassName(c);}
 function qSA(s) { return d.querySelectorAll(s); }
+function cE(s) { return d.createElement(s); }
 function isEmpty(o) {for (const i in o) return false; return true;}
 function isObj(i) {return (i && typeof i === 'object' && !Array.isArray(i));}
 function isNumeric(n) {return !isNaN(parseFloat(n)) && isFinite(n);}
@@ -181,7 +182,7 @@ function cTheme(light) {
 function loadBg() {
 	const { url: iUrl, rnd: iRnd } = cfg.theme.bg;
 	const bg = gId('bg');
-	const img = d.createElement("img");
+	const img = cE("img");
 	img.src = iUrl;
 	if (!iUrl || iRnd) {
 		const today = new Date();
@@ -207,7 +208,7 @@ function loadSkinCSS(cId)
 	if (!gId(cId))	// check if element exists
 	{
 		var h  = d.getElementsByTagName('head')[0];
-		var l  = d.createElement('link');
+		var l  = cE('link');
 		l.id   = cId;
 		l.rel  = 'stylesheet';
 		l.type = 'text/css';
@@ -216,6 +217,39 @@ function loadSkinCSS(cId)
 		h.appendChild(l);
 	}
 }
+
+// takes state object (and passes it to inject code if loaded)
+function loadUmInject(s) {
+	let safeInject = () => { if (typeof umInject == "function") try { umInject(s); } catch (e) { console.log(e); } };
+	if (gId("umInj")) {
+		safeInject(); // already loaded
+	} else {
+		let scE = cE("script");
+		scE.id = "umInj";
+		scE.src = getURL("/um.js");
+		scE.async = false;
+		scE.onload = () => { safeInject(); };
+		scE.onerror = (e) => {
+			console.log("Usermod inject script not present or failed to load", e);
+		};
+		d.body.appendChild(scE);
+	}
+}
+
+/*
+// sample umInject function that adds "Hello" text to segment box (content supplied by usermod)
+function umInject(s) {
+	// state object "s" not used in the example
+	qSA("#segcont div.lstI .segin").forEach((s,i)=>{
+		if (s.querySelector("div#cust"+i)) return;
+		let div = cE("div");
+		div.id = "cust"+i;
+		div.classList.add("lbl-l");
+		div.innerText = "Hello "+i;
+		s.appendChild(div);
+	});
+}
+*/
 
 function getURL(path) {
 	return (loc ? locproto + "//" + locip : "") + path;
@@ -287,8 +321,8 @@ function onLoad()
 			// load and populate effects
 			setTimeout(()=>{loadFX(()=>{
 				loadPalettesData(()=>{
-					requestJson();// will load presets and create WS
-					if (cfg.comp.css) setTimeout(()=>{loadSkinCSS('skinCss')},50);
+					if (cfg.comp.css) loadSkinCSS('skinCss');
+					setTimeout(requestJson,25);// will load presets and create WS
 				});
 			})},50);
 		});
@@ -1558,6 +1592,7 @@ function readState(s,command=false)
 	selectedFx = i.fx;
 	redrawPalPrev(); // if any color changed (random palette did at least)
 	updateUI();
+	if (lastinfo.u) loadUmInject(s); // will call umInject(s) if already loaded
 	return true;
 }
 
@@ -1745,12 +1780,12 @@ function requestJson(command=null)
 		if (json.info) {
 			let i = json.info;
 			let loadCustomPalettes = isEmpty(lastinfo);
-			parseInfo(i);
+			parseInfo(i); // populates lastinfo
 			if (loadCustomPalettes) {
 				// append custom palettes (when loading for the 1st time, previews are already loaded)
 				if (!isEmpty(i) && i.cpalcount) {
 					for (let j = 0; j<i.cpalcount; j++) {
-						let div = d.createElement("div");
+						let div = cE("div");
 						gId('pallist').appendChild(div);
 						div.outerHTML = generateListItemHtml(
 							'palette',
@@ -1779,7 +1814,7 @@ function requestJson(command=null)
 				wsRpt = 0;
 				if (!(ws?.readyState === WebSocket.OPEN)) makeWS();
 			});
-		},25);
+		}, 50);
 		reqsLegal = true;
 		retry = false;
 	})
@@ -3059,16 +3094,18 @@ function formatArr(pl) {
 
 function expand(i)
 {
-	var seg = i<100 ? gId('seg' +i) : gId(`p${i-100}o`);
-	let ps = gId("pcont").children; // preset wrapper
-	if (i>100) for (let p of ps) { p.classList.remove('selected'); if (p!==seg) p.classList.remove('expanded'); } // collapse all other presets & remove selected
-
-	seg.classList.toggle('expanded');
-
+	let s = gId('seg'+i);
 	// presets
-	if (i >= 100) {
-		var p = i-100;
-		if (seg.classList.contains('expanded')) {
+	if (i > 100) {
+		let p = i-100;
+		let pN = s.parentNode; // we need parent node (<div id="pXXo">) for presets
+		pN.classList.toggle('expanded');
+		// collapse all other presets & remove selected
+		for (let c of gId("pcont").children) {
+			c.classList.remove('selected');
+			if (c !== pN) c.classList.remove('expanded');
+		}
+		if (pN.classList.contains('expanded')) {
 			if (isPlaylist(p)) {
 				plJson[p] = pJson[p].playlist;
 				// make sure all keys are present in plJson[p]
@@ -3076,24 +3113,26 @@ function expand(i)
 				if (isNaN(plJson[p].repeat)) plJson[p].repeat = 0;
 				if (!plJson[p].r) plJson[p].r = false;
 				if (isNaN(plJson[p].end)) plJson[p].end = 0;
-				gId('seg' +i).innerHTML = makeP(p,true);
+				s.innerHTML = makeP(p,true);
 				refreshPlE(p);
 			} else {
-				gId('seg' +i).innerHTML = makeP(p);
+				s.innerHTML = makeP(p);
 			}
-			var papi = papiVal(p);
+			let papi = papiVal(p);
 			gId(`p${p}api`).value = papi;
 			if (papi.indexOf("Please") == 0) gId(`p${p}cstgl`).checked = false;
 			tglCs(p);
 			gId('putil').classList.remove('staybot');
 		} else {
 			updatePA();
-			gId('seg' +i).innerHTML = "";
+			s.innerHTML = "";
 			gId('putil').classList.add('staybot');
 		}
+	} else {
+		s.classList.toggle('expanded');
 	}
 
-	seg.scrollIntoView({
+	s.scrollIntoView({
 		behavior: 'smooth',
 		block: 'center'
 	});
@@ -3210,7 +3249,7 @@ function tooltip(cont=null)
 		element.addEventListener("pointerover", ()=>{
 			// save title
 			element.setAttribute("data-title", element.getAttribute("title"));
-			const tooltip = d.createElement("span");
+			const tooltip = cE("span");
 			tooltip.className = "tooltip";
 			tooltip.textContent = element.getAttribute("title");
 
@@ -3248,7 +3287,7 @@ function simplifyUI() {
 	// Create dropdown dialog
 	function createDropdown(id, buttonText, dialogElements = null) {
 		// Create dropdown dialog
-		const dialog = document.createElement("dialog");
+		const dialog = cE("dialog");
 		// Move every dialogElement to the dropdown dialog or if none are given, move all children of the element with the given id
 		if (dialogElements) {
 			dialogElements.forEach((e) => {
@@ -3261,7 +3300,7 @@ function simplifyUI() {
 		}
 
 		// Create button for the dropdown
-		const btn = document.createElement("button");
+		const btn = cE("button");
 		btn.id = id + "btn";
 		btn.classList.add("btn");
 		btn.innerText = buttonText;
@@ -3309,7 +3348,7 @@ function simplifyUI() {
 
 	// Hide palette label
 	gId("pall").style.display = "none";
-	gId("Colors").insertBefore(document.createElement("br"), gId("pall"));
+	gId("Colors").insertBefore(cE("br"), gId("pall"));
 	// Hide effect label
 	gId("modeLabel").style.display = "none";
 

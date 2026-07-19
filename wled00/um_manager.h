@@ -80,6 +80,7 @@ class Usermod {
     #ifndef WLED_DISABLE_ESPNOW
     virtual bool onEspNowMessage(uint8_t* sender, uint8_t* payload, uint8_t len) { return false; } // fired upon ESP-NOW message received
     #endif
+    virtual void addUIInjectCode(Print &dest) {}
     virtual void onUpdateBegin(bool) {}                                      // fired prior to and after unsuccessful firmware update
     virtual void onStateChange(uint8_t mode) {}                              // fired upon WLED state change
     virtual uint16_t getId() {return USERMOD_ID_UNSPECIFIED;}
@@ -120,6 +121,7 @@ namespace UsermodManager {
 #ifndef WLED_DISABLE_ESPNOW
   bool onEspNowMessage(uint8_t* sender, uint8_t* payload, uint8_t len);
 #endif
+  void addUIInjectCode(Print &dest);
   void onUpdateBegin(bool);
   void onStateChange(uint8_t);
   bool add(Usermod* um);

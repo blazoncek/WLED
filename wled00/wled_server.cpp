@@ -573,11 +573,15 @@ void initServer()
     request->send(200, FPSTR(CONTENT_TYPE_PLAIN), (String)getFreeHeapSize());
   });
 
-#ifdef WLED_ENABLE_USERMOD_PAGE
-  server.on("/u", HTTP_GET, [](AsyncWebServerRequest *request) {
-    handleStaticContent(request, "", 200, FPSTR(CONTENT_TYPE_HTML), PAGE_usermod, PAGE_usermod_length);
+  server.on(F("/um.js"), HTTP_GET, [](AsyncWebServerRequest *request) {
+    AsyncResponseStream *response = request->beginResponseStream(FPSTR(CONTENT_TYPE_JAVASCRIPT));
+    response->addHeader(FPSTR(h_cache_control), F("no-store"));
+    response->addHeader(F("Expires"), F("0"));
+    response->print(F("function umInject(s){"));
+    UsermodManager::addUIInjectCode(*response);
+    response->print(F("}"));
+    request->send(response);
   });
-#endif
 
   server.on(F("/teapot"), HTTP_GET, [](AsyncWebServerRequest *request){
     serveMessage(request, 418, F("418. I'm a teapot."), F("(Tangible Embedded Advanced Project Of Twinkling)"), 254);

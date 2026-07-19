@@ -55,6 +55,11 @@ bool UsermodManager::onEspNowMessage(uint8_t* sender, uint8_t* payload, uint8_t 
   return false;
 }
 #endif
+void UsermodManager::addUIInjectCode(Print &dest) {
+  // add JavaScript code to dest i.e.
+  // dest.print(F("alert(\"Hello world!\");"));
+  for (const auto &ums : usermods) ums->addUIInjectCode(dest);
+}
 
 /*
  * Enables usermods to lookup another Usermod.
