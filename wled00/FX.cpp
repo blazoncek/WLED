@@ -939,7 +939,7 @@ static const char _data_FX_MODE_CHASE_FLASH_RANDOM[] PROGMEM = "Chase Flash Rnd@
  */
 uint16_t mode_running_random(void) {
   uint32_t cycleTime = 25 + (3 * (uint32_t)(255 - SEGMENT.speed));
-  uint32_t it = strip.now / cycleTime;
+  uint16_t it = strip.now / cycleTime;
   if (SEGENV.call == 0) SEGENV.aux0 = hw_random(); // random seed for PRNG on start
 
   const auto abs  = [](int x) { return x<0 ? -x : x; };
