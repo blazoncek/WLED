@@ -54,25 +54,80 @@ function tooltip(cont=null) {
 		});
 	});
 };
+// sequential loading of external resources (JS or CSS) with retry, calls init() when done
+function loadResources(files, init = undefined) {
+	let j = [], c = [];
+	files.forEach(e=>{
+		let x = e.substring(e.lastIndexOf('.')+1);
+		if (x == 'css') c.push(e);
+		if (x == 'js') j.push(e);
+	});
+	loadJS(j, false, ()=>{loadCss(c)}, init);
+}
+function loadCss(files) {
+	var r = 3;
+	const next = () => {
+		if (files.length) {
+			const file = files.shift();
+			let ext = file.substring(file.lastIndexOf('.')+1)
+			if (ext.substring(0,3) == 'css') {
+				let el = cE('link');
+				el.rel = 'stylesheet';
+				el.href = file.substring(0,4) == 'http' ? file : getURL(file);
+				el.onload = () => {
+					r = 3;
+					setTimeout(next,10); // give ESP some slack
+				};
+				el.onerror = () => {
+					if (r--) {
+						files.unshift(file); // retry
+						setTimeout(next, 150);
+					}
+				};
+				const st = d.head.querySelector('style');
+				if (st) d.head.insertBefore(el, st); // insert before any <style> to allow overrides
+				else d.head.appendChild(el);
+			}
+		}
+	};
+	next();
+}
 // https://www.educative.io/edpresso/how-to-dynamically-load-a-js-file-in-javascript
-function loadJS(FILE_URL, async = true, preGetV = undefined, postGetV = undefined) {
-	let scE = cE("script");
-	scE.setAttribute("src", FILE_URL);
-	scE.setAttribute("type", "text/javascript");
-	scE.setAttribute("async", async);
-	d.body.appendChild(scE);
-	// success event
-	scE.addEventListener("load", () => {
-		//console.log("File loaded");
-		if (preGetV) preGetV();
-		if (GetV) GetV();
-		if (postGetV) postGetV();
-	});
-	// error event
-	scE.addEventListener("error", (ev) => {
-		console.log("Error on loading file", ev);
-		alert("Loading of configuration script failed.\nIncomplete page data!");
-	});
+function loadJS(files, async = true, preGetV = undefined, postGetV = undefined) {
+	if (!Array.isArray(files)) files = [files]; // compatibility with old API
+	var r = 3;
+	const next = () => {
+		if (files.length) {
+			const file = files.shift();
+			let ext = file.substring(file.lastIndexOf('.')+1)
+			if (ext.substring(0,2) == 'js') {
+				let el = cE('script');
+				el.async = async;
+				el.src = file.substring(0,4) == 'http' ? file : getURL(file);
+				el.type = "text/javascript";
+				el.onload = () => {
+					r = 3; // reset retry counter
+					setTimeout(next,10); // give ESP some slack
+				};
+				el.onerror = (e) => {
+					console.log("Error loading JS file", e);
+					// retry & reduce retry count
+					if (r--) {
+						files.unshift(file);
+						setTimeout(next, 150);
+					} else {
+						alert("Loading script failed.\nIncomplete page data!");
+					}
+				};
+				d.body.appendChild(el);
+			}
+		} else if (!async) {
+			if (preGetV) preGetV();
+			if (GetV) GetV(); // GetV() injected by settings script
+			if (postGetV) postGetV();
+		}
+	};
+	next();
 }
 function getLoc() {
 	let l = window.location;
@@ -109,9 +164,9 @@ function showToast(text, error = false) {
 }
 function uploadFile(fileObj, name) {
 	var req = new XMLHttpRequest();
-	req.addEventListener('load', function(){showToast(this.responseText,this.status >= 400)});
-	req.addEventListener('error', function(e){showToast(e.stack,true);});
-	req.open("POST", "/upload");
+	req.onload = ()=>{showToast(this.responseText,this.status >= 400);};
+	req.onerror = (e)=>{showToast(e.stack,true);};
+	req.open("POST", getURL("/upload"));
 	var formData = new FormData();
 	formData.append("data", fileObj.files[0], name);
 	req.send(formData);
