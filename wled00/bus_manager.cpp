@@ -829,6 +829,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 , display(nullptr)
 , virtualDisp(nullptr)
 , _chainType((uint8_t)CHAIN_NONE) // default for quarter-scan panels that do not use chaining
+, _colorOrder(bc.colorOrder)
 {
   #ifdef WLED_DEBUG_BUS
   size_t lastHeap = getFreeHeapSize();
@@ -905,7 +906,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     return;
   }
 
-  switch (bc.colorOrder) {
+  switch (_colorOrder) {
     case COL_ORDER_BGR:
       std::swap(mxconfig.gpio.r1, mxconfig.gpio.b1);
       std::swap(mxconfig.gpio.r2, mxconfig.gpio.b2);
@@ -932,6 +933,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
       break;
     case COL_ORDER_RGB:
     default:
+      _colorOrder = COL_ORDER_RGB;
       break;
   }
 

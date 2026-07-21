@@ -492,6 +492,7 @@ class BusHub75Matrix : public Bus {
     [[gnu::hot]] void setPixelColor(unsigned pix, uint32_t c) override;
     void show() override;
     void setBrightness(uint8_t b) override;
+    uint8_t  getColorOrder() const override  { return _colorOrder; }
     uint16_t getFrequency() const override;
     size_t getPins(uint8_t* pinArray = nullptr) const override;
     size_t getBusSize() const override;
@@ -512,6 +513,7 @@ class BusHub75Matrix : public Bus {
     MatrixPanel_I2S_DMA *display;
     VirtualMatrixPanel  *virtualDisp;
     uint8_t _chainType;
+    uint8_t _colorOrder;
     static uint8_t _customPins[14]; // another option would be to allocate memory dynamically (if needed), but this is simpler for now
 };
 #endif

@@ -157,7 +157,7 @@
 				}
 			} else if (isHub75(t)) {
 				dbl += 2304; // approximate size of driver memory requirements (excluding buffers)
-				mul = 2;     // double buffer
+				//mul = 2;     // double buffer (not used, see bus_manager mxconfig.double_buff)
 			}
 			return len * ch * mul + dbl;
 		}
@@ -250,7 +250,7 @@
 			gId("pc").textContent = (sLC == sPC) ? "":"(" + sPC + " physical)";
 
 			// memory usage and warnings
-			memu += sLC * (4 + (gN("MS").checked ? 0 : 4)); // pixel buffer (4 bytes per pixel) + at least 1 segment buffer
+			memu += sLC * (4 + (gN("MS").checked ? 0 : 4)); // pixel buffer (4 bytes per pixel) + at least 1 segment buffer (per output segment added in getMem())
 			gId('m0').innerHTML = memu;
 			bquot = memu / maxM * 100;
 			gId('dbar').style.background = `linear-gradient(90deg, ${bquot > 60 ? (bquot > 90 ? "red":"orange"):"#ccc"} 0 ${bquot}%, #444 ${bquot}% 100%)`;
