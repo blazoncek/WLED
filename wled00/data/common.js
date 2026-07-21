@@ -173,3 +173,19 @@ function uploadFile(fileObj, name) {
 	fileObj.value = '';
 	return false;
 }
+// connect to WebSocket, use parent WS or open new, callback function gets passed the new WS object
+function connectWs(onOpenMsg) {
+	let ws = top?.window?.ws;
+	// reuse if open
+	if (ws && ws.readyState === WebSocket.OPEN) {
+		if (onOpenMsg) ws.send(onOpenMsg);
+	} else {
+		// create new ws connection
+		getLoc(); // ensure globals are up to date
+		let url = loc ? getURL('/ws').replace("http", "ws") : "ws://" + window.location.hostname + "/ws";
+		ws = new WebSocket(url);
+		ws.binaryType = "arraybuffer";
+		if (onOpenMsg) ws.onopen = () => ws.send(onOpenMsg);
+	}
+	return ws;
+}
