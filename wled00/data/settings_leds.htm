@@ -794,21 +794,21 @@ Swap: <select id="xw${s}" name="XW${s}">
 								LK = addDD(LK);            // pin 3 is number of panels/chain type for Hub75
 								LK.classList.remove("pin");// not a pin select
 								LK.classList.add("panel");
-								addO(LK, "1x1", 1);
-								addO(LK, "2x1", 2);
-								addO(LK, "1x2", 13);       // vertical (11 + 2)
+								addO(LK, "1", 1);
+								addO(LK, "2h", 2);
+								addO(LK, "2v", 13);       // vertical (11 + 2)
 								if (!isS2()) {
-									addO(LK, "3x1", 3);
-									addO(LK, "1x3", 14);   // vertical (11 + 3)
-									addO(LK, "4x1", 4);
-									addO(LK, "1x4", 15);   // vertical (11 + 4)
+									addO(LK, "3h", 3);
+									addO(LK, "3v", 14);   // vertical (11 + 3)
+									addO(LK, "4h", 4);
+									addO(LK, "4v", 15);   // vertical (11 + 4)
 									addO(LK, "2x2", 5);
 									if (isS3()) {
-										addO(LK, "3x2", 6);
-										addO(LK, "4x2", 8);
-										addO(LK, "3x3", 9);
-										addO(LK, "4x3", 12);
-										addO(LK, "4x4", 16);
+										addO(LK, "3h x 2v", 6);
+										addO(LK, "4h x 2v", 8);
+										addO(LK, "3h x 3v", 9);
+										addO(LK, "4h x 3v", 12);
+										addO(LK, "4h x 4v", 16);
 									}
 								}
 							}

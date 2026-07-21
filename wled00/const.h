@@ -474,16 +474,24 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 
 #ifndef MAX_LED_MEMORY
   #ifdef ESP8266
-    #define MAX_LED_MEMORY 5120
+    #define MAX_LED_MEMORY (5*1024)
   #else
     #if defined(ARDUINO_ARCH_ESP32S2)
-      #define MAX_LED_MEMORY 16384
+      #ifdef BOARD_HAS_PSRAM
+        #define MAX_LED_MEMORY (48*1024)
+      #else
+        #define MAX_LED_MEMORY (24*1024)
+      #endif
     #elif defined(ARDUINO_ARCH_ESP32C3)
-      #define MAX_LED_MEMORY 32768
+      #define MAX_LED_MEMORY (96*1024)
     #elif defined(ARDUINO_ARCH_ESP32S3)
-      #define MAX_LED_MEMORY 131072
+      #ifdef BOARD_HAS_PSRAM
+        #define MAX_LED_MEMORY (224*1024)
+      #else
+        #define MAX_LED_MEMORY (128*1024)
+      #endif
     #else
-      #define MAX_LED_MEMORY 65536
+      #define MAX_LED_MEMORY (64*1024)
     #endif
   #endif
 #endif
