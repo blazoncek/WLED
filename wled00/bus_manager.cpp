@@ -854,7 +854,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   //mxconfig.double_buff = true;  // need to call flipDMABuffer() in each show()
   mxconfig.driver = (HUB75_I2S_CFG::shift_driver)bc.pins[3];
   // mxconfig.latch_blanking = 3;
-  mxconfig.i2sspeed = (HUB75_I2S_CFG::clk_speed)(bc.frequency * 1000); // correctly set in set.cpp (8000, 16000, 20000)
+  mxconfig.i2sspeed = (HUB75_I2S_CFG::clk_speed)(max((uint16_t)8000,bc.frequency) * 1000); // correctly set in set.cpp (8000, 16000, 20000)
   // mxconfig.min_refresh_rate = 90;
   // mxconfig.min_refresh_rate = 120;
   mxconfig.clkphase = bc.reversed;
@@ -1079,7 +1079,7 @@ void BusHub75Matrix::deallocatePins() {
 }
 
 uint16_t BusHub75Matrix::getFrequency() const { 
-  return (uint16_t)(display ? (unsigned)display->getCfg().i2sspeed / 1000 : 0);
+  return (uint16_t)(display ? (unsigned)display->getCfg().i2sspeed / 1000 : 8000);
 }
 
 size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {

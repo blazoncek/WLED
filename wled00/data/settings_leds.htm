@@ -203,7 +203,11 @@
 				let t = parseInt(gN("LT"+n).value);     // LED type SELECT
 				LC.max = isAna(t) ? 1 : (isDig(t) ? maxPB : maxL); // set max value
 				// update LED count for Hub75 panels
-				if (isHub75(t)) LC.value = parseInt(gN("G0"+n).value) * parseInt(gN("G1"+n).value) * parseInt(gN("G2"+n).value);
+				if (isHub75(t)) {
+					let chains = parseInt(gN("G2"+n).value);
+					if (chains > 12 && chains < 16) chains -= 11; // undo chain selection hack
+					LC.value = parseInt(gN("G0"+n).value) * parseInt(gN("G1"+n).value) * chains;
+				}
 				let c = parseInt(LC.value,10);          // get LED count
 				if (!customStarts || !startsDirty[i]) gId("ls"+n).value = sLC; // update start value
 				gId("ls"+n).disabled = !customStarts;   // enable/disable field editing
@@ -786,9 +790,9 @@ Swap: <select id="xw${s}" name="XW${s}">
 								addO(LK, "DP3246/SM5368", 6);
 							}
 							if (p == 2 && LK.tagName === "INPUT") {
-								// this is a hack to allow dropdown selection
-								LK = addDD(LK);           // pin 3 is number of panels for Hub75
-								LK.classList.remove("pin");     // not a pin select
+								// this is a hack to allow chains dropdown selection
+								LK = addDD(LK);            // pin 3 is number of panels/chain type for Hub75
+								LK.classList.remove("pin");// not a pin select
 								LK.classList.add("panel");
 								addO(LK, "1x1", 1);
 								addO(LK, "2x1", 2);
