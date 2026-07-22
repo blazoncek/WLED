@@ -216,6 +216,24 @@ function loadSkinCSS(cId) {
 }
 // takes state object (and passes it to inject code if loaded)
 function loadUmInject(s) {
+	// check if we have a usermod that supports injection
+	// usermod needs to implement addToJsonState() and add "JS" property with "true" value, i.e. state:{..., mod:{ on:true, JS:true,...}, ...}
+	let hasJS = false;
+	(function JScheck(o/*, s*/) {
+		if (!isObj(o)) return; // check only actual objects
+    	for (var p in o) {
+			if (Object.hasOwn(o, p)) {
+				if (typeof o[p] == "object") { // recurse arrays too (but ignore content)
+					JScheck(o[p]/*, s + '.' + p*/);
+				} else {
+					//console.log(s+'.' + p + ":" + o[p]);
+					if (p == "JS" && o[p] == true) hasJS = true;
+				}
+			}
+		}
+	})(s/*, ""*/);
+	if (!hasJS) return;
+
 	let safeInject = () => { if (typeof umInject == "function") try { umInject(s); } catch (e) { console.log(e); } };
 	if (gId("umInj")) {
 		safeInject(); // already loaded
