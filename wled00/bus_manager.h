@@ -509,11 +509,11 @@ class BusHub75Matrix : public Bus {
 
   private:
     unsigned _matrixWidth;
-    //byte *_ledsDirty;
     MatrixPanel_I2S_DMA *display;
     VirtualMatrixPanel  *virtualDisp;
     uint8_t _chainType;
     uint8_t _colorOrder;
+    uint8_t _rows, _cols; // number of rows and columns of panels
     static uint8_t _customPins[14]; // another option would be to allocate memory dynamically (if needed), but this is simpler for now
 };
 #endif

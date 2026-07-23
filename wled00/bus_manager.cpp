@@ -830,6 +830,8 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 , virtualDisp(nullptr)
 , _chainType((uint8_t)CHAIN_NONE) // default for quarter-scan panels that do not use chaining
 , _colorOrder(bc.colorOrder)
+, _rows(1)
+, _cols(1)
 {
   #ifdef WLED_DEBUG_BUS
   size_t lastHeap = getFreeHeapSize();
@@ -862,44 +864,42 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 
   uint8_t chainLength = constrain(bc.pins[2], 1, 16); // number of chained panels
   // pre-calcualte rows and columns based on chain length
-  uint8_t _rows, _cols;
-  // possible combinations: (simple, horizontal) 1x1, 2x1, 3x1, 4x1, (complex & vertical) 2x2=5, 3x2, 4x2, 3x3, 4x3, 1x2=13, 1x3=14, 1x4=15, 4x4
-  if      (chainLength <   5) { _rows = 1; _cols = chainLength; }       // 1 to 4 panels in a single row
+  // possible combinations: (simple, horizontal) 1, 2, 3, 4, (complex & vertical) 2x2=5, 3h x 2v, 4h x 2v, 3h x 3v, 4h x 3v, 2v=13, 3v=14, 4v=15, 4h x 4v
+  if      (chainLength <   5) {            _cols = chainLength;     }   // 1 to 4 panels in a single row
   else if (chainLength <   9) { _rows = 2; _cols = chainLength / 2; }   // 7 does not exist and 5 is rounded down for 2(x2)
   else if (chainLength <  13) { _rows = 3; _cols = chainLength / 3; }   // 10 & 11 do not exist
-  else if (chainLength <  16) { _rows = chainLength - 11; _cols = 1; }  // hack for 1x2, 1x3, 1x4 vertical panels
-  else if (chainLength >= 16) { _rows = 4; _cols = 4; }
-  mxconfig.chain_length = _rows * _cols;  // allows chaining multiple panels
-
-  mxconfig.mx_width = dim[0];   // panel width in pixels
-  mxconfig.mx_height = dim[1];  // panel height in pixels
-  if (isOffRefreshRequired()) { // we reuse off refresh flag for quarter-scan panels
-    mxconfig.mx_width = dim[0] << 1;  // panel width in pixels for quarter-scan is double
-    mxconfig.mx_height = dim[1] >> 1; // panel height in pixels for quarter-scan is half
-  }
-
+  else if (chainLength <  16) { _rows = chainLength - 11;           }   // hack for 1x2, 1x3, 1x4 vertical panels
+  else if (chainLength >= 16) { _rows = 4; _cols = 4;               }
   // check for too many pixels & reduce panel count if necessary
   // ESP32: MAX_LEDS (8192) will consume 32k for strip LED buffer + 32k for (1) segment buffer = 64k RAM!!!
   // S3: MAX_LEDS (16384) will consume 64k for strip LED buffer + 64k for (1) segment buffer = 128k RAM!!!
   // S2: MAX_LEDS (2048) will consume 8k for strip LED buffer + 8k for (1) segment buffer = 16k RAM!!!
   // all will also need driver's internal buffers (12-bit, 8-bit, 4-bit or 3-bit depth)
-  while (mxconfig.mx_height * mxconfig.mx_width * mxconfig.chain_length > MAX_LEDS) {
-    mxconfig.chain_length--;
-    if (mxconfig.chain_length == 10 || mxconfig.chain_length == 11) mxconfig.chain_length = 9; // skip non-existing 10 & 11
-    if (mxconfig.chain_length == 7) mxconfig.chain_length--;
+  while (mxconfig.mx_height * mxconfig.mx_width * _rows * _cols > MAX_LEDS) {
+    if (_rows > 1) _rows--;       // reduce vertical panels
+    else           _cols--;       // reduce horizontal panels
   }
-  if (mxconfig.chain_length == 0) {
-    DEBUGBUS_PRINTLN("No panels to drive (too large panel?)");
-    return;
+  chainLength = _rows * _cols;    // allows chaining multiple panels
+  if (chainLength == 0) {
+    DEBUGBUS_PRINTLN("No panels to drive (too large panel?)\nFallback to one 32x32 panel.");
+    chainLength = 1;
+    dim[0] = dim[1] = 32;         // fallback to 32x32 (acceptable for all ESPs)
+  }
+  mxconfig.chain_length = chainLength;
+  mxconfig.mx_width = dim[0];     // panel width in pixels
+  mxconfig.mx_height = dim[1];    // panel height in pixels
+  if (isOffRefreshRequired()) {   // we reuse off refresh flag for quarter-scan panels
+    mxconfig.mx_width = dim[0] << 1;  // panel width in pixels for quarter-scan is double
+    mxconfig.mx_height = dim[1] >> 1; // panel height in pixels for quarter-scan is half
   }
 
-  if (mxconfig.getPixelColorDepthBits() != 8) mxconfig.setPixelColorDepthBits(8); // this is the default
-#if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)// classic esp32, or esp32-s2: reduce bitdepth for large panels
-  if (mxconfig.mx_height >= 64) {
-    if      (mxconfig.chain_length * mxconfig.mx_width > 192) mxconfig.setPixelColorDepthBits(3);
-    else if (mxconfig.chain_length * mxconfig.mx_width > 64)  mxconfig.setPixelColorDepthBits(4);
-  }
+#if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)    // classic esp32, or esp32-s2: reduce bitdepth for large panels
+  int pixels = mxconfig.chain_length * mxconfig.mx_width * mxconfig.mx_height;
+  if (pixels > MAX_LEDS/2) {
+    mxconfig.setPixelColorDepthBits(pixels >= ((3 * MAX_LEDS) / 4) ? 4 : 6);  // reduce DMA memory
+  } else
 #endif
+    mxconfig.setPixelColorDepthBits(8); // this is the default
 
   if (getHub75Pins(_type, (uint8_t*)&(mxconfig.gpio)) == nullptr) {
     DEBUGBUS_PRINTLN(F("Failed to get HUB75 matrix pin configuration. Aborting!"));
@@ -959,7 +959,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 
   // for quad-scan panels or 2 or more rows we create a virtual panel that maps to the physical one
   if (_rows > 1 || isOffRefreshRequired()) {  // quarter-scan panels need virtual panel (hijack off-refresh)
-    if (_rows > 1 || _cols > 1) _chainType = bc.pins[4]==255 ? (uint8_t)CHAIN_BOTTOM_LEFT_UP : bc.pins[4]; // CHAIN_TOP_RIGHT_DOWN might be more natural fit
+    if (_rows > 1 || _cols > 1) _chainType = bc.pins[4]==255 || _rows == 1 ? (uint8_t)CHAIN_TOP_LEFT_DOWN : bc.pins[4];
     virtualDisp = new(std::nothrow) VirtualMatrixPanel((*display), _rows, _cols, dim[0], dim[1], (PANEL_CHAIN_TYPE)_chainType);
     if (virtualDisp) {
       virtualDisp->setRotation(0);
@@ -1000,15 +1000,12 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
     delay(18);  // experiment - give the driver a moment (~ one full frame @ 60hz) to settle
 
-    //_ledsDirty = (byte*) allocate_buffer(getBitArrayBytes(_len), BFRALLOC_ENFORCE_DRAM | BFRALLOC_CLEAR); // create LEDs dirty bits
-    //if (_ledsDirty == nullptr) {
-    //  cleanup();
-    //  DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA not started - not enough memory for dirty bits!"));
-    //  DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
-    //  return;  //  fail if we cannot get memory for the buffer
-    //}
-    //DEBUGBUS_PRINTLN(F("BusHub75Matrix LEDs dirty bit optimization enabled."));
-    //DEBUGBUS_PRINTF_P(PSTR("BusHub75Matrix LED buffers use %u bytes.\n"), getBitArrayBytes(_len));
+    #ifdef WLED_DEBUG_BUS
+    if (virtualDisp) {
+      virtualDisp->drawDisplayTest(); // draw text numbering on each screen to check connectivity
+      delay(250);
+    }
+    #endif
 
     display->clearScreen();   // initially clear the screen buffer
     DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA clear ok"));
@@ -1089,13 +1086,12 @@ size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
     const HUB75_I2S_CFG &mxconfig = display->getCfg();
     uint8_t chainLength = mxconfig.chain_length;
     // adjust for hack used in UI
-    if (virtualDisp != nullptr) {
-      // using complex display arrangement (vertical or multiple rows/columns)
-      if (mxconfig.chain_length <= 4) chainLength += 11;  // 1x2, 1x3, 1x4 arrangements
-      if (mxconfig.chain_length == 4 && virtualDisp->width() == virtualDisp->height()) chainLength = 5; // 2x2 arrangement
+    switch (_cols) {
+      case 1: if (_rows >  1) chainLength += 11; break; // vertical 2v, 3v, 4v chaining
+      case 2: if (_rows == 2) chainLength++;     break; // 2x2 chaining
     }
-    pinArray[0] = mxconfig.mx_width;  // 16-128
-    pinArray[1] = mxconfig.mx_height; // 16-64
+    pinArray[0] = mxconfig.mx_width;  // 32,64,128
+    pinArray[1] = mxconfig.mx_height; // 32,64,128
     pinArray[2] = chainLength;        // 1-16 (invalid values: 7, 10, 11)
     pinArray[3] = (uint8_t)mxconfig.driver;
     pinArray[4] = _chainType;
