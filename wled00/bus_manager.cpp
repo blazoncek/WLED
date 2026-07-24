@@ -731,39 +731,12 @@ void BusNetwork::cleanup() {
   #ifndef NO_CIE1931
     #define NO_CIE1931 1
   #endif
-  #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
-  #include <ESP32-VirtualMatrixPanel-I2S-DMA.h>
+#include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
+#include <ESP32-VirtualMatrixPanel-I2S-DMA.h>
 
-  static inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
-  static inline size_t getContiguousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest contiguous free block
+static inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
+static inline size_t getContiguousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest contiguous free block
   
-/*
-// functions to get/set bits in an array - based on functions created by @Brandon502 for GOL
-// used for tracking dirty LEDs in HUB75 matrix
-static bool getBitFromArray(const uint8_t* byteArray, size_t position) { // get bit value
-  size_t byteIndex = position >> 3; // position / 8
-  size_t bitIndex  = position & 7;  // position % 8
-  uint8_t byteValue = byteArray[byteIndex];
-  return (byteValue >> bitIndex) & 1;
-}
-
-static void setBitInArray(uint8_t* byteArray, size_t position, bool value) {  // set bit - with error handling for nullptr
-    size_t byteIndex = position >> 3; // position / 8
-    size_t bitIndex  = position & 7;  // position % 8
-    if (value) byteArray[byteIndex] |=  (uint8_t)(1U << bitIndex);
-    else       byteArray[byteIndex] &= ~(uint8_t)(1U << bitIndex);
-}
-
-static inline size_t getBitArrayBytes(size_t num_bits) { // number of bytes needed for an array with num_bits bits
-  return (num_bits + 7) >> 3; // (num_bits + 7) / 8
-}
-
-static inline void setBitArray(uint8_t* byteArray, size_t numBits, bool value) {  // set all bits to same value
-  size_t len = getBitArrayBytes(numBits);
-  memset(byteArray, value * 0xFF, len);
-}
-*/
-
 constexpr size_t HUB75_PIN_COUNT = sizeof(HUB75_I2S_CFG::gpio) / sizeof(int8_t);
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
 static uint8_t __portal[HUB75_PIN_COUNT]    PROGMEM = { 42, 41, 40, 38, 39, 37, 45, 36, 48, 35, 21, 47, 14,  2};
@@ -825,7 +798,6 @@ static const uint8_t * const getHub75Pins(uint8_t type, uint8_t *dest = nullptr)
 BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 : Bus(bc.type, bc.start, bc.autoWhite, bc.count, false, bc.refreshReq)
 , _matrixWidth(0)
-//, _ledsDirty(nullptr)
 , display(nullptr)
 , virtualDisp(nullptr)
 , _chainType((uint8_t)CHAIN_NONE) // default for quarter-scan panels that do not use chaining
@@ -896,7 +868,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)    // classic esp32, or esp32-s2: reduce bitdepth for large panels
   int pixels = mxconfig.chain_length * mxconfig.mx_width * mxconfig.mx_height;
   if (pixels > MAX_LEDS/2) {
-    mxconfig.setPixelColorDepthBits(pixels >= ((3 * MAX_LEDS) / 4) ? 4 : 6);  // reduce DMA memory
+    mxconfig.setPixelColorDepthBits(pixels > ((3 * MAX_LEDS) / 4) ? 4 : 6);   // reduce DMA memory
   } else
 #endif
     mxconfig.setPixelColorDepthBits(8); // this is the default
@@ -959,7 +931,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 
   // for quad-scan panels or 2 or more rows we create a virtual panel that maps to the physical one
   if (_rows > 1 || isOffRefreshRequired()) {  // quarter-scan panels need virtual panel (hijack off-refresh)
-    if (_rows > 1 || _cols > 1) _chainType = bc.pins[4]==255 || _rows == 1 ? (uint8_t)CHAIN_TOP_LEFT_DOWN : bc.pins[4];
+    if (_rows > 1 || _cols > 1) _chainType = bc.pins[4]==255 || _rows == 1 ? (uint8_t)CHAIN_NONE : bc.pins[4];
     virtualDisp = new(std::nothrow) VirtualMatrixPanel((*display), _rows, _cols, dim[0], dim[1], (PANEL_CHAIN_TYPE)_chainType);
     if (virtualDisp) {
       virtualDisp->setRotation(0);
@@ -1000,13 +972,6 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
     delay(18);  // experiment - give the driver a moment (~ one full frame @ 60hz) to settle
 
-    #ifdef WLED_DEBUG_BUS
-    if (virtualDisp) {
-      virtualDisp->drawDisplayTest(); // draw text numbering on each screen to check connectivity
-      delay(250);
-    }
-    #endif
-
     display->clearScreen();   // initially clear the screen buffer
     DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA clear ok"));
 
@@ -1021,10 +986,6 @@ void BusHub75Matrix::setPixelColor(unsigned pix, uint32_t c) {
   if (!_valid || pix >= _len) return;
   if (_cct >= 1900) c = colorBalanceFromKelvin(_cct, c);  //color correction from CCT
   c = gamma32Func(c);
-
-  // dirty bit optimization might not be necessary as each pixel is only update once per frame (see WS2812FX::show())
-  //if (c && !getBitFromArray(_ledsDirty, pix)) return;     // ignore black if pixel is already black
-  //setBitInArray(_ledsDirty, pix, (bool)c);                // dirty = true means "color is not BLACK"
 
   uint8_t r = R(c);
   uint8_t g = G(c);
@@ -1067,8 +1028,6 @@ void BusHub75Matrix::cleanup() {
     #endif
   }
   deallocatePins();
-  //free(_ledsDirty); // no need to check for nullptr
-  //_ledsDirty = nullptr;
 }
 
 void BusHub75Matrix::deallocatePins() {
