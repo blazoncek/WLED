@@ -528,13 +528,15 @@ class Segment {
     inline void  blendPixelColorRaw(unsigned i, CRGBA c, uint8_t b) const               { pixels[i].nblend(c, b); }
     inline void  fadePixelColorRaw(unsigned i, uint8_t b) const                         { pixels[i] = pixels[i].scale8_video(b); }  // pixels[i].nscale8(b); will crash ESP
     inline CRGBA getPixelColorRaw(unsigned i) const                                     { return pixels[i]; };
-  #ifndef WLED_DISABLE_2D
+    void setStripPixelColor(unsigned i, CRGBA c) const;
+      #ifndef WLED_DISABLE_2D
     inline static unsigned XY(unsigned x, unsigned y)                                   { return x + y*Segment::vWidth(); }
     inline void  setPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const              { pixels[XY(x,y)] = c; }
     inline void  addPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const              { pixels[XY(x,y)] = pixels[XY(x,y)].add(c); }           // pixels[XY(x,y)].nadd(c); will crash ESP
     inline void  blendPixelColorXYRaw(unsigned x, unsigned y, CRGBA c, uint8_t b) const { pixels[XY(x,y)].nblend(c, b); }
     inline void  fadePixelColorXYRaw(unsigned x, unsigned y, uint8_t b) const           { pixels[XY(x,y)] = pixels[XY(x,y)].scale8_video(b); }  // pixels[XY(x,y)].nscale8(b); will crash ESP
     inline CRGBA getPixelColorXYRaw(unsigned x, unsigned y) const                       { return pixels[XY(x,y)]; };
+    void setStripPixelColorXY(unsigned x, unsigned y, CRGBA c) const;
   #endif
     void resetIfRequired();         // sets all SEGENV variables to 0 and clears data buffer
 
@@ -588,6 +590,7 @@ class Segment {
     , aux0(0)
     , aux1(0)
     , data(nullptr)
+    , pixels(nullptr)
     , _dataLen(0)
     , _default_palette(6) // PartyColors
     , _capabilities(0)
@@ -595,6 +598,8 @@ class Segment {
     , _t(nullptr)
     {
       DEBUGFX_PRINTF_P(PSTR("-- Creating segment: %p [%d,%d:%d,%d]\n"), this, (int)start, (int)stop, (int)startY, (int)stopY);
+      // for very large matrices skip allocating pixel buffer (writes go directly to strip buffer -> no segment layering, limited transitions)
+      if (strip.getLengthTotal() > MAX_LEDS/2) return;
       // allocate render buffer (always entire segment), prefer IRAM/PSRAM. Note: impact on FPS with PSRAM buffer is low (<2% with QSPI PSRAM) on S2/S3
       pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
       if (!pixels) {
@@ -602,7 +607,7 @@ class Segment {
         DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
         extern byte errorFlag;
         errorFlag = ERR_NORAM_PX;
-        stop = 0; // mark segment as inactive/invalid
+        //stop = 0; // mark segment as inactive/invalid
       }
     }
 
@@ -887,6 +892,7 @@ class WS2812FX {
     inline void setPixelColor(unsigned n, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0) const
                                                               { setPixelColor(n, RGBW32(r,g,b,w)); }
     inline void setPixelColor(unsigned n, CRGB c) const       { setPixelColor(n, c.red, c.green, c.blue); }
+    inline void setPixelColor(unsigned n, CRGBA c) const      { setPixelColor(n, c.red, c.green, c.blue); }
     inline void fill(uint32_t c) const                        { for (size_t i = 0; i < getLengthTotal(); i++) setPixelColor(i, c); } // fill whole strip with color (inline)
     inline void trigger()                                     { _triggered = true; }  // Forces the next frame to be computed on all active segments.
     inline void setShowCallback(show_callback cb)             { _callback = cb; }

@@ -67,7 +67,7 @@ Segment::Segment(const Segment &orig) {
       errorFlag = ERR_NORAM_PX;
       stop = 0; // mark segment as inactive/invalid
     }
-  } else stop = 0; // mark segment as inactive/invalid
+  } //else stop = 0; // mark segment as inactive/invalid
 }
 
 // move constructor
@@ -110,7 +110,7 @@ Segment& Segment::operator= (const Segment &orig) {
         errorFlag = ERR_NORAM_PX;
         stop = 0; // mark segment as inactive/invalid
       }
-    } else stop = 0; // mark segment as inactive/invalid
+    } //else stop = 0; // mark segment as inactive/invalid
   }
   return *this;
 }
@@ -263,6 +263,8 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
     return;
   }
 
+  if (strip.getLengthTotal() > MAX_LEDS/2 || pixels == nullptr) segmentCopy = false;
+
   // check if we ahve enough memory to store old segment if requested
   unsigned freeMem = getFreeHeapSize() - MIN_HEAP_SIZE;
   unsigned segMem = sizeof(uint32_t)*length() + _dataLen + sizeof(Segment) + sizeof(Transition); // pixel buffer + data buffer + segment + transition
@@ -282,14 +284,14 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
     if (segmentCopy && !_t->_oldSegment) {
       // already in transition but segment copy requested and not yet created
       _t->_oldSegment = new(std::nothrow) Segment(*this); // store/copy current segment settings
-      _t->_start = millis();                              // restart countdown
-      _t->_dur   = dur;
-      _t->_prevPaletteBlends = 0;                         // reset previous palette blends
       if (_t->_oldSegment) {
         if (!_t->_oldSegment->isActive()) {               // even though segment's copy may be created it may lack pixel buffer
           stopTransition();                               // in such case it will be marked inactive so stop transition entirely
           return;
         }
+        _t->_start = millis();                            // restart countdown
+        _t->_dur = dur;
+        _t->_prevPaletteBlends = 0;                       // reset previous palette blends
         _t->_oldSegment->opacity = _t->_bri;              // restore original opacity
         _t->_oldSegment->cct     = _t->_cct;              // restore original CCT
         _t->_oldSegment->palette = _t->_palette;          // restore original palette and colors (from start of transition)
@@ -763,6 +765,17 @@ bool Segment::isPixelClipped(int i) const {
   return false;
 }
 
+void Segment::setStripPixelColor(unsigned i, CRGBA c) const {
+  // TODO: for now ignore W, CCT and opacity
+  const uint32_t col = hasWhite() ? c.color32 : (uint32_t)c;  // explicit uint32_t conversion strips alpha/white channel
+  unsigned indx = reverse ? virtualLength() - i - 1 : i;  // might use vLength()
+  strip.setPixelColor(start + indx, col);
+  if (mirror) {
+    indx = length() - indx - 1;
+    strip.setPixelColor(start + indx, col);
+  }
+}
+
 void Segment::setPixelColor(int i, CRGBA col) const
 {
   if (!isActive() || i < 0) return; // not active or invalid index
@@ -778,23 +791,24 @@ void Segment::setPixelColor(int i, CRGBA col) const
   if (i >= vL) return;  // if pixel would still fall out of segment just exit
 
 #ifndef WLED_DISABLE_2D
+  void (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
   if (is2D()) {
     switch (map1D2D) {
       case M12_Pixels:
         // use all available pixels as a long strip (respect transpose)
-        setPixelColorXYRaw(i % vW, i / vW, col);
+        (this->*setPixelXY)(i % vW, i / vW, col);
         break;
       case M12_pBar:
         // expand 1D effect vertically or have it play on virtual strips
-        if (vStrip > 0)                   setPixelColorXYRaw(vStrip - 1, vH - i - 1, col);
-        else for (int x = 0; x < vW; x++) setPixelColorXYRaw(x, vH - i - 1, col);
+        if (vStrip > 0)                   (this->*setPixelXY)(vStrip - 1, vH - i - 1, col);
+        else for (int x = 0; x < vW; x++) (this->*setPixelXY)(x, vH - i - 1, col);
         break;
       case M12_pArc: {
         // expand 1D effect in a circular manner
         // adapted code by @brandon502 wled#4994
-        if (i == 0)    { setPixelColorXYRaw(0, 0, col);       break; }  // with only 1 pixel to draw, return early
-        if (i == vL-1) { setPixelColorXYRaw(vW-1, vH-1, col); break; }  // extreme (last) pixel is always in corner
-        if (i == 2)      setPixelColorXYRaw(1, 1, col);                 // cover anomally (missing pixel with square detection)
+        if (i == 0)    { (this->*setPixelXY)(0, 0, col);       break; }  // with only 1 pixel to draw, return early
+        if (i == vL-1) { (this->*setPixelXY)(vW-1, vH-1, col); break; }  // extreme (last) pixel is always in corner
+        if (i == 2)      (this->*setPixelXY)(1, 1, col);                 // cover anomally (missing pixel with square detection)
         // Tony Barrera's circle algorithm
         // https://softwareengineering.stackexchange.com/questions/287478/drawing-concentric-circles-without-gaps/357445#357445
         int x = 0, y = i;  // i is the radius
@@ -802,8 +816,8 @@ void Segment::setPixelColor(int i, CRGBA col) const
         while (x <= y) {
           if (i != x || i != y) { // prevent early square
             // as segment may not be square limit pixel drawing (faster than letting setPixelColorXY() decide)
-            if (x < vW && y < vH) setPixelColorXYRaw(x, y, col);
-            if (y < vW && x < vH) setPixelColorXYRaw(y, x, col);
+            if (x < vW && y < vH) (this->*setPixelXY)(x, y, col);
+            if (y < vW && x < vH) (this->*setPixelXY)(y, x, col);
           }
           if (d <= 0) d += ++x;
           else        d -= --y;
@@ -816,8 +830,8 @@ void Segment::setPixelColor(int i, CRGBA col) const
         // drawing in that particular dimension
         int w = min(i, vW - 1);
         int h = min(i, vH - 1);
-        if (i < vH) for (int x = 0; x <= w; x++) setPixelColorXYRaw(x, i, col);
-        if (i < vW) for (int y = 0; y <= h; y++) setPixelColorXYRaw(i, y, col);
+        if (i < vH) for (int x = 0; x <= w; x++) (this->*setPixelXY)(x, i, col);
+        if (i < vW) for (int y = 0; y <= h; y++) (this->*setPixelXY)(i, y, col);
         break;
       }
       case M12_sPinwheel: {
@@ -906,7 +920,7 @@ void Segment::setPixelColor(int i, CRGBA col) const
                   (!onLine1 && (!onLine2 || drawLast))  || // Middle pixels and line2 if drawLast
                   (!onLine2 && (!onLine1 || drawFirst))    // Middle pixels and line1 if drawFirst
                 ) {
-                if (x < vW && y < vH) setPixelColorXYRaw(x, y, col);
+                if (x < vW && y < vH) (this->*setPixelXY)(x, y, col);
               }
             }
           }
@@ -923,12 +937,13 @@ void Segment::setPixelColor(int i, CRGBA col) const
       int x = 0, y = 0;
       if (vH > 1) y = i;
       if (vW > 1) x = i;
-      if (x < vW && y < vH) setPixelColorXYRaw(x, y, col);
+      if (x < vW && y < vH) (this->*setPixelXY)(x, y, col);
       return;
     }
   }
 #endif
-  setPixelColorRaw(i, col);
+  if (pixels) setPixelColorRaw(i, col);
+  else setStripPixelColor(i, col);
 }
 
 CRGBA Segment::getPixelColor(int i) const
@@ -997,7 +1012,7 @@ CRGBA Segment::getPixelColor(int i) const
     i = XY(x, y);
   }
 #endif
-  return getPixelColorRaw(i);
+  return pixels ? getPixelColorRaw(i) : strip.getPixelColor(start + i);
 }
 
 void Segment::refreshLightCapabilities() const {
@@ -1040,7 +1055,8 @@ void Segment::refreshLightCapabilities() const {
  */
 void Segment::fill(CRGBA c) const {
   if (!isActive()) return; // not active
-  for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i,c); // always fill all pixels (blending will take care of grouping, spacing and clipping)
+  void (Segment::*setPixel)(unsigned, CRGBA) const = pixels ? &Segment::setPixelColorRaw : &Segment::setStripPixelColor;
+  for (unsigned i = 0; i < length(); i++) (this->*setPixel)(i,c); // always fill all pixels (blending will take care of grouping, spacing and clipping)
 }
 
 /*
@@ -1053,20 +1069,38 @@ void Segment::fade_out(uint8_t rate) const {
   rate = (256-rate) >> 1;
   const int mappedRate = 256 / (rate + 1);
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
-  for (unsigned j = 0; j < length(); j++) {
-    CRGBA color = getPixelColorRaw(j);
-    if (color == colors[1]) continue;   // already at target color
-    for (int i = 0; i < 4; i ++) {
-      uint8_t c2 = colors[1].raw[i];    // get background channel
-      uint8_t c1 = color[i];            // get foreground channel
-      // we can't use bitshift since we are using int
-      int delta = (c2 - c1) * mappedRate / 256;
-      // if fade isn't complete, make sure delta is at least 1 (fixes rounding issues)
-      if (delta == 0) delta += (c2 == c1) ? 0 : (c2 > c1) ? 1 : -1;
-      // stuff new value back into color
-      color[i] = constrain(c1 + delta, 0, 255);
+  if (pixels) {
+    for (unsigned j = 0; j < length(); j++) {
+      CRGBA color = getPixelColorRaw(j);
+      if (color == colors[1]) continue;   // already at target color
+      for (int i = 0; i < 4; i ++) {
+        uint8_t c2 = colors[1].raw[i];    // get background channel
+        uint8_t c1 = color[i];            // get foreground channel
+        // we can't use bitshift since we are using int
+        int delta = (c2 - c1) * mappedRate / 256;
+        // if fade isn't complete, make sure delta is at least 1 (fixes rounding issues)
+        if (delta == 0) delta += (c2 == c1) ? 0 : (c2 > c1) ? 1 : -1;
+        // stuff new value back into color
+        color[i] = constrain(c1 + delta, 0, 255);
+      }
+      setPixelColorRaw(j, color);
     }
-    setPixelColorRaw(j, color);
+  } else {
+    for (unsigned j = 0; j < length(); j++) {
+      CRGBA color = strip.getPixelColor(start + j);
+      if (color == colors[1]) continue;   // already at target color
+      for (int i = 0; i < 4; i ++) {
+        uint8_t c2 = colors[1].raw[i];    // get background channel
+        uint8_t c1 = color[i];            // get foreground channel
+        // we can't use bitshift since we are using int
+        int delta = (c2 - c1) * mappedRate / 256;
+        // if fade isn't complete, make sure delta is at least 1 (fixes rounding issues)
+        if (delta == 0) delta += (c2 == c1) ? 0 : (c2 > c1) ? 1 : -1;
+        // stuff new value back into color
+        color[i] = constrain(c1 + delta, 0, 255);
+      }
+      setStripPixelColor(j, color);
+    }
   }
 }
 
@@ -1074,7 +1108,8 @@ void Segment::fade_out(uint8_t rate) const {
 void Segment::fadeToSecondaryBy(uint8_t fadeBy) const {
   if (!isActive() || fadeBy == 0) return;   // optimization - no scaling to apply
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
-  for (unsigned i = 0; i < length(); i++) blendPixelColorRaw(i, colors[1], fadeBy);
+  if (pixels) for (unsigned i = 0; i < length(); i++) blendPixelColorRaw(i, colors[1], fadeBy);
+  else        for (unsigned i = 0; i < length(); i++) setStripPixelColor(i, getPixelColor(i).nblend(colors[1], fadeBy));
 }
 
 // fades all pixels to black using nscale8()
@@ -1082,7 +1117,8 @@ void Segment::fadeToBlackBy(uint8_t fadeBy) const {
   if (!isActive() || fadeBy == 0) return;   // optimization - no scaling to apply
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
   uint8_t scale = 255 - fadeBy; // slight optimization
-  for (unsigned i = 0; i < length(); i++) fadePixelColorRaw(i, scale); // will not fade white channel
+  if (pixels) for (unsigned i = 0; i < length(); i++) fadePixelColorRaw(i, scale); // will not fade white channel
+  else        for (unsigned i = 0; i < length(); i++) setStripPixelColor(i, getPixelColor(i).nscale8(scale)); // will not fade white channel
 }
 
 /*
@@ -1109,14 +1145,26 @@ void Segment::blur1D(uint8_t blur_amount, bool smear) const {
   CRGBA carryover(BLACK);
   // we can use get/setPixelColorRaw() and vLength() since is2D() handles possible 1D->2D mapping (blurs entire 2D segment)
   // we will also blur alpha channel if we have RGB only strip
-  for (unsigned i = 0; i < vlength; i++) {
-    CRGBA cur = getPixelColorRaw(i);
-    CRGBA part = cur.scale8(seep);
-    cur.nscale8(keep);
-    cur += carryover;
-    if (i > 0) addPixelColorRaw(i - 1, part);
-    setPixelColorRaw(i, cur); // first pixel
-    carryover = part;
+  if (pixels) {
+    for (unsigned i = 0; i < vlength; i++) {
+      CRGBA cur = getPixelColorRaw(i);
+      CRGBA part = cur.scale8(seep);
+      cur.nscale8(keep);
+      cur += carryover;
+      if (i > 0) addPixelColorRaw(i - 1, part);
+      setPixelColorRaw(i, cur); // first pixel
+      carryover = part;
+    }
+  } else {
+    for (unsigned i = 0; i < vlength; i++) {
+      CRGBA cur = strip.getPixelColor(start + i);
+      CRGBA part = cur.scale8(seep);
+      cur.nscale8(keep);
+      cur += carryover;
+      if (i > 0) setStripPixelColor(i - 1, getPixelColor(i - 1).nadd(part));
+      setStripPixelColor(i, cur); // first pixel
+      carryover = part;
+    }
   }
 }
 
@@ -1916,20 +1964,22 @@ void WS2812FX::show() {
   size_t diff = showNow - _lastShow;
 
   size_t totalLen = getLengthTotal();
-  // WARNING: as WLED doesn't handle CCT on pixel level but on Segment level instead
-  // we need to keep track of each pixel's CCT when blending segments (if CCT is present)
-  // and then set appropriate CCT from that pixel during paint (see below).
-  if ((hasCCTBus() || correctWB) && !cctFromRgb)
-    _pixelCCT = static_cast<uint8_t*>(allocate_buffer(totalLen * sizeof(uint8_t), BFRALLOC_PREFER_PSRAM)); // allocate CCT buffer if necessary
-  if (_pixelCCT) memset(_pixelCCT, 127, totalLen); // set neutral (50:50) CCT
+  if (totalLen <= MAX_LEDS/2) {
+    // WARNING: as WLED doesn't handle CCT on pixel level but on Segment level instead
+    // we need to keep track of each pixel's CCT when blending segments (if CCT is present)
+    // and then set appropriate CCT from that pixel during paint (see below).
+    if ((hasCCTBus() || correctWB) && !cctFromRgb)
+      _pixelCCT = static_cast<uint8_t*>(allocate_buffer(totalLen * sizeof(uint8_t), BFRALLOC_PREFER_PSRAM)); // allocate CCT buffer if necessary
+    if (_pixelCCT) memset(_pixelCCT, 127, totalLen); // set neutral (50:50) CCT
 
-  // if we are in live mode we don't do segment blending unless useMainSegmentOnly is on or override is on
-  if (realtimeMode == REALTIME_MODE_INACTIVE || useMainSegmentOnly || realtimeOverride) {
-    // clear frame buffer (if not it will allow strange result if topmost segment doesn't use Top/Default blend mode)
-    for (size_t i = 0; i < totalLen; i++) _pixels[i] = BLACK; // memset(_pixels, 0, sizeof(uint32_t) * getLengthTotal());
-    // blend all segments into (cleared) buffer
-    for (Segment &seg : _segments) if (seg.isActive() && (seg.on || seg.isInTransition())) {
-      blendSegment(seg);              // blend segment's buffer into frame buffer
+    // if we are in live mode we don't do segment blending unless useMainSegmentOnly is on or override is on
+    if (realtimeMode == REALTIME_MODE_INACTIVE || useMainSegmentOnly || realtimeOverride) {
+      // clear frame buffer (if not it will allow strange result if topmost segment doesn't use Top/Default blend mode)
+      for (size_t i = 0; i < totalLen; i++) _pixels[i] = BLACK; // memset(_pixels, 0, sizeof(uint32_t) * getLengthTotal());
+      // blend all segments into (cleared) buffer
+      for (Segment &seg : _segments) if (seg.getPixels() != nullptr && seg.isActive() && (seg.on || seg.isInTransition())) {
+        blendSegment(seg);              // blend segment's buffer into frame buffer
+      }
     }
   }
 
@@ -2334,26 +2384,26 @@ bool WS2812FX::deserializeMap(unsigned n) {
   }
   #endif
 
-  p_free(customMappingTable);
-  customMappingTable = static_cast<uint16_t*>(p_malloc(sizeof(uint16_t)*getLengthTotal()));
+  f.seek(0);
+  // look for "map":[ (which may include spaces/newlines in between tokens)
+  if (!f.find("\"map\"") || !f.find(':') || !f.find('[')) { // stops after the "map":[
+    DEBUG_PRINTF_P(PSTR("ERROR Invalid ledmap in %s: no map found\n"), fileName);
+    free(customMappingTable);
+    customMappingTable = nullptr;
+    f.close();
+    return false;
+  }
+
+  free(customMappingTable);
+  customMappingTable = static_cast<uint16_t*>(allocate_buffer(sizeof(uint16_t)*getLengthTotal(), BFRALLOC_PREFER_PSRAM));
 
   if (customMappingTable) {
-    f.seek(0);
+    DEBUG_PRINTF_P(PSTR("ledmap allocated: %uB @ %p\n"), sizeof(uint16_t)*getLengthTotal(), customMappingTable);
     // initialize mapping table with invalid entries (2D part)
     size_t minMappingSize = min(Segment::maxWidth * Segment::maxHeight, (int)getLengthTotal());
     for (size_t i = 0; i < minMappingSize; i++) customMappingTable[i] = isMatrix ? 0xFFFF : i;
     // pre-fill with direct mapping (1D part)
     for (size_t i = minMappingSize; i < getLengthTotal(); i++) customMappingTable[i] = i;
-
-    DEBUG_PRINTF_P(PSTR("ledmap allocated: %uB @ %p\n"), sizeof(uint16_t)*getLengthTotal(), customMappingTable);
-    // look for "map":[ (which may include spaces/newlines in between tokens)
-    if (!f.find("\"map\"") || !f.find(':') || !f.find('[')) { // stops after the "map":[
-      DEBUG_PRINTF_P(PSTR("ERROR Invalid ledmap in %s: no map found\n"), fileName);
-      p_free(customMappingTable);
-      customMappingTable = nullptr;
-      f.close();
-      return false;
-    }
 
     #ifndef WLED_DISABLE_2D
     int arrPos = f.position();  // remember position after "map":[

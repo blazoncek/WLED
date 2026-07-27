@@ -47,94 +47,77 @@ void WS2812FX::setUpMatrix() {
     }
 
     customMappingSize = 0; // prevent use of mapping if anything goes wrong
+    free(customMappingTable);
+
+    // we will try to load a "gap" array (a JSON file)
+    // the array has to have the same amount of values as mapping array (or larger)
+    // "gap" array is used while building ledmap (mapping array)
+    // and discarded afterwards as it has no meaning after the process
+    // content of the file is just raw JSON array in the form of [val1,val2,val3,...]
+    // there are no other "key":"value" pairs in it
+    // allowed values are: -1 (missing pixel/no LED attached), 0 (inactive/unused pixel), 1 (active/used pixel)
+    const unsigned matrixSize = Segment::maxWidth * Segment::maxHeight; // less or equal to getLengthTotal()
+    char    fileName[32]; strcpy_P(fileName, PSTR("/2d-gaps.json"));
+    bool    isFile = WLED_FS.exists(fileName);
+    size_t  gapSize = 0;
+    int8_t *gapTable = nullptr;
+
+    if (isFile) {
+      DEBUG_PRINTLN(F("Loading gaps."));
+      File f = WLED_FS.open(fileName, "r");
+      if (f && f.find("[")) {
+        size_t pos = f.position();
+        // count elements first to know how much to allocate
+        char token[32]; strcpy_P(token, PSTR(" \n\r\t,-01"));
+        //while (f.available()) if (f.read() == ',') gapSize++;
+        while (f.available()) {
+          char c = f.read();
+          if (strchr(token, c) == nullptr) break; // invalid character, stop
+          if (c == ',') gapSize++;
+        }
+        gapSize++;  // there's one more entry than there is commas
+        if (gapSize >= matrixSize) {
+          f.seek(pos);
+          gapTable = static_cast<int8_t*>(p_malloc(gapSize));
+          if (gapTable) {
+            memset(gapTable, 1, gapSize);
+            pos = 0;
+            while (f.available() && pos < gapSize) {
+              size_t n = f.readBytesUntil(',', token, sizeof(token)-1);
+              token[n] = '\0';
+              if (n < sizeof(token)-1) gapTable[pos++] = (int8_t)constrain(strtol(token, nullptr, 10), -1, 1);
+              if (strchr(token, ']') != nullptr) break; // end of array
+            }
+            DEBUG_PRINTLN(F("Gaps loaded."));
+          } else {
+            DEBUG_PRINTLN(F("Out of memory."));
+          }
+        } else {
+          DEBUG_PRINTLN(F("Gapfile too small."));
+        }
+        f.close();
+      }
+    } else if (panel.size() == 1 && !panel[0].bottomStart && !panel[0].rightStart && !panel[0].serpentine && !panel[0].vertical) {
+      // if we only have one panel that starts at top-left and is not serpentine and vertically oriented then don't bother with ledmap
+      DEBUG_PRINTLN(F("Ledmap not needed."));
+      return;
+    }
 
     DEBUG_PRINTLN(F("Creating 2D ledmap"));
-    p_free(customMappingTable);
     // Segment::maxWidth and Segment::maxHeight are set according to panel layout
     // and the product will include at least all leds in matrix
     // if actual LEDs are more, getLengthTotal() will return correct number of LEDs
-    customMappingTable = static_cast<uint16_t*>(p_malloc(sizeof(uint16_t)*getLengthTotal()));
+    customMappingTable = static_cast<uint16_t*>(allocate_buffer(sizeof(uint16_t)*getLengthTotal(), BFRALLOC_PREFER_PSRAM));
 
     if (customMappingTable) {
       customMappingSize = getLengthTotal();
       DEBUG_PRINTF_P(PSTR("ledmap allocated: %uB @ %p\n"), customMappingSize * sizeof(uint16_t), customMappingTable);
 
       // fill with empty in case we don't fill the entire matrix
-      unsigned matrixSize = Segment::maxWidth * Segment::maxHeight; // less or equal to getLengthTotal()
       for (unsigned i = 0; i < matrixSize; i++) customMappingTable[i] = 0xFFFFU;
       for (unsigned i = matrixSize; i < customMappingSize; i++) customMappingTable[i] = i; // trailing LEDs for ledmap (after matrix) if it exist
 
-      // we will try to load a "gap" array (a JSON file)
-      // the array has to have the same amount of values as mapping array (or larger)
-      // "gap" array is used while building ledmap (mapping array)
-      // and discarded afterwards as it has no meaning after the process
-      // content of the file is just raw JSON array in the form of [val1,val2,val3,...]
-      // there are no other "key":"value" pairs in it
-      // allowed values are: -1 (missing pixel/no LED attached), 0 (inactive/unused pixel), 1 (active/used pixel)
-      char    fileName[32]; strcpy_P(fileName, PSTR("/2d-gaps.json"));
-      bool    isFile = WLED_FS.exists(fileName);
-      size_t  gapSize = 0;
-      int8_t *gapTable = nullptr;
-
-      if (isFile) {
-        DEBUG_PRINTLN(F("Loading gaps."));
-        File f = WLED_FS.open(fileName, "r");
-        if (f && f.find("[")) {
-          size_t pos = f.position();
-          // count elements first to know how much to allocate
-          char token[32]; strcpy_P(token, PSTR(" \n\r\t,-01"));
-          //while (f.available()) if (f.read() == ',') gapSize++;
-          while (f.available()) {
-            char c = f.read();
-            if (strchr(token, c) == nullptr) break; // invalid character, stop
-            if (c == ',') gapSize++;
-          }
-          gapSize++;  // there's one more entry than there is commas
-          if (gapSize >= matrixSize) {
-            f.seek(pos);
-            gapTable = static_cast<int8_t*>(p_malloc(gapSize));
-            if (gapTable) {
-              memset(gapTable, 1, gapSize);
-              pos = 0;
-              while (f.available() && pos < gapSize) {
-                size_t n = f.readBytesUntil(',', token, sizeof(token)-1);
-                token[n] = '\0';
-                if (n < sizeof(token)-1) gapTable[pos++] = (int8_t)constrain(strtol(token, nullptr, 10), -1, 1);
-                if (strchr(token, ']') != nullptr) break; // end of array
-              }
-              DEBUG_PRINTLN(F("Gaps loaded."));
-            } else {
-              DEBUG_PRINTLN(F("Out of memory."));
-            }
-          } else {
-            DEBUG_PRINTLN(F("Gapfile too small."));
-          }
-          f.close();
-        }
-      }
-/*
-      if (isFile && requestJSONBufferLock(20)) {
-        DEBUG_PRINT(F("Reading LED gap from "));
-        DEBUG_PRINTLN(fileName);
-        // read the array into global JSON buffer
-        if (readObjectFromFile(fileName, nullptr, pDoc)) {
-          // the array is similar to ledmap, except it has only 3 values:
-          // -1 ... missing pixel (do not increase pixel count)
-          //  0 ... inactive pixel (it does count, but should be mapped out (-1))
-          //  1 ... active pixel (it will count and will be mapped)
-          JsonArray map = pDoc->as<JsonArray>();
-          gapSize = map.size();
-          if (!map.isNull() && gapSize >= matrixSize) { // not an empty map
-            gapTable = static_cast<int8_t*>(p_malloc(gapSize));
-            if (gapTable) for (size_t i = 0; i < gapSize; i++) {
-              gapTable[i] = constrain(map[i], -1, 1);
-            }
-          }
-        }
-        DEBUG_PRINTLN(F("Gaps loaded."));
-        releaseJSONBufferLock();
-      }
-*/
+      // create ledmap using gap file if it exists 
       unsigned x, y, pix=0; //pixel
       for (const Panel &p : panel) {
         unsigned h = p.vertical ? p.height : p.width;
@@ -151,9 +134,6 @@ void WS2812FX::setUpMatrix() {
         }
       }
 
-      // delete gap array as we no longer need it
-      p_free(gapTable);
-
       #ifdef WLED_DEBUG
       DEBUG_PRINTLN(F("Matrix ledmap:"));
       for (unsigned i = 0; i < customMappingSize; i++) {
@@ -169,6 +149,9 @@ void WS2812FX::setUpMatrix() {
       Segment::maxHeight = 1;
       resetSegments();
     }
+
+    // delete gap array as we no longer need it
+    p_free(gapTable);
   }
 #else
   isMatrix = false; // no matter what config says
@@ -220,11 +203,36 @@ bool Segment::isPixelXYClipped(int x, int y) const {
   return false;
 }
 
+void Segment::setStripPixelColorXY(unsigned x, unsigned y, CRGBA c) const {
+  // TODO: for now ignore W, CCT and opacity
+  const auto XY = [](int x, int y){ return x + y*Segment::maxWidth; };
+  const int revX = reverse   ? virtualWidth()  - x - 1 : x;   // might use vWidth() for speed
+  const int revY = reverse_y ? virtualHeight() - y - 1 : y;   // might use vHeight() for speed
+  const int baseX = start  + revX;
+  const int baseY = startY + revY;
+  const uint32_t col = hasWhite() ? c.color32 : (uint32_t)c;  // explicit cast strips alpha/white channel
+  size_t indx = XY(baseX, baseY); // absolute address on strip
+  // TODO: for now ignore W, CCT and opacity
+  strip.setPixelColor(indx, col);
+  // Apply mirroring
+  if (mirror || mirror_y) {
+    const int mirrorX = start  + width()  - revX - 1;
+    const int mirrorY = startY + height() - revY - 1;
+    const size_t idxMX = XY(transpose ? baseX : mirrorX, transpose ? mirrorY : baseY);
+    const size_t idxMY = XY(transpose ? mirrorX : baseX, transpose ? baseY : mirrorY);
+    const size_t idxMM = XY(mirrorX, mirrorY);
+    if (mirror)             strip.setPixelColor(idxMX, col);
+    if (mirror_y)           strip.setPixelColor(idxMY, col);
+    if (mirror && mirror_y) strip.setPixelColor(idxMM, col);
+  }
+}
+
 void Segment::setPixelColorXY(int x, int y, CRGBA col) const
 {
   if (!isActive()) return; // not active
   if (x >= (int)vWidth() || y >= (int)vHeight() || x < 0 || y < 0) return;  // if pixel would fall out of virtual segment just exit
-  setPixelColorXYRaw(x, y, col);
+  if (pixels) setPixelColorXYRaw(x, y, col);
+  else setStripPixelColorXY(x, y, col);
 }
 
 #ifdef WLED_USE_AA_PIXELS
@@ -274,7 +282,16 @@ void Segment::setPixelColorXY(float x, float y, uint32_t col, bool aa) const
 CRGBA Segment::getPixelColorXY(int x, int y) const {
   if (!isActive()) return 0; // not active
   if (x >= (int)vWidth() || y >= (int)vHeight() || x<0 || y<0) return 0;  // if pixel would fall out of virtual segment just exit
-  return getPixelColorXYRaw(x,y);
+  if (pixels) return getPixelColorXYRaw(x, y);
+  else {
+    const auto XY = [](int x, int y){ return x + y*Segment::maxWidth; };
+    const int revX = reverse   ? virtualWidth()  - x - 1 : x; // may replace with vWidth() for speed
+    const int revY = reverse_y ? virtualHeight() - y - 1 : y; // may replace with vHeight() for speed
+    const int baseX = start  + revX;
+    const int baseY = startY + revY;
+    size_t indx = XY(baseX, baseY); // absolute address on strip
+    return strip.getPixelColor(indx);
+  }
 }
 
 // 2D blurring, can be asymmetrical
@@ -285,32 +302,62 @@ void Segment::blur2D(uint8_t blur_x, uint8_t blur_y, bool smear) const {
   if (blur_x) {
     const uint8_t keepx = smear ? 255 : 255 - blur_x;
     const uint8_t seepx = blur_x >> (1 + smear);
-    for (unsigned row = 0; row < rows; row++) { // blur rows (x direction)
-      CRGBA carryover = BLACK;
-      for (unsigned x = 0; x < cols; x++) {
-        CRGBA cur = getPixelColorXYRaw(x, row);
-        CRGBA part = cur.scale8(seepx); // we are assuming RGBW pixels here as we also want to blur alpha channel
-        cur.nscale8(keepx);
-        cur += carryover;
-        if (x > 0) addPixelColorXYRaw(x - 1, row, part);
-        setPixelColorXYRaw(x, row, cur); // first pixel
-        carryover = part;
+    if (pixels) {
+      for (unsigned row = 0; row < rows; row++) { // blur rows (x direction)
+        CRGBA carryover = BLACK;
+        for (unsigned x = 0; x < cols; x++) {
+          CRGBA cur = getPixelColorXYRaw(x, row);
+          CRGBA part = cur.scale8(seepx); // we are assuming RGBW pixels here as we also want to blur alpha channel
+          cur.nscale8(keepx);
+          cur += carryover;
+          if (x > 0) addPixelColorXYRaw(x - 1, row, part);
+          setPixelColorXYRaw(x, row, cur); // first pixel
+          carryover = part;
+        }
+      }
+    } else {
+      for (unsigned row = 0; row < rows; row++) { // blur rows (x direction)
+        CRGBA carryover = BLACK;
+        for (unsigned x = 0; x < cols; x++) {
+          CRGBA cur = getPixelColorXY(x, row);
+          CRGBA part = cur.scale8(seepx); // we are assuming RGBW pixels here as we also want to blur alpha channel
+          cur.nscale8(keepx);
+          cur += carryover;
+          if (x > 0) setStripPixelColorXY(x - 1, row, getPixelColorXY(x - 1, row).nadd(part));
+          setStripPixelColorXY(x, row, cur); // first pixel
+          carryover = part;
+        }
       }
     }
   }
   if (blur_y) {
     const uint8_t keepy = smear ? 255 : 255 - blur_y;
     const uint8_t seepy = blur_y >> (1 + smear);
-    for (unsigned col = 0; col < cols; col++) {
-      CRGBA carryover = BLACK;
-      for (unsigned y = 0; y < rows; y++) {
-        CRGBA cur = getPixelColorXYRaw(col, y);
-        CRGBA part = cur.scale8(seepy);
-        cur.nscale8(keepy);
-        cur += carryover;
-        if (y > 0) addPixelColorXYRaw(col, y - 1, part);
-        setPixelColorXYRaw(col, y, cur); // first pixel
-        carryover = part;
+    if (pixels) {
+      for (unsigned col = 0; col < cols; col++) {
+        CRGBA carryover = BLACK;
+        for (unsigned y = 0; y < rows; y++) {
+          CRGBA cur = getPixelColorXYRaw(col, y);
+          CRGBA part = cur.scale8(seepy);
+          cur.nscale8(keepy);
+          cur += carryover;
+          if (y > 0) addPixelColorXYRaw(col, y - 1, part);
+          setPixelColorXYRaw(col, y, cur); // first pixel
+          carryover = part;
+        }
+      }
+    } else {
+      for (unsigned col = 0; col < cols; col++) {
+        CRGBA carryover = BLACK;
+        for (unsigned y = 0; y < rows; y++) {
+          CRGBA cur = getPixelColorXY(col, y);
+          CRGBA part = cur.scale8(seepy);
+          cur.nscale8(keepy);
+          cur += carryover;
+          if (y > 0) setStripPixelColorXY(col, y - 1, getPixelColorXY(col, y - 1).nadd(part));
+          setStripPixelColorXY(col, y, cur); // first pixel
+          carryover = part;
+        }
       }
     }
   }
@@ -401,13 +448,24 @@ void Segment::moveX(int delta, bool wrap) const {
     stop = vW - absDelta;
     newDelta = delta > 0 ? delta : 0;
   }
-  for (int y = 0; y < vH; y++) {
-    for (int x = 0; x < stop; x++) {
-      int srcX = x + newDelta;
-      if (wrap) srcX %= vW; // Wrap using modulo when `wrap` is true
-      newPxCol[x] = getPixelColorXYRaw(srcX, y);
+  if (pixels) {
+    for (int y = 0; y < vH; y++) {
+      for (int x = 0; x < stop; x++) {
+        int srcX = x + newDelta;
+        if (wrap) srcX %= vW; // Wrap using modulo when `wrap` is true
+        newPxCol[x] = getPixelColorXYRaw(srcX, y);
+      }
+      for (int x = 0; x < stop; x++) setPixelColorXYRaw(x + start, y, newPxCol[x]);
     }
-    for (int x = 0; x < stop; x++) setPixelColorXYRaw(x + start, y, newPxCol[x]);
+  } else {
+    for (int y = 0; y < vH; y++) {
+      for (int x = 0; x < stop; x++) {
+        int srcX = x + newDelta;
+        if (wrap) srcX %= vW; // Wrap using modulo when `wrap` is true
+        newPxCol[x] = getPixelColorXY(srcX, y);
+      }
+      for (int x = 0; x < stop; x++) setStripPixelColorXY(x + start, y, newPxCol[x]);
+    }
   }
 }
 
@@ -428,13 +486,24 @@ void Segment::moveY(int delta, bool wrap) const {
     stop = vH - absDelta;
     newDelta = delta > 0 ? delta : 0;
   }
-  for (int x = 0; x < vW; x++) {
-    for (int y = 0; y < stop; y++) {
-      int srcY = y + newDelta;
-      if (wrap) srcY %= vH; // Wrap using modulo when `wrap` is true
-      newPxCol[y] = getPixelColorXYRaw(x, srcY);
+  if (pixels) {
+    for (int x = 0; x < vW; x++) {
+      for (int y = 0; y < stop; y++) {
+        int srcY = y + newDelta;
+        if (wrap) srcY %= vH; // Wrap using modulo when `wrap` is true
+        newPxCol[y] = getPixelColorXYRaw(x, srcY);
+      }
+      for (int y = 0; y < stop; y++) setPixelColorXYRaw(x, y + start, newPxCol[y]);
+    }  
+  } else {
+    for (int x = 0; x < vW; x++) {
+      for (int y = 0; y < stop; y++) {
+        int srcY = y + newDelta;
+        if (wrap) srcY %= vH; // Wrap using modulo when `wrap` is true
+        newPxCol[y] = getPixelColorXY(x, srcY);
+      }
+      for (int y = 0; y < stop; y++) setStripPixelColorXY(x, y + start, newPxCol[y]);
     }
-    for (int y = 0; y < stop; y++) setPixelColorXYRaw(x, y + start, newPxCol[y]);
   }
 }
 
@@ -475,32 +544,60 @@ void Segment::fillEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
   //DEBUG_PRINTF_P(PSTR("Draw ellipse cx=%d cy=%d rx=%d ry=%d pxMin=%d pxMax=%d pyMin=%d pyMax=%d\n"), cx, cy, rx, ry, pxMin, pxMax, pyMin, pyMax);
 
   // traverse all pixels within bounding box and check if they are within ellipse radius
-  for (int y = pyMin; y < pyMax; y++) {
-    const int32_t dy = (y << 6) - cy;
-    for (int x = pxMin; x < pxMax; x++) {
-      const int32_t dx = (x << 6) - cx;
-      const int32_t dist = (mul106(dx,dx)*256/rxSq) + (mul106(dy,dy)*256/rySq);
-      if (dist > 384) continue; // outside ellipse (actually it should be 256 but that will render a smaller ellipse)
-      int32_t px = x;
-      int32_t py = y;
-      if (wrapX) {
-        while (px < 0)        px += vW;
-        while (px >= (int)vW) px -= vW;
+  if (pixels) {
+    for (int y = pyMin; y < pyMax; y++) {
+      const int32_t dy = (y << 6) - cy;
+      for (int x = pxMin; x < pxMax; x++) {
+        const int32_t dx = (x << 6) - cx;
+        const int32_t dist = (mul106(dx,dx)*256/rxSq) + (mul106(dy,dy)*256/rySq);
+        if (dist > 384) continue; // outside ellipse (actually it should be 256 but that will render a smaller ellipse)
+        int32_t px = x;
+        int32_t py = y;
+        if (wrapX) {
+          while (px < 0)        px += vW;
+          while (px >= (int)vW) px -= vW;
+        }
+        if (wrapY) {
+          while (py < 0)        py += vH;
+          while (py >= (int)vH) py -= vH;
+        }
+        if ((unsigned)px < vW && (unsigned)py < vH) {
+          if (dist > 192) { // may need tweaking!
+            CRGBA c = color;
+            uint8_t alpha = 448 - dist; // may need tweaking!
+            blendPixelColorXYRaw(px, py, c/*.setOpacity(alpha)*/, alpha); // may need tweaking!
+          } else setPixelColorXYRaw(px, py, color);
+        }
       }
-      if (wrapY) {
-        while (py < 0)        py += vH;
-        while (py >= (int)vH) py -= vH;
-      }
-      if ((unsigned)px < vW && (unsigned)py < vH) {
-        if (dist > 192) { // may need tweaking!
-          CRGBA c = color;
-          uint8_t alpha = 448 - dist; // may need tweaking!
-          SEGMENT.blendPixelColorXYRaw(px, py, c/*.setOpacity(alpha)*/, alpha); // may need tweaking!
-        } else SEGMENT.setPixelColorXYRaw(px, py, color);
+    }
+  } else {
+    for (int y = pyMin; y < pyMax; y++) {
+      const int32_t dy = (y << 6) - cy;
+      for (int x = pxMin; x < pxMax; x++) {
+        const int32_t dx = (x << 6) - cx;
+        const int32_t dist = (mul106(dx,dx)*256/rxSq) + (mul106(dy,dy)*256/rySq);
+        if (dist > 384) continue; // outside ellipse (actually it should be 256 but that will render a smaller ellipse)
+        int32_t px = x;
+        int32_t py = y;
+        if (wrapX) {
+          while (px < 0)        px += vW;
+          while (px >= (int)vW) px -= vW;
+        }
+        if (wrapY) {
+          while (py < 0)        py += vH;
+          while (py >= (int)vH) py -= vH;
+        }
+        if ((unsigned)px < vW && (unsigned)py < vH) {
+          if (dist > 192) { // may need tweaking!
+            CRGBA c = color;
+            uint8_t alpha = 448 - dist; // may need tweaking!
+            setStripPixelColorXY(px, py, getPixelColorXY(px, py).nblend(c, alpha));
+          } else setStripPixelColorXY(px, py, color);
+        }
       }
     }
   }
-};
+}
 
 // https://gamedev.stackexchange.com/questions/176036/how-to-draw-a-smoother-solid-fill-circle
 // draws a circle at (cx,cy) with given radius (in 10.6 fixed point notation) and color
@@ -523,8 +620,13 @@ void Segment::drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA col, boo
       while (y >= (int)vH) y -= vH;
     }
     if ((unsigned)x < vW && (unsigned)y < vH) {
-      if (b < 255) blendPixelColorXYRaw(x, y, col, b);
-      else         addPixelColorXYRaw(x, y, col);
+      if (pixels) {
+        if (b < 255) blendPixelColorXYRaw(x, y, col, b);
+        else         setPixelColorXYRaw(x, y, col);
+      } else {
+        if (b < 255) setStripPixelColorXY(x, y, getPixelColorXY(x, y).nblend(col, b));
+        else         setStripPixelColorXY(x, y, col);
+      }
     }
   };
 
@@ -595,6 +697,8 @@ void Segment::drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
   auto int106 = [](int16_t a)            { return (int16_t)((int32_t)a >> 6); };      // convert 12.4 fixed point to integer
   auto mul106 = [](int16_t a, int16_t b) { return (int16_t)((int32_t)a * b) >> 6; };  // 12.4 fixed point multiplication
 
+  void (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+
   auto plot   = [&](int32_t x, int32_t y) {
     if (wrapX) {
       while (x < 0)        x += vW;
@@ -604,15 +708,21 @@ void Segment::drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
       while (y < 0)        y += vH;
       while (y >= (int)vH) y -= vH;
     }
-    if ((unsigned)x < vW && (unsigned)y < vH) addPixelColorXYRaw(x, y, color);
+    if ((unsigned)x < vW && (unsigned)y < vH) (this->*setPixelXY)(x, y, color);
   }; // draws a single point
 
   auto points = [&](int32_t x, int32_t y) { // draws 4 simertically placed points
-    for (int i = 0; i < 4; i++) {
-      int32_t dx = (i & 1) ? -x : x;
-      int32_t dy = (i & 2) ? -y : y;
-      plot(int106(cx) + dx, int106(cy) + dy);
-    }
+    int32_t c_x = int106(cx);
+    int32_t c_y = int106(cx);
+    //for (int i = 0; i < 4; i++) {
+    //  int32_t dx = (i & 1) ? -x : x;
+    //  int32_t dy = (i & 2) ? -y : y;
+    //  plot(c_x + dx, c_y + dy);
+    //}
+    plot(c_x + x, c_y + y);
+    plot(c_x - x, c_y + y);
+    plot(c_x + x, c_y - y);
+    plot(c_x - x, c_y - y);
   };
 
   int32_t rxSq = mul106(rx,rx);
@@ -669,9 +779,11 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
   const int dx = abs(int(x1)-int(x0)); // x distance
   const int dy = abs(int(y1)-int(y0)); // y distance
 
+  void (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+
   // single pixel (line length == 0)
   if (dx+dy == 0) {
-    setPixelColorXYRaw(x0, y0, c);
+    (this->*setPixelXY)(x0, y0, c);
     return;
   }
 
@@ -691,18 +803,34 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
     }
     int32_t grad = x1==x0 ? 1 << 8 : ((y1-y0)<<8)/(x1-x0); // gradient in 16.8 fixed point
     int32_t intY = (y0<<8); // y intersection in 16.8 fixed point
-    for (int x = x0; x <= x1; x++) {
-      uint8_t keep = (intY & 0xFF); // fractional part of y in 16.8 fixed point
-      uint8_t seep = 0xFF - keep;
-      int y = intY >> 8;
-      if (steep) std::swap(x,y);  // temporaryly swap if steep
-      // pixel coverage is determined by fractional part of y co-ordinate
-      int x2 = x + steep;
-      int y2 = y + !steep;
-      if (x  >= 0 && y  >= 0 && x  < vW && y  < vH) blendPixelColorXYRaw(x,  y,  c, seep);
-      if (x2 >= 0 && y2 >= 0 && x2 < vW && y2 < vH) blendPixelColorXYRaw(x2, y2, c, keep);
-      intY += grad;
-      if (steep) std::swap(x,y);  // restore if steep
+    if (pixels) {
+      for (int x = x0; x <= x1; x++) {
+        uint8_t keep = (intY & 0xFF); // fractional part of y in 16.8 fixed point
+        uint8_t seep = 0xFF - keep;
+        int y = intY >> 8;
+        if (steep) std::swap(x,y);  // temporaryly swap if steep
+        // pixel coverage is determined by fractional part of y co-ordinate
+        int x2 = x + steep;
+        int y2 = y + !steep;
+        if (x  >= 0 && y  >= 0 && x  < vW && y  < vH) blendPixelColorXYRaw(x,  y,  c, seep);
+        if (x2 >= 0 && y2 >= 0 && x2 < vW && y2 < vH) blendPixelColorXYRaw(x2, y2, c, keep);
+        intY += grad;
+        if (steep) std::swap(x,y);  // restore if steep
+      }
+    } else {
+      for (int x = x0; x <= x1; x++) {
+        uint8_t keep = (intY & 0xFF); // fractional part of y in 16.8 fixed point
+        uint8_t seep = 0xFF - keep;
+        int y = intY >> 8;
+        if (steep) std::swap(x,y);  // temporaryly swap if steep
+        // pixel coverage is determined by fractional part of y co-ordinate
+        int x2 = x + steep;
+        int y2 = y + !steep;
+        if (x  >= 0 && y  >= 0 && x  < vW && y  < vH) setStripPixelColorXY(x,  y,  getPixelColorXY(x,  y ).nblend(c, seep));
+        if (x2 >= 0 && y2 >= 0 && x2 < vW && y2 < vH) setStripPixelColorXY(x2, y2, getPixelColorXY(x2, y2).nblend(c, keep));
+        intY += grad;
+        if (steep) std::swap(x,y);  // restore if steep
+      }
     }
   } else {
     // Bresenham's algorithm
@@ -710,7 +838,7 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
     const int sy = y0<y1 ? 1 : -1;  // y step
     int err = (dx>dy ? dx : -dy)/2; // error direction
     for (;;) {
-      addPixelColorXYRaw(x0, y0, c);
+      (this->*setPixelXY)(x0, y0, c);
       if (x0==x1 && y0==y1) break;
       int e2 = err;
       if (e2 >-dx) { err -= dy; x0 += sx; }
@@ -733,6 +861,7 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
   chr -= 32; // align with font table entries
   const int font = w*h;
 
+  void (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
   CRGBPalette16 grad = col2 != BLACK ? CRGBPalette16(CRGB(color), CRGB(col2)) : Segment::getCurrentPalette(); // selected palette as gradient
 
   for (int i = 0; i<h; i++) { // character height
@@ -757,7 +886,7 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
       }
       if (x0 < 0 || x0 >= (int)vWidth() || y0 < 0 || y0 >= (int)vHeight()) continue; // drawing off-screen
       if (((bits>>(j+(8-w))) & 0x01)) { // bit set
-        setPixelColorXYRaw(x0, y0, c);
+        (this->*setPixelXY)(x0, y0, c);
       }
     }
   }
@@ -782,10 +911,18 @@ void Segment::setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const {
   const int step = x+1 < vW ? 1 : 2; // skip right pixels if out of bounds
   const int maxI = y+1 < vH ? 4 : 2; // skip bottom pixels if out of bounds
   // multiply the intensities by the colour, and saturating-add them to the pixels
-  for (int i = 0; i < maxI; i += step) {
-    int wu_x = x + (i & 1);        // precalculate x
-    int wu_y = y + ((i >> 1) & 1); // precalculate y
-    blendPixelColorXYRaw(wu_x, wu_y, c, wu[i]);
+  if (pixels) {
+    for (int i = 0; i < maxI; i += step) {
+      int wu_x = x + (i & 1);        // precalculate x
+      int wu_y = y + ((i >> 1) & 1); // precalculate y
+      blendPixelColorXYRaw(wu_x, wu_y, c, wu[i]);
+    }
+  } else {
+    for (int i = 0; i < maxI; i += step) {
+      int wu_x = x + (i & 1);        // precalculate x
+      int wu_y = y + ((i >> 1) & 1); // precalculate y
+      setStripPixelColorXY(wu_x, wu_y, getPixelColorXY(wu_x, wu_y).nblend(c, wu[i]));
+    }
   }
 }
 
