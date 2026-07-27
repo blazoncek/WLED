@@ -743,13 +743,16 @@ static uint8_t __portal[HUB75_PIN_COUNT]    PROGMEM = { 42, 41, 40, 38, 39, 37, 
 static uint8_t __moonhub[HUB75_PIN_COUNT]   PROGMEM = {  1,  5,  6,  7, 13,  9, 16, 48, 47, 21, 38,  8,  4, 18};
 static uint8_t __s3generic[HUB75_PIN_COUNT] PROGMEM = {  1,  2, 42, 41, 40, 39, 45, 48, 47, 21, 38,  8,  3, 18};
 static uint8_t __hd_wf2[HUB75_PIN_COUNT]    PROGMEM = {  2,  6, 10,  3,  7, 11, 39, 38, 37, 36, 21, 33, 35, 34};
-static uint8_t __seengreat[HUB75_PIN_COUNT] PROGMEM = { 18,  8, 17, 16,  1, 15,  7, 48,  6, 47,  2, 21,  4,  5};
+static uint8_t __seengreat[HUB75_PIN_COUNT] PROGMEM = { 37,  6, 36, 35,  5,  0, 45,  1, 48,  2,  4, 38, 21, 47};
+static uint8_t __seengrea2[HUB75_PIN_COUNT] PROGMEM = { 18,  8, 17, 16,  1, 15,  7, 48,  6, 47,  2, 21,  4,  5};
 static uint8_t __waveshare[HUB75_PIN_COUNT] PROGMEM = {  4,  5,  6,  7, 15, 16, 18,  8,  3, 42,  9, 40,  2, 41};
 #elif defined(CONFIG_IDF_TARGET_ESP32S2)
 static uint8_t __s2drive[HUB75_PIN_COUNT]   PROGMEM = {  2,  6,  3,  4,  8,  5, 39, 38, 37, 36, 12, 33, 35, 34};
 #elif defined(CONFIG_IDF_TARGET_ESP32)
 static uint8_t __trinity[HUB75_PIN_COUNT]   PROGMEM = { 25, 26, 27, 14, 12, 13, 23, 19,  5, 17, 18,  4, 15, 16};
 static uint8_t __forum[HUB75_PIN_COUNT]     PROGMEM = {  2, 15,  4, 16, 27, 17,  5, 18, 19, 21, 12, 26, 25, 22};
+static uint8_t __seengreat[HUB75_PIN_COUNT] PROGMEM = { 18, 25,  5, 17, 33, 16,  4,  3,  0, 21, 32, 19, 15,  2};
+static uint8_t __seengrea2[HUB75_PIN_COUNT] PROGMEM = { 18, 17, 19, 21, 23, 27, 26, 16, 25,  4, 22,  2, 32, 33};
 #endif
 
 // known controller board pinouts
@@ -772,6 +775,9 @@ static const uint8_t * const getHub75Pins(uint8_t type, uint8_t *dest = nullptr)
     case TYPE_HUB75SEENGREAT:
       b = __seengreat;
       break;
+    case TYPE_HUB75SEENGREA2:
+      b = __seengrea2;
+      break;
     case TYPE_HUB75WAVESHARE:
       b = __waveshare;
       break;
@@ -785,6 +791,12 @@ static const uint8_t * const getHub75Pins(uint8_t type, uint8_t *dest = nullptr)
       break;
     case TYPE_HUB75MATRIX_TRINITY:
       b = __trinity;
+      break;
+    case TYPE_HUB75SEENGREAT:
+      b = __seengreat;
+      break;
+    case TYPE_HUB75SEENGREA2:
+      b = __seengrea2;
       break;
 #endif
     case TYPE_HUB75MATRIX_CUSTOM:
@@ -839,7 +851,9 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   // possible combinations: (simple, horizontal) 1, 2, 3, 4, (complex & vertical) 2x2=5, 3h x 2v, 4h x 2v, 3h x 3v, 4h x 3v, 2v=13, 3v=14, 4v=15, 4h x 4v
   if      (chainLength <   5) {            _cols = chainLength;     }   // 1 to 4 panels in a single row
   else if (chainLength <   9) { _rows = 2; _cols = chainLength / 2; }   // 7 does not exist and 5 is rounded down for 2(x2)
-  else if (chainLength <  13) { _rows = 3; _cols = chainLength / 3; }   // 10 & 11 do not exist
+  else if (chainLength == 10) { _rows = 3; _cols = 2;               }   // 10 (2hx3v)
+  else if (chainLength == 11) { _rows = 4; _cols = 2;               }   // 11 (2hx4v)
+  else if (chainLength <  13) { _rows = 3; _cols = chainLength / 3; }   // 9, 12
   else if (chainLength <  16) { _rows = chainLength - 11;           }   // hack for 1x2, 1x3, 1x4 vertical panels
   else if (chainLength >= 16) { _rows = 4; _cols = 4;               }
   // check for too many pixels & reduce panel count if necessary
@@ -909,7 +923,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
       break;
   }
 
-  DEBUGBUS_PRINTF_P(PSTR("MatrixPanel_I2S_DMA config - %ux%u length: %u\n"), mxconfig.mx_width, mxconfig.mx_height, mxconfig.chain_length);
+  DEBUGBUS_PRINTF_P(PSTR("MatrixPanel_I2S_DMA config - %ux%u length: %u=%dx%d)\n"), mxconfig.mx_width, mxconfig.mx_height, mxconfig.chain_length, (int)_cols, (int)_rows);
   DEBUGBUS_PRINTF_P(PSTR("R1_PIN=%u, G1_PIN=%u, B1_PIN=%u, R2_PIN=%u, G2_PIN=%u, B2_PIN=%u, A_PIN=%u, B_PIN=%u, C_PIN=%u, D_PIN=%u, E_PIN=%u, LAT_PIN=%u, OE_PIN=%u, CLK_PIN=%u\n"),
                 mxconfig.gpio.r1, mxconfig.gpio.g1, mxconfig.gpio.b1, mxconfig.gpio.r2, mxconfig.gpio.g2, mxconfig.gpio.b2,
                 mxconfig.gpio.a, mxconfig.gpio.b, mxconfig.gpio.c, mxconfig.gpio.d, mxconfig.gpio.e, mxconfig.gpio.lat, mxconfig.gpio.oe, mxconfig.gpio.clk);
@@ -928,12 +942,15 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     cleanup(); // free allocated pins
     return;
   }
+  DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA created"));
 
   // for quad-scan panels or 2 or more rows we create a virtual panel that maps to the physical one
   if (_rows > 1 || isOffRefreshRequired()) {  // quarter-scan panels need virtual panel (hijack off-refresh)
     if (_rows > 1 || _cols > 1) _chainType = bc.pins[4]==255 || _rows == 1 ? (uint8_t)CHAIN_NONE : bc.pins[4];
+    DEBUGBUS_PRINTLN(F("Attempting to create virtual display."));
     virtualDisp = new(std::nothrow) VirtualMatrixPanel((*display), _rows, _cols, dim[0], dim[1], (PANEL_CHAIN_TYPE)_chainType);
     if (virtualDisp) {
+      DEBUGBUS_PRINTF_P(PSTR("Virtual display created. Chain: %d"), (int)_chainType);
       virtualDisp->setRotation(0);
       // adjust scan rate based on height
       switch (bc.pins[1]) {
@@ -953,7 +970,6 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     }
   }
 
-  DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA created"));
   DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
   DEBUGBUS_PRINTF_P(PSTR("Hub75 Length: %u\n"), _len);
 
@@ -976,10 +992,9 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA clear ok"));
 
     _matrixWidth = virtualDisp ? virtualDisp->width() : display->width();  // cache width - it will never change
-    DEBUGBUS_PRINTF_P(PSTR("MatrixPanel_I2S_DMA %sstarted, width=%u, %u pixels.\n"), _valid? "":"not ", _matrixWidth, _len);
     _valid = true;
+    DEBUGBUS_PRINTF_P(PSTR("MatrixPanel_I2S_DMA started, width=%u, %u pixels.\n"), _matrixWidth, _len);
   }
-
 }
 
 void BusHub75Matrix::setPixelColor(unsigned pix, uint32_t c) {
@@ -1047,11 +1062,16 @@ size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
     // adjust for hack used in UI
     switch (_cols) {
       case 1: if (_rows >  1) chainLength += 11; break; // vertical 2v, 3v, 4v chaining
-      case 2: if (_rows == 2) chainLength++;     break; // 2x2 chaining
+      case 2: switch (_rows) {
+                case 2: chainLength++;    break;  // accommodate 2x2 as 5
+                case 3: chainLength = 10; break;  // 2x3
+                case 4: chainLength = 11; break;  // 2x4
+              }
+              break;
     }
-    pinArray[0] = mxconfig.mx_width;  // 32,64,128
-    pinArray[1] = mxconfig.mx_height; // 32,64,128
-    pinArray[2] = chainLength;        // 1-16 (invalid values: 7, 10, 11)
+    pinArray[0] = isOffRefreshRequired() ? mxconfig.mx_width  >> 1 : mxconfig.mx_width;  // 32,64,128
+    pinArray[1] = isOffRefreshRequired() ? mxconfig.mx_height << 1 : mxconfig.mx_height; // 32,64,128
+    pinArray[2] = chainLength;        // 1-16 (invalid value: 7)
     pinArray[3] = (uint8_t)mxconfig.driver;
     pinArray[4] = _chainType;
     getHub75Pins(_type, &pinArray[5]);// ignoreable extension
@@ -1072,13 +1092,16 @@ std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
     {TYPE_HUB75MATRIX_MOONHUB, "H", PSTR("HUB75 (Moonhub T7 S3)")},
     {TYPE_HUB75MATRIX_S3,      "H", PSTR("HUB75 (S3 with PSRAM)")},
     {TYPE_HUB75HD_WF2,         "H", PSTR("HUB75 (Huidu HD-WF2)")},
-    {TYPE_HUB75SEENGREAT,      "H", PSTR("HUB75 (Seengreat v2)")},
+    {TYPE_HUB75SEENGREAT,      "H", PSTR("HUB75 (Seengreat v1)")},
+    {TYPE_HUB75SEENGREA2,      "H", PSTR("HUB75 (Seengreat v2)")},
     {TYPE_HUB75WAVESHARE,      "H", PSTR("HUB75 (Waveshare S3)")},
 #elif defined(CONFIG_IDF_TARGET_ESP32S2)
     {TYPE_HUB75MATRIX_S2DRIVE, "H", PSTR("HUB75 (S2 Drive P4)")},
 #elif defined(CONFIG_IDF_TARGET_ESP32)
     {TYPE_HUB75MATRIX_TRINITY, "H", PSTR("HUB75 (Trinity/ElectroDragon)")},
     {TYPE_HUB75MATRIX_FORUM,   "H", PSTR("HUB75 (ESP32 Forum Pinout)")},
+    {TYPE_HUB75SEENGREAT,      "H", PSTR("HUB75 (Seengreat v1)")},
+    {TYPE_HUB75SEENGREA2,      "H", PSTR("HUB75 (Seengreat v2)")},
 #endif
     {TYPE_HUB75MATRIX_CUSTOM,  "H", PSTR("HUB75 (custom pins)")}
 };

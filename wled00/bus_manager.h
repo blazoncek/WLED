@@ -115,7 +115,7 @@ uint16_t approximateKelvinFromRGB(uint32_t rgb);
 #define TYPE_LPD6803             54
 #define TYPE_HD108               55
 #define TYPE_2PIN_MAX            63
-//Digital types (Hub75 matrix) (64-71)
+//Digital types (Hub75 matrix) (64-79)
 #if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
 #define TYPE_HUB75MATRIX_MIN     64
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
@@ -123,16 +123,19 @@ uint16_t approximateKelvinFromRGB(uint32_t rgb);
 #define TYPE_HUB75MATRIX_MOONHUB 65           //MoonHub75 board
 #define TYPE_HUB75MATRIX_S3      66           //plain S3 Hub75 matrix board
 #define TYPE_HUB75HD_WF2         67           //Huidu HD-WF2 (S3 without PSRAM!!)
-#define TYPE_HUB75SEENGREAT      68           //Seengreat v2
+#define TYPE_HUB75SEENGREA2      68           //Seengreat v2
 #define TYPE_HUB75WAVESHARE      69           //Waveshare ESP32-S3-RGB-Matrix
+#define TYPE_HUB75SEENGREAT      70           //Seengreat v1
 #elif defined(CONFIG_IDF_TARGET_ESP32S2)
 #define TYPE_HUB75MATRIX_S2DRIVE 64           //S2 drive (https://www.ledclub.net/2025/03/15/esp32-s2-drive-p4-80x40-led-matrix/)
 #elif defined(CONFIG_IDF_TARGET_ESP32)
 #define TYPE_HUB75MATRIX_TRINITY 64           //Trinity/ElectroDragon ESP32 board (https://esp32trinity.com/, https://www.electrodragon.com/product/rgb-matrix-panel-drive-interface-board-for-esp32-dma/)
 #define TYPE_HUB75MATRIX_FORUM   65           //ESP32 Forum/SmartMatrix board (https://github.com/rorosaurus/esp32-hub75-driver)
+#define TYPE_HUB75SEENGREAT      66           //Seengreat v1
+#define TYPE_HUB75SEENGREA2      67           //Seengreat v2
 #endif
-#define TYPE_HUB75MATRIX_CUSTOM  71           //custom pins defined in hub75pin.json file (manually uploaded, contains JSON array of pin numbers; no validation performed)
-#define TYPE_HUB75MATRIX_MAX     71
+#define TYPE_HUB75MATRIX_CUSTOM  79           //custom pins defined in hub75pin.json file (manually uploaded, contains JSON array of pin numbers; no validation performed)
+#define TYPE_HUB75MATRIX_MAX     79
 #endif
 //Network types (master broadcast) (80-95)
 #define TYPE_VIRTUAL_MIN         80
