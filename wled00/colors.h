@@ -219,7 +219,7 @@ struct CRGBA {
   friend inline CRGBA operator|(CRGBA lhs, const CRGBA& rhs)    { lhs |= rhs;   return lhs; }
 
   // Conversion operator to uint32_t (!!! will strip alpha channel, producing 0x00RRGGBB)
-  explicit inline operator uint32_t() const { return color32; }
+  explicit inline operator uint32_t() const { return color32 & 0x00FFFFFF; }
 
 #ifdef FASTLED_VERSION
   // Constructor from CRGB
