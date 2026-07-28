@@ -140,9 +140,9 @@ struct PSsource {
 // class uses 72 bytes
 class ParticleSystem2D {
 public:
-  ParticleSystem2D(const uint32_t numberofparticles, const uint32_t numberofsources, const bool sizecontrol = false); // constructor
+  ParticleSystem2D(const Segment &seg, const uint32_t numberofparticles, const uint32_t numberofsources, const bool sizecontrol = false); // constructor
   // note: memory is allcated in the FX function, no deconstructor needed
-  void update(void); //update the particles according to set options and render to the matrix
+  void update(); //update the particles according to set options and render to the matrix
   void updateSystem(uint32_t w, uint32_t h); // call at the beginning of every FX, updates pointers and dimensions
   void particleMoveUpdate(PSparticle &part, PSsettings2D &options); // move function
   // particle emitters
@@ -203,6 +203,7 @@ private:
   void getParticleXYsize(int32_t size, uint32_t asymmetry, int32_t asymdir, uint32_t &xsize, uint32_t &ysize);
   [[gnu::hot]] void bounce(int8_t &incomingSpeed, int8_t &perpendicularSpeed, int32_t &position, const uint32_t maxPosition, const uint32_t particleRadius); // bounce on a wall
 
+  const Segment &_segment;
   // note: variables that are accessed often are 32bit for speed
   PSsettings2D particlesettings; // settings used when updating particles (can also used by FX to move sources), do not edit properties directly, use functions above
   uint32_t numParticles;  // total number of particles allocated by this system
@@ -220,7 +221,7 @@ private:
 };
 
 // initialization functions (not part of class)
-bool initParticleSystem2D(ParticleSystem2D *&PartSys, const uint32_t requestedsources, const uint32_t additionalbytes = 0, const bool sizecontrol = false);
+bool initParticleSystem2D(Segment &seg, ParticleSystem2D *&PartSys, const uint32_t requestedsources, const uint32_t additionalbytes = 0, const bool sizecontrol = false);
 #endif // WLED_DISABLE_PARTICLESYSTEM2D
 
 /*

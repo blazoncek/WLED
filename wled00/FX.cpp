@@ -6678,7 +6678,7 @@ uint16_t mode_particlevortex(void) {
   uint32_t i, j;
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(PartSys, NUMBEROFSOURCES))
+    if (!initParticleSystem2D(SEGMENT, PartSys, NUMBEROFSOURCES))
       return mode_static(); // allocation failed
     #ifdef ESP8266
     PartSys->setMotionBlur(180);
@@ -6788,7 +6788,7 @@ uint16_t mode_particlefireworks(void) {
   uint32_t numRockets;
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(PartSys, NUMBEROFSOURCES))
+    if (!initParticleSystem2D(SEGMENT, PartSys, NUMBEROFSOURCES))
       return mode_static(); // allocation failed
 
     PartSys->setKillOutOfBounds(true); // out of bounds particles dont return (except on top, taken care of by gravity setting)
@@ -6934,7 +6934,7 @@ uint16_t mode_particlevolcano(void) {
   uint32_t i = 0;
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(PartSys, NUMBEROFSOURCES)) // init, no additional data needed
+    if (!initParticleSystem2D(SEGMENT, PartSys, NUMBEROFSOURCES)) // init, no additional data needed
       return mode_static(); // allocation failed or not 2D
 
     PartSys->setBounceY(true);
@@ -7001,7 +7001,7 @@ uint16_t mode_particlepit(void) {
   ParticleSystem2D *PartSys = nullptr;
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(PartSys, 0)) // init
+    if (!initParticleSystem2D(SEGMENT, PartSys, 0)) // init
       return mode_static(); // allocation failed or not 2D
     PartSys->setKillOutOfBounds(true);
     PartSys->setGravity(); // enable with default gravity
@@ -7072,7 +7072,7 @@ uint16_t mode_particlewaterfall(void) {
   uint32_t i = 0;
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(PartSys, 12)) // init, request 12 sources
+    if (!initParticleSystem2D(SEGMENT, PartSys, 12)) // init, request 12 sources
       return mode_static(); // allocation failed or not 2D
 
     PartSys->setGravity();  // enable with default gforce
@@ -7143,7 +7143,7 @@ uint16_t mode_particlebox(void) {
   uint32_t i;
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(PartSys, 0)) // init
+    if (!initParticleSystem2D(SEGMENT, PartSys, 0)) // init
       return mode_static(); // allocation failed or not 2D
     PartSys->setBounceX(true);
     PartSys->setBounceY(true);
@@ -7231,7 +7231,7 @@ uint16_t mode_particleperlin(void) {
   uint32_t i;
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(PartSys, 1))
+    if (!initParticleSystem2D(SEGMENT, PartSys, 1))
       return mode_static(); // allocation failed or not 2D
 
     PartSys->setKillOutOfBounds(true); // should never happen, but lets make sure there are no stray particles
@@ -7294,7 +7294,7 @@ uint16_t mode_particleimpact(void) {
   PSsettings2D meteorsettings(0b00101000); // PS settings for meteors: bounceY and gravity enabled
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(PartSys, NUMBEROFSOURCES)) // init, no additional data needed
+    if (!initParticleSystem2D(SEGMENT, PartSys, NUMBEROFSOURCES)) // init, no additional data needed
       return mode_static(); // allocation failed or not 2D
     PartSys->setKillOutOfBounds(true);
     PartSys->setGravity(); // enable default gravity
@@ -7401,7 +7401,7 @@ uint16_t mode_particleattractor(void) {
   PSsettings2D sourcesettings(0b00001100); // PS settings for bounceY, bounceY used for source movement (it always bounces whereas particles do not)
   PSparticle *attractor; // particle pointer to the attractor
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(PartSys, 1, sizeof(PSparticle))) // init using 1 source and advanced particle settings
+    if (!initParticleSystem2D(SEGMENT, PartSys, 1, sizeof(PSparticle))) // init using 1 source and advanced particle settings
       return mode_static(); // allocation failed or not 2D
     PartSys->sources[0].source.hue = hw_random16();
     PartSys->sources[0].source.vy = 0;
@@ -7492,7 +7492,7 @@ uint16_t mode_particlespray(void) {
   const uint8_t hardness = 200; // collision hardness is fixed
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(PartSys, 1)) // init, no additional data needed
+    if (!initParticleSystem2D(SEGMENT, PartSys, 1)) // init, no additional data needed
       return mode_static(); // allocation failed or not 2D
     PartSys->setKillOutOfBounds(true); // out of bounds particles dont return (except on top, taken care of by gravity setting)
     PartSys->setBounceY(true);
@@ -7560,7 +7560,7 @@ uint16_t mode_particleghostrider(void) {
   PSsettings2D ghostsettings(0b0000011); //enable wrapX and wrapY
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(PartSys, 1)) // init, no additional data needed
+    if (!initParticleSystem2D(SEGMENT, PartSys, 1)) // init, no additional data needed
       return mode_static(); // allocation failed or not 2D
     PartSys->setKillOutOfBounds(true); // out of bounds particles dont return (except on top, taken care of by gravity setting)
     PartSys->sources[0].maxLife = 260; // lifetime in frames
@@ -7639,7 +7639,7 @@ uint16_t mode_particleblobs(void) {
   ParticleSystem2D *PartSys = nullptr;
 
   if (SEGENV.call == 0) {
-    if (!initParticleSystem2D(PartSys, 0, 0, true)) //init, no additional bytes, size control
+    if (!initParticleSystem2D(SEGMENT, PartSys, 0, 0, true)) //init, no additional bytes, size control
       return mode_static(); // allocation failed or not 2D
     PartSys->setBounceX(true);
     PartSys->setBounceY(true);
@@ -7717,7 +7717,7 @@ uint16_t mode_particlegalaxy(void) {
   ParticleSystem2D *PartSys = nullptr;
   PSsettings2D sourcesettings(0b00001100); // PS settings for bounceY, bounceY used for source movement (it always bounces whereas particles do not)
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(PartSys, 1)) // init using 1 source
+    if (!initParticleSystem2D(SEGMENT, PartSys, 1)) // init using 1 source
       return mode_static(); // allocation failed or not 2D
     PartSys->sources[0].source.vy = 0;
     PartSys->sources[0].source.vx = -4; // will collide with wall and get random bounce direction

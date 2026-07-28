@@ -55,7 +55,9 @@ static bool checkBoundsAndWrap(int32_t &position, int32_t max, const int32_t par
 
 // ParticleSystem2D class functions
 // constructor
-ParticleSystem2D::ParticleSystem2D(uint32_t numberofparticles, uint32_t numberofsources, bool sizecontrol) {
+ParticleSystem2D::ParticleSystem2D(const Segment &seg, uint32_t numberofparticles, uint32_t numberofsources, bool sizecontrol)
+: _segment(seg)
+{
   PSPRINTLN("ParticleSystem2D constructor");
   numSources = numberofsources; // number of sources allocated in init
   numParticles = numberofparticles; // number of particles allocated in init
@@ -84,7 +86,7 @@ ParticleSystem2D::ParticleSystem2D(uint32_t numberofparticles, uint32_t numberof
 }
 
 // update function applies gravity, moves the particles, handles collisions and renders the particles
-void ParticleSystem2D::update(void) {
+void ParticleSystem2D::update() {
   //apply gravity globally if enabled
   if (particlesettings.useGravity) applyGravity();
 
@@ -465,9 +467,9 @@ void ParticleSystem2D::render() {
   TBlendType blend = particlesettings.colorByAge ? LINEARBLEND_NOWRAP : LINEARBLEND; // default color rendering: wrap palette
 
   if (motionBlur) { // motion-blurring active (fade existing pixels before overlaying new frame)
-    SEGMENT.fadeToBlackBy(motionBlur);
+    _segment.fadeToBlackBy(motionBlur);
   } else { // no motion blurring: clear buffer
-    SEGMENT.clear();
+    _segment.clear();
   }
 
   // go over particles and render them to the buffer
@@ -490,7 +492,7 @@ void ParticleSystem2D::render() {
 
   // apply 2D blur to rendered frame
   if (smearBlur) {
-    SEGMENT.blur2D(smearBlur, smearBlur, true);
+    _segment.blur2D(smearBlur, smearBlur, true);
   }
 }
 
@@ -498,11 +500,15 @@ void ParticleSystem2D::render() {
 void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color, const bool wrapX, const bool wrapY) {
   uint32_t particleRadius = particles[particleindex].size;
 
+  // work with bufferless segment
+  void  (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = _segment.getPixels() ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const        = _segment.getPixels() ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+
   // single pixel non-antialiased rendering
   if (particleRadius == 0) {
     const int32_t pxC = (particles[particleindex].x >> PS_P_SHIFT);
     const int32_t pyC = maxYpixel - (particles[particleindex].y >> PS_P_SHIFT);  // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-    if ((uint32_t)pxC <= (uint32_t)maxXpixel && (uint32_t)pyC <= (uint32_t)maxYpixel) SEGMENT.addPixelColorXYRaw(pxC, pyC, color);
+    if ((uint32_t)pxC <= (uint32_t)maxXpixel && (uint32_t)pyC <= (uint32_t)maxYpixel) (_segment.*setPixelXY)(pxC, pyC, (_segment.*getPixelXY)(pxC, pyC).add(color));
     return;
   }
 
@@ -510,7 +516,7 @@ void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color,
   if (particleRadius == 1) {
     const int32_t pxC = particles[particleindex].x << (8 - PS_P_SHIFT);
     const int32_t pyC = (maxY - particles[particleindex].y) << (8 - PS_P_SHIFT);  // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-    if ((uint32_t)(pxC>>8) <= (uint32_t)maxXpixel && (uint32_t)(pyC>>8) <= (uint32_t)maxYpixel) SEGMENT.setWuPixelColor(pxC, pyC, color);
+    if ((uint32_t)(pxC>>8) <= (uint32_t)maxXpixel && (uint32_t)(pyC>>8) <= (uint32_t)maxYpixel) _segment.setWuPixelColor(pxC, pyC, color); // handles bufferless segment on its own
     return;
   }
 
@@ -560,8 +566,8 @@ void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color,
             CRGBA c = color;
             // apply antialiasing: 384>dist>192 -> 64 to 255; 64<dist<128 -> 64 to 252
             uint8_t alpha = dist > 192 ? 448 - dist : (dist*dist) >> 6; // may need tuning! (including inverse gamma according to @DedeHai)
-            SEGMENT.blendPixelColorXYRaw(px, py, c/*.setOpacity(alpha)*/, alpha); // may need tuning!
-          } else SEGMENT.setPixelColorXYRaw(px, py, color);
+            (_segment.*setPixelXY)(px, py, (_segment.*getPixelXY)(px, py).nblend(c, alpha)); // may need tuning!
+          } else (_segment.*setPixelXY)(px, py, color);
         }
       }
     }
@@ -577,6 +583,7 @@ void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color,
   // limit to radius from 0.5 to 5 pixels
   rx = constrain(rx, 32, 320);
   ry = constrain(ry, 32, 320);
+  // use custom ellipse
   drawEllipse(particles[particleindex].x, particles[particleindex].y, rx, ry, particles[particleindex].hollow);
 }
 
@@ -883,7 +890,7 @@ static uint32_t calculateNumberOfSources2D(uint32_t pixels, uint32_t requestedso
 }
 
 //allocate memory for particle system class, particles, sprays plus additional memory requested by FX //TODO: add percentofparticles like in 1D to reduce memory footprint of some FX?
-static bool allocateParticleSystemMemory2D(uint32_t numparticles, uint32_t numsources, bool sizecontrol = false, uint32_t additionalbytes = 0) {
+static bool allocateParticleSystemMemory2D(Segment &seg, uint32_t numparticles, uint32_t numsources, bool sizecontrol = false, uint32_t additionalbytes = 0) {
   PSPRINTLN("PS 2D alloc");
   PSPRINTF(PSTR(" numparticles: %d numsources: %d additionalbytes: %d\n"), numparticles, numsources, additionalbytes);
   uint32_t requiredmemory = sizeof(ParticleSystem2D);
@@ -892,31 +899,31 @@ static bool allocateParticleSystemMemory2D(uint32_t numparticles, uint32_t numso
   if (sizecontrol) requiredmemory += sizeof(PSsizeControl) * numparticles;
   requiredmemory += sizeof(PSsource) * numsources;
   requiredmemory += additionalbytes;
-  return SEGMENT.allocateData(requiredmemory);
+  return seg.allocateData(requiredmemory);
 }
 
 // initialize Particle System, allocate additional bytes if needed (pointer to those bytes can be read from particle system class: PSdataEnd)
-bool initParticleSystem2D(ParticleSystem2D *&PartSys, uint32_t requestedsources, uint32_t additionalbytes, bool sizecontrol) {
+bool initParticleSystem2D(Segment &seg, ParticleSystem2D *&PartSys, uint32_t requestedsources, uint32_t additionalbytes, bool sizecontrol) {
   PSPRINTLN("PS 2D init");
   if (!strip.isMatrix) return false; // only for 2D
-  uint32_t cols = SEGMENT.vWidth();
-  uint32_t rows = SEGMENT.vHeight();
+  uint32_t cols = seg.vWidth();
+  uint32_t rows = seg.vHeight();
   uint32_t pixels = cols * rows;
 
   uint32_t numparticles = calculateNumberOfParticles2D(pixels, sizecontrol);
   PSPRINTF(PSTR(" segmentsize: %dx%d particles: %d\n"), cols, rows, numparticles);
   uint32_t numsources = calculateNumberOfSources2D(pixels, requestedsources);
-  while (!allocateParticleSystemMemory2D(numparticles, numsources, sizecontrol, additionalbytes) && numparticles >= 4) { // make sure we have at least 4 particles or quit
+  while (!allocateParticleSystemMemory2D(seg, numparticles, numsources, sizecontrol, additionalbytes) && numparticles >= 4) { // make sure we have at least 4 particles or quit
     numparticles = (numparticles>>1) & ~0x03; // try with less particles
     PSPRINTLN(F("PS 2D alloc failed, trying with less particles..."));
   }
   if (numparticles < 4) {
     PSPRINTLN(F("PS 2D alloc failed, not enough memory!"));
-    SEGMENT.deallocateData(); // free any previously allocated memory
+    seg.deallocateData(); // free any previously allocated memory
     return false; // allocation failed
   }
 
-  PartSys = new (SEGENV.data) ParticleSystem2D(numparticles, numsources, sizecontrol); // particle system constructor
+  PartSys = new (SEGENV.data) ParticleSystem2D(seg, numparticles, numsources, sizecontrol); // particle system constructor
   PartSys->setMatrixSize(cols, rows);
 
   PSPRINTLN(F("2D PS init done"));

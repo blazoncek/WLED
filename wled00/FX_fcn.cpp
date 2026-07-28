@@ -727,11 +727,11 @@ unsigned Segment::virtualHeight() const {
 #ifndef WLED_DISABLE_2D
 constexpr int Fixed_Scale = 16384; // fixpoint scaling factor (14bit for fraction)
 // Pinwheel helper function: matrix dimensions to number of rays
-static int getPinwheelLength(int vW, int vH) {
+static inline int getPinwheelLength(unsigned vW, unsigned vH) {
   // Returns multiple of 8, prevents over drawing
   return (max(vW, vH) + 15) & ~7;
 }
-static void setPinwheelParameters(int i, int vW, int vH, int& startx, int& starty, int* cosVal, int* sinVal, bool getPixel = false) {
+static void setPinwheelParameters(unsigned i, unsigned vW, unsigned vH, int& startx, int& starty, int* cosVal, int* sinVal, bool getPixel = false) {
   int steps = getPinwheelLength(vW, vH);
   int baseAngle = ((0xFFFF + steps / 2) / steps);  // 360° / steps, in 16 bit scale round to nearest integer
   int rotate = 0;
@@ -791,7 +791,7 @@ uint16_t Segment::maxMappingLength() const {
 #endif
 
 // set clipping range
-void Segment::setClippingRect(int startX, int stopX, int startY, int stopY) {
+void Segment::setClippingRect(unsigned startX, unsigned stopX, unsigned startY, unsigned stopY) {
   _clipStart  = startX;
   _clipStop   = stopX;
   _clipStartY = startY;
@@ -800,11 +800,11 @@ void Segment::setClippingRect(int startX, int stopX, int startY, int stopY) {
 
 // pixel is clipped if it falls outside clipping range
 // if clipping start > stop the clipping range is inverted
-bool Segment::isPixelClipped(int i) const {
+bool Segment::isPixelClipped(unsigned i) const {
   if (transitionStyle != TRANSITION_FADE && isInTransition() && _clipStart != _clipStop) {
-    bool invert = _clipStart > _clipStop;  // ineverted start & stop
-    int start = invert ? _clipStop : _clipStart;
-    int stop  = invert ? _clipStart : _clipStop;
+    const bool invert = _clipStart > _clipStop;  // ineverted start & stop
+    unsigned   start  = invert ? _clipStop : _clipStart;
+    unsigned   stop   = invert ? _clipStart : _clipStop;
     if (transitionStyle == TRANSITION_FAIRY_DUST) {
       unsigned len = stop - start;
       if (len < 2) return false;
@@ -829,21 +829,20 @@ void Segment::setStripPixelColor(unsigned i, CRGBA c) const {
   }
 }
 
-void Segment::setPixelColor(int i, CRGBA col) const
-{
-  if (!isActive() || i < 0) return; // not active or invalid index
-#ifndef WLED_DISABLE_2D
-  const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
-  const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
-  int vStrip = i>>16; // hack to allow running on virtual strips (2D segment columns/rows)
-#endif
-  const int vL = vLength();
+void Segment::setPixelColor(unsigned i, CRGBA col) const {
+  if (!isActive()) return; // not active or invalid index
+  #ifndef WLED_DISABLE_2D
+  unsigned vStrip = i>>16;        // hack to allow running on virtual strips (2D segment columns/rows)
+  #endif
+  const unsigned vL = vLength();
   // if the 1D effect is using virtual strips "i" will have virtual strip id stored in upper 16 bits
   // in such case "i" will be > virtualLength()
   i &= 0xFFFF;          // truncate vStrip index
   if (i >= vL) return;  // if pixel would still fall out of segment just exit
 
 #ifndef WLED_DISABLE_2D
+  const unsigned vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
+  const unsigned vH = vHeight();  // segment height in logical pixels (is always >= 1)
   void (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
   if (is2D()) {
     switch (map1D2D) {
@@ -853,18 +852,18 @@ void Segment::setPixelColor(int i, CRGBA col) const
         break;
       case M12_pBar:
         // expand 1D effect vertically or have it play on virtual strips
-        if (vStrip > 0)                   (this->*setPixelXY)(vStrip - 1, vH - i - 1, col);
-        else for (int x = 0; x < vW; x++) (this->*setPixelXY)(x, vH - i - 1, col);
+        if (vStrip > 0)                        (this->*setPixelXY)(vStrip - 1, vH - i - 1, col);
+        else for (unsigned x = 0; x < vW; x++) (this->*setPixelXY)(x, vH - i - 1, col);
         break;
       case M12_pArc: {
         // expand 1D effect in a circular manner
         // adapted code by @brandon502 wled#4994
         if (i == 0)    { (this->*setPixelXY)(0, 0, col);       break; }  // with only 1 pixel to draw, return early
         if (i == vL-1) { (this->*setPixelXY)(vW-1, vH-1, col); break; }  // extreme (last) pixel is always in corner
-        if (i == 2)      (this->*setPixelXY)(1, 1, col);                 // cover anomally (missing pixel with square detection)
+        if (i == 2)    { (this->*setPixelXY)(1, 1, col);              }  // cover anomally (missing pixel with square detection)
         // Tony Barrera's circle algorithm
         // https://softwareengineering.stackexchange.com/questions/287478/drawing-concentric-circles-without-gaps/357445#357445
-        int x = 0, y = i;  // i is the radius
+        unsigned x = 0, y = i;  // i is the radius
         int d = -(i >> 1); // initial decision parameter
         while (x <= y) {
           if (i != x || i != y) { // prevent early square
@@ -881,10 +880,10 @@ void Segment::setPixelColor(int i, CRGBA col) const
         // corner expansion can work on non-square segments, but virtualLength() returns
         // maximum dimension (either virtualWidth() or virtualHeight()) so we needt to limit
         // drawing in that particular dimension
-        int w = min(i, vW - 1);
-        int h = min(i, vH - 1);
-        if (i < vH) for (int x = 0; x <= w; x++) (this->*setPixelXY)(x, i, col);
-        if (i < vW) for (int y = 0; y <= h; y++) (this->*setPixelXY)(i, y, col);
+        unsigned w = min(i, vW - 1);
+        unsigned h = min(i, vH - 1);
+        if (i < vH) for (unsigned x = 0; x <= w; x++) (this->*setPixelXY)(x, i, col);
+        if (i < vW) for (unsigned y = 0; y <= h; y++) (this->*setPixelXY)(i, y, col);
         break;
       }
       case M12_sPinwheel: {
@@ -987,7 +986,7 @@ void Segment::setPixelColor(int i, CRGBA col) const
   } else if (Segment::maxHeight != 1 && (width() == 1 || height() == 1)) {
     if (start < Segment::maxWidth*Segment::maxHeight) {
       // we have a vertical or horizontal 1D segment (WARNING: virtual...() may be transposed)
-      int x = 0, y = 0;
+      unsigned x = 0, y = 0;
       if (vH > 1) y = i;
       if (vW > 1) x = i;
       if (x < vW && y < vH) (this->*setPixelXY)(x, y, col);
@@ -999,20 +998,17 @@ void Segment::setPixelColor(int i, CRGBA col) const
   else setStripPixelColor(i, col);
 }
 
-CRGBA Segment::getPixelColor(int i) const
-{
-  if (!isActive() || i < 0) return 0; // not active or invalid index
-
+CRGBA Segment::getPixelColor(unsigned i) const {
 #ifndef WLED_DISABLE_2D
-  int vStrip = i>>16; // virtual strips are only relevant in Bar expansion mode
+  unsigned vStrip = i>>16; // virtual strips are only relevant in Bar expansion mode
 #endif
   i &= 0xFFFF;
-  if (i >= (int)vLength()) return 0;
+  if (i >= vLength() || !isActive()) return 0; // not active or invalid index
 
 #ifndef WLED_DISABLE_2D
   if (is2D()) {
-    const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
-    const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
+    const unsigned vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
+    const unsigned vH = vHeight();  // segment height in logical pixels (is always >= 1)
     int x = 0, y = 0;
     switch (map1D2D) {
       case M12_Pixels:
@@ -1028,9 +1024,9 @@ CRGBA Segment::getPixelColor(int i) const
           // using diagonal/hypotenuse pixel has a drawback as not every arc paints diagonal pixels
           // so we need to reverse-plot the circle to find a pixel that was painted
           // using Barerra's circle algorithm (see above, i is outside of segment dimensions)
-          int cx = 0, cy = i;     // i is the radius (i.e. > vW or vH)
-          int d = -(i >> 1);      // initial decision parameter
-          int validCount = 0;     // count of valid pixels found
+          unsigned cx = 0, cy = i;  // i is the radius (i.e. > vW or vH)
+          int d = -(i >> 1);        // initial decision parameter
+          int validCount = 0;       // count of valid pixels found
           while (cx <= cy && validCount < 2) { // when we find 2 valid pixels we are done otherwise continue until circle is complete
             if      (cy < vH && cx < vW) { x = cx; y = cy; validCount++; }
             else if (cy < vW && cx < vH) { x = cy; y = cx; validCount++; }

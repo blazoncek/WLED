@@ -166,14 +166,14 @@ void WS2812FX::setUpMatrix() {
 #ifndef WLED_DISABLE_2D
 // pixel is clipped if it falls outside clipping range
 // if clipping start > stop the clipping range is inverted
-bool Segment::isPixelXYClipped(int x, int y) const {
+bool Segment::isPixelXYClipped(unsigned x, unsigned y) const {
   if (transitionStyle != TRANSITION_FADE && isInTransition() && _clipStart != _clipStop) {
     const bool invertX = _clipStart  > _clipStop;
     const bool invertY = _clipStartY > _clipStopY;
-    const int  cStartX = invertX ? _clipStop   : _clipStart;
-    const int  cStopX  = invertX ? _clipStart  : _clipStop;
-    const int  cStartY = invertY ? _clipStopY  : _clipStartY;
-    const int  cStopY  = invertY ? _clipStartY : _clipStopY;
+    const unsigned cStartX = invertX ? _clipStop   : _clipStart;
+    const unsigned cStopX  = invertX ? _clipStart  : _clipStop;
+    const unsigned cStartY = invertY ? _clipStopY  : _clipStartY;
+    const unsigned cStopY  = invertY ? _clipStartY : _clipStopY;
     if (transitionStyle == TRANSITION_FAIRY_DUST) {
       const unsigned width = cStopX - cStartX;          // assumes full segment width (faster than virtualWidth())
       const unsigned len = width * (cStopY - cStartY);  // assumes full segment height (faster than virtualHeight())
@@ -183,16 +183,16 @@ bool Segment::isPixelXYClipped(int x, int y) const {
       return progress() <= pos;
     }
     if (transitionStyle == TRANSITION_CIRCULAR_IN || transitionStyle == TRANSITION_CIRCULAR_OUT) {
-      const int cx   = (cStopX-cStartX+1) / 2;
-      const int cy   = (cStopY-cStartY+1) / 2;
-      const bool out = (transitionStyle == TRANSITION_CIRCULAR_OUT);
+      const unsigned cx   = (cStopX-cStartX+1) / 2;
+      const unsigned cy   = (cStopY-cStartY+1) / 2;
+      const bool     out  = (transitionStyle == TRANSITION_CIRCULAR_OUT);
       const unsigned prog = out ? progress() : 0xFFFFU - progress();
-      int radius2    = max(cx, cy) * prog / 0xFFFF;
+      unsigned radius2    = max(cx, cy) * prog / 0xFFFF;
       radius2 = 2 * radius2 * radius2;
       if (radius2 == 0) return out;
       const int dx = x - cx;
       const int dy = y - cy;
-      const bool outside = dx * dx + dy * dy > radius2;
+      const bool outside = (dx * dx + dy * dy) > radius2;
       return out ? outside : !outside;
     }
     bool xInside = (x >= cStartX && x < cStopX); if (invertX) xInside = !xInside;
@@ -205,19 +205,19 @@ bool Segment::isPixelXYClipped(int x, int y) const {
 
 void Segment::setStripPixelColorXY(unsigned x, unsigned y, CRGBA c) const {
   // TODO: for now ignore W, CCT and opacity
-  const auto XY = [](int x, int y){ return x + y*Segment::maxWidth; };
-  const int revX = reverse   ? virtualWidth()  - x - 1 : x;   // might use vWidth() for speed
-  const int revY = reverse_y ? virtualHeight() - y - 1 : y;   // might use vHeight() for speed
-  const int baseX = start  + revX;
-  const int baseY = startY + revY;
+  const auto XY = [](unsigned x, unsigned y){ return x + y*Segment::maxWidth; };
+  const unsigned revX = reverse   ? vWidth()  - x - 1 : x;
+  const unsigned revY = reverse_y ? vHeight() - y - 1 : y;
+  const unsigned baseX = start  + revX;
+  const unsigned baseY = startY + revY;
   const uint32_t col = hasWhite() ? c.color32 : (uint32_t)c;  // explicit cast strips alpha/white channel
   size_t indx = XY(baseX, baseY); // absolute address on strip
   // TODO: for now ignore W, CCT and opacity
   strip.setPixelColor(indx, col);
   // Apply mirroring
   if (mirror || mirror_y) {
-    const int mirrorX = start  + width()  - revX - 1;
-    const int mirrorY = startY + height() - revY - 1;
+    const unsigned mirrorX = start  + width()  - revX - 1;
+    const unsigned mirrorY = startY + height() - revY - 1;
     const size_t idxMX = XY(transpose ? baseX : mirrorX, transpose ? mirrorY : baseY);
     const size_t idxMY = XY(transpose ? mirrorX : baseX, transpose ? baseY : mirrorY);
     const size_t idxMM = XY(mirrorX, mirrorY);
@@ -227,68 +227,22 @@ void Segment::setStripPixelColorXY(unsigned x, unsigned y, CRGBA c) const {
   }
 }
 
-void Segment::setPixelColorXY(int x, int y, CRGBA col) const
-{
-  if (!isActive()) return; // not active
-  if (x >= (int)vWidth() || y >= (int)vHeight() || x < 0 || y < 0) return;  // if pixel would fall out of virtual segment just exit
+void Segment::setPixelColorXY(unsigned x, unsigned y, CRGBA col) const {
+  if (!isActive() || x >= vWidth() || y >= vHeight()) return; // if segment is inactive or pixel would fall out of virtual segment just exit
   if (pixels) setPixelColorXYRaw(x, y, col);
   else setStripPixelColorXY(x, y, col);
 }
 
-#ifdef WLED_USE_AA_PIXELS
-// anti-aliased version of setPixelColorXY()
-void Segment::setPixelColorXY(float x, float y, uint32_t col, bool aa) const
-{
-  if (!isActive()) return; // not active
-  if (x<0.0f || x>1.0f || y<0.0f || y>1.0f) return; // not normalized
-
-  float fX = x * (vWidth()-1);
-  float fY = y * (vHeight()-1);
-  if (aa) {
-    unsigned xL = roundf(fX-0.49f);
-    unsigned xR = roundf(fX+0.49f);
-    unsigned yT = roundf(fY-0.49f);
-    unsigned yB = roundf(fY+0.49f);
-    float    dL = (fX - xL)*(fX - xL);
-    float    dR = (xR - fX)*(xR - fX);
-    float    dT = (fY - yT)*(fY - yT);
-    float    dB = (yB - fY)*(yB - fY);
-    uint32_t cXLYT = getPixelColorXY(xL, yT);
-    uint32_t cXRYT = getPixelColorXY(xR, yT);
-    uint32_t cXLYB = getPixelColorXY(xL, yB);
-    uint32_t cXRYB = getPixelColorXY(xR, yB);
-
-    if (xL!=xR && yT!=yB) {
-      setPixelColorXY(xL, yT, color_blend(col, cXLYT, uint8_t(sqrtf(dL*dT)*255.0f))); // blend TL pixel
-      setPixelColorXY(xR, yT, color_blend(col, cXRYT, uint8_t(sqrtf(dR*dT)*255.0f))); // blend TR pixel
-      setPixelColorXY(xL, yB, color_blend(col, cXLYB, uint8_t(sqrtf(dL*dB)*255.0f))); // blend BL pixel
-      setPixelColorXY(xR, yB, color_blend(col, cXRYB, uint8_t(sqrtf(dR*dB)*255.0f))); // blend BR pixel
-    } else if (xR!=xL && yT==yB) {
-      setPixelColorXY(xR, yT, color_blend(col, cXLYT, uint8_t(dL*255.0f))); // blend L pixel
-      setPixelColorXY(xR, yT, color_blend(col, cXRYT, uint8_t(dR*255.0f))); // blend R pixel
-    } else if (xR==xL && yT!=yB) {
-      setPixelColorXY(xR, yT, color_blend(col, cXLYT, uint8_t(dT*255.0f))); // blend T pixel
-      setPixelColorXY(xL, yB, color_blend(col, cXLYB, uint8_t(dB*255.0f))); // blend B pixel
-    } else {
-      setPixelColorXY(xL, yT, col); // exact match (x & y land on a pixel)
-    }
-  } else {
-    setPixelColorXY(uint16_t(roundf(fX)), uint16_t(roundf(fY)), col);
-  }
-}
-#endif
-
-// returns RGBW values of pixel
-CRGBA Segment::getPixelColorXY(int x, int y) const {
-  if (!isActive()) return 0; // not active
-  if (x >= (int)vWidth() || y >= (int)vHeight() || x<0 || y<0) return 0;  // if pixel would fall out of virtual segment just exit
+// returns RGB values of pixel
+CRGBA Segment::getPixelColorXY(unsigned x, unsigned y) const {
+  if (!isActive() || x >= vWidth() || y >= vHeight()) return 0; // if segment is inactive or pixel would fall out of virtual segment just exit
   if (pixels) return getPixelColorXYRaw(x, y);
   else {
-    const auto XY = [](int x, int y){ return x + y*Segment::maxWidth; };
-    const int revX = reverse   ? virtualWidth()  - x - 1 : x; // may replace with vWidth() for speed
-    const int revY = reverse_y ? virtualHeight() - y - 1 : y; // may replace with vHeight() for speed
-    const int baseX = start  + revX;
-    const int baseY = startY + revY;
+    const auto XY = [](unsigned x, unsigned y){ return x + y*Segment::maxWidth; };
+    const unsigned revX = reverse   ? vWidth()  - x - 1 : x;
+    const unsigned revY = reverse_y ? vHeight() - y - 1 : y;
+    const unsigned baseX = start  + revX;
+    const unsigned baseY = startY + revY;
     size_t indx = XY(baseX, baseY); // absolute address on strip
     return strip.getPixelColor(indx);
   }
@@ -299,65 +253,40 @@ void Segment::blur2D(uint8_t blur_x, uint8_t blur_y, bool smear) const {
   if (!isActive()) return; // not active
   const unsigned cols = vWidth();
   const unsigned rows = vHeight();
+
+  // support bufferless segment
+  void  (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const        = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+
   if (blur_x) {
     const uint8_t keepx = smear ? 255 : 255 - blur_x;
     const uint8_t seepx = blur_x >> (1 + smear);
-    if (pixels) {
-      for (unsigned row = 0; row < rows; row++) { // blur rows (x direction)
-        CRGBA carryover = BLACK;
-        for (unsigned x = 0; x < cols; x++) {
-          CRGBA cur = getPixelColorXYRaw(x, row);
-          CRGBA part = cur.scale8(seepx); // we are assuming RGBW pixels here as we also want to blur alpha channel
-          cur.nscale8(keepx);
-          cur += carryover;
-          if (x > 0) addPixelColorXYRaw(x - 1, row, part);
-          setPixelColorXYRaw(x, row, cur); // first pixel
-          carryover = part;
-        }
-      }
-    } else {
-      for (unsigned row = 0; row < rows; row++) { // blur rows (x direction)
-        CRGBA carryover = BLACK;
-        for (unsigned x = 0; x < cols; x++) {
-          CRGBA cur = getPixelColorXY(x, row);
-          CRGBA part = cur.scale8(seepx); // we are assuming RGBW pixels here as we also want to blur alpha channel
-          cur.nscale8(keepx);
-          cur += carryover;
-          if (x > 0) setStripPixelColorXY(x - 1, row, getPixelColorXY(x - 1, row).nadd(part));
-          setStripPixelColorXY(x, row, cur); // first pixel
-          carryover = part;
-        }
+    for (unsigned row = 0; row < rows; row++) { // blur rows (x direction)
+      CRGBA carryover = BLACK;
+      for (unsigned x = 0; x < cols; x++) {
+        CRGBA cur = (this->*getPixelXY)(x, row);
+        CRGBA part = cur.scale8(seepx); // we are assuming RGBW pixels here as we also want to blur alpha channel
+        cur.nscale8(keepx);
+        cur += carryover;
+        if (x > 0) (this->*setPixelXY)(x - 1, row, (this->*getPixelXY)(x - 1, row).add(part));
+        (this->*setPixelXY)(x, row, cur); // first pixel
+        carryover = part;
       }
     }
   }
   if (blur_y) {
     const uint8_t keepy = smear ? 255 : 255 - blur_y;
     const uint8_t seepy = blur_y >> (1 + smear);
-    if (pixels) {
-      for (unsigned col = 0; col < cols; col++) {
-        CRGBA carryover = BLACK;
-        for (unsigned y = 0; y < rows; y++) {
-          CRGBA cur = getPixelColorXYRaw(col, y);
-          CRGBA part = cur.scale8(seepy);
-          cur.nscale8(keepy);
-          cur += carryover;
-          if (y > 0) addPixelColorXYRaw(col, y - 1, part);
-          setPixelColorXYRaw(col, y, cur); // first pixel
-          carryover = part;
-        }
-      }
-    } else {
-      for (unsigned col = 0; col < cols; col++) {
-        CRGBA carryover = BLACK;
-        for (unsigned y = 0; y < rows; y++) {
-          CRGBA cur = getPixelColorXY(col, y);
-          CRGBA part = cur.scale8(seepy);
-          cur.nscale8(keepy);
-          cur += carryover;
-          if (y > 0) setStripPixelColorXY(col, y - 1, getPixelColorXY(col, y - 1).nadd(part));
-          setStripPixelColorXY(col, y, cur); // first pixel
-          carryover = part;
-        }
+    for (unsigned col = 0; col < cols; col++) {
+      CRGBA carryover = BLACK;
+      for (unsigned y = 0; y < rows; y++) {
+        CRGBA cur = (this->*getPixelXY)(col, y);
+        CRGBA part = cur.scale8(seepy);
+        cur.nscale8(keepy);
+        cur += carryover;
+        if (y > 0) (this->*setPixelXY)(col, y - 1, (this->*getPixelXY)(col, y - 1).add(part));
+        (this->*setPixelXY)(col, y, cur); // first pixel
+        carryover = part;
       }
     }
   }
@@ -438,6 +367,11 @@ void Segment::moveX(int delta, bool wrap) const {
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
   int absDelta = abs(delta);
   if (absDelta >= vW) return;
+
+  // support bufferless segment
+  void  (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const        = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+
   CRGBA newPxCol[vW];
   int newDelta;
   int stop = vW;
@@ -448,24 +382,13 @@ void Segment::moveX(int delta, bool wrap) const {
     stop = vW - absDelta;
     newDelta = delta > 0 ? delta : 0;
   }
-  if (pixels) {
-    for (int y = 0; y < vH; y++) {
-      for (int x = 0; x < stop; x++) {
-        int srcX = x + newDelta;
-        if (wrap) srcX %= vW; // Wrap using modulo when `wrap` is true
-        newPxCol[x] = getPixelColorXYRaw(srcX, y);
-      }
-      for (int x = 0; x < stop; x++) setPixelColorXYRaw(x + start, y, newPxCol[x]);
+  for (int y = 0; y < vH; y++) {
+    for (int x = 0; x < stop; x++) {
+      int srcX = x + newDelta;
+      if (wrap) srcX %= vW; // Wrap using modulo when `wrap` is true
+      newPxCol[x] = (this->*getPixelXY)(srcX, y);
     }
-  } else {
-    for (int y = 0; y < vH; y++) {
-      for (int x = 0; x < stop; x++) {
-        int srcX = x + newDelta;
-        if (wrap) srcX %= vW; // Wrap using modulo when `wrap` is true
-        newPxCol[x] = getPixelColorXY(srcX, y);
-      }
-      for (int x = 0; x < stop; x++) setStripPixelColorXY(x + start, y, newPxCol[x]);
-    }
+    for (int x = 0; x < stop; x++) (this->*setPixelXY)(x + start, y, newPxCol[x]);
   }
 }
 
@@ -476,6 +399,11 @@ void Segment::moveY(int delta, bool wrap) const {
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
   int absDelta = abs(delta);
   if (absDelta >= vH) return;
+
+  // support bufferless segment
+  void  (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const        = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+
   CRGBA newPxCol[vH];
   int newDelta;
   int stop = vH;
@@ -486,25 +414,14 @@ void Segment::moveY(int delta, bool wrap) const {
     stop = vH - absDelta;
     newDelta = delta > 0 ? delta : 0;
   }
-  if (pixels) {
-    for (int x = 0; x < vW; x++) {
-      for (int y = 0; y < stop; y++) {
-        int srcY = y + newDelta;
-        if (wrap) srcY %= vH; // Wrap using modulo when `wrap` is true
-        newPxCol[y] = getPixelColorXYRaw(x, srcY);
-      }
-      for (int y = 0; y < stop; y++) setPixelColorXYRaw(x, y + start, newPxCol[y]);
-    }  
-  } else {
-    for (int x = 0; x < vW; x++) {
-      for (int y = 0; y < stop; y++) {
-        int srcY = y + newDelta;
-        if (wrap) srcY %= vH; // Wrap using modulo when `wrap` is true
-        newPxCol[y] = getPixelColorXY(x, srcY);
-      }
-      for (int y = 0; y < stop; y++) setStripPixelColorXY(x, y + start, newPxCol[y]);
+  for (int x = 0; x < vW; x++) {
+    for (int y = 0; y < stop; y++) {
+      int srcY = y + newDelta;
+      if (wrap) srcY %= vH; // Wrap using modulo when `wrap` is true
+      newPxCol[y] = (this->*getPixelXY)(x, srcY);
     }
-  }
+    for (int y = 0; y < stop; y++) (this->*setPixelXY)(x, y + start, newPxCol[y]);
+  }  
 }
 
 // move() - move all pixels in desired direction delta number of pixels
@@ -541,59 +458,35 @@ void Segment::fillEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
   const int32_t rxSq  = mul106(rx, rx);
   const int32_t rySq  = mul106(ry, ry);
 
+  // support bufferless segment
+  void  (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const        = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+
   //DEBUG_PRINTF_P(PSTR("Draw ellipse cx=%d cy=%d rx=%d ry=%d pxMin=%d pxMax=%d pyMin=%d pyMax=%d\n"), cx, cy, rx, ry, pxMin, pxMax, pyMin, pyMax);
 
   // traverse all pixels within bounding box and check if they are within ellipse radius
-  if (pixels) {
-    for (int y = pyMin; y < pyMax; y++) {
-      const int32_t dy = (y << 6) - cy;
-      for (int x = pxMin; x < pxMax; x++) {
-        const int32_t dx = (x << 6) - cx;
-        const int32_t dist = (mul106(dx,dx)*256/rxSq) + (mul106(dy,dy)*256/rySq);
-        if (dist > 384) continue; // outside ellipse (actually it should be 256 but that will render a smaller ellipse)
-        int32_t px = x;
-        int32_t py = y;
-        if (wrapX) {
-          while (px < 0)        px += vW;
-          while (px >= (int)vW) px -= vW;
-        }
-        if (wrapY) {
-          while (py < 0)        py += vH;
-          while (py >= (int)vH) py -= vH;
-        }
-        if ((unsigned)px < vW && (unsigned)py < vH) {
-          if (dist > 192) { // may need tweaking!
-            CRGBA c = color;
-            uint8_t alpha = 448 - dist; // may need tweaking!
-            blendPixelColorXYRaw(px, py, c/*.setOpacity(alpha)*/, alpha); // may need tweaking!
-          } else setPixelColorXYRaw(px, py, color);
-        }
+  for (int y = pyMin; y < pyMax; y++) {
+    const int32_t dy = (y << 6) - cy;
+    for (int x = pxMin; x < pxMax; x++) {
+      const int32_t dx = (x << 6) - cx;
+      const int32_t dist = (mul106(dx,dx)*256/rxSq) + (mul106(dy,dy)*256/rySq);
+      if (dist > 384) continue; // outside ellipse (actually it should be 256 but that will render a smaller ellipse)
+      int32_t px = x;
+      int32_t py = y;
+      if (wrapX) {
+        while (px < 0)        px += vW;
+        while (px >= (int)vW) px -= vW;
       }
-    }
-  } else {
-    for (int y = pyMin; y < pyMax; y++) {
-      const int32_t dy = (y << 6) - cy;
-      for (int x = pxMin; x < pxMax; x++) {
-        const int32_t dx = (x << 6) - cx;
-        const int32_t dist = (mul106(dx,dx)*256/rxSq) + (mul106(dy,dy)*256/rySq);
-        if (dist > 384) continue; // outside ellipse (actually it should be 256 but that will render a smaller ellipse)
-        int32_t px = x;
-        int32_t py = y;
-        if (wrapX) {
-          while (px < 0)        px += vW;
-          while (px >= (int)vW) px -= vW;
-        }
-        if (wrapY) {
-          while (py < 0)        py += vH;
-          while (py >= (int)vH) py -= vH;
-        }
-        if ((unsigned)px < vW && (unsigned)py < vH) {
-          if (dist > 192) { // may need tweaking!
-            CRGBA c = color;
-            uint8_t alpha = 448 - dist; // may need tweaking!
-            setStripPixelColorXY(px, py, getPixelColorXY(px, py).nblend(c, alpha));
-          } else setStripPixelColorXY(px, py, color);
-        }
+      if (wrapY) {
+        while (py < 0)        py += vH;
+        while (py >= (int)vH) py -= vH;
+      }
+      if ((unsigned)px < vW && (unsigned)py < vH) {
+        if (dist > 192) { // may need tweaking!
+          CRGBA c = color;
+          uint8_t alpha = 448 - dist; // may need tweaking!
+          (this->*setPixelXY)(px, py, (this->*getPixelXY)(px, py).nblend(c, alpha));
+        } else (this->*setPixelXY)(px, py, color);
       }
     }
   }
@@ -610,6 +503,10 @@ void Segment::drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA col, boo
 
   if ((unsigned)int106(radius) > min(vW, vH)/2) return; // too large
 
+  // support bufferless segment
+  void  (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const        = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+
   auto plot = [&](int x, int y, uint8_t b) {
     if (wrapX) {
       while (x < 0)        x += vW;
@@ -620,13 +517,8 @@ void Segment::drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA col, boo
       while (y >= (int)vH) y -= vH;
     }
     if ((unsigned)x < vW && (unsigned)y < vH) {
-      if (pixels) {
-        if (b < 255) blendPixelColorXYRaw(x, y, col, b);
-        else         setPixelColorXYRaw(x, y, col);
-      } else {
-        if (b < 255) setStripPixelColorXY(x, y, getPixelColorXY(x, y).nblend(col, b));
-        else         setStripPixelColorXY(x, y, col);
-      }
+      if (b < 255) (this->*setPixelXY)(x, y, (this->*getPixelXY)(x, y).nblend(col, b)); // blendPixelColorXY
+      else         (this->*setPixelXY)(x, y, col);
     }
   };
 
@@ -697,7 +589,9 @@ void Segment::drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
   auto int106 = [](int16_t a)            { return (int16_t)((int32_t)a >> 6); };      // convert 12.4 fixed point to integer
   auto mul106 = [](int16_t a, int16_t b) { return (int16_t)((int32_t)a * b) >> 6; };  // 12.4 fixed point multiplication
 
+  // support bufferless segment
   void (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const       = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
 
   auto plot   = [&](int32_t x, int32_t y) {
     if (wrapX) {
@@ -708,7 +602,7 @@ void Segment::drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
       while (y < 0)        y += vH;
       while (y >= (int)vH) y -= vH;
     }
-    if ((unsigned)x < vW && (unsigned)y < vH) (this->*setPixelXY)(x, y, color);
+    if ((unsigned)x < vW && (unsigned)y < vH) (this->*setPixelXY)(x, y, (this->*getPixelXY)(x, y).add(color)); // addPixelColorXY
   }; // draws a single point
 
   auto points = [&](int32_t x, int32_t y) { // draws 4 simertically placed points
@@ -779,7 +673,9 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
   const int dx = abs(int(x1)-int(x0)); // x distance
   const int dy = abs(int(y1)-int(y0)); // y distance
 
+  // support bufferless segment
   void (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const       = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
 
   // single pixel (line length == 0)
   if (dx+dy == 0) {
@@ -803,34 +699,18 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
     }
     int32_t grad = x1==x0 ? 1 << 8 : ((y1-y0)<<8)/(x1-x0); // gradient in 16.8 fixed point
     int32_t intY = (y0<<8); // y intersection in 16.8 fixed point
-    if (pixels) {
-      for (int x = x0; x <= x1; x++) {
-        uint8_t keep = (intY & 0xFF); // fractional part of y in 16.8 fixed point
-        uint8_t seep = 0xFF - keep;
-        int y = intY >> 8;
-        if (steep) std::swap(x,y);  // temporaryly swap if steep
-        // pixel coverage is determined by fractional part of y co-ordinate
-        int x2 = x + steep;
-        int y2 = y + !steep;
-        if (x  >= 0 && y  >= 0 && x  < vW && y  < vH) blendPixelColorXYRaw(x,  y,  c, seep);
-        if (x2 >= 0 && y2 >= 0 && x2 < vW && y2 < vH) blendPixelColorXYRaw(x2, y2, c, keep);
-        intY += grad;
-        if (steep) std::swap(x,y);  // restore if steep
-      }
-    } else {
-      for (int x = x0; x <= x1; x++) {
-        uint8_t keep = (intY & 0xFF); // fractional part of y in 16.8 fixed point
-        uint8_t seep = 0xFF - keep;
-        int y = intY >> 8;
-        if (steep) std::swap(x,y);  // temporaryly swap if steep
-        // pixel coverage is determined by fractional part of y co-ordinate
-        int x2 = x + steep;
-        int y2 = y + !steep;
-        if (x  >= 0 && y  >= 0 && x  < vW && y  < vH) setStripPixelColorXY(x,  y,  getPixelColorXY(x,  y ).nblend(c, seep));
-        if (x2 >= 0 && y2 >= 0 && x2 < vW && y2 < vH) setStripPixelColorXY(x2, y2, getPixelColorXY(x2, y2).nblend(c, keep));
-        intY += grad;
-        if (steep) std::swap(x,y);  // restore if steep
-      }
+    for (int x = x0; x <= x1; x++) {
+      uint8_t keep = (intY & 0xFF); // fractional part of y in 16.8 fixed point
+      uint8_t seep = 0xFF - keep;
+      int y = intY >> 8;
+      if (steep) std::swap(x,y);  // temporaryly swap if steep
+      // pixel coverage is determined by fractional part of y co-ordinate
+      int x2 = x + steep;
+      int y2 = y + !steep;
+      if (x  >= 0 && y  >= 0 && x  < vW && y  < vH) (this->*setPixelXY)(x, y, (this->*getPixelXY)(x, y).nblend(c, seep));
+      if (x2 >= 0 && y2 >= 0 && x2 < vW && y2 < vH) (this->*setPixelXY)(x2, y2, (this->*getPixelXY)(x2, y2).nblend(c, keep));
+      intY += grad;
+      if (steep) std::swap(x,y);  // restore if steep
     }
   } else {
     // Bresenham's algorithm
@@ -861,6 +741,7 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
   chr -= 32; // align with font table entries
   const int font = w*h;
 
+  // support bufferless segment
   void (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
   CRGBPalette16 grad = col2 != BLACK ? CRGBPalette16(CRGB(color), CRGB(col2)) : Segment::getCurrentPalette(); // selected palette as gradient
 
@@ -900,6 +781,9 @@ void Segment::setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const {
   if (!isActive()) return; // not active
   const unsigned vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const unsigned vH = vHeight();  // segment height in logical pixels (is always >= 1)
+  // support bufferless segment
+  void (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const       = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
   // extract the fractional parts and derive their inverses
   const unsigned xx = x & 0xff, yy = y & 0xff, ix = 255 - xx, iy = 255 - yy;
   x >>= 8; // integer part of x
@@ -911,18 +795,10 @@ void Segment::setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const {
   const int step = x+1 < vW ? 1 : 2; // skip right pixels if out of bounds
   const int maxI = y+1 < vH ? 4 : 2; // skip bottom pixels if out of bounds
   // multiply the intensities by the colour, and saturating-add them to the pixels
-  if (pixels) {
-    for (int i = 0; i < maxI; i += step) {
-      int wu_x = x + (i & 1);        // precalculate x
-      int wu_y = y + ((i >> 1) & 1); // precalculate y
-      blendPixelColorXYRaw(wu_x, wu_y, c, wu[i]);
-    }
-  } else {
-    for (int i = 0; i < maxI; i += step) {
-      int wu_x = x + (i & 1);        // precalculate x
-      int wu_y = y + ((i >> 1) & 1); // precalculate y
-      setStripPixelColorXY(wu_x, wu_y, getPixelColorXY(wu_x, wu_y).nblend(c, wu[i]));
-    }
+  for (int i = 0; i < maxI; i += step) {
+    int wu_x = x + (i & 1);        // precalculate x
+    int wu_y = y + ((i >> 1) & 1); // precalculate y
+    (this->*setPixelXY)(wu_x, wu_y, (this->*getPixelXY)(wu_x, wu_y).nblend(c, wu[i]));  // blendPixelColorXY
   }
 }
 
