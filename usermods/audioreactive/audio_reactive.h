@@ -1757,7 +1757,7 @@ uint16_t mode_particleGEQ() {
   ParticleSystem2D *PartSys = nullptr;
 
   if (SEGMENT.call == 0) { // initialization
-    if (!initParticleSystem2D(PartSys, 1))
+    if (!initParticleSystem2D(SEGMENT, PartSys, 1))
       return mode_static(); // allocation failed or not 2D
     PartSys->setKillOutOfBounds(true);
     PartSys->setUsedParticles(170); // use 2/3 of available particles
@@ -1831,7 +1831,7 @@ uint16_t mode_particlecenterGEQ() {
   uint32_t i;
 
   if (SEGMENT.call == 0) { // initialization
-    if (!initParticleSystem2D(PartSys, NUMBEROFSOURCES))  // init, request 16 sources
+    if (!initParticleSystem2D(SEGMENT, PartSys, NUMBEROFSOURCES))  // init, request 16 sources
       return mode_static(); // allocation failed or not 2D
 
     numSprays = min(PartSys->numSources, (uint32_t)NUMBEROFSOURCES);
