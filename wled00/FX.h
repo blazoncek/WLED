@@ -558,59 +558,7 @@ class Segment {
 
   public:
 
-    Segment(uint16_t sStart=0, uint16_t sStop=30, uint16_t sStartY = 0, uint16_t sStopY = 1)
-    : colors{DEFAULT_COLOR,BLACK,BLACK}
-    , start(sStart)
-    , stop(sStop > sStart ? sStop : sStart+1) // minimum length is 1
-    , startY(sStartY)
-    , stopY(sStopY > sStartY ? sStopY : sStartY+1) // minimum height is 1
-    , offset(0)
-    , options(SELECTED | SEGMENT_ON | ZOOM_WRAP | ZOOM_MIRROR) // default: selected, on, zoom wrap & mirror
-    , grouping(1)
-    , spacing(0)
-    , opacity(255)
-    , cct(127)
-    , mode(DEFAULT_MODE)
-    , palette(0)
-    , speed(DEFAULT_SPEED)
-    , intensity(DEFAULT_INTENSITY)
-    , custom1(DEFAULT_C1)
-    , custom2(DEFAULT_C2)
-    , custom3(DEFAULT_C3)
-    , check1(false)
-    , check2(false)
-    , check3(false)
-    , blendMode(0)    // top blend mode
-    , zoomAmount(8)   // no zoom
-    , rotateSpeed(0)  // no rotation
-    , name(nullptr)
-    , next_time(0)
-    , step(0)
-    , call(0)
-    , aux0(0)
-    , aux1(0)
-    , data(nullptr)
-    , pixels(nullptr)
-    , _dataLen(0)
-    , _default_palette(6) // PartyColors
-    , _capabilities(0)
-    , _rotatedAngle(0)
-    , _t(nullptr)
-    {
-      DEBUGFX_PRINTF_P(PSTR("-- Creating segment: %p [%d,%d:%d,%d]\n"), this, (int)start, (int)stop, (int)startY, (int)stopY);
-      // for very large matrices skip allocating pixel buffer (writes go directly to strip buffer -> no segment layering, limited transitions)
-      if (strip.getLengthTotal() > MAX_LEDS/2) return;
-      // allocate render buffer (always entire segment), prefer IRAM/PSRAM. Note: impact on FPS with PSRAM buffer is low (<2% with QSPI PSRAM) on S2/S3
-      pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
-      if (!pixels) {
-        //clear();
-        DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
-        extern byte errorFlag;
-        errorFlag = ERR_NORAM_PX;
-        //stop = 0; // mark segment as inactive/invalid
-      }
-    }
-
+    Segment(uint16_t sStart = 0, uint16_t sStop = 30, uint16_t sStartY = 0, uint16_t sStopY = 1);
     Segment(const Segment &orig); // copy constructor
     Segment(Segment &&orig) noexcept; // move constructor
 
