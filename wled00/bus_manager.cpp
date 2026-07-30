@@ -923,10 +923,13 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
       break;
   }
 
-  DEBUGBUS_PRINTF_P(PSTR("MatrixPanel_I2S_DMA config - %ux%u length: %u=%dx%d)\n"), mxconfig.mx_width, mxconfig.mx_height, mxconfig.chain_length, (int)_cols, (int)_rows);
-  DEBUGBUS_PRINTF_P(PSTR("R1_PIN=%u, G1_PIN=%u, B1_PIN=%u, R2_PIN=%u, G2_PIN=%u, B2_PIN=%u, A_PIN=%u, B_PIN=%u, C_PIN=%u, D_PIN=%u, E_PIN=%u, LAT_PIN=%u, OE_PIN=%u, CLK_PIN=%u\n"),
-                mxconfig.gpio.r1, mxconfig.gpio.g1, mxconfig.gpio.b1, mxconfig.gpio.r2, mxconfig.gpio.g2, mxconfig.gpio.b2,
-                mxconfig.gpio.a, mxconfig.gpio.b, mxconfig.gpio.c, mxconfig.gpio.d, mxconfig.gpio.e, mxconfig.gpio.lat, mxconfig.gpio.oe, mxconfig.gpio.clk);
+  DEBUGBUS_PRINTF_P(PSTR("MatrixPanel_I2S_DMA config - %ux%u length: %u (%dx%d)\n"), mxconfig.mx_width, mxconfig.mx_height, mxconfig.chain_length, (int)_cols, (int)_rows);
+  DEBUGBUS_PRINTF_P(PSTR(" R1_PIN=%u, G1_PIN=%u, B1_PIN=%u,\n"
+    " R2_PIN=%u, G2_PIN=%u, B2_PIN=%u,\n"
+    " A_PIN=%u, B_PIN=%u, C_PIN=%u, D_PIN=%u, E_PIN=%u,\n"
+    " LAT_PIN=%u, OE_PIN=%u, CLK_PIN=%u\n"),
+    mxconfig.gpio.r1, mxconfig.gpio.g1, mxconfig.gpio.b1, mxconfig.gpio.r2, mxconfig.gpio.g2, mxconfig.gpio.b2,
+    mxconfig.gpio.a, mxconfig.gpio.b, mxconfig.gpio.c, mxconfig.gpio.d, mxconfig.gpio.e, mxconfig.gpio.lat, mxconfig.gpio.oe, mxconfig.gpio.clk);
   //PinManagerPinType pins[HUB75_PIN_COUNT];
   //for (size_t i = 0; i < HUB75_PIN_COUNT; i++) pins[i] = {((int8_t*)&mxconfig.gpio)[i], true};
   if (!PinManager::allocateMultiplePins((int8_t*)&(mxconfig.gpio), HUB75_PIN_COUNT, PinOwner::HUB75, true)) {
@@ -938,7 +941,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   display = new(std::nothrow) MatrixPanel_I2S_DMA(mxconfig);
   if (display == nullptr) {
     DEBUGBUS_PRINTLN(F("*** MatrixPanel_I2S_DMA !KABOOM! driver object allocation failed ***"));
-    DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
+    DEBUGBUS_PRINTF_P(PSTR("Hub75 heap usage: %u (%u) of %u\n"), lastHeap - getFreeHeapSize(), sizeof(MatrixPanel_I2S_DMA), lastHeap);
     cleanup(); // free allocated pins
     return;
   }
@@ -950,7 +953,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     DEBUGBUS_PRINTLN(F("Attempting to create virtual display."));
     virtualDisp = new(std::nothrow) VirtualMatrixPanel((*display), _rows, _cols, dim[0], dim[1], (PANEL_CHAIN_TYPE)_chainType);
     if (virtualDisp) {
-      DEBUGBUS_PRINTF_P(PSTR("Virtual display created. Chain: %d"), (int)_chainType);
+      DEBUGBUS_PRINTF_P(PSTR("Virtual display created. Chain: %d\n"), (int)_chainType);
       virtualDisp->setRotation(0);
       // adjust scan rate based on height
       switch (bc.pins[1]) {
@@ -970,7 +973,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     }
   }
 
-  DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
+  DEBUGBUS_PRINTF_P(PSTR("Hub75 heap usage: %u (%u) of %u\n"), lastHeap - getFreeHeapSize(), sizeof(MatrixPanel_I2S_DMA)+(virtualDisp?sizeof(VirtualMatrixPanel):0), lastHeap);
   DEBUGBUS_PRINTF_P(PSTR("Hub75 Length: %u\n"), _len);
 
   // let's adjust default brightness (using hardware)
@@ -980,12 +983,12 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   // Allocate memory and start DMA display
   if (!display->begin()) {
     DEBUGBUS_PRINTLN(F("*** MatrixPanel_I2S_DMA !KABOOM! I2S memory buffer allocation failed ***"));
-    DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
+    DEBUGBUS_PRINTF_P(PSTR("Hub75 free heap: %u\n"), getFreeHeapSize());
     cleanup();  // free allocated pins and display object
     return;
   } else {
     DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA begin ok"));
-    DEBUGBUS_PRINTF_P(PSTR("heap usage: %u\n"), lastHeap - getFreeHeapSize());
+    DEBUGBUS_PRINTF_P(PSTR("Hub75 heap usage: %u\n"), lastHeap - getFreeHeapSize());
     delay(18);  // experiment - give the driver a moment (~ one full frame @ 60hz) to settle
 
     display->clearScreen();   // initially clear the screen buffer
@@ -1036,11 +1039,11 @@ void BusHub75Matrix::cleanup() {
       virtualDisp = nullptr;
       DEBUGBUS_PRINTLN("HUB75 virtual display destroyed.");
     }
-    #ifndef CONFIG_IDF_TARGET_ESP32S3 // on ESP32-S3 deleting display does not work and leads to crash (DMA issues), request reboot from user instead
+    //#ifndef CONFIG_IDF_TARGET_ESP32S3 // on ESP32-S3 deleting display does not work and leads to crash (DMA issues), request reboot from user instead
     delete display;
     display = nullptr;
     DEBUGBUS_PRINTLN("HUB75 display destroyed.");
-    #endif
+    //#endif
   }
   deallocatePins();
 }
@@ -1132,7 +1135,7 @@ size_t BusConfig::memUsage(unsigned nr) const {
 #if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
   } else if (Bus::isHub75(type)) {
     return sizeof(BusHub75Matrix) + sizeof(MatrixPanel_I2S_DMA)
-      + (pins[2] > 1 && refreshReq ? sizeof(VirtualMatrixPanel) : 0)
+      + (pins[4] > 0 || refreshReq ? sizeof(VirtualMatrixPanel) : 0)
       + (count * 
     #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)  // classic esp32, or esp32-s2: reduced bitdepth for large panels
       (count > 12288 ? 3 : (count > 4096 ? 4 : 8))

@@ -86,7 +86,10 @@ Segment::Segment(uint16_t sStart, uint16_t sStop, uint16_t sStartY, uint16_t sSt
 {
   DEBUGFX_PRINTF_P(PSTR("-- Creating segment: %p [%d,%d:%d,%d]\n"), this, (int)start, (int)stop, (int)startY, (int)stopY);
   // for very large matrices skip allocating pixel buffer (writes go directly to strip buffer -> no segment layering, limited transitions)
-  if (strip.getLengthTotal() > MAX_LEDS/2) return;
+  if (strip.getLengthTotal() > MAX_LEDS/2) {
+    DEBUGFX_PRINTLN(F("Bufferless segment."));
+    return;
+  }
   // allocate render buffer (always entire segment), prefer IRAM/PSRAM. Note: impact on FPS with PSRAM buffer is low (<2% with QSPI PSRAM) on S2/S3
   pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
   if (!pixels) {
@@ -2030,6 +2033,8 @@ void WS2812FX::show() {
         blendSegment(seg);              // blend segment's buffer into frame buffer
       }
     }
+  } else {
+    DEBUGFX_PRINTLN(F("Not blending segments."));
   }
 
   // avoid race condition, capture _callback value

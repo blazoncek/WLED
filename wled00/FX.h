@@ -586,7 +586,7 @@ class Segment {
     inline bool     getOption(uint8_t n)   const { return ((options >> n) & 0x01); }
     inline bool     isSelected()           const { return selected; }
     inline bool     isInTransition()       const { return _t != nullptr; }
-    inline bool     isActive()             const { return stop > start && pixels; }
+    inline bool     isActive()             const { return stop > start; }
     inline bool     hasRGB()               const { return _isRGB; }
     inline bool     hasWhite()             const { return _hasW; }
     inline bool     isCCT()                const { return _isCCT; }
