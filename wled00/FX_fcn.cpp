@@ -86,15 +86,14 @@ Segment::Segment(uint16_t sStart, uint16_t sStop, uint16_t sStartY, uint16_t sSt
 {
   DEBUGFX_PRINTF_P(PSTR("-- Creating segment: %p [%d,%d:%d,%d]\n"), this, (int)start, (int)stop, (int)startY, (int)stopY);
   // for very large matrices skip allocating pixel buffer (writes go directly to strip buffer -> no segment layering, limited transitions)
-  if (strip.getLengthTotal() > MAX_LEDS/2) {
-    DEBUGFX_PRINTLN(F("Bufferless segment."));
-    return;
-  }
+  //if (strip.getLengthTotal() > MAX_LEDS/2) {
+  //  DEBUGFX_PRINTLN(F("Bufferless segment."));
+  //  return;
+  //}
   // allocate render buffer (always entire segment), prefer IRAM/PSRAM. Note: impact on FPS with PSRAM buffer is low (<2% with QSPI PSRAM) on S2/S3
   pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
   if (!pixels) {
-    //clear();
-    DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
+    DEBUGFX_PRINTF_P(PSTR("!!! Not enough RAM for pixel buffer !!! (%u)\n"), length() * sizeof(CRGBA));
     extern byte errorFlag;
     errorFlag = ERR_NORAM_PX;
     //stop = 0; // mark segment as inactive/invalid
@@ -319,7 +318,7 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
     return;
   }
 
-  if (strip.getLengthTotal() > MAX_LEDS/2 || pixels == nullptr) segmentCopy = false;
+  if (length() > MAX_LEDS/2 || pixels == nullptr) segmentCopy = false;
 
   // check if we ahve enough memory to store old segment if requested
   unsigned freeMem = getFreeHeapSize() - MIN_HEAP_SIZE;
@@ -2015,26 +2014,25 @@ void WS2812FX::show() {
   unsigned long showNow = millis();
   size_t diff = showNow - _lastShow;
 
-  size_t totalLen = getLengthTotal();
-  if (totalLen <= MAX_LEDS/2) {
-    // WARNING: as WLED doesn't handle CCT on pixel level but on Segment level instead
-    // we need to keep track of each pixel's CCT when blending segments (if CCT is present)
-    // and then set appropriate CCT from that pixel during paint (see below).
-    if ((hasCCTBus() || correctWB) && !cctFromRgb)
-      _pixelCCT = static_cast<uint8_t*>(allocate_buffer(totalLen * sizeof(uint8_t), BFRALLOC_PREFER_PSRAM)); // allocate CCT buffer if necessary
-    if (_pixelCCT) memset(_pixelCCT, 127, totalLen); // set neutral (50:50) CCT
+  bool bufferLess = false;
+  for (const Segment &seg : _segments) if (seg.getPixels() == nullptr) { bufferLess = true; break; }
 
-    // if we are in live mode we don't do segment blending unless useMainSegmentOnly is on or override is on
-    if (realtimeMode == REALTIME_MODE_INACTIVE || useMainSegmentOnly || realtimeOverride) {
-      // clear frame buffer (if not it will allow strange result if topmost segment doesn't use Top/Default blend mode)
-      for (size_t i = 0; i < totalLen; i++) _pixels[i] = BLACK; // memset(_pixels, 0, sizeof(uint32_t) * getLengthTotal());
-      // blend all segments into (cleared) buffer
-      for (Segment &seg : _segments) if (seg.getPixels() != nullptr && seg.isActive() && (seg.on || seg.isInTransition())) {
-        blendSegment(seg);              // blend segment's buffer into frame buffer
-      }
+  size_t totalLen = getLengthTotal();
+  // WARNING: as WLED doesn't handle CCT on pixel level but on Segment level instead
+  // we need to keep track of each pixel's CCT when blending segments (if CCT is present)
+  // and then set appropriate CCT from that pixel during paint (see below).
+  if ((hasCCTBus() || correctWB) && !cctFromRgb)
+    _pixelCCT = static_cast<uint8_t*>(allocate_buffer(totalLen * sizeof(uint8_t), BFRALLOC_PREFER_PSRAM)); // allocate CCT buffer if necessary
+  if (_pixelCCT) memset(_pixelCCT, 127, totalLen); // set neutral (50:50) CCT
+
+  // if we are in live mode we don't do segment blending unless useMainSegmentOnly is on or override is on
+  if (realtimeMode == REALTIME_MODE_INACTIVE || useMainSegmentOnly || realtimeOverride) {
+    // clear frame buffer (if not it will allow strange result if topmost segment doesn't use Top/Default blend mode)
+    if (!bufferLess) for (size_t i = 0; i < totalLen; i++) _pixels[i] = BLACK; // memset(_pixels, 0, sizeof(uint32_t) * getLengthTotal());
+    // blend all segments into (cleared) buffer
+    for (Segment &seg : _segments) if (seg.getPixels() != nullptr && seg.isActive() && (seg.on || seg.isInTransition())) {
+      blendSegment(seg);              // blend segment's buffer into frame buffer
     }
-  } else {
-    DEBUGFX_PRINTLN(F("Not blending segments."));
   }
 
   // avoid race condition, capture _callback value

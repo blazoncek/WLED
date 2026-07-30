@@ -868,7 +868,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				enLA(gN("LL"+n)); // update LED mA
 				gN("LC"+n).value = 1; // reset LED count on change
 				if (isS3() && ((sel.dataset.old && isHub75(parseInt(sel.dataset.old))) || isHub75(parseInt(sel.value))))
-					alert("HUB75 changes require a reboot!");
+					alert("HUB75 changes may need a reboot!");
 				sel.dataset.old = sel.value;
 			}
 			(sel?[sel]:LTs).forEach((s,i) => {

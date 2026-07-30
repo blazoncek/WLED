@@ -825,6 +825,14 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   _hasWhite = false;
   _hasCCT = false;
 
+  // bc.pins[] have the following meaning:
+  // bc.pins[0] = panel width (32-128)
+  // bc.pins[1] = panel height (32-64)
+  // bc.pins[2] = panel chain length (encoded for WxH set-ups; 1-16 with 7 being invalid value; see below)
+  // bc.pins[3] = shift driver
+  // bc.pins[4] = chain orientation: NONE, TLD, TRD, etc
+  // isOffRefreshRequired() is a (dirty) hack that enables quarter-scan panels
+
   // clamp panel width and height to multiples of 32
   uint8_t dim[2];
   dim[0] = bc.pins[0] & 0xE0;
@@ -955,8 +963,8 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     if (virtualDisp) {
       DEBUGBUS_PRINTF_P(PSTR("Virtual display created. Chain: %d\n"), (int)_chainType);
       virtualDisp->setRotation(0);
-      // adjust scan rate based on height
-      switch (bc.pins[1]) {
+      // adjust scan rate based on height for quarter-scan panels
+      if (isOffRefreshRequired()) switch (bc.pins[1]) {
         case 16:
           virtualDisp->setPhysicalPanelScanRate(FOUR_SCAN_16PX_HIGH);
           break;
@@ -1039,11 +1047,9 @@ void BusHub75Matrix::cleanup() {
       virtualDisp = nullptr;
       DEBUGBUS_PRINTLN("HUB75 virtual display destroyed.");
     }
-    //#ifndef CONFIG_IDF_TARGET_ESP32S3 // on ESP32-S3 deleting display does not work and leads to crash (DMA issues), request reboot from user instead
     delete display;
     display = nullptr;
     DEBUGBUS_PRINTLN("HUB75 display destroyed.");
-    //#endif
   }
   deallocatePins();
 }
