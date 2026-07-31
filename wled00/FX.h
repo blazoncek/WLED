@@ -517,6 +517,13 @@ class Segment {
       }
     } *_t;
 
+    inline void reallocatePixelBuffer() {
+      // allocate frame buffer after matrix has been set up (gaps!)
+      // use IRAM/PSRAM if available: there is no measurable perfomance impact between PSRAM and DRAM on S2/S3 with QSPI PSRAM for this buffer
+      p_free(pixels);
+      pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+    }
+
   protected:
 
     inline static unsigned getUsedSegmentData()            { return Segment::_usedSegmentData; }

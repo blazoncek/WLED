@@ -608,7 +608,7 @@ void WLED::beginStrip()
   offMode = !bri;
   toggleRelay(!offMode);
 
-  colorUpdated(CALL_MODE_INIT); // will not send notification
+  colorUpdated(CALL_MODE_INIT); // will not send notification (but will apply global segment values to all segments)
   if (bootPreset > 0) {
     applyPreset(bootPreset, CALL_MODE_INIT);
   }

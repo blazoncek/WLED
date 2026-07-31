@@ -633,14 +633,12 @@ void *allocate_buffer(size_t size, uint32_t type) {
     #else
     int caps1 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT; // prefer PSRAM if requested, otherwise use DRAM
     #endif
-    int caps2 = ((type & BFRALLOC_NOBYTEACCESS) ? MALLOC_CAP_32BIT : MALLOC_CAP_8BIT) | MALLOC_CAP_INTERNAL; // prefer 32bit access if requested, otherwise use 8bit DRAM;
+    int caps2 = ((type & BFRALLOC_NOBYTEACCESS) ? MALLOC_CAP_32BIT : MALLOC_CAP_8BIT); // prefer 32bit access if requested, otherwise use 8bit DRAM;
     if (type & BFRALLOC_NOBYTEACCESS) std::swap(caps1, caps2); // swap if we want 32bit access to prioritise it
     buffer = heap_caps_malloc_prefer(size, 3, caps1, caps2, MALLOC_CAP_8BIT); // if caps1 and caps2 fail, use 8bit fallback in any memory type available
-    #ifdef CONFIG_IDF_TARGET_ESP32
-    // ESP32 (classic) has a special 32bit DRAM region (accessible only in 32-bit chunks; MALLOC_CAP_32BIT)
+    // ESP32 (any) has a special 32bit DRAM region (accessible only in 32-bit chunks; MALLOC_CAP_32BIT)
     // check if it succeeded (stuff everything in debug statement to avoid code bloat)
     DEBUG_PRINTF_P(((type & BFRALLOC_NOBYTEACCESS) && (uintptr_t)buffer < SOC_DRAM_HIGH) ? PSTR("WARN: buffer (%u @ %p) did not fit into 32bit DRAM region, using 8bit RAM\n") : "", size, buffer);
-    #endif
     if ((uintptr_t)buffer >= SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && getContiguousFreeHeap() < MIN_HEAP_SIZE) {
       DEBUG_PRINTLN(F("WARN: heap too low after allocation! Releasing."));
       heap_caps_free(buffer); // free buffer if heap is too low

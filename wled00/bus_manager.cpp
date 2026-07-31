@@ -1089,9 +1089,9 @@ size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
 }
 
 size_t BusHub75Matrix::getBusSize() const {
-  return sizeof(BusHub75Matrix) + sizeof(MatrixPanel_I2S_DMA)
+  return Bus::getBusSize() + sizeof(BusHub75Matrix) + sizeof(MatrixPanel_I2S_DMA)
     + (virtualDisp ? sizeof(VirtualMatrixPanel) : 0)
-    + (isOk() ? display->width() * display->height() * display->getCfg().getPixelColorDepthBits() / 8 : _len) * 3;
+    + (isOk() ? 3 * _len * display->getCfg().getPixelColorDepthBits() / 8 : _len) * 3; // count * bitsperchannel/8 * channels * bit-cadence
 }
 
 std::vector<LEDType> BusHub75Matrix::getLEDTypes() {
@@ -1143,12 +1143,12 @@ size_t BusConfig::memUsage(unsigned nr) const {
     return sizeof(BusHub75Matrix) + sizeof(MatrixPanel_I2S_DMA)
       + (pins[4] > 0 || refreshReq ? sizeof(VirtualMatrixPanel) : 0)
       + (count * 
-    #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)  // classic esp32, or esp32-s2: reduced bitdepth for large panels
-      (count > 12288 ? 3 : (count > 4096 ? 4 : 8))
-    #else
-      8
-    #endif
-      / 8) * 3; // count * bitsperchannel/8 * channels
+        #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)  // classic esp32, or esp32-s2: reduced bitdepth for large panels
+        (count > MAX_LEDS/2 ? (count > ((3 * MAX_LEDS) / 4) ? 4 : 6) : 8)
+        #else
+        8
+        #endif
+        / 8) * 3 * 3; // count * bitsperchannel/8 * channels * bit-cadence
 #endif
   } else if (Bus::isDigital(type)) {
     // if any of digital buses uses I2S, there is additional common I2S DMA buffer

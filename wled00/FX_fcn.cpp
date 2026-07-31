@@ -85,13 +85,7 @@ Segment::Segment(uint16_t sStart, uint16_t sStop, uint16_t sStartY, uint16_t sSt
 , _t(nullptr)
 {
   DEBUGFX_PRINTF_P(PSTR("-- Creating segment: %p [%d,%d:%d,%d]\n"), this, (int)start, (int)stop, (int)startY, (int)stopY);
-  // for very large matrices skip allocating pixel buffer (writes go directly to strip buffer -> no segment layering, limited transitions)
-  //if (strip.getLengthTotal() > MAX_LEDS/2) {
-  //  DEBUGFX_PRINTLN(F("Bufferless segment."));
-  //  return;
-  //}
-  // allocate render buffer (always entire segment), prefer IRAM/PSRAM. Note: impact on FPS with PSRAM buffer is low (<2% with QSPI PSRAM) on S2/S3
-  pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+  reallocatePixelBuffer();
   if (!pixels) {
     DEBUGFX_PRINTF_P(PSTR("!!! Not enough RAM for pixel buffer !!! (%u)\n"), length() * sizeof(CRGBA));
     extern byte errorFlag;
@@ -111,8 +105,7 @@ Segment::Segment(const Segment &orig) {
   pixels = nullptr;
   if (!stop) return;  // nothing to do if segment is inactive/invalid
   if (orig.pixels) {
-    // allocate pixel buffer: prefer IRAM/PSRAM
-    pixels = static_cast<CRGBA*>(allocate_buffer(orig.length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS));
+    reallocatePixelBuffer();
     if (pixels) {
       memcpy(pixels, orig.pixels, sizeof(CRGBA) * orig.length());
       if (orig.name) { name = static_cast<char*>(d_malloc(strlen(orig.name)+1)); if (name) strcpy(name, orig.name); }
@@ -154,8 +147,7 @@ Segment& Segment::operator= (const Segment &orig) {
     if (!stop) return *this;  // nothing to do if segment is inactive/invalid
     // copy source data
     if (orig.pixels) {
-      // allocate pixel buffer: prefer IRAM/PSRAM
-      pixels = static_cast<CRGBA*>(allocate_buffer(orig.length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS));
+      reallocatePixelBuffer();
       if (pixels) {
         memcpy(pixels, orig.pixels, sizeof(CRGBA) * orig.length());
         if (orig.name) { name = static_cast<char*>(d_malloc(strlen(orig.name)+1)); if (name) strcpy(name, orig.name); }
@@ -312,13 +304,11 @@ CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) {
 
 // starting a transition has to occur before change so we get current values 1st
 void Segment::startTransition(uint16_t dur, bool segmentCopy) {
-  DEBUGFX_PRINTF_P(PSTR("-- Starting transition: %ums w/%s segment copy\n"), (unsigned)dur, (segmentCopy ? "" : "o"));
   if (dur == 0 || !isActive()) {
     if (isInTransition()) _t->_dur = 0;
     return;
   }
-
-  if (length() > MAX_LEDS/2 || pixels == nullptr) segmentCopy = false;
+  if (pixels == nullptr) segmentCopy = false;
 
   // check if we ahve enough memory to store old segment if requested
   unsigned freeMem = getFreeHeapSize() - MIN_HEAP_SIZE;
@@ -328,6 +318,8 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
     errorFlag = ERR_NORAM_PX;
     segmentCopy = false; // try to continue without segment copy
   }
+
+  DEBUGFX_PRINTF_P(PSTR("-- Starting transition: %ums w/%s segment copy\n"), (unsigned)dur, (segmentCopy ? "" : "o"));
 
   // When any of segment's parameters change in deserializeSegment() (i.e. seg.setSxxxx())
   // startTransition() is called. This means that multiple startTransition() calls are made
@@ -573,8 +565,7 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
   // allocate FX render buffer only if increased in size (prevent fragmentation)
   if (length() > oldLength) {
     // allocate render buffer (always entire segment), prefer IRAM/PSRAM. Note: impact on FPS with PSRAM buffer is low (<2% with QSPI PSRAM) on S2/S3
-    p_free(pixels);
-    pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+    reallocatePixelBuffer();
     if (!pixels) {
       DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
       deallocateData();
@@ -652,6 +643,7 @@ Segment &Segment::setMode(uint8_t fx, bool loadDefaults) {
   if (fx >= strip.getModeCount()) fx = 0; // set solid mode
   // if we have a valid mode & is not reserved
   if (fx != mode) {
+    DEBUGFX_PRINTF_P(PSTR("- Starting effect transition: %d\n"), fx);
     startTransition(strip.getTransition(), true); // set effect transitions (must create segment copy)
     mode = fx;
     int sOpt;
@@ -700,7 +692,10 @@ Segment &Segment::setName(const char *newName) {
   if (newName) {
     const int newLen = min(strlen(newName), (size_t)WLED_MAX_SEGNAME_LEN);
     if (newLen) {
-      if (mode == FX_MODE_2DSCROLLTEXT) startTransition(strip.getTransition(), true); // if the name changes in scrolling text mode, we need to copy the segment for blending
+      if (mode == FX_MODE_2DSCROLLTEXT) {
+        DEBUGFX_PRINTLN(F("- Starting name transition\n"));
+        startTransition(strip.getTransition(), true); // if the name changes in scrolling text mode, we need to copy the segment for blending
+      }
       if (name) name = static_cast<char*>(d_realloc(name, newLen+1)); // if WLED's realloc fails it will free old buffer
       else      name = static_cast<char*>(d_malloc(newLen+1));
       if (name) strlcpy(name, newName, newLen+1);
