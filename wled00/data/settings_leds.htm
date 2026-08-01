@@ -209,8 +209,8 @@
 					LC.value = parseInt(gN("G0"+n).value) * parseInt(gN("G1"+n).value) * chains;
 				}
 				let c = parseInt(LC.value,10);          // get LED count
-				if (!customStarts || !startsDirty[i]) gId("ls"+n).value = sLC; // update start value
-				gId("ls"+n).disabled = !customStarts;   // enable/disable field editing
+				if (!customStarts || !startsDirty[i]) gN("LS"+n).value = sLC; // update start value
+				gN("LS"+n).disabled = !customStarts;   // enable/disable field editing
 				if (c) {
 					let s = parseInt(gN("LS"+n).value); // start value
 					if (s+c > sLC) sLC = s+c;           // update total count
@@ -464,7 +464,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 					if (el) el.name = n + sNew;
 				});
 				// IDs: l,n,abl,LAdis,PSU,co,dig?w,dig?l,dig?c,p0d,p1d,p2d,p3d,p4d,net?h,dig?r,dig?s,dig?f,dig?a
-				["l","n","abl","LAdis","PSU","co","dig?w","dig?l","dig?c","p0d","p1d","p2d","p3d","p4d","net?h","dig?r","dig?s","dig?f","dig?a"].forEach((n)=>{
+				["l","n","ls","rf","bf","off","rev","abl","LAdis","PSU","co","dig?w","dig?l","dig?c","p0d","p1d","p2d","p3d","p4d","net?h","dig?r","dig?s","dig?f","dig?a"].forEach((n)=>{
 					if (n.indexOf("?") < 0) n += "?";
 					let el = e.querySelector("#"+n.replace("?", sOld));
 					if (el) el.id = n.replace("?", sNew);
