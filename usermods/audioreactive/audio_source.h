@@ -5,10 +5,10 @@
 #include <driver/adc.h>
 #include <soc/i2s_reg.h>  // needed for SPH0465 timing workaround (classic ESP32)
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
-#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(CONFIG_IDF_TARGET_ESP32C3)
-#include <driver/adc_deprecated.h>
-#include <driver/adc_types_deprecated.h>
-#endif
+//#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+//#include <driver/adc_deprecated.h>
+//#include <driver/adc_types_deprecated.h>
+//#endif
 // type of i2s_config_t.SampleRate was changed from "int" to "unsigned" in IDF 4.4.x
 #define SRate_t uint32_t
 #else
