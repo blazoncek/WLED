@@ -1317,7 +1317,7 @@ void BusManager::esp32RMTInvertIdle() {
     else if (lvl == RMT_IDLE_LEVEL_LOW) lvl = RMT_IDLE_LEVEL_HIGH;
     else continue;
     rmt_set_idle_level(ch, idle_out, lvl);
-    u++
+    u++;
   }
 }
 #endif
