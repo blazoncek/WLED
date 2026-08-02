@@ -123,7 +123,7 @@ function loadJS(files, async = true, preGetV = undefined, postGetV = undefined) 
 			}
 		} else if (!async) {
 			if (preGetV) preGetV();
-			if (GetV) GetV(); // GetV() injected by settings script
+			try { GetV(); } catch (e) {} // GetV() injected by settings script
 			if (postGetV) postGetV();
 		}
 	};
