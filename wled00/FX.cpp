@@ -5176,7 +5176,7 @@ uint16_t mode_2Dmatrix(void) {                  // Matrix2D. By Jeremy Williams.
     SEGENV.step = 0;
   }
 
-  uint8_t fade = map(SEGMENT.custom1, 0, 255, 50, 250);    // equals trail size
+  uint8_t fade = map(SEGMENT.custom1, 0, 255, 250, 10);    // equals trail size
   uint8_t speed = (256-SEGMENT.speed) >> map(min(rows, 150), 0, 150, 0, 3);    // slower speeds for small displays
 
   CRGBA spawnColor;
