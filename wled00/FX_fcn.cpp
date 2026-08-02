@@ -134,7 +134,7 @@ Segment& Segment::operator= (const Segment &orig) {
   DEBUGFX_PRINTF_P(PSTR("-- Copying segment: %p -> %p\n"), &orig, this);
   if (this != &orig) {
     // clean destination
-    if (name) { d_free(name); name = nullptr; }
+    clearName();
     if (isInTransition()) stopTransition(); // also erases _t
     deallocateData();
     p_free(pixels);
@@ -166,7 +166,7 @@ Segment& Segment::operator= (const Segment &orig) {
 Segment& Segment::operator= (Segment &&orig) noexcept {
   DEBUGFX_PRINTF_P(PSTR("-- Moving segment: %p -> %p\n"), &orig, this);
   if (this != &orig) {
-    if (name) { d_free(name); name = nullptr; } // free old name
+    clearName(); // free old name
     if (isInTransition()) stopTransition(); // also erases _t
     deallocateData(); // free old runtime data
     p_free(pixels);   // free old pixel buffer
@@ -189,18 +189,19 @@ bool Segment::allocateData(size_t len) {
     return true;
   }
   //DEBUGFX_PRINTF_P(PSTR("--   Allocating data (%d): %p\n"), len, this);
+  // limit to MAX_SEGMENT_DATA if there is no PSRAM, otherwise prefer functionality over speed
+  #ifndef BOARD_HAS_PSRAM
   if (Segment::getUsedSegmentData() + len - _dataLen > MAX_SEGMENT_DATA) {
     // not enough memory
-    DEBUGFX_PRINTF_P(PSTR("!!! FX data overallocation attempt: %d/%d !!!\n"), len, Segment::getUsedSegmentData());
+    DEBUGFX_PRINTF_P(PSTR("FX data limit reached: %d/%d !!!\n"), len, Segment::getUsedSegmentData());
     errorFlag = ERR_NORAM;
     return false;
   }
+  #endif
   Segment::addUsedSegmentData(-_dataLen); // subtract original buffer size (is 0 if no buffer was allocated)
   d_free(data); // free data and try to allocate again (segment buffer may be blocking contiguous heap)
   // prefer DRAM over PSRAM on ESP32 since it is faster
-  //data = static_cast<byte*>(d_calloc(len));
-  // these two are effectively the same
-  data = static_cast<byte*>(allocate_buffer(len, BFRALLOC_PREFER_PSRAM | BFRALLOC_CLEAR));
+  data = static_cast<byte*>(allocate_buffer(len, BFRALLOC_PREFER_DRAM | BFRALLOC_CLEAR)); // if allocation is large >PSRAM_THRESHOLD, allocate_buffer() will revert to PSRAM if it exists
   if (data) {
     Segment::addUsedSegmentData(len);
     _dataLen = len;
@@ -218,8 +219,6 @@ void Segment::deallocateData() {
   if ((Segment::getUsedSegmentData() > 0) && (_dataLen > 0)) { // check that we don't have a dangling / inconsistent data pointer
     //DEBUGFX_PRINTF_P(PSTR("---  Released data (%p): %d/%d -> %p\n"), this, _dataLen, Segment::getUsedSegmentData(), data);
     d_free(data);
-  } else {
-    DEBUGFX_PRINTF_P(PSTR("---- Released data (%p): inconsistent UsedSegmentData (%d/%d), cowardly refusing to free nothing.\n"), this, _dataLen, Segment::getUsedSegmentData());
   }
   data = nullptr;
   Segment::addUsedSegmentData(_dataLen <= Segment::getUsedSegmentData() ? -_dataLen : -Segment::getUsedSegmentData());
@@ -242,7 +241,7 @@ void Segment::resetIfRequired() {
   next_time = 0; step = 0; call = 0; aux0 = 0; aux1 = 0;
   reset = false;
   #ifdef WLED_ENABLE_GIF
-  endImagePlayback(this);
+  if (mode == FX_MODE_IMAGE) endImagePlayback(this);
   #endif
 }
 
@@ -2435,13 +2434,13 @@ bool WS2812FX::deserializeMap(unsigned n) {
   // look for "map":[ (which may include spaces/newlines in between tokens)
   if (!f.find("\"map\"") || !f.find(':') || !f.find('[')) { // stops after the "map":[
     DEBUG_PRINTF_P(PSTR("ERROR Invalid ledmap in %s: no map found\n"), fileName);
-    free(customMappingTable);
+    p_free(customMappingTable);
     customMappingTable = nullptr;
     f.close();
     return false;
   }
 
-  free(customMappingTable);
+  p_free(customMappingTable);
   customMappingTable = static_cast<uint16_t*>(allocate_buffer(sizeof(uint16_t)*getLengthTotal(), BFRALLOC_PREFER_PSRAM));
 
   if (customMappingTable) {

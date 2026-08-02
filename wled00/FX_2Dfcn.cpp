@@ -47,7 +47,7 @@ void WS2812FX::setUpMatrix() {
     }
 
     customMappingSize = 0; // prevent use of mapping if anything goes wrong
-    free(customMappingTable);
+    p_free(customMappingTable);
 
     // we will try to load a "gap" array (a JSON file)
     // the array has to have the same amount of values as mapping array (or larger)

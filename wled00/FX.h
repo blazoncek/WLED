@@ -79,10 +79,25 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
   #define FAIR_DATA_PER_SEG 320   // 5k by default
 #elif defined(CONFIG_IDF_TARGET_ESP32S2)
   #define MAX_NUM_SEGMENTS  20
-  #define FAIR_DATA_PER_SEG 768   // 15k by default (S2 is short on free RAM)
+  #ifdef BOARD_HAS_PSRAM
+  #define FAIR_DATA_PER_SEG 1024  // 32k by default
+  #else
+  #define FAIR_DATA_PER_SEG 768   // 24k by default (S2 is short on free RAM)
+  #endif
+#elif defined(CONFIG_IDF_TARGET_ESP3232)
+  #define MAX_NUM_SEGMENTS  32    // warning: going beyond 32 may consume too much RAM for stable operation
+  #ifdef BOARD_HAS_PSRAM
+  #define FAIR_DATA_PER_SEG 3096  // 96k by default
+  #else
+  #define FAIR_DATA_PER_SEG 2048  // 64k by default
+  #endif
 #else
   #define MAX_NUM_SEGMENTS  32    // warning: going beyond 32 may consume too much RAM for stable operation
+  #ifdef BOARD_HAS_PSRAM
+  #define FAIR_DATA_PER_SEG 2048  // 64k by default
+  #else
   #define FAIR_DATA_PER_SEG 1536  // 48k by default
+  #endif
 #endif
 
 /* How much data bytes all segments combined may allocate */
@@ -521,7 +536,7 @@ class Segment {
       // allocate frame buffer after matrix has been set up (gaps!)
       // use IRAM/PSRAM if available: there is no measurable perfomance impact between PSRAM and DRAM on S2/S3 with QSPI PSRAM for this buffer
       p_free(pixels);
-      pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+      pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), (length() > 768 ? BFRALLOC_PREFER_PSRAM : BFRALLOC_PREFER_DRAM) | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
     }
 
   protected:
