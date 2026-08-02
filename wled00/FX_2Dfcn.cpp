@@ -205,7 +205,7 @@ bool Segment::isPixelXYClipped(unsigned x, unsigned y) const {
 
 void Segment::setStripPixelColorXY(unsigned x, unsigned y, CRGBA c) const {
   // TODO: for now ignore W, CCT and opacity
-  const auto XY = [](unsigned x, unsigned y){ return x + y*Segment::maxWidth; };
+  const auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::maxWidth; };
   const unsigned revX = reverse   ? vWidth()  - x - 1 : x;
   const unsigned revY = reverse_y ? vHeight() - y - 1 : y;
   const unsigned baseX = start  + revX;
@@ -238,7 +238,7 @@ CRGBA Segment::getPixelColorXY(unsigned x, unsigned y) const {
   if (!isActive() || x >= vWidth() || y >= vHeight()) return 0; // if segment is inactive or pixel would fall out of virtual segment just exit
   if (pixels) return getPixelColorXYRaw(x, y);
   else {
-    const auto XY = [](unsigned x, unsigned y){ return x + y*Segment::maxWidth; };
+    const auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::maxWidth; };
     const unsigned revX = reverse   ? vWidth()  - x - 1 : x;
     const unsigned revY = reverse_y ? vHeight() - y - 1 : y;
     const unsigned baseX = start  + revX;
