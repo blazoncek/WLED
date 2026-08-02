@@ -163,7 +163,9 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 #ifdef ARDUINO_ARCH_ESP32
   WiFi.setSleep(!noWifiSleep);
   WiFi.setHostname(hostName); // Sets the hostName in the wifi lib; does not necessarily propagate it to the network interface
+  #if (ESP_IDF_VERSION > ESP_IDF_VERSION_VAL(4, 4, 4)) && (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(4, 5, 0))
   set_esp_interface_hostname(ESP_IF_WIFI_STA, hostName); // ensure hostName propagates to network interface for DHCP and mDNS
+  #endif
 #else
   WiFi.setPhyMode(force802_3g ? WIFI_PHY_MODE_11G : WIFI_PHY_MODE_11N);
   wifi_set_sleep_type((noWifiSleep) ? NONE_SLEEP_T : MODEM_SLEEP_T);
