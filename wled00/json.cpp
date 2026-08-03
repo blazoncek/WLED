@@ -180,9 +180,9 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   #endif
 
   // if segment's virtual dimensions change we need to restart effect (segment blending and PS rely on dimensions)
-  if (seg.mirror != mirror) seg.markForReset();
+  if (seg.mirror != mirror || seg.grouping != grp || seg.spacing != spc) seg.markForReset();
   #ifndef WLED_DISABLE_2D
-  if (seg.mirror_y != mirror_y || seg.transpose != transpose) seg.markForReset();
+  if (seg.mirror_y != mirror_y || seg.transpose != transpose || seg.map1D2D != map1D2D) seg.markForReset();
   #endif
 
   if (stop > start) {
