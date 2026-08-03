@@ -16,6 +16,8 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
   //0: menu 1: wifi 2: leds 3: ui 4: sync 5: time 6: sec 7: DMX 8: usermods 9: N/A 10: 2D
   if (subPage < 1 || subPage > 10 || !correctPIN) return;
 
+  bool rebootNeeded = false;
+
   //WIFI SETTINGS
   if (subPage == SUBPAGE_WIFI)
   {
@@ -74,7 +76,9 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     ETH.setHostname(hostName);
   #endif
     WiFi.setHostname(hostName); // Sets the hostName in the wifi lib; does not necessarily propagate it to the network interface
+    #if (ESP_IDF_VERSION > ESP_IDF_VERSION_VAL(4, 4, 4)) && (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(4, 5, 0))
     set_esp_interface_hostname(ESP_IF_WIFI_STA, hostName); // ensure hostName propagates to network interface for DHCP and mDNS
+    #endif
 #else
     WiFi.hostname(hostName);
 #endif
@@ -252,11 +256,14 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       type |= request->hasArg(rf) << 7; // off refresh override
       text = request->arg(hs).substring(0,31);
       // actual finalization is done in WLED::loop() (removing old busses and adding new)
-      // this may happen even before this loop is finished so we do "doInitBusses" after the loop
+      // this may happen even before this loop is finished so we do "doInit" after the loop
       busConfigs.emplace_back(type, pins, start, length, colorOrder | (channelSwap<<4), request->hasArg(cv), skip, awmode, freq, maPerLed, maMax, text, scale);
       busesChanged = true;
+      #ifdef CONFIG_IDF_TARGET_ESP32S3
+      // S3 implementation of Hub75 bus driver needs reboot to function properly (i.e. I2S deinit doesn't work)
+      if (type >= TYPE_HUB75MATRIX_MIN && type <= TYPE_HUB75MATRIX_MAX) rebootNeeded = true;
+      #endif
     }
-    //doInitBusses = busesChanged; // we will do that below to ensure all input data is processed
 
     // we will not bother with pre-allocating ColorOrderMappings vector
     BusManager::getColorOrderMap().reset();
@@ -611,8 +618,9 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     if (request->hasArg(F("RS"))) //complete factory reset
     {
       WLED_FS.format();
-      serveMessage(request, 200, F("All Settings erased."), F("Connect to WLED-AP to setup again"),255);
+      serveMessage(request, 200, F("All Settings erased."), F("Connect to WLED-AP to setup again"), 255);
       doReboot = true; // may reboot immediately on dual-core system (race condition) which is desireable in this case
+      return;
     }
 
     if (request->hasArg(F("PIN"))) {
@@ -829,6 +837,8 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     UsermodManager::readFromConfig(um);  // force change of usermod parameters
     DEBUG_PRINTLN(F("Done re-init UsermodManager::"));
     releaseJSONBufferLock();
+
+    rebootNeeded |= request->hasArg(F("RBT"));
   }
 
   #ifndef WLED_DISABLE_2D
@@ -869,10 +879,10 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
   lastEditTime = millis();
   // do not save if factory reset or LED settings (which are saved after LED re-init)
   doSerializeConfig = subPage != SUBPAGE_LEDS && !(subPage == SUBPAGE_SEC && doReboot);
-  if (subPage == SUBPAGE_UM) doReboot = request->hasArg(F("RBT")); // prevent race condition on dual core system (set reboot here, after doSerializeConfig has been set)
   #ifndef WLED_DISABLE_ALEXA
   if (subPage == SUBPAGE_SYNC) alexaInit();
   #endif
+  if (rebootNeeded) doReboot = true; // prevent race condition on dual core system (set reboot here, after doSerializeConfig has been set)
 }
 
 

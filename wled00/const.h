@@ -455,7 +455,8 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 
 #define INIT_BUS      0x01
 #define INIT_2D       0x02
-#define INIT_RESERVED 0xFC
+#define INIT_REBOOT   0x80
+#define INIT_RESERVED 0x7C
 
 //maximum number of rendered LEDs - this does not have to match max. physical LEDs, e.g. if there are virtual busses
 #ifndef MAX_LEDS

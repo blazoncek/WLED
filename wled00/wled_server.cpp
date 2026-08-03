@@ -827,6 +827,7 @@ void serveSettings(AsyncWebServerRequest* request, bool post) {
 
     char s[32];
     char s2[45] = "";
+    if (doReboot) strcpy_P(s2, PSTR("Rebooting, please wait ~10 seconds..."));
 
     switch (subPage) {
       case SUBPAGE_WIFI   : strcpy_P(s, PSTR("WiFi")); strcpy_P(s2, PSTR("Please connect to the new IP (if changed)")); break;
@@ -834,7 +835,7 @@ void serveSettings(AsyncWebServerRequest* request, bool post) {
       case SUBPAGE_UI     : strcpy_P(s, PSTR("UI")); break;
       case SUBPAGE_SYNC   : strcpy_P(s, PSTR("Sync")); break;
       case SUBPAGE_TIME   : strcpy_P(s, PSTR("Time")); break;
-      case SUBPAGE_SEC    : strcpy_P(s, PSTR("Security")); if (doReboot) strcpy_P(s2, PSTR("Rebooting, please wait ~10 seconds...")); break;
+      case SUBPAGE_SEC    : strcpy_P(s, PSTR("Security")); break;
 #ifdef WLED_ENABLE_DMX
       case SUBPAGE_DMX    : strcpy_P(s, PSTR("DMX")); break;
 #endif
@@ -851,8 +852,7 @@ void serveSettings(AsyncWebServerRequest* request, bool post) {
       subPage = originalSubPage; // on correct PIN load settings page the user intended
     } else {
       if (!s2[0]) strcpy_P(s2, s_redirecting);
-
-      bool redirectAfter9s = (subPage == SUBPAGE_WIFI || ((subPage == SUBPAGE_SEC || subPage == SUBPAGE_UM) && doReboot));
+      bool redirectAfter9s = (subPage == SUBPAGE_WIFI || doReboot);
       serveMessage(request, (correctPIN ? 200 : 401), s, s2, redirectAfter9s ? 129 : (correctPIN ? 1 : 3));
       return;
     }
