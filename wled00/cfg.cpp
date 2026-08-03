@@ -46,7 +46,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   //int rev_major = doc["rev"][0]; // 1
   //int rev_minor = doc["rev"][1]; // 0
 
-  //long vid = doc[F("vid")]; // 2010020
+  long vid = doc[F("vid")] | VERSION; // note: "vid" can be used to detect an update from older versions but only on first call, it is written to the new VID after buses are initialized
 
   JsonObject id = doc["id"];
   // legacy behaviour
@@ -743,10 +743,19 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   JsonArray timersArray = tm["ins"];
   if (!timersArray.isNull()) {
     clearTimers();
+    bool legacySunriseLoaded = false;  // migration flag: pre 16.0 used hour=255 for both sunrise & sunset (type determined by array position)
     for (JsonObject timer : timersArray) {
       uint8_t p = timer[F("macro")] | 0;
       if (p == 0) continue;
       uint8_t h = timer[F("hour")] | 0;
+      // legacy migration: first occurrence = sunrise, second occurrence = sunset
+      if ((doc[F("vid")].isNull() || vid <= 2607050) && h == 255) {
+        if (legacySunriseLoaded) {
+          h = TH_SUNSET;   // second "255" entry is actually sunset
+        } else {
+          legacySunriseLoaded = true;
+        }
+      }
       int8_t m = timer["min"] | 0;
       uint8_t dow = timer["dow"] | 127;
       uint8_t wd = (dow << 1) | ((timer["en"] | 0) ? 1 : 0);
