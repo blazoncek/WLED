@@ -592,10 +592,13 @@ class Segment {
       DEBUGFX_PRINTF_P(PSTR(" T[%p]"), _t);
       DEBUGFX_PRINTLN();
       #endif
+      if (_t) stopTransition();
+      #ifdef WLED_ENABLE_GIF
+      if (mode == FX_MODE_IMAGE) endImagePlayback(this);
+      #endif
       clearName();
       deallocateData();
       p_free(pixels);
-      if (_t) stopTransition();
     }
 
     Segment& operator= (const Segment &orig); // copy assignment
@@ -810,9 +813,9 @@ class WS2812FX {
     }
 
     ~WS2812FX() {
-      d_free(_pixels);
-      d_free(_pixelCCT); // just in case
-      d_free(customMappingTable);
+      p_free(_pixels);
+      p_free(_pixelCCT); // just in case
+      p_free(customMappingTable);
       _mode.clear();
       _modeData.clear();
       _segments.clear();

@@ -689,14 +689,15 @@ Segment &Segment::setPalette(uint8_t pal) {
 
 Segment &Segment::setName(const char *newName) {
   if (newName) {
-    const int newLen = min(strlen(newName), (size_t)WLED_MAX_SEGNAME_LEN);
+    const size_t newLen = min(strlen(newName), (size_t)WLED_MAX_SEGNAME_LEN);
     if (newLen) {
       if (mode == FX_MODE_2DSCROLLTEXT) {
         DEBUGFX_PRINTLN(F("- Starting name transition\n"));
         startTransition(strip.getTransition(), true); // if the name changes in scrolling text mode, we need to copy the segment for blending
       }
-      if (name) name = static_cast<char*>(d_realloc(name, newLen+1)); // if WLED's realloc fails it will free old buffer
-      else      name = static_cast<char*>(d_malloc(newLen+1));
+      // do not reallocate buffer if new name fits into old one
+      if (name && strlen(name) < newLen) clearName();
+      if (!name) name = static_cast<char*>(d_malloc(newLen+1));
       if (name) strlcpy(name, newName, newLen+1);
       return *this;
     }
@@ -722,19 +723,20 @@ unsigned Segment::virtualHeight() const {
 // Constants for mapping mode "Pinwheel"
 #ifndef WLED_DISABLE_2D
 constexpr int Fixed_Scale = 16384; // fixpoint scaling factor (14bit for fraction)
+
 // Pinwheel helper function: matrix dimensions to number of rays
-static inline int getPinwheelLength(unsigned vW, unsigned vH) {
+static inline unsigned getPinwheelLength(unsigned vW, unsigned vH) {
   // Returns multiple of 8, prevents over drawing
   return (max(vW, vH) + 15) & ~7;
 }
+
 static void setPinwheelParameters(unsigned i, unsigned vW, unsigned vH, int& startx, int& starty, int* cosVal, int* sinVal, bool getPixel = false) {
-  int steps = getPinwheelLength(vW, vH);
-  int baseAngle = ((0xFFFF + steps / 2) / steps);  // 360° / steps, in 16 bit scale round to nearest integer
-  int rotate = 0;
+  unsigned steps = getPinwheelLength(vW, vH);
+  unsigned baseAngle = ((0xFFFF + steps / 2) / steps);  // 360° / steps, in 16 bit scale round to nearest integer
+  unsigned rotate = 0;
   if (getPixel) rotate = baseAngle / 2; // rotate by half a ray width when reading pixel color
-  for (int k = 0; k < 2; k++) // angular steps for two consecutive rays
-  {
-    int angle = (i + k) * baseAngle + rotate;
+  for (unsigned k = 0; k < 2; k++) {    // angular steps for two consecutive rays
+    unsigned angle = (i + k) * baseAngle + rotate;
     cosVal[k] = (cos16_t(angle) * Fixed_Scale) >> 15; // step per pixel in fixed point, cos16 output is -0x7FFF to +0x7FFF
     sinVal[k] = (sin16_t(angle) * Fixed_Scale) >> 15; // using explicit bit shifts as dividing negative numbers is not equivalent (rounding error is acceptable)
   }
@@ -910,7 +912,7 @@ void Segment::setPixelColor(unsigned i, CRGBA col) const {
           int idx = 0;
           int err = dx + dy;
           while (true) {
-            if ((unsigned)x0 >= (unsigned)vW || (unsigned)y0 >= (unsigned)vH) {
+            if ((unsigned)x0 >= vW || (unsigned)y0 >= vH) {
               closestEdgeIdx = min(closestEdgeIdx, idx-2);
               break; // stop if outside of grid (exploit unsigned int overflow)
             }
@@ -932,11 +934,11 @@ void Segment::setPixelColor(unsigned i, CRGBA col) const {
           int idx = (lineLength[shortLineIdx] - 1) * 2; // last valid coordinate index
           int lastX = lineCoords[shortLineIdx][idx++];
           int lastY = lineCoords[shortLineIdx][idx++];
-          bool keepX = lastX == 0 || lastX == vW - 1;
+          bool keepX = lastX == 0 || lastX == (int)vW - 1;
           for (int d = 0; d < abs(diff); d++) {
-            lineCoords[shortLineIdx][idx] = keepX ? lastX :lineCoords[longLineIdx][idx];
+            lineCoords[shortLineIdx][idx] = keepX ? lastX : lineCoords[longLineIdx][idx];
             idx++;
-            lineCoords[shortLineIdx][idx] =  keepX ? lineCoords[longLineIdx][idx] : lastY;
+            lineCoords[shortLineIdx][idx] = keepX ? lineCoords[longLineIdx][idx] : lastY;
             idx++;
           }
         }
@@ -944,8 +946,8 @@ void Segment::setPixelColor(unsigned i, CRGBA col) const {
         // draw and block-fill the line coordinates. Note: block filling only efficient if angle between lines is small
         closestEdgeIdx += 2;
         int max_i = getPinwheelLength(vW, vH) - 1;
-        bool drawFirst = !(prevRays[0] == i - 1 || (i == 0 && prevRays[0] == max_i)); // draw first line if previous ray was not adjacent including wrap
-        bool drawLast  = !(prevRays[0] == i + 1 || (i == max_i && prevRays[0] == 0)); // same as above for last line
+        bool drawFirst = !(prevRays[0] == (int)i - 1 || ((int)i == 0 && prevRays[0] == max_i)); // draw first line if previous ray was not adjacent including wrap
+        bool drawLast  = !(prevRays[0] == (int)i + 1 || ((int)i == max_i && prevRays[0] == 0)); // same as above for last line
         for (int idx = 0; idx < lineLength[longLineIdx] * 2;) { //!! should be long line idx!
           int x1 = lineCoords[0][idx];
           int x2 = lineCoords[1][idx++];
@@ -959,7 +961,7 @@ void Segment::setPixelColor(unsigned i, CRGBA col) const {
           bool alwaysDraw = (drawFirst && drawLast) || // No adjacent rays, draw all pixels
                             (idx > closestEdgeIdx)  || // Edge pixels on uneven lines are always drawn
                             (i == 0 && idx == 2)    || // Center pixel special case
-                            (i == prevRays[1]);        // Effect drawing twice in 1 frame
+                            ((int)i == prevRays[1]);   // Effect drawing twice in 1 frame
           for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
               bool onLine1 = x == x1 && y == y1;
@@ -968,7 +970,7 @@ void Segment::setPixelColor(unsigned i, CRGBA col) const {
                   (!onLine1 && (!onLine2 || drawLast))  || // Middle pixels and line2 if drawLast
                   (!onLine2 && (!onLine1 || drawFirst))    // Middle pixels and line1 if drawFirst
                 ) {
-                if (x < vW && y < vH) (this->*setPixelXY)(x, y, col);
+                if (x < (int)vW && y < (int)vH) (this->*setPixelXY)(x, y, col);
               }
             }
           }
@@ -1044,7 +1046,7 @@ CRGBA Segment::getPixelColor(unsigned i) const {
         int maxX = (vW-1) * Fixed_Scale;
         int maxY = (vH-1) * Fixed_Scale;
         // trace ray from center until we hit any edge - to avoid rounding problems, we use fixed point coordinates
-        while ((x < maxX)  && (y < maxY) && (x > Fixed_Scale) && (y > Fixed_Scale)) {
+        while ((x < maxX) && (y < maxY) && (x > Fixed_Scale) && (y > Fixed_Scale)) {
           x += cosVal[0]; // advance to next position
           y += sinVal[0];
         }
@@ -1053,7 +1055,7 @@ CRGBA Segment::getPixelColor(unsigned i) const {
         break;
       }
     }
-    if (x >= vW || y >= vH) return CRGBA(0, 0, 0, hasWhite() ? 0 : 255); // out of bounds
+    if (x >= (int)vW || y >= (int)vH) return CRGBA(0, 0, 0, hasWhite() ? 0 : 255); // out of bounds
     i = XY(x, y);
   }
 #endif
