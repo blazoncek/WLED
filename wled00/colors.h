@@ -148,6 +148,10 @@ struct CRGBA {
 
   inline uint8_t getAverageLight() const { return (uint16_t(r) + uint16_t(g) + uint16_t(b)) * uint16_t(a) / (3*255); }
   inline uint8_t getPureValue() const { return (unsigned(r) * 77 + unsigned(g) * 150 + unsigned(b) * 29) >> 8; }
+  // get the average of the R, G, B values
+  inline uint8_t getRGBaverage() const {
+    return ((r + g + b) * 21846) >> 16; // x*21846>>16 is equal to "divide by 3"
+  }
 
   CRGBA&  desaturate(uint8_t amount);
 
