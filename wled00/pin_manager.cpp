@@ -264,6 +264,32 @@ bool PinManager::isReadOnlyPin(byte gpio)
   return false;
 }
 
+bool PinManager::isAnalogPin(byte gpio) {
+  #ifdef ARDUINO_ARCH_ESP32
+  // Check ADC capability: only ADC1 channels can be used (ADC2 channels are not usable when WiFi is active)
+  #if CONFIG_IDF_TARGET_ESP32
+  // ESP32: ADC1 channels 0-7 (GPIO 36, 37, 38, 39, 32, 33, 34, 35)
+  int adc_channel = digitalPinToAnalogChannel(gpio);
+  if (adc_channel >= 0 && adc_channel <= 7) return true;
+  #elif CONFIG_IDF_TARGET_ESP32S2
+  // ESP32-S2: ADC1 channels 0-9 (GPIO 1-10)
+  int adc_channel = digitalPinToAnalogChannel(gpio);
+  if (adc_channel >= 0 && adc_channel <= 9) return true;
+  #elif CONFIG_IDF_TARGET_ESP32S3
+  // ESP32-S3: ADC1 channels 0-9 (GPIO 1-10)
+  int adc_channel = digitalPinToAnalogChannel(gpio);
+  if (adc_channel >= 0 && adc_channel <= 9) return true;
+  #elif CONFIG_IDF_TARGET_ESP32C3
+  // ESP32-C3: ADC1 channels 0-4 (GPIO 0-4)
+  int adc_channel = digitalPinToAnalogChannel(gpio);
+  if (adc_channel >= 0 && adc_channel <= 4) return true;
+  #endif
+  #else // 8266
+  if (gpio == 17) return true;
+  #endif
+  return false; // not an analog pin if it doesn't have ADC capability
+}
+
 PinOwner PinManager::getPinOwner(byte gpio)
 {
   if (!isPinOk(gpio, false)) return PinOwner::None;

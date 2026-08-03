@@ -117,6 +117,7 @@ namespace PinManager {
   bool isPinOk(byte gpio, bool output = true);
 
   bool isReadOnlyPin(byte gpio);
+  bool isAnalogPin(byte gpio); // returns true if pin has ADC capability, otherwise false
 
   PinOwner getPinOwner(byte gpio);
 

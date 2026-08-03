@@ -160,6 +160,18 @@ void appendGPIOinfo(Print& settingsScript) {
   }
   settingsScript.print(F("];"));
 
+  // add info about ADC-capable GPIO (for analog button pin filtering)
+  settingsScript.print(F("adc_gpio=["));
+  firstPin = true;
+  for (unsigned i = 0; i < WLED_NUM_PINS; i++) {
+    if (PinManager::isAnalogPin(i)) {
+      if (!firstPin) settingsScript.print(',');
+      settingsScript.print(i);
+      firstPin = false;
+    }
+  }
+  settingsScript.print(F("];"));
+
   // add info about max. # of pins
   settingsScript.printf_P(PSTR("max_gpio=%d;"),WLED_NUM_PINS);
 }

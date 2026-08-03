@@ -10,7 +10,7 @@
 		var unqPins = []; // must be global for pinDDs()
 		var customStarts = false, startsDirty = [];
 		var ledTypes = [/*{i:22,c:1,t:"D",n:"WS2812"},{i:42,c:6,t:"AA",n:"PWM CCT"},{i:127,c:6,t:"VVVV",n:"Usermod (virtual)",p:[23,24,25]}*/]; // filled from GetV()
-		var um_p = [], rsvd = [], ro_gpio = [];
+		var um_p = [], rsvd = [], ro_gpio = [], adc_gpio = [];
 		var max_gpio = 50;
 		function off(n)    { gN(n).value = -1;}
 		// these functions correspond to C macros found in const.h
