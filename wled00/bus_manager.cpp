@@ -731,6 +731,12 @@ void BusNetwork::cleanup() {
   #ifndef NO_CIE1931
     #define NO_CIE1931 1
   #endif
+  #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)    // classic esp32, or esp32-s2: reduce bitdepth for large panels
+    #define REDUCE_BITS 2
+  #else
+    #define REDUCE_BITS 1
+  #endif
+
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #include <ESP32-VirtualMatrixPanel-I2S-DMA.h>
 
@@ -887,13 +893,16 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
     mxconfig.mx_height = dim[1] >> 1; // panel height in pixels for quarter-scan is half
   }
 
-#if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)    // classic esp32, or esp32-s2: reduce bitdepth for large panels
+  // DMA memory is approximately 3 times as large as pixel buffer (which is: 3 bytes for RGB * chain length * panel width *panel height)
   int pixels = mxconfig.chain_length * mxconfig.mx_width * mxconfig.mx_height;
-  if (pixels > MAX_LEDS/2) {
-    mxconfig.setPixelColorDepthBits(pixels > ((3 * MAX_LEDS) / 4) ? 4 : 6);   // reduce DMA memory
-  } else
-#endif
-    mxconfig.setPixelColorDepthBits(8); // this is the default
+  size_t bitDepth = 8;
+  #if defined(CONFIG_IDF_TARGET_ESP32S3)
+  if (pixels > 3*MAX_LEDS/4) bitDepth -= REDUCE_BITS;     // slightly reduce DMA memory (minimal visual impact)
+  #else
+  if (pixels > 3*MAX_LEDS/4) bitDepth -= 2*REDUCE_BITS;   // substantially reduce DMA memory (noticable visual impact)
+  else if (pixels > MAX_LEDS/2) bitDepth -= REDUCE_BITS;  // moderately reduce DMA memory (slight visual impact)
+  #endif
+  mxconfig.setPixelColorDepthBits(bitDepth);
 
   if (getHub75Pins(_type, (uint8_t*)&(mxconfig.gpio)) == nullptr) {
     DEBUGBUS_PRINTLN(F("Failed to get HUB75 matrix pin configuration. Aborting!"));
