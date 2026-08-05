@@ -552,38 +552,24 @@ void *p_calloc(size_t count, size_t size) {
 }
 #endif // BOARD_HAS_PSRAM
 
-#ifdef BOARD_HAS_PSRAM
-#define RTC_RAM_THRESHOLD 512   // use RTC RAM for allocations smaller than this size
-#else
-#define RTC_RAM_THRESHOLD 65535 // without PSRAM, allow any size into RTC RAM (useful especially on S2 without PSRAM)
-#endif
-#define WLED_HAVE_RTC_MEMORY_HEAP (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
 
 void *d_malloc(size_t size) {
   void *buffer = nullptr;
   #ifdef ESP8266
   buffer = malloc(size);
   #else
-/*
-  #ifdef BOARD_HAS_PSRAM // only ESP32 & S variants have PSRAM
-  // if heap would fall below MIN_HEAP_SIZE or size is larger than PSRAM_THRESHOLD, prefer PSRAM
-  if (getContiguousFreeHeap() < (MIN_HEAP_SIZE + size) || size > PSRAM_THRESHOLD) {
-    buffer = heap_caps_malloc_prefer(size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // otherwise prefer DRAM
-  } else
-  #endif
-*/
   unsigned caps1 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
   unsigned caps2 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
   if (getContiguousFreeHeap() < (2*MIN_HEAP_SIZE + size)) std::swap(caps1, caps2);
-  #if WLED_HAVE_RTC_MEMORY_HEAP
+  #ifdef WLED_HAVE_RTC_MEMORY_HEAP
   // the newer ESP32 variants have byte-accessible fast RTC memory that can be used as heap, access speed is on-par with DRAM
   // the system does prefer normal DRAM until full, since free RTC memory is ~7.5k only, its below the minimum heap threshold and needs to be allocated explicitly
   // use RTC RAM for small allocations or if DRAM is running low to improve fragmentation
-  if (size < RTC_RAM_THRESHOLD || getContiguousFreeHeap() < 2*MIN_HEAP_SIZE + size)
+  if (size < RTC_RAM_THRESHOLD)
     buffer = heap_caps_malloc_prefer(size, 3, MALLOC_CAP_RTCRAM, caps1, caps2);
   else
   #endif
-    buffer = heap_caps_malloc_prefer(size, 2, caps1, caps2); // allocate in any available heap memory
+    buffer = heap_caps_malloc_prefer(size, 3, caps1, caps2, MALLOC_CAP_DEFAULT); // allocate in any available heap memory
   #endif
   buffer = validateFreeHeap(buffer); // make sure there is enough free heap left
   return validateFreeHeap(buffer);
@@ -595,19 +581,6 @@ void *d_realloc(void *ptr, size_t size) {
   return d_malloc(size); // use malloc
   #else
   void *buffer = nullptr;
-/*
-  #ifdef BOARD_HAS_PSRAM
-  // if heap would fall below MIN_HEAP_SIZE or size is larger than PSRAM_THRESHOLD, prefer PSRAM
-  if (getContiguousFreeHeap() < (MIN_HEAP_SIZE + size) || size > PSRAM_THRESHOLD) {
-    buffer = heap_caps_realloc_prefer(ptr, size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // otherwise prefer DRAM
-    if (validateFreeHeap(buffer)) return buffer; // realloc successful
-    else {
-      d_free(ptr); // free old buffer if realloc failed (to keep consumer allocation logic simple)
-      return d_malloc(size); // fallback to malloc if realloc failed (buffer will not be copied!!!)
-    }
-  }
-  #endif
-*/
   #ifdef ESP8266
   buffer = realloc(ptr, size);
   #else
@@ -618,11 +591,11 @@ void *d_realloc(void *ptr, size_t size) {
   // the newer ESP32 variants have byte-accessible fast RTC memory that can be used as heap, access speed is on-par with DRAM
   // the system does prefer normal DRAM until full, since free RTC memory is ~7.5k only, its below the minimum heap threshold and needs to be allocated explicitly
   // use RTC RAM for small allocations or if DRAM is running low to improve fragmentation
-  if (size < RTC_RAM_THRESHOLD || getContiguousFreeHeap() < 2*MIN_HEAP_SIZE + size)
+  if (size < RTC_RAM_THRESHOLD)
     buffer = heap_caps_realloc_prefer(ptr, 3, MALLOC_CAP_RTCRAM, caps1, caps2);
   else
   #endif
-    buffer = heap_caps_realloc_prefer(ptr, 2, size, caps1, caps2);
+    buffer = heap_caps_realloc_prefer(ptr, 3, size, caps1, caps2, MALLOC_CAP_DEFAULT);
   #endif
   if (validateFreeHeap(buffer)) return buffer; // realloc successful
   else {
@@ -665,13 +638,15 @@ void *allocate_buffer(size_t size, uint32_t type) {
     int caps2 = MALLOC_CAP_DEFAULT  | MALLOC_CAP_8BIT; // use any 8bit;
     #endif
     if (type & BFRALLOC_NOBYTEACCESS) {
-      // try to allocate in ESP32's fast IRAM (32bit access only) and if that fails use 4 byte aligned allocation
+      // try to allocate in ESP32's fast IRAM (32bit access only) and if that fails try to use 4 byte aligned allocation
       size = (size + 3) & (~0x00000003U); // round to 4 byte multiple
       buffer = heap_caps_malloc(size, MALLOC_CAP_32BIT);
+      #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
       if (!buffer) buffer = heap_caps_aligned_alloc(4, size, caps1);
       if (!buffer) buffer = heap_caps_aligned_alloc(4, size, caps2);
-    } else
-      buffer = heap_caps_malloc_prefer(size, 3, caps1, caps2, MALLOC_CAP_8BIT); // if caps1 and caps2 fail, use 8bit fallback in any memory type available
+      #endif
+    }
+    if (!buffer) buffer = heap_caps_malloc_prefer(size, 3, caps1, caps2, MALLOC_CAP_DEFAULT); // if caps1 and caps2 fail, use 8bit fallback in any memory type available
     #ifdef CONFIG_IDF_TARGET_ESP32
     // ESP32 has a special 32bit DRAM region (accessible only in 32-bit chunks; MALLOC_CAP_32BIT)
     // check if it succeeded (stuff everything in debug statement to avoid code bloat)

@@ -201,7 +201,7 @@ bool Segment::allocateData(size_t len) {
   Segment::addUsedSegmentData(-_dataLen); // subtract original buffer size (is 0 if no buffer was allocated)
   d_free(data); // free data and try to allocate again (segment buffer may be blocking contiguous heap)
   // prefer DRAM over PSRAM on ESP32 since it is faster
-  data = static_cast<byte*>(allocate_buffer(len, BFRALLOC_PREFER_DRAM | BFRALLOC_CLEAR)); // if allocation is large >PSRAM_THRESHOLD, allocate_buffer() will revert to PSRAM if it exists
+  data = static_cast<byte*>(d_calloc(len, sizeof(data[0])));
   if (data) {
     Segment::addUsedSegmentData(len);
     _dataLen = len;
@@ -567,9 +567,9 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
     reallocatePixelBuffer();
     if (!pixels) {
       DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
-      deallocateData();
+      //deallocateData();
       errorFlag = ERR_NORAM_PX;
-      stop = 0;
+      //stop = 0;
       // no reset
       return;
     }

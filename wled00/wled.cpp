@@ -267,15 +267,42 @@ void WLED::loop()
     DEBUG_PRINTF_P(PSTR("Runtime: %lus\n"),  now/1000);
     DEBUG_PRINTF_P(PSTR("Unix time: %u,%03u\n"), toki.getTime().sec, toki.getTime().ms);
     DEBUG_PRINTF_P(PSTR("Free heap/contiguous: %u/%u\n"), getFreeHeapSize(), getContiguousFreeHeap());
+  #if defined(ESP32)
+    // Internal DRAM (standard 8-bit accessible heap)
+    DEBUG_PRINTF_P(PSTR("DRAM 8-bit:   Total: %7u | Free: %7u | Largest: %7u (bytes)\n")
+    , heap_caps_get_total_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL)
+    , heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL)
+    , heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL)
+    );
     #if defined(CONFIG_IDF_TARGET_ESP32)
-    int dram32_free = heap_caps_get_free_size(MALLOC_CAP_32BIT|MALLOC_CAP_INTERNAL) - getFreeHeapSize();
-    DEBUG_PRINTF_P(PSTR("Free 32bit-heap: %d\n"), dram32_free);
+    // 32-bit DRAM (not byte accessible, only available on ESP32)
+    DEBUG_PRINTF_P(PSTR("DRAM 32-bit:  Total: %7u | Free: %7u | Largest: %7u (bytes)\n")
+    , heap_caps_get_total_size(MALLOC_CAP_32BIT)
+    , heap_caps_get_free_size(MALLOC_CAP_32BIT)
+    , heap_caps_get_largest_free_block(MALLOC_CAP_32BIT)
+    );
     #endif
     #ifdef BOARD_HAS_PSRAM
-    if (psramFound()) {
-      DEBUG_PRINTF_P(PSTR("PSRAM: %dkB/%dkB\n"), ESP.getFreePsram()/1024, ESP.getPsramSize()/1024);
-    }
+    DEBUG_PRINTF_P(PSTR("PSRAM:        Total: %7u | Free: %7u | Largest: %7u (bytes)\n")
+    , heap_caps_get_total_size(MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM)
+    , heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM)
+    , heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM)
+    );
     #endif
+    #ifdef WLED_HAVE_RTC_MEMORY_HEAP
+    // Fast RTC Memory (not available on ESP32)
+    DEBUG_PRINTF_P(PSTR("RTC RAM:      Total: %7u | Free: %7u | Largest: %7u (bytes)\n")
+    , heap_caps_get_total_size(MALLOC_CAP_RTCRAM)
+    , heap_caps_get_free_size(MALLOC_CAP_RTCRAM)
+    , heap_caps_get_largest_free_block(MALLOC_CAP_RTCRAM)
+    );
+    #endif
+    DEBUG_PRINTF_P(PSTR("DMA RAM:      Total: %7u | Free: %7u | Largest: %7u (bytes)\n")
+    , heap_caps_get_total_size(MALLOC_CAP_DMA)
+    , heap_caps_get_free_size(MALLOC_CAP_DMA)
+    , heap_caps_get_largest_free_block(MALLOC_CAP_DMA)
+    );
+  #endif
     #if defined(ARDUINO_ARCH_ESP32)
     DEBUG_PRINTF_P(PSTR("TX power: %d/%d\n"), WiFi.getTxPower(), txPower);
     #endif

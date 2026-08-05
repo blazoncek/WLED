@@ -580,6 +580,16 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
   #define PSRAM_THRESHOLD 1024 // S2 does not have a lot of RAM. C3 and ESP8266 do not support PSRAM: the value is not used
 #endif
 
+#ifdef BOARD_HAS_PSRAM
+  #define RTC_RAM_THRESHOLD 512   // use RTC RAM for allocations smaller than this size
+#else
+  #define RTC_RAM_THRESHOLD 65535 // without PSRAM, allow any size into RTC RAM (useful especially on S2 without PSRAM)
+#endif
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
+  #define WLED_HAVE_RTC_MEMORY_HEAP (defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
+#endif
+
 // Maximum size of node map (list of other WLED instances)
 #ifdef ESP8266
   #define WLED_MAX_NODES 24
