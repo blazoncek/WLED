@@ -1716,7 +1716,7 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
     };
 
     // zooming and rotation
-    auto RotateAndZoom = [](const CRGBA *srcPixels, CRGBA *destPixels, int midX, int midY, int cols, int rows, int shearAngle, int zoomOffset, bool wrap, bool mirror) {
+    auto RotateAndZoom = [](const CRGBA *srcPixels, CRGBA *destPixels, int midX, int midY, int cols, int rows, int shearAngleTimesTen, int zoomOffset, bool wrap, bool mirror) {
       for (int i = 0; i < cols * rows; i++) destPixels[i] = CRGBA(0,0,0); // fill black
 
       constexpr uint8_t Scale_Shift = 10;
@@ -1726,11 +1726,11 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       int zoomScale = Fixed_Scale + (zoomOffset * zoomRange) / 8; // zoomOffset: -8 .. +7 -> zoomScale: 256 .. 1696
       if (zoomScale <= 0) zoomScale = 1; // avoid divide-by-zero and negative zoom
 
-      const bool flip = (shearAngle > 90 && shearAngle < 270); // Flip to avoid instability near 180°
-      if (flip) { shearAngle = (shearAngle + 180); while (shearAngle >= 360) shearAngle -= 360; }
+      const bool flip = (shearAngleTimesTen > 900 && shearAngleTimesTen < 2700); // Flip to avoid instability near 180°
+      if (flip) { shearAngleTimesTen = (shearAngleTimesTen + 1800); while (shearAngleTimesTen >= 3600) shearAngleTimesTen -= 3600; }
 
       // Calculate shearX and shearY
-      const float angleRadians = radians(shearAngle);
+      const float angleRadians = radians(shearAngleTimesTen)*0.1f;
       const int shearX = -tan_t(angleRadians / 2) * Fixed_Scale;
       const int shearY =  sin_t(angleRadians)     * Fixed_Scale;
 
@@ -1777,19 +1777,19 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
       }
     };
 
-    const int speedAdjust = 5 * getTargetFps() / WLED_FPS; // adjust rotation speed based on target fps
+    const int speedAdjust = 10 * WLED_FPS / getTargetFps(); // adjust rotation speed based on target fps
     CRGBA *_pixelsN = topSegment.getPixels();
     if (topSegment.rotateSpeed || topSegment.zoomAmount != 8) {
       _pixelsN = new CRGBA[nCols * nRows];
       const int midX = nCols / 2;
       const int midY = nRows / 2;
       if (topSegment.rotateSpeed != 0) {
-        topSegment._rotatedAngle += topSegment.rotateSpeed;
-        while (topSegment._rotatedAngle > 3600) topSegment._rotatedAngle -= 3600;
+        topSegment._rotatedAngle += (topSegment.rotateSpeed * speedAdjust);
+        while (topSegment._rotatedAngle >= 3600) topSegment._rotatedAngle -= 3600;
       } else {
         topSegment._rotatedAngle = 0;
       }
-      RotateAndZoom(topSegment.getPixels(), _pixelsN, midX, midY, nCols, nRows, topSegment._rotatedAngle/speedAdjust, topSegment.zoomAmount - 8, topSegment.zoomWrap, topSegment.zoomMirror);
+      RotateAndZoom(topSegment.getPixels(), _pixelsN, midX, midY, nCols, nRows, topSegment._rotatedAngle, topSegment.zoomAmount - 8, topSegment.zoomWrap, topSegment.zoomMirror);
     }
     CRGBA *_pixelsO = topSegment.getPixels();
     if (segO) {
@@ -1799,12 +1799,12 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
         const int midX = oCols / 2;
         const int midY = oRows / 2;
         if (segO->rotateSpeed != 0) {
-          segO->_rotatedAngle += segO->rotateSpeed;
-          while (segO->_rotatedAngle > 3600) segO->_rotatedAngle -= 3600;
+          segO->_rotatedAngle += (segO->rotateSpeed * speedAdjust);
+          while (segO->_rotatedAngle >= 3600) segO->_rotatedAngle -= 3600;
         } else {
           segO->_rotatedAngle = 0;
         }
-        RotateAndZoom(segO->getPixels(), _pixelsO, midX, midY, oCols, oRows, segO->_rotatedAngle/speedAdjust, segO->zoomAmount - 8, segO->zoomWrap, segO->zoomMirror);
+        RotateAndZoom(segO->getPixels(), _pixelsO, midX, midY, oCols, oRows, segO->_rotatedAngle, segO->zoomAmount - 8, segO->zoomWrap, segO->zoomMirror);
       }
     }
 
