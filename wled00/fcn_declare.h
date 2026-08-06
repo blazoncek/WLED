@@ -327,6 +327,7 @@ extern "C" {
   #endif
 }
 #ifndef ESP8266
+inline size_t getTotalHeapSize() { return heap_caps_get_total_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
 inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
 inline size_t getContiguousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest contiguous free block
 #else
@@ -340,6 +341,9 @@ inline size_t getContiguousFreeHeap() { return ESP.getMaxFreeBlockSize(); } // r
 #define BFRALLOC_ENFORCE_PSRAM   (1 << 4) // use PSRAM if available, otherwise fall back to DRAM
 #define BFRALLOC_CLEAR           (1 << 5) // clear allocated buffer after allocation
 void *allocate_buffer(size_t size, uint32_t type);
+#if defined(BOARD_HAS_PSRAM) && (defined(CONFIG_IDF_TARGET_ESP32S2)|| defined(CONFIG_IDF_TARGET_ESP32S3))
+void preload_psram_buffer(void* psram_buf, size_t buf_size);
+#endif
 
 // RAII guard class for the JSON Buffer lock
 // Modeled after std::lock_guard

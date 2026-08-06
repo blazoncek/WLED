@@ -536,7 +536,12 @@ class Segment {
       // allocate frame buffer after matrix has been set up (gaps!)
       // use IRAM/PSRAM if available: there is no significant perfomance impact between PSRAM and DRAM on S2/S3 with OPI or QSPI PSRAM for this buffer
       p_free(pixels);
-      pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), (length() > 768 ? BFRALLOC_PREFER_PSRAM : BFRALLOC_PREFER_DRAM) | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+      #ifdef CONFIG_IDF_TARGET_ESP32
+      // classic ESP32 has a write-through PSRAM cache making it slow for write operations
+      pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_DRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+      #else
+      pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), (length() > 512 ? BFRALLOC_PREFER_PSRAM : BFRALLOC_PREFER_DRAM) | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+      #endif
     }
 
   protected:
@@ -848,7 +853,12 @@ class WS2812FX {
       // allocate frame buffer after matrix has been set up (gaps!)
       // use IRAM/PSRAM if available: there is no measurable perfomance impact between PSRAM and DRAM on S2/S3 with QSPI PSRAM for this buffer
       p_free(_pixels);
+      #ifdef CONFIG_IDF_TARGET_ESP32
+      // classic ESP32 has a write-through PSRAM cache making it slow for write operations
+      _pixels = static_cast<uint32_t*>(allocate_buffer(getLengthTotal() * sizeof(uint32_t), BFRALLOC_PREFER_DRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+      #else
       _pixels = static_cast<uint32_t*>(allocate_buffer(getLengthTotal() * sizeof(uint32_t), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
+      #endif
     }
 
     inline void resetTimebase()                               { timebase = 0UL - millis(); }

@@ -1408,6 +1408,10 @@ void WS2812FX::service() {
 
     if (!seg.isActive()) continue;
 
+    #if defined(BOARD_HAS_PSRAM) && (defined(CONFIG_IDF_TARGET_ESP32S2)|| defined(CONFIG_IDF_TARGET_ESP32S3))
+    preload_psram_buffer(seg.getPixels(), seg.length() * sizeof(CRGBA));
+    #endif
+
     const bool mustUpdate = _triggered || (doShow && seg.mode == FX_MODE_STATIC);
     // last condition ensures all solid segments are updated at the same time
     if (mustUpdate || seg.needsUpdate(nowUp)) {
@@ -2014,6 +2018,9 @@ void WS2812FX::show() {
   for (const Segment &seg : _segments) if (seg.getPixels() == nullptr) { bufferLess = true; break; }
 
   size_t totalLen = getLengthTotal();
+  #if defined(BOARD_HAS_PSRAM) && (defined(CONFIG_IDF_TARGET_ESP32S2)|| defined(CONFIG_IDF_TARGET_ESP32S3))
+  preload_psram_buffer(_pixels, totalLen * sizeof(uint32_t));
+  #endif
   // WARNING: as WLED doesn't handle CCT on pixel level but on Segment level instead
   // we need to keep track of each pixel's CCT when blending segments (if CCT is present)
   // and then set appropriate CCT from that pixel during paint (see below).

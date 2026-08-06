@@ -631,19 +631,21 @@ void *allocate_buffer(size_t size, uint32_t type) {
   } else {
     // we will try to allocate memory in a single call using fallbacks if not using 32-bit aligned allocation
     #ifdef BOARD_HAS_PSRAM
-    int caps1 = ((type & BFRALLOC_PREFER_PSRAM || size > PSRAM_THRESHOLD) ? MALLOC_CAP_SPIRAM : MALLOC_CAP_INTERNAL) | MALLOC_CAP_8BIT; // prefer PSRAM if requested, otherwise use DRAM
-    int caps2 = (type & BFRALLOC_PREFER_PSRAM ? MALLOC_CAP_INTERNAL : MALLOC_CAP_SPIRAM) | MALLOC_CAP_8BIT; // prefer 32bit access if requested, otherwise use 8bit DRAM;
+    uint32_t caps1 = ((type & BFRALLOC_PREFER_PSRAM || size > PSRAM_THRESHOLD) ? MALLOC_CAP_SPIRAM : MALLOC_CAP_INTERNAL) | MALLOC_CAP_8BIT; // prefer PSRAM if requested, otherwise use DRAM
+    uint32_t caps2 = (type & BFRALLOC_PREFER_PSRAM ? MALLOC_CAP_INTERNAL : MALLOC_CAP_SPIRAM) | MALLOC_CAP_8BIT; // prefer 32bit access if requested, otherwise use 8bit DRAM;
     #else
     int caps1 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT; // no PSRAM available, use DRAM
     int caps2 = MALLOC_CAP_DEFAULT  | MALLOC_CAP_8BIT; // use any 8bit;
     #endif
     if (type & BFRALLOC_NOBYTEACCESS) {
       // try to allocate in ESP32's fast IRAM (32bit access only) and if that fails try to use 4 byte aligned allocation
-      size = (size + 3) & (~0x00000003U); // round to 4 byte multiple
+      size = (size + sizeof(uint32_t) - 1) & (~(sizeof(uint32_t)-1)); // round to 4 byte multiple
       buffer = heap_caps_malloc(size, MALLOC_CAP_32BIT);
+      const size_t align1 = (type & BFRALLOC_PREFER_PSRAM || size > PSRAM_THRESHOLD) ? 64 : 4; // 64 byte alignment helps with PSRAM pre-loading
+      const size_t align2 = !(type & BFRALLOC_PREFER_PSRAM) ? 64 : 4;
       #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
-      if (!buffer) buffer = heap_caps_aligned_alloc(4, size, caps1);
-      if (!buffer) buffer = heap_caps_aligned_alloc(4, size, caps2);
+      if (!buffer) buffer = heap_caps_aligned_alloc(align1, size, caps1);
+      if (!buffer) buffer = heap_caps_aligned_alloc(align2, size, caps2);
       #endif
     }
     if (!buffer) buffer = heap_caps_malloc_prefer(size, 3, caps1, caps2, MALLOC_CAP_DEFAULT); // if caps1 and caps2 fail, use 8bit fallback in any memory type available
@@ -658,6 +660,48 @@ void *allocate_buffer(size_t size, uint32_t type) {
   if (buffer && (type & BFRALLOC_CLEAR)) memset(buffer, 0, size); // clear allocated buffer
   return buffer;
 }
+
+#if defined(BOARD_HAS_PSRAM) && (defined(CONFIG_IDF_TARGET_ESP32S2)|| defined(CONFIG_IDF_TARGET_ESP32S3))
+// AI-begin: AI generated content
+  #if ESP_IDF_VERSION_MAJOR > 4
+    #include "esp_memory_utils.h"
+    #include "esp_cache.h"
+    #define Cache_Start_DCache_Preload(a,b,c) esp_cache_preload((a), (b), ESP_CACHE_PRELOAD_DATA)
+  #else
+    #include "soc/soc_memory_layout.h"
+    #ifdef __cplusplus
+    extern "C" {
+    #endif
+    // ESP32-S3 ROM function to trigger Data Cache Preload
+    void Cache_Start_DCache_Preload(uint32_t addr, uint32_t len, uint32_t cache_item);
+    #ifdef __cplusplus
+    }
+    #endif
+  #endif
+#define ESP32S3_CACHE_LINE_SIZE 64
+void preload_psram_buffer(void* ptr, size_t size) {
+  // Check if actual buffer is in PSRAM and is sufficiently large to warrant pre-loading
+  if (size < 9216 || !esp_ptr_external_ram(ptr)) return;
+
+  uint32_t start_addr = (uint32_t)ptr;
+  uint32_t end_addr = start_addr + size;
+
+  // 1. Align start address DOWN to 64-byte boundary
+  uint32_t aligned_start = start_addr & ~(ESP32S3_CACHE_LINE_SIZE - 1);
+
+  // 2. Align end address UP to 64-byte boundary
+  uint32_t aligned_end = (end_addr + ESP32S3_CACHE_LINE_SIZE - 1) & ~(ESP32S3_CACHE_LINE_SIZE - 1);
+  
+  // 3. Calculate adjusted total size
+  uint32_t aligned_len = aligned_end - aligned_start;
+
+  // 4. Fire the hardware preload command
+  // The third parameter (0) targets L1 Data Cache
+  Cache_Start_DCache_Preload(aligned_start, aligned_len, 0);
+}
+// AI-end
+#endif
+
 
 /*
  * Fixed point integer based Perlin noise functions by @dedehai
