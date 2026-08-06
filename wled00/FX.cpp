@@ -5919,10 +5919,8 @@ uint16_t mode_2Dscrollingtext(void) {
   }
   const uint8_t fade = SEGMENT.custom3;
 
-  char text[WLED_MAX_SEGNAME_LEN+1] = {'\0'};
-  if (SEGMENT.name) for (size_t i=0,j=0; i<strlen(SEGMENT.name) && i<WLED_MAX_SEGNAME_LEN; i++) if (SEGMENT.name[i]>31 && SEGMENT.name[i]<128) text[j++] = SEGMENT.name[i];
-  text[WLED_MAX_SEGNAME_LEN] = '\0'; // ensure null-termination
-  const bool zero = strchr(text, '0') != nullptr;
+  char text[2*WLED_MAX_SEGNAME_LEN+1];
+  size_t len = strlen(SEGMENT.name);
 
   char sec[5];
   int  AmPmHour = hour(localTime);
@@ -5935,27 +5933,62 @@ uint16_t mode_2Dscrollingtext(void) {
     sprintf_P(sec, PSTR(":%02d"), second(localTime));
   }
 
-  if (!strlen(text)) { // fallback if empty segment name: display date and time
+  if (len == 0) { // fallback if empty segment name: display date and time
     sprintf_P(text, PSTR("%s %d, %d %d:%02d%s"), monthShortStr(month(localTime)), day(localTime), year(localTime), AmPmHour, minute(localTime), sec);
   } else {
-    if (text[0] == '#') for (auto &c : text) c = std::toupper(c);
-    if      (!strncmp_P(text,PSTR("#DATE"),5)) sprintf_P(text, zero?PSTR("%02d.%02d.%04d"):PSTR("%d.%d.%d"),   day(localTime),   month(localTime),  year(localTime));
-    else if (!strncmp_P(text,PSTR("#DDMM"),5)) sprintf_P(text, zero?PSTR("%02d.%02d")     :PSTR("%d.%d"),      day(localTime),   month(localTime));
-    else if (!strncmp_P(text,PSTR("#MMDD"),5)) sprintf_P(text, zero?PSTR("%02d/%02d")     :PSTR("%d/%d"),      month(localTime), day(localTime));
-    else if (!strncmp_P(text,PSTR("#TIME"),5)) sprintf_P(text, zero?PSTR("%02d:%02d%s")   :PSTR("%2d:%02d%s"), AmPmHour,         minute(localTime), sec);
-    else if (!strncmp_P(text,PSTR("#HHMM"),5)) sprintf_P(text, zero?PSTR("%02d:%02d")     :PSTR("%d:%02d"),    AmPmHour,         minute(localTime));
-    else if (!strncmp_P(text,PSTR("#HH"),3))   sprintf  (text, zero?    ("%02d")          :    ("%d"),         AmPmHour);
-    else if (!strncmp_P(text,PSTR("#MM"),3))   sprintf  (text, zero?    ("%02d")          :    ("%d"),         minute(localTime));
-    else if (!strncmp_P(text,PSTR("#SS"),3))   sprintf  (text,          ("%02d")                     ,         second(localTime));
-    else if (!strncmp_P(text,PSTR("#DD"),3))   sprintf  (text, zero?    ("%02d")          :    ("%d"),         day(localTime));
-    else if (!strncmp_P(text,PSTR("#DAY"),4))  sprintf  (text,          ("%s")                       ,         dayShortStr(day(localTime)));
-    else if (!strncmp_P(text,PSTR("#DDDD"),5)) sprintf  (text,          ("%s")                       ,         dayStr(day(localTime)));
-    else if (!strncmp_P(text,PSTR("#DAYL"),5)) sprintf  (text,          ("%s")                       ,         dayStr(day(localTime)));
-    else if (!strncmp_P(text,PSTR("#MO"),3))   sprintf  (text, zero?    ("%02d")          :    ("%d"),         month(localTime));
-    else if (!strncmp_P(text,PSTR("#MON"),4))  sprintf  (text,          ("%s")                       ,         monthShortStr(month(localTime)));
-    else if (!strncmp_P(text,PSTR("#MMMM"),5)) sprintf  (text,          ("%s")                       ,         monthStr(month(localTime)));
-    else if (!strncmp_P(text,PSTR("#YY"),3))   sprintf  (text,          ("%02d")                     ,         year(localTime)%100);
-    else if (!strncmp_P(text,PSTR("#YYYY"),5)) sprintf_P(text, zero?PSTR("%04d")          :    ("%d"),         year(localTime));
+    size_t i = 0;
+    size_t text_pos = 0;
+    while (i < len && text_pos < sizeof(text)-1) {
+      const char c = SEGMENT.name[i++];
+      if (!std::isprint(c)) continue; // is printable ASCII character
+      // # denotes the start of a token
+      if (c == '#') {
+        char token[5];  // token is up to 4 chars + null terminator
+        size_t j = 0;
+        for (; j < sizeof(token)-1 && i < len; j++, i++) {
+          token[j] = std::toupper(SEGMENT.name[i]);
+          if (!std::isalpha(token[j])) break;
+        }
+        // a 0 suffix means display leading zeros on times and dates
+        const bool zero = (SEGMENT.name[i] == '0');
+        if (zero && j > 0) i++; // don't include it in output text
+        token[j] = '\0'; // terminate token string
+        // Process token (must be in longest to shortest order not to misinterpret some)
+        char temp[32];
+        if      (!strcmp_P(token, PSTR("DATE"))) sprintf_P(temp, zero?PSTR("%02d.%02d.%04d"):PSTR("%d.%d.%d")  , day(localTime),   month(localTime),  year(localTime));
+        else if (!strcmp_P(token, PSTR("DDMM"))) sprintf_P(temp, zero?PSTR("%02d.%02d")     :PSTR("%d.%d")     , day(localTime),   month(localTime));
+        else if (!strcmp_P(token, PSTR("MMDD"))) sprintf_P(temp, zero?PSTR("%02d/%02d")     :PSTR("%d/%d")     , month(localTime), day(localTime));
+        else if (!strcmp_P(token, PSTR("TIME"))) sprintf_P(temp, zero?PSTR("%02d:%02d%s")   :PSTR("%2d:%02d%s"), AmPmHour,         minute(localTime), sec);
+        else if (!strcmp_P(token, PSTR("HHMM"))) sprintf_P(temp, zero?PSTR("%02d:%02d")     :PSTR("%d:%02d")   , AmPmHour,         minute(localTime));
+        else if (!strcmp_P(token, PSTR("YYYY"))) sprintf_P(temp,      PSTR("%04d")                             , year(localTime));
+        else if (!strcmp_P(token, PSTR("MONL"))) sprintf  (temp,          ("%s")                               , monthStr(month(localTime)));
+        else if (!strcmp_P(token, PSTR("MMMM"))) sprintf  (temp,          ("%s")                               , monthStr(month(localTime)));
+        else if (!strcmp_P(token, PSTR("DAYL"))) sprintf  (temp,          ("%s")                               , dayStr(weekday(localTime)));
+        else if (!strcmp_P(token, PSTR("DDDD"))) sprintf  (temp,          ("%s")                               , dayStr(weekday(localTime)));
+        #ifdef ESP32
+        else if (!strcmp_P(token, PSTR("CPU") )) sprintf_P(temp,      PSTR("%s rev.%d @ %uMHz")                , ESP.getChipModel(), (int)ESP.getChipRevision(), ESP.getCpuFreqMHz());
+        else if (!strcmp_P(token, PSTR("MEM") )) sprintf_P(temp,      PSTR("%uk/%uk/%uk")                      , getFreeHeapSize()/1024, getContiguousFreeHeap()/1024, getTotalHeapSize()/1024);
+        #else
+        else if (!strcmp_P(token, PSTR("CPU") )) sprintf_P(temp,      PSTR("%s @ %uMHz")                       , "esp8266", ESP.getCpuFreqMHz());
+        else if (!strcmp_P(token, PSTR("MEM") )) sprintf_P(temp,      PSTR("%uk/%uk")                          , getFreeHeapSize()/1024, getContiguousFreeHeap()/1024);
+        #endif
+        else if (!strcmp_P(token, PSTR("MON") )) sprintf  (temp,          ("%s")                               , monthShortStr(month(localTime)));
+        else if (!strcmp_P(token, PSTR("DAY") )) sprintf  (temp,          ("%s")                               , dayShortStr(weekday(localTime)));
+        else if (!strcmp_P(token, PSTR("FPS") )) sprintf  (temp, zero?    ("%02d")          :    ("%d")        , strip.getFps());
+        else if (!strcmp_P(token, PSTR("YY")  )) sprintf  (temp,          ("%02d")                             , year(localTime)%100);
+        else if (!strcmp_P(token, PSTR("HH")  )) sprintf  (temp, zero?    ("%02d")          :    ("%d")        , AmPmHour);
+        else if (!strcmp_P(token, PSTR("MM")  )) sprintf  (temp, zero?    ("%02d")          :    ("%d")        , minute(localTime));
+        else if (!strcmp_P(token, PSTR("SS")  )) sprintf  (temp, zero?    ("%02d")          :    ("%d")        , second(localTime));
+        else if (!strcmp_P(token, PSTR("MO")  )) sprintf  (temp, zero?    ("%02d")          :    ("%d")        , month(localTime));
+        else if (!strcmp_P(token, PSTR("DD")  )) sprintf  (temp, zero?    ("%02d")          :    ("%d")        , day(localTime));
+        else                                     sprintf_P(temp,      PSTR("#%s")                              , token);  // no token found, print # instead
+        const size_t temp_len = strlen(temp);
+        for (j = 0; text_pos < sizeof(text)-1 && j < temp_len; j++) text[text_pos++] = temp[j];
+      } else {
+        text[text_pos++] = c; // no token, just copy char
+      }
+    }
+    text[text_pos] = '\0'; // terminate string
   }
 
   const int  numberOfLetters = strlen(text);
