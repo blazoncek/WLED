@@ -620,6 +620,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       WLED_FS.format();
       serveMessage(request, 200, F("All Settings erased."), F("Connect to WLED-AP to setup again"), 255);
       doReboot = true; // may reboot immediately on dual-core system (race condition) which is desireable in this case
+      doSerializeConfig = false;
       return;
     }
 
@@ -878,7 +879,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
 
   lastEditTime = millis();
   // do not save if factory reset or LED settings (which are saved after LED re-init)
-  doSerializeConfig = subPage != SUBPAGE_LEDS && !(subPage == SUBPAGE_SEC && doReboot);
+  doSerializeConfig = subPage != SUBPAGE_LEDS;
   #ifndef WLED_DISABLE_ALEXA
   if (subPage == SUBPAGE_SYNC) alexaInit();
   #endif

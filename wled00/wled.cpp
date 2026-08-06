@@ -216,7 +216,7 @@ void WLED::loop()
     loadLedmap = -1;
   }
   yield();
-  if (doSerializeConfig && !doReboot) serializeConfig();
+  if (doSerializeConfig) serializeConfig();
 
   yield();
   handleWs();
