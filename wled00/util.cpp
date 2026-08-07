@@ -596,9 +596,9 @@ void *allocate_buffer(size_t size, uint32_t type) {
       // try to allocate in ESP32's fast IRAM (32bit access only) and if that fails try to use 4 byte aligned allocation
       size = (size + sizeof(uint32_t) - 1) & (~(sizeof(uint32_t)-1)); // round to 4 byte multiple
       buffer = heap_caps_malloc(size, MALLOC_CAP_32BIT);
+      #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
       const size_t align1 = (type & BFRALLOC_PREFER_PSRAM || size > PSRAM_THRESHOLD) ? 64 : 4; // 64 byte alignment helps with PSRAM pre-loading
       const size_t align2 = !(type & BFRALLOC_PREFER_PSRAM) ? 64 : 4;
-      #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
       if (!buffer) buffer = heap_caps_aligned_alloc(align1, size, caps1);
       if (!buffer) buffer = heap_caps_aligned_alloc(align2, size, caps2);
       #endif

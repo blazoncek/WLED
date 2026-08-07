@@ -246,11 +246,12 @@ void WLED::loop()
 #if defined(WLED_DEBUG) && defined(WLED_DEBUG_STATS)
   unsigned long now = millis();
   loopMillis = now - loopMillis;
-  //if (loopMillis > 30) {
-  //  DEBUG_PRINTF_P(PSTR(" Loop took %lums.\n"),     loopMillis);
-  //  DEBUG_PRINTF_P(PSTR(" Usermods took %lums.\n"), usermodMillis);
-  //  DEBUG_PRINTF_P(PSTR(" Strip took %lums.\n"),    stripMillis);
-  //}
+  if (loopMillis - stripMillis - usermodMillis > 30) {
+    DEBUG_PRINTLN(F("---- loop() stalled ----"));
+    DEBUG_PRINTF_P(PSTR("Loop took %lums.\n"),     loopMillis);
+    DEBUG_PRINTF_P(PSTR("Usermods took %lums.\n"), usermodMillis);
+    DEBUG_PRINTF_P(PSTR("Strip took %lums.\n"),    stripMillis);
+  }
   avgLoopMillis += loopMillis;
   if (loopMillis > maxLoopMillis) maxLoopMillis = loopMillis;
   if (WiFi.status() != lastWifiState) wifiStateChangedTime = now;
@@ -266,8 +267,7 @@ void WLED::loop()
     DEBUG_PRINTLN(F("---DEBUG INFO---"));
     DEBUG_PRINTF_P(PSTR("Runtime: %lus\n"),  now/1000);
     DEBUG_PRINTF_P(PSTR("Unix time: %u,%03u\n"), toki.getTime().sec, toki.getTime().ms);
-    DEBUG_PRINTF_P(PSTR("Free heap/continuous: %u/%u\n"), getFreeHeapSize(), getContinuousFreeHeap());
-  #if defined(ESP32)
+  #if defined(ESP32) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
     // Internal DRAM (standard 8-bit accessible heap)
     DEBUG_PRINTF_P(PSTR("DRAM 8-bit:   Total: %7u | Free: %7u | Largest: %7u (bytes)\n")
     , heap_caps_get_total_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL)
@@ -302,6 +302,8 @@ void WLED::loop()
     , heap_caps_get_free_size(MALLOC_CAP_DMA)
     , heap_caps_get_largest_free_block(MALLOC_CAP_DMA)
     );
+  #else
+    DEBUG_PRINTF_P(PSTR("Free heap/continuous: %u/%u\n"), getFreeHeapSize(), getContinuousFreeHeap());
   #endif
     #if defined(ARDUINO_ARCH_ESP32)
     DEBUG_PRINTF_P(PSTR("TX power: %d/%d\n"), WiFi.getTxPower(), txPower);

@@ -323,7 +323,6 @@ extern "C" {
   void *d_realloc(void *, size_t);
   inline void d_free(void *ptr) { heap_caps_free(ptr); }
 }
-inline size_t getTotalHeapSize() { return heap_caps_get_total_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); }
 inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
 inline size_t getContinuousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest continuous free block
 #endif
