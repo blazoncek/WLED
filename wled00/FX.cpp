@@ -5967,10 +5967,10 @@ uint16_t mode_2Dscrollingtext(void) {
         else if (!strcmp_P(token, PSTR("DDDD"))) sprintf  (temp,          ("%s")                               , dayStr(weekday(localTime)));
         #ifdef ESP32
         else if (!strcmp_P(token, PSTR("CPU") )) sprintf_P(temp,      PSTR("%s rev.%d @ %uMHz")                , ESP.getChipModel(), (int)ESP.getChipRevision(), ESP.getCpuFreqMHz());
-        else if (!strcmp_P(token, PSTR("MEM") )) sprintf_P(temp,      PSTR("%uk/%uk/%uk")                      , getFreeHeapSize()/1024, getContiguousFreeHeap()/1024, getTotalHeapSize()/1024);
+        else if (!strcmp_P(token, PSTR("MEM") )) sprintf_P(temp,      PSTR("%uk/%uk/%uk")                      , getFreeHeapSize()/1024, getContinuousFreeHeap()/1024, getTotalHeapSize()/1024);
         #else
         else if (!strcmp_P(token, PSTR("CPU") )) sprintf_P(temp,      PSTR("%s @ %uMHz")                       , "esp8266", ESP.getCpuFreqMHz());
-        else if (!strcmp_P(token, PSTR("MEM") )) sprintf_P(temp,      PSTR("%uk/%uk")                          , getFreeHeapSize()/1024, getContiguousFreeHeap()/1024);
+        else if (!strcmp_P(token, PSTR("MEM") )) sprintf_P(temp,      PSTR("%uk/%uk")                          , getFreeHeapSize()/1024, getContinuousFreeHeap()/1024);
         #endif
         else if (!strcmp_P(token, PSTR("MON") )) sprintf  (temp,          ("%s")                               , monthShortStr(month(localTime)));
         else if (!strcmp_P(token, PSTR("DAY") )) sprintf  (temp,          ("%s")                               , dayShortStr(weekday(localTime)));

@@ -137,7 +137,7 @@ Segment& Segment::operator= (const Segment &orig) {
     clearName();
     if (isInTransition()) stopTransition(); // also erases _t
     deallocateData();
-    p_free(pixels);
+    d_free(pixels);
     // copy source
     memcpy((void*)this, (void*)&orig, sizeof(Segment));
     // erase pointers to allocated data
@@ -169,7 +169,7 @@ Segment& Segment::operator= (Segment &&orig) noexcept {
     clearName(); // free old name
     if (isInTransition()) stopTransition(); // also erases _t
     deallocateData(); // free old runtime data
-    p_free(pixels);   // free old pixel buffer
+    d_free(pixels);   // free old pixel buffer
     // move source data
     memcpy((void*)this, (void*)&orig, sizeof(Segment));
     orig.name = nullptr;
@@ -199,7 +199,7 @@ bool Segment::allocateData(size_t len) {
   }
   #endif
   Segment::addUsedSegmentData(-_dataLen); // subtract original buffer size (is 0 if no buffer was allocated)
-  d_free(data); // free data and try to allocate again (segment buffer may be blocking contiguous heap)
+  d_free(data); // free data and try to allocate again (segment buffer may be blocking continuous heap)
   // prefer DRAM over PSRAM on ESP32 since it is faster
   data = static_cast<byte*>(d_calloc(len, sizeof(data[0])));
   if (data) {
@@ -538,7 +538,7 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
   // safety check
   if (i2 <= i1 || i2Y <= i1Y) { // disable segment if stop is smaller or equal to start
     deallocateData();
-    p_free(pixels);
+    d_free(pixels);
     pixels = nullptr;
     stop = 0;
     // reset grouping, spacing and offset on deactivation
@@ -1495,7 +1495,7 @@ static uint8_t _hue       (uint8_t a, uint8_t b) { return a; } // not really use
 static uint8_t _sat       (uint8_t a, uint8_t b) { return a; } // not really used, but implemented for completeness
 static uint8_t _val       (uint8_t a, uint8_t b) { return a; } // not really used, but implemented for completeness
 
-void WS2812FX::blendSegment(const Segment &topSegment) const {
+void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const {
 
   typedef uint8_t(*FuncType)(uint8_t, uint8_t);
   // when expanding the funcs array, also update "bm" property limits in json.cpp
@@ -2024,9 +2024,10 @@ void WS2812FX::show() {
   // WARNING: as WLED doesn't handle CCT on pixel level but on Segment level instead
   // we need to keep track of each pixel's CCT when blending segments (if CCT is present)
   // and then set appropriate CCT from that pixel during paint (see below).
+  uint8_t *pixelCCT = nullptr;
   if ((hasCCTBus() || correctWB) && !cctFromRgb)
-    _pixelCCT = static_cast<uint8_t*>(allocate_buffer(totalLen * sizeof(uint8_t), BFRALLOC_PREFER_PSRAM)); // allocate CCT buffer if necessary
-  if (_pixelCCT) memset(_pixelCCT, 127, totalLen); // set neutral (50:50) CCT
+    pixelCCT = static_cast<uint8_t*>(d_malloc(totalLen * sizeof(uint8_t))); // allocate CCT buffer if necessary
+  if (pixelCCT) memset(pixelCCT, 127, totalLen); // set neutral (50:50) CCT
 
   // if we are in live mode we don't do segment blending unless useMainSegmentOnly is on or override is on
   if (realtimeMode == REALTIME_MODE_INACTIVE || useMainSegmentOnly || realtimeOverride) {
@@ -2034,7 +2035,7 @@ void WS2812FX::show() {
     if (!bufferLess) for (size_t i = 0; i < totalLen; i++) _pixels[i] = BLACK; // memset(_pixels, 0, sizeof(uint32_t) * getLengthTotal());
     // blend all segments into (cleared) buffer
     for (Segment &seg : _segments) if (seg.getPixels() != nullptr && seg.isActive() && (seg.on || seg.isInTransition())) {
-      blendSegment(seg);              // blend segment's buffer into frame buffer
+      blendSegment(seg, pixelCCT);              // blend segment's buffer into frame buffer
     }
   }
 
@@ -2049,8 +2050,8 @@ void WS2812FX::show() {
   for (size_t i = 0; i < totalLen; i++) {
     // when correctWB is true setSegmentCCT() will convert CCT into K with which we can then
     // correct/adjust RGB value according to desired CCT value, it will still affect actual WW/CW ratio
-    if (_pixelCCT) { // cctFromRgb already exluded at allocation
-      if (i == 0 || _pixelCCT[i-1] != _pixelCCT[i]) BusManager::setSegmentCCT(_pixelCCT[i], correctWB);
+    if (pixelCCT) { // cctFromRgb already exluded at allocation
+      if (i == 0 || pixelCCT[i-1] != pixelCCT[i]) BusManager::setSegmentCCT(pixelCCT[i], correctWB);
     }
     // WARNING: BusDigital::setPixelColor() will pre-calculate sum of all channels for per-output ABL
     // this means we cannot modify bus pixel values after this point and need to call BusManager::show() immediately after this loop
@@ -2058,8 +2059,8 @@ void WS2812FX::show() {
   }
   Bus::setCCT(oldCCT);  // restore old CCT for ABL adjustments
 
-  p_free(_pixelCCT);
-  _pixelCCT = nullptr;
+  d_free(pixelCCT);
+  pixelCCT = nullptr;
 
   // some buses send asynchronously and this method will return before
   // all of the data has been sent.
@@ -2443,13 +2444,13 @@ bool WS2812FX::deserializeMap(unsigned n) {
   // look for "map":[ (which may include spaces/newlines in between tokens)
   if (!f.find("\"map\"") || !f.find(':') || !f.find('[')) { // stops after the "map":[
     DEBUG_PRINTF_P(PSTR("ERROR Invalid ledmap in %s: no map found\n"), fileName);
-    p_free(customMappingTable);
+    d_free(customMappingTable);
     customMappingTable = nullptr;
     f.close();
     return false;
   }
 
-  p_free(customMappingTable);
+  d_free(customMappingTable);
   customMappingTable = static_cast<uint16_t*>(allocate_buffer(sizeof(uint16_t)*getLengthTotal(), BFRALLOC_PREFER_PSRAM));
 
   if (customMappingTable) {

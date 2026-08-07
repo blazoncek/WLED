@@ -413,49 +413,48 @@ uint8_t beatsin8_t(accum88 beats_per_minute, uint8_t lowest, uint8_t highest, ui
 static const char s_ledmap_tmpl[] PROGMEM = "ledmap%d.json";
 // enumerate all ledmapX.json files on FS and extract ledmap names if existing
 void enumerateLedmaps() {
-  StaticJsonDocument<64> filter;
-  filter["n"] = true;
   ledMaps = 1;
   for (size_t i=1; i<WLED_MAX_LEDMAPS; i++) {
     char fileName[33] = "/";
     sprintf_P(fileName+1, s_ledmap_tmpl, i);
-    bool isFile = WLED_FS.exists(fileName);
 
     #ifndef ESP8266
     if (ledmapNames[i-1]) { //clear old name
-      p_free(ledmapNames[i-1]);
+      d_free(ledmapNames[i-1]);
       ledmapNames[i-1] = nullptr;
     }
     #endif
 
-    if (isFile) {
+    File f = WLED_FS.open(fileName, "r");
+    if (f) {
       ledMaps |= 1 << i;
 
       #ifndef ESP8266
-      if (requestJSONBufferLock(21)) {
-        if (readObjectFromFile(fileName, nullptr, pDoc, &filter)) {
-          size_t len = 0;
-          JsonObject root = pDoc->as<JsonObject>();
-          if (!root["n"].isNull()) {
-            // name field exists
-            const char *name = root["n"].as<const char*>();
-            if (name != nullptr) len = strlen(name);
-            if (len > 0 && len < 33) {
-              ledmapNames[i-1] = static_cast<char*>(p_malloc(len+1));
-              if (ledmapNames[i-1]) strlcpy(ledmapNames[i-1], name, 33);
-            }
-          }
-          if (!ledmapNames[i-1]) {
-            char tmp[33];
-            snprintf_P(tmp, 32, s_ledmap_tmpl, i);
-            len = strlen(tmp);
-            ledmapNames[i-1] = static_cast<char*>(p_malloc(len+1));
-            if (ledmapNames[i-1]) strlcpy(ledmapNames[i-1], tmp, 33);
+      StaticJsonDocument<256> doc;
+      StaticJsonDocument<64> filter;
+      filter["n"] = true;
+      if (deserializeJson(doc, f, DeserializationOption::Filter(filter)) == DeserializationError::Ok) {
+        size_t len = 0;
+        JsonObject root = doc.as<JsonObject>();
+        if (!root["n"].isNull()) {
+          // name field exists
+          const char *name = root["n"].as<const char*>();
+          if (name != nullptr) len = strlen(name);
+          if (len > 0 && len < 33) {
+            ledmapNames[i-1] = static_cast<char*>(d_malloc(len+1));
+            if (ledmapNames[i-1]) strlcpy(ledmapNames[i-1], name, 33);
           }
         }
-        releaseJSONBufferLock();
+        if (!ledmapNames[i-1]) {
+          char tmp[33];
+          snprintf_P(tmp, 32, s_ledmap_tmpl, i);
+          len = strlen(tmp);
+          ledmapNames[i-1] = static_cast<char*>(d_malloc(len+1));
+          if (ledmapNames[i-1]) strlcpy(ledmapNames[i-1], tmp, 33);
+        }
       }
       #endif
+      f.close();
     }
 
   }
@@ -504,14 +503,14 @@ uint32_t hw_random(uint32_t lowerlimit, uint32_t upperlimit) {
 static void *validateFreeHeap(void *buffer) {
   // make sure there is enough free heap left if buffer was allocated in DRAM region, free it if not
   #ifdef ESP8266
-  // note: ESP826 needs very little contiguous heap for webserver, checking total free heap works better
+  // note: ESP8266 needs very little continuous heap for webserver, checking total free heap works better
   if (getFreeHeapSize() < MIN_HEAP_SIZE) {
     free(buffer);
     return nullptr;
   }
   #else
   // TODO: between allocate and free, heap can run low (async web access), only IDF V5 allows for a pre-allocation-check of all free blocks
-  if ((uintptr_t)buffer > SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && getContiguousFreeHeap() < MIN_HEAP_SIZE) {
+  if ((uintptr_t)buffer > SOC_DRAM_LOW && (uintptr_t)buffer < SOC_DRAM_HIGH && getContinuousFreeHeap() < MIN_HEAP_SIZE) {
     heap_caps_free(buffer);
     return nullptr;
   }
@@ -519,91 +518,47 @@ static void *validateFreeHeap(void *buffer) {
   return buffer;
 }
 
-#ifdef BOARD_HAS_PSRAM
-  #if defined(CONFIG_IDF_TARGET_ESP32)
-    #warning "If compiling for ESP32 (rev.1), make sure to use '-mfix-esp32-psram-cache-issue' compiler flag to avoid PSRAM cache issues!"
-  #endif
-// p_x prefer PSRAM
-void *p_malloc(size_t size) {
-  void *buffer = nullptr;
-  buffer = heap_caps_malloc_prefer(size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // prefer PSRAM if it exists
-  return validateFreeHeap(buffer); // return allocated buffer
-}
-
-void *p_realloc(void *ptr, size_t size) {
-  #ifdef WLED_SIMPLE_REALLOC
-  p_free(ptr); // free old buffer
-  return p_malloc(size); // use malloc
-  #else
-  void *buffer = nullptr;
-  buffer = heap_caps_realloc_prefer(ptr, size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // otherwise prefer PSRAM if it exists
-  if (validateFreeHeap(buffer)) return buffer; // realloc successful
-  else {
-    p_free(ptr); // free old buffer if realloc failed (to keep consumer allocation logic simple)
-    return p_malloc(size); // fallback to malloc if realloc failed (buffer will not be copied!!!)
-  }
-  #endif
-}
-
-void *p_calloc(size_t count, size_t size) {
-  void *buffer = p_malloc(count * size);
-  if (buffer) memset(buffer, 0, count * size); // clear allocated buffer
-  return buffer;
-}
-#endif // BOARD_HAS_PSRAM
-
-
+#ifndef ESP8266
+// WLED's implementation of STDC malloc() which automatically determines where to allocate memory from (DRAM/PSRAM/RTC)
+// NOTE: classic ESP32 has a write-through PSRAM cache making every write to PSRAM slow, S2/S3 have write-back
+// cache (up to 32k/64k) making it perform on-par with DRAM unless writes are very large
+// due to slow nature of classic ESP32's PSRAM it is not desireable to use it unless allocations are very large
+// S3 has plenty of SRAM so the need to allocate in PSRAM is reduced compared to S2
 void *d_malloc(size_t size) {
   void *buffer = nullptr;
-  #ifdef ESP8266
-  buffer = malloc(size);
-  #else
   unsigned caps1 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
   unsigned caps2 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
-  if (getContiguousFreeHeap() < (2*MIN_HEAP_SIZE + size)) std::swap(caps1, caps2);
+  // check available (continuous) free heap and if less than 2*MIN_HEAP_SIZE would remain prefer PSRAM
+  if (size > PSRAM_THRESHOLD || getContinuousFreeHeap() < (2*MIN_HEAP_SIZE + size)) std::swap(caps1, caps2);
   #ifdef WLED_HAVE_RTC_MEMORY_HEAP
-  // the newer ESP32 variants have byte-accessible fast RTC memory that can be used as heap, access speed is on-par with DRAM
-  // the system does prefer normal DRAM until full, since free RTC memory is ~7.5k only, its below the minimum heap threshold and needs to be allocated explicitly
-  // use RTC RAM for small allocations or if DRAM is running low to improve fragmentation
-  if (size < RTC_RAM_THRESHOLD)
-    buffer = heap_caps_malloc_prefer(size, 3, MALLOC_CAP_RTCRAM, caps1, caps2);
+  // the newer ESP32 variants have 8k of byte-accessible fast RTC memory that can be used as heap, access speed is on-par with DRAM
+  // use RTC RAM for small allocations
+  if (size < RTC_RAM_THRESHOLD) buffer = heap_caps_malloc_prefer(size, 3, MALLOC_CAP_RTCRAM, caps1, caps2);
   else
   #endif
     buffer = heap_caps_malloc_prefer(size, 3, caps1, caps2, MALLOC_CAP_DEFAULT); // allocate in any available heap memory
-  #endif
-  buffer = validateFreeHeap(buffer); // make sure there is enough free heap left
-  return validateFreeHeap(buffer);
+  return validateFreeHeap(buffer); // make sure there is enough free heap left
 }
 
 void *d_realloc(void *ptr, size_t size) {
-  #ifdef WLED_SIMPLE_REALLOC
-  d_free(ptr); // free old buffer
-  return d_malloc(size); // use malloc
-  #else
   void *buffer = nullptr;
-  #ifdef ESP8266
-  buffer = realloc(ptr, size);
-  #else
   unsigned caps1 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
   unsigned caps2 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
-  if (getContiguousFreeHeap() < (2*MIN_HEAP_SIZE + size)) std::swap(caps1, caps2);
+  // check available (continuous) free heap and if less than 2*MIN_HEAP_SIZE would remain prefer PSRAM
+  if (size > PSRAM_THRESHOLD || getContinuousFreeHeap() < (2*MIN_HEAP_SIZE + size)) std::swap(caps1, caps2);
   #if WLED_HAVE_RTC_MEMORY_HEAP
-  // the newer ESP32 variants have byte-accessible fast RTC memory that can be used as heap, access speed is on-par with DRAM
-  // the system does prefer normal DRAM until full, since free RTC memory is ~7.5k only, its below the minimum heap threshold and needs to be allocated explicitly
-  // use RTC RAM for small allocations or if DRAM is running low to improve fragmentation
-  if (size < RTC_RAM_THRESHOLD)
-    buffer = heap_caps_realloc_prefer(ptr, 3, MALLOC_CAP_RTCRAM, caps1, caps2);
+  // the newer ESP32 variants have 8k of byte-accessible fast RTC memory that can be used as heap, access speed is on-par with DRAM
+  // use RTC RAM for small allocations
+  if (size < RTC_RAM_THRESHOLD) buffer = heap_caps_realloc_prefer(ptr, 3, MALLOC_CAP_RTCRAM, caps1, caps2);
   else
   #endif
     buffer = heap_caps_realloc_prefer(ptr, 3, size, caps1, caps2, MALLOC_CAP_DEFAULT);
-  #endif
   if (validateFreeHeap(buffer)) return buffer; // realloc successful
   else {
     // this behaviour simplifies the consumer allocation logic in case of failed realloc
     d_free(ptr); // free old buffer if realloc failed
     return d_malloc(size); // fallback to malloc if realloc failed
   }
-  #endif
 }
 
 void *d_calloc(size_t count, size_t size) {
@@ -611,10 +566,10 @@ void *d_calloc(size_t count, size_t size) {
   if (buffer) memset(buffer, 0, count * size); // clear allocated buffer
   return buffer;
 }
-
+#endif
 
 // allocation function for large buffers like pixel-buffers and segment data
-// ensures that a contiguous block of MIN_HEAP_SIZE remains to keep the UI working, otherwise returns nullptr
+// ensures that a continuous block of MIN_HEAP_SIZE remains to keep the UI working, otherwise returns nullptr
 void *allocate_buffer(size_t size, uint32_t type) {
   void *buffer = nullptr;
   #if defined(ESP8266) || defined(CONFIG_IDF_TARGET_ESP32C3) // ESP8266 & C3 do not support PSRAM

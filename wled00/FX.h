@@ -535,7 +535,7 @@ class Segment {
     inline void reallocatePixelBuffer() {
       // allocate frame buffer after matrix has been set up (gaps!)
       // use IRAM/PSRAM if available: there is no significant perfomance impact between PSRAM and DRAM on S2/S3 with OPI or QSPI PSRAM for this buffer
-      p_free(pixels);
+      d_free(pixels);
       #ifdef CONFIG_IDF_TARGET_ESP32
       // classic ESP32 has a write-through PSRAM cache making it slow for write operations
       pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), BFRALLOC_PREFER_DRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
@@ -603,7 +603,7 @@ class Segment {
       #endif
       clearName();
       deallocateData();
-      p_free(pixels);
+      d_free(pixels);
     }
 
     Segment& operator= (const Segment &orig); // copy assignment
@@ -788,7 +788,6 @@ class WS2812FX {
       milliAmpsAvg(0),
       // true private variables
       _pixels(nullptr),
-      _pixelCCT(nullptr),
       _suspend(false),
       _brightness(DEFAULT_BRIGHTNESS),
       _length(DEFAULT_LED_COUNT),
@@ -818,9 +817,8 @@ class WS2812FX {
     }
 
     ~WS2812FX() {
-      p_free(_pixels);
-      p_free(_pixelCCT); // just in case
-      p_free(customMappingTable);
+      d_free(_pixels);
+      d_free(customMappingTable);
       _mode.clear();
       _modeData.clear();
       _segments.clear();
@@ -843,7 +841,7 @@ class WS2812FX {
       resetSegments(),                            // marks all segments for reset
       makeAutoSegments(bool forceReset = false),  // will create segments based on configured outputs
       fixInvalidSegments(),                       // fixes incorrect segment configuration
-      blendSegment(const Segment &topSegment) const,    // blends topSegment into pixels
+      blendSegment(const Segment &topSegment, uint8_t *pixelsCCT) const,    // blends topSegment into pixels
       show(),                                     // initiates LED output
       setTargetFps(unsigned fps),
       setupEffectData(),                          // add default effects to the list; defined in FX.cpp
@@ -852,7 +850,7 @@ class WS2812FX {
     inline void reallocatePixelBuffer() {
       // allocate frame buffer after matrix has been set up (gaps!)
       // use IRAM/PSRAM if available: there is no measurable perfomance impact between PSRAM and DRAM on S2/S3 with QSPI PSRAM for this buffer
-      p_free(_pixels);
+      d_free(_pixels);
       #ifdef CONFIG_IDF_TARGET_ESP32
       // classic ESP32 has a write-through PSRAM cache making it slow for write operations
       _pixels = static_cast<uint32_t*>(allocate_buffer(getLengthTotal() * sizeof(uint32_t), BFRALLOC_PREFER_DRAM | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
@@ -984,7 +982,6 @@ class WS2812FX {
 
   private:
     uint32_t *_pixels;
-    uint8_t  *_pixelCCT;
     std::vector<Segment> _segments;
 
     volatile bool _suspend;

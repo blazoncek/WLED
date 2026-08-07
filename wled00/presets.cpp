@@ -57,10 +57,10 @@ static void doSaveState() {
 */
   #if defined(ARDUINO_ARCH_ESP32)
   if (!persist) {
-    p_free(tmpRAMbuffer);
+    d_free(tmpRAMbuffer);
     size_t len = measureJson(*pDoc) + 1;
     // if possible use SPI RAM on ESP32
-    tmpRAMbuffer = (char*)p_malloc(len);
+    tmpRAMbuffer = (char*)d_malloc(len);
     if (tmpRAMbuffer!=nullptr) {
       serializeJson(*pDoc, tmpRAMbuffer, len);
     } else {
@@ -81,8 +81,8 @@ static void doSaveState() {
   // clean up
   saveLedmap   = -1;
   presetToSave = 0;
-  p_free(saveName);
-  p_free(quickLoad);
+  d_free(saveName);
+  d_free(quickLoad);
   saveName = nullptr;
   quickLoad = nullptr;
   playlistSave = false;
@@ -205,7 +205,7 @@ bool doApplyPreset(uint8_t tmpPreset, uint8_t tmpMode)
   #if defined(ARDUINO_ARCH_ESP32)
   //Aircoookie recommended not to delete buffer
   if (tmpPreset==255 && tmpRAMbuffer!=nullptr) {
-    p_free(tmpRAMbuffer);
+    d_free(tmpRAMbuffer);
     tmpRAMbuffer = nullptr;
   }
   #endif
@@ -217,8 +217,8 @@ bool doApplyPreset(uint8_t tmpPreset, uint8_t tmpMode)
 //called from handleSet(PS=) [network callback (sObj is empty)], IR (irrational) [loop context] and deserializeState() [network callback]
 void savePreset(byte index, const char* pname, JsonObject sObj)
 {
-  if (!saveName) saveName = static_cast<char*>(p_malloc(33));
-  if (!quickLoad) quickLoad = static_cast<char*>(p_malloc(9));
+  if (!saveName) saveName = static_cast<char*>(d_malloc(33));
+  if (!quickLoad) quickLoad = static_cast<char*>(d_malloc(9));
   if (!saveName || !quickLoad) return;
 
   if (index == 0 || (index > 250 && index < 255)) return;
@@ -267,8 +267,8 @@ void savePreset(byte index, const char* pname, JsonObject sObj)
         strip.resume();
         currentPreset = index; // set current preset to the one just saved
       }
-      p_free(saveName);
-      p_free(quickLoad);
+      d_free(saveName);
+      d_free(quickLoad);
       saveName = nullptr;
       quickLoad = nullptr;
     } else {

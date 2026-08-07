@@ -34,37 +34,19 @@ uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const
 
 //util.cpp (contraproductive!!)
 // PSRAM allocation wrappers
-#if defined(BOARD_HAS_PSRAM) && defined(ARDUINO_ARCH_ESP32) && !defined(ARDUINO_ARCH_ESP32C3)
+#if defined(BOARD_HAS_PSRAM) && defined(ARDUINO_ARCH_ESP32)
 extern "C" {
-  void *p_malloc(size_t);           // prefer PSRAM over DRAM
-  void *p_calloc(size_t, size_t);   // prefer PSRAM over DRAM
-  void *p_realloc(void *, size_t);  // prefer PSRAM over DRAM
-  inline void p_free(void *ptr) { heap_caps_free(ptr); }
-  void *d_malloc(size_t);           // prefer DRAM over PSRAM
-  void *d_calloc(size_t, size_t);   // prefer DRAM over PSRAM
-  void *d_realloc(void *, size_t);  // prefer DRAM over PSRAM
+  void *d_malloc(size_t);
+  void *d_calloc(size_t, size_t);
+  void *d_realloc(void *, size_t);
   inline void d_free(void *ptr) { heap_caps_free(ptr); }
 }
 #else
-#define p_malloc d_malloc
-#define p_calloc d_calloc
-#define p_realloc d_realloc
-#define p_free d_free
 #define d_malloc malloc
 #define d_calloc calloc
-//#define d_realloc realloc
+#define d_realloc realloc
 #define d_free free
-extern "C" {
-  void *d_realloc(void *, size_t); // implement free + malloc to be consistent with ESP32
-}
 #endif
-#define BFRALLOC_NOBYTEACCESS    (1 << 0) // ESP32 has 32bit accessible DRAM (usually ~50kB free) that must not be byte-accessed
-#define BFRALLOC_PREFER_DRAM     (1 << 1) // prefer DRAM over PSRAM
-#define BFRALLOC_ENFORCE_DRAM    (1 << 2) // use DRAM only, no PSRAM
-#define BFRALLOC_PREFER_PSRAM    (1 << 3) // prefer PSRAM over DRAM
-#define BFRALLOC_ENFORCE_PSRAM   (1 << 4) // use PSRAM if available, otherwise fall back to DRAM
-#define BFRALLOC_CLEAR           (1 << 5) // clear allocated buffer after allocation
-void *allocate_buffer(size_t size, uint32_t type); // buffer allocator with MIN_HEAP_SIZE enforcement
 
 //color mangling macros
 #define RGBW32(r,g,b,w) (uint32_t((byte(w) << 24) | (byte(r) << 16) | (byte(g) << 8) | (byte(b))))
@@ -741,7 +723,7 @@ void BusNetwork::cleanup() {
 #include <ESP32-VirtualMatrixPanel-I2S-DMA.h>
 
 static inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
-static inline size_t getContiguousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest contiguous free block
+static inline size_t getContinuousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest continuous free block
   
 constexpr size_t HUB75_PIN_COUNT = sizeof(HUB75_I2S_CFG::gpio) / sizeof(int8_t);
 #if defined(CONFIG_IDF_TARGET_ESP32S3)

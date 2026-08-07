@@ -305,43 +305,31 @@ uint32_t hw_random(uint32_t lowerlimit, uint32_t upperlimit);
 //template <typename T> T hw_random(T lowerlimit, T upperlimit) { return static_cast<T>(hw_random((uint32_t)lowerlimit, (uint32_t)upperlimit)); }
 
 // memory allocation wrappers
-extern "C" {
-  #if defined(BOARD_HAS_PSRAM)
-  void *p_malloc(size_t);           // prefer PSRAM over DRAM
-  void *p_calloc(size_t, size_t);   // prefer PSRAM over DRAM
-  void *p_realloc(void *, size_t);  // prefer PSRAM over DRAM
-  inline void p_free(void *ptr) { heap_caps_free(ptr); }
-  #else
-  #define p_malloc d_malloc
-  #define p_calloc d_calloc
-  #define p_realloc d_realloc
-  #define p_free d_free
-  #endif
-  void *d_malloc(size_t);           // prefer DRAM over PSRAM
-  void *d_calloc(size_t, size_t);   // prefer DRAM over PSRAM
-  void *d_realloc(void *, size_t);  // prefer DRAM over PSRAM
-  #ifdef ESP8266
-  inline void d_free(void *ptr) { free(ptr); }
-  #else
-  inline void d_free(void *ptr) { heap_caps_free(ptr); }
-  #endif
-}
-#ifndef ESP8266
-inline size_t getTotalHeapSize() { return heap_caps_get_total_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
-inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
-inline size_t getContiguousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest contiguous free block
-#else
+#define p_malloc d_malloc //legacy
+#define p_calloc d_calloc //legacy
+#define p_realloc d_realloc //legacy
+#define p_free d_free //legacy
+#ifdef ESP8266
+#define d_malloc malloc
+#define d_calloc calloc
+#define d_realloc realloc
+#define d_free free
 inline size_t getFreeHeapSize() { return ESP.getFreeHeap(); } // returns free heap
-inline size_t getContiguousFreeHeap() { return ESP.getMaxFreeBlockSize(); } // returns largest contiguous free block
+inline size_t getContinuousFreeHeap() { return ESP.getMaxFreeBlockSize(); } // returns largest continuous free block
+#else
+extern "C" {
+  void *d_malloc(size_t);
+  void *d_calloc(size_t, size_t);
+  void *d_realloc(void *, size_t);
+  inline void d_free(void *ptr) { heap_caps_free(ptr); }
+}
+inline size_t getTotalHeapSize() { return heap_caps_get_total_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); }
+inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
+inline size_t getContinuousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest continuous free block
 #endif
-#define BFRALLOC_NOBYTEACCESS    (1 << 0) // ESP32 has 32bit accessible DRAM (usually ~50kB free) that must not be byte-accessed
-#define BFRALLOC_PREFER_DRAM     (1 << 1) // prefer DRAM over PSRAM
-#define BFRALLOC_ENFORCE_DRAM    (1 << 2) // use DRAM only, no PSRAM
-#define BFRALLOC_PREFER_PSRAM    (1 << 3) // prefer PSRAM over DRAM
-#define BFRALLOC_ENFORCE_PSRAM   (1 << 4) // use PSRAM if available, otherwise fall back to DRAM
-#define BFRALLOC_CLEAR           (1 << 5) // clear allocated buffer after allocation
 void *allocate_buffer(size_t size, uint32_t type);
-#if defined(BOARD_HAS_PSRAM) && (defined(CONFIG_IDF_TARGET_ESP32S2)|| defined(CONFIG_IDF_TARGET_ESP32S3))
+// preloading PSRAM buffers into cache is only reasonable on S2 & S3
+#if defined(BOARD_HAS_PSRAM) && (defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
 void preload_psram_buffer(void* psram_buf, size_t buf_size);
 #endif
 

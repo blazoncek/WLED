@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2608060
+#define VERSION 2608070
 #else
 #define VERSION BUILD
 #endif
@@ -193,11 +193,11 @@
 // The following is a construct to enable code to compile without it.
 // There is a code that will still not use PSRAM though:
 //    AsyncJsonResponse is a derived class that implements DynamicJsonDocument (AsyncJson-v6.h)
-#if defined(ARDUINO_ARCH_ESP32)
+#if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
 struct PSRAM_Allocator {
-  static inline void* allocate(size_t size)                  { return p_malloc(size); }
-  static inline void* reallocate(void* ptr, size_t new_size) { return p_realloc(ptr, new_size); }
-  static inline void  deallocate(void* pointer)              { p_free(pointer); }
+  static inline void* allocate(size_t size)                  { return d_malloc(size); }
+  static inline void* reallocate(void* ptr, size_t new_size) { return d_realloc(ptr, new_size); }
+  static inline void  deallocate(void* pointer)              { d_free(pointer); }
 };
 using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
 #else
@@ -779,6 +779,9 @@ WLED_GLOBAL bool sdCard _INIT(false);
 
 // global ArduinoJson buffer
 // we will allocate buffer in PSRAM if possible from setup() otherwise we will use heap
+#if defined(CONFIG_IDF_TARGET_ESP32) && defined(BOARD_HAS_PSRAM)
+  #warning "If compiling for ESP32 (rev.1), make sure to use '-mfix-esp32-psram-cache-issue' compiler flag to avoid PSRAM cache issues!"
+#endif
 #ifndef BOARD_HAS_PSRAM
 WLED_GLOBAL StaticJsonDocument<JSON_BUFFER_SIZE> gDoc;
 WLED_GLOBAL JsonDocument *pDoc _INIT(&gDoc);

@@ -879,7 +879,7 @@ void serializeInfo(JsonObject root)
   root[F("fmode")] = FPSTR(fmode);
   root[F("fspeed")] = ESP.getFlashChipSpeed()/1000000;
   #ifdef WLED_DEBUG
-  root[F("maxalloc")] = getContiguousFreeHeap();
+  root[F("maxalloc")] = getContinuousFreeHeap();
   root[F("resetReason0")] = (int)rtc_get_reset_reason(0);
   root[F("resetReason1")] = (int)rtc_get_reset_reason(1);
   #endif
@@ -901,7 +901,7 @@ void serializeInfo(JsonObject root)
   root[F("fmode")] = FPSTR(fmode);
   root[F("fspeed")] = ESP.getFlashChipSpeed()/1000000;
   #ifdef WLED_DEBUG
-  root[F("maxalloc")] = getContiguousFreeHeap();
+  root[F("maxalloc")] = getContinuousFreeHeap();
   root[F("resetReason")] = (int)ESP.getResetInfoPtr()->reason;
   #endif
   root[F("lwip")] = LWIP_VERSION_MAJOR;

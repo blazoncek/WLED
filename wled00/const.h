@@ -572,10 +572,14 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #endif
 // threshold for PSRAM use: if heap is running low, requests above PSRAM_THRESHOLD will be allocated in PSRAM
 // if heap is plenty, requests below PSRAM_THRESHOLD will be allocated in DRAM for speed
+// NOTE: classic ESP32 has a write-through PSRAM cache making every write to PSRAM slow, S2/S3 have write-back
+// cache (up to 32k/64k) making it perform on-par with DRAM unless writes are very large
+// due to slow nature of classic ESP32's PSRAM it is not desireable to use it unless allocations are very large
+// S3 has plenty of SRAM so the need to allocate in PSRAM is reduced compared to S2
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
   #define PSRAM_THRESHOLD 5120
 #elif defined(CONFIG_IDF_TARGET_ESP32)
-  #define PSRAM_THRESHOLD 4096
+  #define PSRAM_THRESHOLD 6144
 #else
   #define PSRAM_THRESHOLD 1024 // S2 does not have a lot of RAM. C3 and ESP8266 do not support PSRAM: the value is not used
 #endif
@@ -583,7 +587,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #ifdef BOARD_HAS_PSRAM
   #define RTC_RAM_THRESHOLD 512   // use RTC RAM for allocations smaller than this size
 #else
-  #define RTC_RAM_THRESHOLD 65535 // without PSRAM, allow any size into RTC RAM (useful especially on S2 without PSRAM)
+  #define RTC_RAM_THRESHOLD 8192  // without PSRAM, allow any* size into RTC RAM (there is only 8k of RTC RAM)
 #endif
 
 #ifndef ESP8266
@@ -591,6 +595,14 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
   #define WLED_HAVE_RTC_MEMORY_HEAP (defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
 #endif
 #endif
+
+// allocate_buffer() allocation types
+#define BFRALLOC_NOBYTEACCESS    (1 << 0) // ESP32 has 32bit accessible DRAM (usually ~50kB free) that must not be byte-accessed
+#define BFRALLOC_PREFER_DRAM     (1 << 1) // prefer DRAM over PSRAM
+#define BFRALLOC_ENFORCE_DRAM    (1 << 2) // use DRAM only, no PSRAM
+#define BFRALLOC_PREFER_PSRAM    (1 << 3) // prefer PSRAM over DRAM
+#define BFRALLOC_ENFORCE_PSRAM   (1 << 4) // use PSRAM if available, otherwise fall back to DRAM
+#define BFRALLOC_CLEAR           (1 << 5) // clear allocated buffer after allocation
 
 // Maximum size of node map (list of other WLED instances)
 #ifdef ESP8266

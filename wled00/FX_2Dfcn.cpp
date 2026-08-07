@@ -47,7 +47,7 @@ void WS2812FX::setUpMatrix() {
     }
 
     customMappingSize = 0; // prevent use of mapping if anything goes wrong
-    p_free(customMappingTable);
+    d_free(customMappingTable);
 
     // we will try to load a "gap" array (a JSON file)
     // the array has to have the same amount of values as mapping array (or larger)
@@ -78,7 +78,7 @@ void WS2812FX::setUpMatrix() {
         gapSize++;  // there's one more entry than there is commas
         if (gapSize >= matrixSize) {
           f.seek(pos);
-          gapTable = static_cast<int8_t*>(p_malloc(gapSize));
+          gapTable = static_cast<int8_t*>(d_malloc(gapSize));
           if (gapTable) {
             memset(gapTable, 1, gapSize);
             pos = 0;
@@ -151,7 +151,7 @@ void WS2812FX::setUpMatrix() {
     }
 
     // delete gap array as we no longer need it
-    p_free(gapTable);
+    d_free(gapTable);
   }
 #else
   isMatrix = false; // no matter what config says

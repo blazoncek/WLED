@@ -266,7 +266,7 @@ void WLED::loop()
     DEBUG_PRINTLN(F("---DEBUG INFO---"));
     DEBUG_PRINTF_P(PSTR("Runtime: %lus\n"),  now/1000);
     DEBUG_PRINTF_P(PSTR("Unix time: %u,%03u\n"), toki.getTime().sec, toki.getTime().ms);
-    DEBUG_PRINTF_P(PSTR("Free heap/contiguous: %u/%u\n"), getFreeHeapSize(), getContiguousFreeHeap());
+    DEBUG_PRINTF_P(PSTR("Free heap/continuous: %u/%u\n"), getFreeHeapSize(), getContinuousFreeHeap());
   #if defined(ESP32)
     // Internal DRAM (standard 8-bit accessible heap)
     DEBUG_PRINTF_P(PSTR("DRAM 8-bit:   Total: %7u | Free: %7u | Largest: %7u (bytes)\n")
