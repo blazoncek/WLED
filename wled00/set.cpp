@@ -259,10 +259,6 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       // this may happen even before this loop is finished so we do "doInit" after the loop
       busConfigs.emplace_back(type, pins, start, length, colorOrder | (channelSwap<<4), request->hasArg(cv), skip, awmode, freq, maPerLed, maMax, text, scale);
       busesChanged = true;
-      #if defined(WLED_ENABLE_HUB75MATRIX) && defined(CONFIG_IDF_TARGET_ESP32S3)
-      // S3 implementation of Hub75 bus driver needs reboot to function properly (i.e. I2S deinit doesn't work)
-      if (type >= TYPE_HUB75MATRIX_MIN && type <= TYPE_HUB75MATRIX_MAX) rebootNeeded = true;
-      #endif
     }
 
     // we will not bother with pre-allocating ColorOrderMappings vector

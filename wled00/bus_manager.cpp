@@ -814,35 +814,47 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
   _hasCCT = false;
 
   // bc.pins[] have the following meaning:
-  // bc.pins[0] = panel width (32-128)
-  // bc.pins[1] = panel height (32-64)
-  // bc.pins[2] = panel chain length (encoded for WxH set-ups; 1-16 with 7 being invalid value; see below)
-  // bc.pins[3] = shift driver
-  // bc.pins[4] = chain orientation: NONE, TLD, TRD, etc
+  // bc.pins[0] = panel type (panel W x panel H)>>8
+  // bc.pins[1] = panel chain length (encoded for n*X x n*Y set-ups; 1-16 with 7 being invalid value; see below)
+  // bc.pins[2] = shift driver
+  // bc.pins[3] = chain orientation: NONE, TLD, TRD, etc
+  // bc.pins[4] = unused
   // isOffRefreshRequired() is a (dirty) hack that enables quarter-scan panels
 
-  // clamp panel width and height to multiples of 32
   uint8_t dim[2];
-  dim[0] = bc.pins[0] & 0xE0;
-  dim[1] = bc.pins[1] & 0xE0;
-  for (int j=0; j<2; j++) {
-    if (dim[j] <  32) dim[j] =  32;
-    if (dim[j] > 128) dim[j] = 128;
-    // this may not be needed if sizes allowed include [96]
-    if (dim[j] & 0x40) dim[j] &= 0x40;
+  if (bc.pins[1] > 16) {
+    // legacy config support TODO: remove on release
+    dim[0] = bc.pins[0] & 0xE0;
+    dim[1] = bc.pins[1] & 0xE0;
+    for (int j=0; j<2; j++) {
+      if (dim[j] <  32) dim[j] =  32;
+      if (dim[j] > 128) dim[j] = 128;
+    }
+  } else switch (bc.pins[0]) {
+    //case  1: dim[0] =  16; dim[1] =  16; break; // (16x16)>>8 (unused)
+    case  2: dim[0] =  32; dim[1] =  16; break; // (32x16)>>8
+    default: // fallthrough
+    case  4: dim[0] =  32; dim[1] =  32; break;
+    case  8: dim[0] =  64; dim[1] =  32; break;
+    case 12: dim[0] =  80; dim[1] =  40; break;
+    case 16: dim[0] =  64; dim[1] =  64; break;
+    case 18: dim[0] =  96; dim[1] =  48; break;
+    case 32: dim[0] = 128; dim[1] =  64; break;
+    case 50: dim[0] = 160; dim[1] =  80; break;
+    case 64: dim[0] = 128; dim[1] = 128; break;
   }
 
   HUB75_I2S_CFG mxconfig; // default config
   mxconfig.double_buff = false;   // (default) do no double buffering to save RAM
   //mxconfig.double_buff = true;  // need to call flipDMABuffer() in each show()
-  mxconfig.driver = (HUB75_I2S_CFG::shift_driver)bc.pins[3];
+  mxconfig.driver = (HUB75_I2S_CFG::shift_driver)bc.pins[bc.pins[1] > 16 ? 3 : 2]; // legacy config support TODO: remove on release
   // mxconfig.latch_blanking = 3;
   mxconfig.i2sspeed = (HUB75_I2S_CFG::clk_speed)(max((uint16_t)8000,bc.frequency) * 1000); // correctly set in set.cpp (8000, 16000, 20000)
   // mxconfig.min_refresh_rate = 90;
   // mxconfig.min_refresh_rate = 120;
   mxconfig.clkphase = bc.reversed;
 
-  uint8_t chainLength = constrain(bc.pins[2], 1, 16); // number of chained panels
+  uint8_t chainLength = constrain(bc.pins[bc.pins[1] > 16 ? 2 : 1], 1, 16); // number of chained panels
   // pre-calcualte rows and columns based on chain length
   // possible combinations: (simple, horizontal) 1, 2, 3, 4, (complex & vertical) 2x2=5, 3h x 2v, 4h x 2v, 3h x 3v, 4h x 3v, 2v=13, 3v=14, 4v=15, 4h x 4v
   if      (chainLength <   5) {            _cols = chainLength;     }   // 1 to 4 panels in a single row
@@ -948,26 +960,21 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 
   // for quad-scan panels or 2 or more rows we create a virtual panel that maps to the physical one
   if (_rows > 1 || isOffRefreshRequired()) {  // quarter-scan panels need virtual panel (hijack off-refresh)
-    if (_rows > 1 || _cols > 1) _chainType = bc.pins[4]==255 || _rows == 1 ? (uint8_t)CHAIN_NONE : bc.pins[4];
+    if (_rows > 1 || _cols > 1) _chainType = bc.pins[bc.pins[1] > 16 ? 4 : 3]==255 || _rows == 1 ? (uint8_t)CHAIN_NONE : bc.pins[bc.pins[1] > 16 ? 4 : 3]; // legacy config support TODO: remove on release
     DEBUGBUS_PRINTLN(F("Attempting to create virtual display."));
     virtualDisp = new(std::nothrow) VirtualMatrixPanel((*display), _rows, _cols, dim[0], dim[1], (PANEL_CHAIN_TYPE)_chainType);
     if (virtualDisp) {
       DEBUGBUS_PRINTF_P(PSTR("Virtual display created. Chain: %d\n"), (int)_chainType);
       virtualDisp->setRotation(0);
       // adjust scan rate based on height for quarter-scan panels
-      if (isOffRefreshRequired()) switch (bc.pins[1]) {
-        case 16:
-          virtualDisp->setPhysicalPanelScanRate(FOUR_SCAN_16PX_HIGH);
-          break;
-        default:
-          DEBUGBUS_PRINTLN(F("Unsupported height"));
-          // fallthrough and use 32px
-        case 32:
-          virtualDisp->setPhysicalPanelScanRate(FOUR_SCAN_32PX_HIGH);
-          break;
-        case 64:
-          virtualDisp->setPhysicalPanelScanRate(FOUR_SCAN_64PX_HIGH);
-          break;
+      if (isOffRefreshRequired()) switch (dim[1]) {
+        case 48: // fallthrough; not sure if this works (untested)
+        case 16: virtualDisp->setPhysicalPanelScanRate(FOUR_SCAN_16PX_HIGH); break;
+        default: DEBUGBUS_PRINTLN(F("Hub75: Unsupported height")); // fallthrough and use 32px
+        case 32: virtualDisp->setPhysicalPanelScanRate(FOUR_SCAN_32PX_HIGH); break;
+        case 80: // fallthrough; not sure if this works (untested)
+        case 40: virtualDisp->setPhysicalPanelScanRate(FOUR_SCAN_40PX_HIGH); break;
+        case 64: virtualDisp->setPhysicalPanelScanRate(FOUR_SCAN_64PX_HIGH); break;
       }
     }
   }
@@ -992,6 +999,7 @@ BusHub75Matrix::BusHub75Matrix(const BusConfig &bc)
 
     display->clearScreen();   // initially clear the screen buffer
     DEBUGBUS_PRINTLN(F("MatrixPanel_I2S_DMA clear ok"));
+    display->resumeDMAoutput();
 
     _matrixWidth = virtualDisp ? virtualDisp->width() : display->width();  // cache width - it will never change
     _valid = true;
@@ -1069,14 +1077,14 @@ size_t BusHub75Matrix::getPins(uint8_t* pinArray) const {
               }
               break;
     }
-    pinArray[0] = isOffRefreshRequired() ? mxconfig.mx_width  >> 1 : mxconfig.mx_width;  // 32,64,128
-    pinArray[1] = isOffRefreshRequired() ? mxconfig.mx_height << 1 : mxconfig.mx_height; // 32,64,128
-    pinArray[2] = chainLength;        // 1-16 (invalid value: 7)
-    pinArray[3] = (uint8_t)mxconfig.driver;
-    pinArray[4] = _chainType;
+    pinArray[0] = (mxconfig.mx_width * mxconfig.mx_height) >> 8;
+    pinArray[1] = chainLength;        // 1-16 (invalid value: 7)
+    pinArray[2] = (uint8_t)mxconfig.driver;
+    pinArray[3] = _chainType;
+    //pinArray[4] = 255; // unused
     getHub75Pins(_type, &pinArray[5]);// ignoreable extension
   }
-  return 5 + HUB75_PIN_COUNT;
+  return 4 + HUB75_PIN_COUNT;
 }
 
 size_t BusHub75Matrix::getBusSize() const {
@@ -1132,7 +1140,7 @@ size_t BusConfig::memUsage(unsigned nr) const {
 #if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
   } else if (Bus::isHub75(type)) {
     return sizeof(BusHub75Matrix) + sizeof(MatrixPanel_I2S_DMA)
-      + (pins[4] > 0 || refreshReq ? sizeof(VirtualMatrixPanel) : 0)
+      + (pins[pins[1] > 16 ? 4 : 3] > 0 || refreshReq ? sizeof(VirtualMatrixPanel) : 0) // legacy support TODO: remove on release
       + (count * 
         #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)  // classic esp32, or esp32-s2: reduced bitdepth for large panels
         (count > MAX_LEDS/2 ? (count > ((3 * MAX_LEDS) / 4) ? 4 : 6) : 8)

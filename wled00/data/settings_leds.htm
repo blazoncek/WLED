@@ -24,6 +24,7 @@
 		function isNet(t)  { return gT(t).t === "N"; }              // is network type
 		function isVir(t)  { return gT(t).t.charAt(0) === "V" || isNet(t); }  // is virtual type
 		function isHub75(t){ return gT(t).t.charAt(0) === "H"; }    // is HUB75 type
+		function isUser(t) { return gT(t).t.charAt(0) === "U"; }    // is usermod type
 		function hasRGB(t) { return !!(gT(t).c & 0x01); }           // has RGB
 		function hasW(t)   { return !!(gT(t).c & 0x02); }           // has white channel
 		function hasCCT(t) { return !!(gT(t).c & 0x04); }           // is white CCT enabled
@@ -204,9 +205,9 @@
 				LC.max = isAna(t) ? 1 : (isDig(t) ? maxPB : maxL); // set max value
 				// update LED count for Hub75 panels
 				if (isHub75(t)) {
-					let chains = parseInt(gN("G2"+n).value);
+					let chains = parseInt(gN("G1"+n).value);
 					if (chains > 12 && chains < 16) chains -= 11; // undo chain selection hack
-					LC.value = parseInt(gN("G0"+n).value) * parseInt(gN("G1"+n).value) * chains;
+					LC.value = (parseInt(gN("G0"+n).value) << 8) * chains;
 				}
 				let c = parseInt(LC.value,10);          // get LED count
 				if (!customStarts || !startsDirty[i]) gN("LS"+n).value = sLC; // update start value
@@ -709,11 +710,10 @@ Swap: <select id="xw${s}" name="XW${s}">
 						p0d = "Config:";
 						break;
 					case 'H': // Hub75
-						p0d = "Panel size: (W)";
-						p1d = "x (H)";
-						p2d = " # Panels:";
-						p3d = " Shift reg.:"
-						p4d = " Chain:"
+						p0d = "Panel:";
+						p1d = " x ";
+						p2d = " Shift reg.:"
+						p3d = " Chain:"
 						rev = "Phase";
 						off = "1/4 scan"
 						break;
@@ -726,7 +726,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				gId("off"+n).innerText = off;
 				gId("rev"+n).innerText = rev;
 				// secondary pins show/hide (type string length is equivalent to number of pins used; except for network and on/off)
-				let pins = isNet(t) ? 4 : (isHub75(t) ? 5 : Math.max(gT(t).t.length,1)); // fixes network "pins" to 4, Hub75 to 5
+				let pins = isUser(t) ? 5 : (isNet(t) || isHub75(t) ? 4 : Math.max(gT(t).t.length,1)); // fixes network "pins" or Hub75 to 4
 				// add output type data-type to pin selects
 				for (let p=0; p<5; p++) {
 					var LK = gN("G"+p+n);
@@ -756,8 +756,8 @@ Swap: <select id="xw${s}" name="XW${s}">
 					}
 					switch (type) {
 						case 'H': // Hub75
-							if (p == 4 && LK.tagName === "INPUT") {
-								// pin 5 is chain orientation
+							if (p == 3 && LK.tagName === "INPUT") {
+								// pin 4 is chain orientation
 								// this is a hack to allow dropdown selection for Hub75 chain orientation
 								LK = addDD(LK);
 								LK.classList.remove("pin");     // not a pin select
@@ -774,14 +774,14 @@ Swap: <select id="xw${s}" name="XW${s}">
 								addO(LK, "BLU-ZZ", 7);
 								addO(LK, "BRU-ZZ", 8);
 							}
-							if (p == 3 && LK.tagName === "INPUT") {
-								// pin 4 is shift register type for Hub75
+							if (p == 2 && LK.tagName === "INPUT") {
+								// pin 3 is shift register type for Hub75
 								// this is a hack to allow dropdown selection for Hub75 shift register type (stored in pin 4)
 								LK = addDD(LK);
 								LK.classList.remove("pin");     // not a pin select
 								LK.classList.add("shift");
 								LK.removeAttribute("onchange"); // not a pin select
-								addO(LK, "SHIFTREG", 0);
+								addO(LK, "None", 0);
 								addO(LK, "FM6124", 1);
 								addO(LK, "FM6126A", 2);
 								addO(LK, "ICN2038S", 3);
@@ -789,7 +789,8 @@ Swap: <select id="xw${s}" name="XW${s}">
 								addO(LK, "SM5266P", 5);
 								addO(LK, "DP3246/SM5368", 6);
 							}
-							if (p == 2 && LK.tagName === "INPUT") {
+							if (p == 1 && LK.tagName === "INPUT") {
+								// pin 1 is multiple panel chain
 								// this is a hack to allow chains dropdown selection
 								LK = addDD(LK);            // pin 3 is number of panels/chain type for Hub75
 								LK.classList.remove("pin");// not a pin select
@@ -814,17 +815,24 @@ Swap: <select id="xw${s}" name="XW${s}">
 									}
 								}
 							}
-							if (p < 2 && LK.tagName === "INPUT") {
-								// pin 0 & 1 are panel size
+							if (p == 0 && LK.tagName === "INPUT") {
+								// pin 0 is panel size
 								// this is a hack to allow dropdown selection
 								LK = addDD(LK);
 								LK.classList.remove("pin");     // not a pin select
 								LK.classList.add("dimension");
-								addO(LK, "32", 32);
-								addO(LK, "64", 64);
-								if (p < 1) addO(LK, "128", 128);
+								//addO(LK, "16x16", 1);
+								addO(LK, "32x16", 2);
+								addO(LK, "32x32", 4);
+								addO(LK, "64x32", 8);
+								addO(LK, "80x40", 12);
+								addO(LK, "64x64", 16);
+								addO(LK, "96x48", 18);
+								addO(LK, "128x64", 32);
+								addO(LK, "160x80", 50);
+								addO(LK, "128x128", 64);
 							}
-							if (p<3) LK.onchange = ()=>{UI();};
+							if (p<2) LK.onchange = ()=>{UI();};
 							break;
 						case 'V': // virtual
 						case 'N': // network
@@ -867,8 +875,8 @@ Swap: <select id="xw${s}" name="XW${s}">
 				if (isDig(sel.value)) gN("LL"+n).selectedIndex = 0; // reset LED mA to default for digital
 				enLA(gN("LL"+n)); // update LED mA
 				gN("LC"+n).value = 1; // reset LED count on change
-				if (isS3() && ((sel.dataset.old && isHub75(parseInt(sel.dataset.old))) || isHub75(parseInt(sel.value))))
-					alert("HUB75 changes may need a reboot!");
+				//if (isS3() && ((sel.dataset.old && isHub75(parseInt(sel.dataset.old))) || isHub75(parseInt(sel.value))))
+				//	alert("HUB75 changes will perform a reboot!");
 				sel.dataset.old = sel.value;
 			}
 			(sel?[sel]:LTs).forEach((s,i) => {
