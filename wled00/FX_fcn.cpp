@@ -1345,7 +1345,7 @@ void WS2812FX::finalizeInit() {
     _hasCCT          |= bus->hasCCT();
     _hasRGB          |= bus->hasRGB();
     //refresh is required to remain off if at least one of the strips requires the refresh.
-    _isOffRefreshRequired |= bus->isOffRefreshRequired() && !bus->isPWM(); // use refresh bit for phase shift with analog
+    _isOffRefreshRequired |= bus->isOffRefreshRequired() && !(bus->isPWM() || bus->isHub75()); // use refresh bit for phase shift with analog or hub75
     unsigned busEnd = bus->getStart() + bus->getLength();
     if (busEnd > _length) _length = busEnd;
     // This must be done after all buses have been created, as some kinds (parallel I2S) interact
@@ -1578,18 +1578,17 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
         int x_inc = 1;
         int y_inc = Segment::maxWidth;
         size_t start_offset = startIndx;
-        if (topSegment.reverse)   { start_offset += (width - 1); x_inc = -1; }
-        if (topSegment.reverse_y) { start_offset += (height - 1) * Segment::maxWidth; y_inc = -Segment::maxWidth; }
-        uint32_t *pRow = _pixels + start_offset;
+        if (topSegment.reverse)   { start_offset += (width - 1); x_inc = -x_inc; }
+        if (topSegment.reverse_y) { start_offset += (height - 1) * Segment::maxWidth; y_inc = -y_inc; }
         for (int y = 0; y < height; y++) {
-          pRow += y * y_inc;
+          uint32_t* pRow = &_pixels[start_offset + y * y_inc];
           const int y_width = y * width;
           for (int x = 0; x < width; x++) {
-            uint32_t       *p  = pRow + x * x_inc;
-            const CRGBA    c_a = topSegment.getPixelColorRaw(x + y_width);
+            uint32_t* p = pRow + x * x_inc;
+            CRGBA c_a = topSegment.getPixelColorRaw(x + y_width);
             const unsigned o   = hasWhite ? opacity : (opacity * (c_a.a + 1)) >> 8; // combine segment opacity with pixel opacity (c_a.a is alpha channel)
             const uint32_t c   = hasWhite ? c_a.color32 : c_a.color32 & 0xFFFFFF;
-            *p = color_blend(*p, blend(c, *p), o);
+            *p = color_blend(*p, blend(c, *p), opacity);
           }
         }
       } else { // transposed
