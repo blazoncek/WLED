@@ -1664,7 +1664,7 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
             CRGBA c_a = _pixelsN[x + y_width];
             const unsigned o   = hasWhite ? opacity : (opacity * (c_a.a + 1)) >> 8; // combine segment opacity with pixel opacity (c_a.a is alpha channel)
             const uint32_t c   = hasWhite ? c_a.color32 : c_a.color32 & 0xFFFFFF;
-            *p = color_blend(*p, blend(c, *p), opacity);
+            *p = color_blend(*p, blend(c, *p), o);
           }
         }
       } else { // transposed
