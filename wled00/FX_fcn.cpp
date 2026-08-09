@@ -1563,6 +1563,71 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
   const unsigned orgTS     = transitionStyle;
   if (width*height == 1) transitionStyle = TRANSITION_FADE; // disable style for single pixel segments (use fade instead)
 
+#ifndef WLED_DISABLE_2D
+  // zooming and rotation
+  const int speedAdjust = 10 * WLED_FPS / getTargetFps(); // adjust rotation speed based on target fps
+  auto RotateAndZoom = [](const CRGBA *srcPixels, CRGBA *destPixels, int midX, int midY, int cols, int rows, int shearAngleTimesTen, int zoomOffset, bool wrap, bool mirror) {
+    for (int i = 0; i < cols * rows; i++) destPixels[i] = CRGBA(0,0,0); // fill black
+
+    constexpr uint8_t Scale_Shift = 10;
+    constexpr int Fixed_Scale = (1 << Scale_Shift);
+    constexpr int RoundVal = (1 << (Scale_Shift - 1));
+    constexpr int zoomRange = (Fixed_Scale * 3) / 4;  // 768
+    int zoomScale = Fixed_Scale + (zoomOffset * zoomRange) / 8; // zoomOffset: -8 .. +7 -> zoomScale: 256 .. 1696
+    if (zoomScale <= 0) zoomScale = 1; // avoid divide-by-zero and negative zoom
+
+    const bool flip = (shearAngleTimesTen > 900 && shearAngleTimesTen < 2700); // Flip to avoid instability near 180°
+    if (flip) { shearAngleTimesTen = (shearAngleTimesTen + 1800); while (shearAngleTimesTen >= 3600) shearAngleTimesTen -= 3600; }
+
+    // Calculate shearX and shearY
+    const float angleRadians = radians(shearAngleTimesTen)*0.1f;
+    const int shearX = -tan_t(angleRadians / 2) * Fixed_Scale;
+    const int shearY =  sin_t(angleRadians)     * Fixed_Scale;
+
+    const int WRAP_PAD_X = cols << 5; // ×32
+    const int WRAP_PAD_Y = rows << 5; // Ensures wrap works with large negative coordinates when zoomed out
+
+    // Use inverse mapping: iterate destination pixels, find source coordinates
+    for (int destY = 0; destY < rows; destY++) {
+      for (int destX = 0; destX < cols; destX++) {
+        // Translate destination to origin
+        int dx = destX - midX;
+        int dy = destY - midY;
+
+        // Inverse shear transformations (reverse order)
+        int x1 = dx - ((shearX * dy + RoundVal) >> Scale_Shift);
+        int y0 = dy - ((shearY * x1 + RoundVal) >> Scale_Shift);
+        int x0 = x1 - ((shearX * y0 + RoundVal) >> Scale_Shift);
+
+        // Apply zoom to source coordinates
+        x0 = (x0 * Fixed_Scale) / zoomScale;
+        y0 = (y0 * Fixed_Scale) / zoomScale;
+
+        // Handle flip
+        int srcX = flip ? (midX - x0) : (midX + x0);
+        int srcY = flip ? (midY - y0) : (midY + y0);
+
+        // Bounds check or wrap
+        if (wrap) { // Wrap around
+          srcX = (srcX + WRAP_PAD_X); while (srcX >= cols) srcX -= cols; // modulo operation: srcX %= cols;
+          srcY = (srcY + WRAP_PAD_Y); while (srcY >= rows) srcY -= rows;
+          if (mirror) { // Wrap plus mirror
+            const int tileX = (srcX + WRAP_PAD_X) / cols;
+            const int tileY = (srcY + WRAP_PAD_Y) / rows;
+            // Flip on odd tiles
+            if (tileX & 1) srcX = cols - 1 - srcX;
+            if (tileY & 1) srcY = rows - 1 - srcY;
+          }
+        }
+        if ((unsigned)srcX >= (unsigned)cols || (unsigned)srcY >= (unsigned)rows) continue;
+
+        // Sample from source & write to destination
+        destPixels[destX + destY * cols] = srcPixels[srcX + srcY * cols];
+      }
+    }
+  };
+#endif
+
 #ifdef WLED_ENABLE_FASTPATH
   // fast path (by @dedehai): handle the default case - no transitions, no grouping/spacing, no mirroring, no CCT
   // TODO: crashes in topSegment.getPixelColorRaw() on ESP8266 & C3 (even when index is not OOB) after WiFi starts connecting
@@ -1571,6 +1636,17 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
   #ifndef WLED_DISABLE_2D
     // 2D fast path
     if (isMatrix && stopIndx <= matrixSize && !_pixelCCT) {
+      CRGBA *_pixelsN = topSegment.getPixels();
+      if (topSegment.rotateSpeed || topSegment.zoomAmount != 8) {
+        _pixelsN = new CRGBA[width * height]; // be careful to delete[] later
+        if (topSegment.rotateSpeed != 0) {
+          topSegment._rotatedAngle += (topSegment.rotateSpeed * speedAdjust);
+          while (topSegment._rotatedAngle >= 3600) topSegment._rotatedAngle -= 3600;
+        } else {
+          topSegment._rotatedAngle = 0;
+        }
+        RotateAndZoom(topSegment.getPixels(), _pixelsN, width/2, height/2, width, height, topSegment._rotatedAngle, topSegment.zoomAmount - 8, topSegment.zoomWrap, topSegment.zoomMirror);
+      }
       // adjust starting position and steps based on Reverse/Transpose
       if (!topSegment.transpose) {
         DEBUGFX_PRINTLN(F("Fastpath 2D non-transposed."));
@@ -1585,7 +1661,7 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
           const int y_width = y * width;
           for (int x = 0; x < width; x++) {
             uint32_t* p = pRow + x * x_inc;
-            CRGBA c_a = topSegment.getPixelColorRaw(x + y_width);
+            CRGBA c_a = _pixelsN[x + y_width];
             const unsigned o   = hasWhite ? opacity : (opacity * (c_a.a + 1)) >> 8; // combine segment opacity with pixel opacity (c_a.a is alpha channel)
             const uint32_t c   = hasWhite ? c_a.color32 : c_a.color32 & 0xFFFFFF;
             *p = color_blend(*p, blend(c, *p), opacity);
@@ -1597,7 +1673,7 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
           const int px = topSegment.reverse ? (height - y - 1) : y;                 // source pixel: swap y into x, reverse if needed
           for (int x = 0; x < width; x++) {
             const int      py  = topSegment.reverse_y ? (width  - x - 1) : x;       // source pixel: swap x into y, reverse if needed
-            const CRGBA    c_a = topSegment.getPixelColorRaw(px + py * height);     // height = virtual width
+            const CRGBA    c_a = _pixelsN[px + py * height];                        // height = virtual width
             const unsigned o   = hasWhite ? opacity : (opacity * (c_a.a + 1)) >> 8; // combine segment opacity with pixel opacity (c_a.a is alpha channel)
             const uint32_t c   = hasWhite ? c_a.color32 : c_a.color32 & 0xFFFFFF;
             const size_t   idx = XY(topSegment.start + x, topSegment.startY + y);   // write logical (non swapped) pixel coordinate
@@ -1605,6 +1681,7 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
           }
         }
       }
+      if (topSegment.rotateSpeed || topSegment.zoomAmount != 8) delete[] _pixelsN;
       return;
     } else
   #endif
@@ -1718,69 +1795,6 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
       }
     };
 
-    // zooming and rotation
-    auto RotateAndZoom = [](const CRGBA *srcPixels, CRGBA *destPixels, int midX, int midY, int cols, int rows, int shearAngleTimesTen, int zoomOffset, bool wrap, bool mirror) {
-      for (int i = 0; i < cols * rows; i++) destPixels[i] = CRGBA(0,0,0); // fill black
-
-      constexpr uint8_t Scale_Shift = 10;
-      constexpr int Fixed_Scale = (1 << Scale_Shift);
-      constexpr int RoundVal = (1 << (Scale_Shift - 1));
-      constexpr int zoomRange = (Fixed_Scale * 3) / 4;  // 768
-      int zoomScale = Fixed_Scale + (zoomOffset * zoomRange) / 8; // zoomOffset: -8 .. +7 -> zoomScale: 256 .. 1696
-      if (zoomScale <= 0) zoomScale = 1; // avoid divide-by-zero and negative zoom
-
-      const bool flip = (shearAngleTimesTen > 900 && shearAngleTimesTen < 2700); // Flip to avoid instability near 180°
-      if (flip) { shearAngleTimesTen = (shearAngleTimesTen + 1800); while (shearAngleTimesTen >= 3600) shearAngleTimesTen -= 3600; }
-
-      // Calculate shearX and shearY
-      const float angleRadians = radians(shearAngleTimesTen)*0.1f;
-      const int shearX = -tan_t(angleRadians / 2) * Fixed_Scale;
-      const int shearY =  sin_t(angleRadians)     * Fixed_Scale;
-
-      const int WRAP_PAD_X = cols << 5; // ×32
-      const int WRAP_PAD_Y = rows << 5; // Ensures wrap works with large negative coordinates when zoomed out
-
-      // Use inverse mapping: iterate destination pixels, find source coordinates
-      for (int destY = 0; destY < rows; destY++) {
-        for (int destX = 0; destX < cols; destX++) {
-          // Translate destination to origin
-          int dx = destX - midX;
-          int dy = destY - midY;
-
-          // Inverse shear transformations (reverse order)
-          int x1 = dx - ((shearX * dy + RoundVal) >> Scale_Shift);
-          int y0 = dy - ((shearY * x1 + RoundVal) >> Scale_Shift);
-          int x0 = x1 - ((shearX * y0 + RoundVal) >> Scale_Shift);
-
-          // Apply zoom to source coordinates
-          x0 = (x0 * Fixed_Scale) / zoomScale;
-          y0 = (y0 * Fixed_Scale) / zoomScale;
-
-          // Handle flip
-          int srcX = flip ? (midX - x0) : (midX + x0);
-          int srcY = flip ? (midY - y0) : (midY + y0);
-
-          // Bounds check or wrap
-          if (wrap) { // Wrap around
-            srcX = (srcX + WRAP_PAD_X); while (srcX >= cols) srcX -= cols; // modulo operation: srcX %= cols;
-            srcY = (srcY + WRAP_PAD_Y); while (srcY >= rows) srcY -= rows;
-            if (mirror) { // Wrap plus mirror
-              const int tileX = (srcX + WRAP_PAD_X) / cols;
-              const int tileY = (srcY + WRAP_PAD_Y) / rows;
-              // Flip on odd tiles
-              if (tileX & 1) srcX = cols - 1 - srcX;
-              if (tileY & 1) srcY = rows - 1 - srcY;
-            }
-          }
-          if ((unsigned)srcX >= (unsigned)cols || (unsigned)srcY >= (unsigned)rows) continue;
-
-          // Sample from source & write to destination
-          destPixels[destX + destY * cols] = srcPixels[srcX + srcY * cols];
-        }
-      }
-    };
-
-    const int speedAdjust = 10 * WLED_FPS / getTargetFps(); // adjust rotation speed based on target fps
     CRGBA *_pixelsN = topSegment.getPixels();
     if (topSegment.rotateSpeed || topSegment.zoomAmount != 8) {
       _pixelsN = new CRGBA[nCols * nRows];
