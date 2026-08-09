@@ -1017,6 +1017,20 @@ function populatePalettes()
 			`<div class="prev" style="${genPalPrevCss(pa[0])}"></div>`
 		);
 	}
+	// append custom palettes (when loading for the 1st time, previews are already loaded)
+	if (lastinfo.cpalcount) {
+		for (let j = 0; j<lastinfo.cpalcount; j++) {
+			html += generateListItemHtml(
+				'palette',
+				255-j,
+				'~ Custom '+j+' ~',
+				'setPalette',
+				`<div class="prev" style="${genPalPrevCss(255-j)}"></div>`
+			);
+		}
+		gId("rmPal").classList.remove("hide");
+	} else gId("rmPal").classList.add("hide");
+
 	gId('pallist').innerHTML=html;
 }
 
