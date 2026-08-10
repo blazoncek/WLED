@@ -904,7 +904,7 @@ class WS2812FX {
     inline uint8_t getSegmentsNum() const   { return _segments.size(); }  // returns currently present segments
     inline uint8_t getCurrSegmentId() const { return _segment_index; }    // returns current segment index (only valid while strip.isServicing())
     inline uint8_t getMainSegmentId() const { return _mainSegment; }      // returns main segment index
-    inline uint8_t getTargetFps() const     { return _targetFps; }        // returns rough FPS value for las 2s interval
+    inline uint8_t getTargetFps() const     { return _targetFps; }        // returns rough FPS value for last 2s interval
     inline uint8_t getModeCount() const     { return _modeCount; }        // returns number of registered modes/effects
 
     uint16_t getLengthPhysical() const;
