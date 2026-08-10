@@ -1628,14 +1628,13 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
   };
 #endif
 
-#ifdef WLED_ENABLE_FASTPATH
+#ifndef WLED_DISABLE_FASTPATH
   // fast path (by @dedehai): handle the default case - no transitions, no grouping/spacing, no mirroring, no CCT
-  // TODO: crashes in topSegment.getPixelColorRaw() on ESP8266 & C3 (even when index is not OOB) after WiFi starts connecting
-  // S3 will sometimes display corrupt buffer. These point to OOB access somehow
   if (!topSegment.isInTransition() && topSegment.groupLength() == 1 && !topSegment.mirror && !topSegment.mirror_y) {
   #ifndef WLED_DISABLE_2D
     // 2D fast path
     if (isMatrix && stopIndx <= matrixSize && !_pixelCCT) {
+      // support for segment zooming and rotation (relatively little impact if used)
       CRGBA *_pixelsN = topSegment.getPixels();
       if (topSegment.rotateSpeed != 8 || topSegment.zoomAmount != 8) {
         _pixelsN = new CRGBA[width * height]; // be careful to delete[] later
@@ -1645,8 +1644,6 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
           while (angle < 0) angle += 3600;
           while (angle >= 3600) angle -= 3600;
           topSegment._rotatedAngle = angle;
-          //topSegment._rotatedAngle += (topSegment.rotateSpeed * speedAdjust);
-          //while (topSegment._rotatedAngle >= 3600) topSegment._rotatedAngle -= 3600;
         } else {
           topSegment._rotatedAngle = 0;
         }
@@ -1811,8 +1808,6 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
         while (angle < 0) angle += 3600;
         while (angle >= 3600) angle -= 3600;
         topSegment._rotatedAngle = angle;
-        //topSegment._rotatedAngle += (topSegment.rotateSpeed * speedAdjust);
-        //while (topSegment._rotatedAngle >= 3600) topSegment._rotatedAngle -= 3600;
       } else {
         topSegment._rotatedAngle = 0;
       }
@@ -1831,8 +1826,6 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
           while (angle < 0) angle += 3600;
           while (angle >= 3600) angle -= 3600;
           segO->_rotatedAngle = angle;
-          //segO->_rotatedAngle += (segO->rotateSpeed * speedAdjust);
-          //while (segO->_rotatedAngle >= 3600) segO->_rotatedAngle -= 3600;
         } else {
           segO->_rotatedAngle = 0;
         }
