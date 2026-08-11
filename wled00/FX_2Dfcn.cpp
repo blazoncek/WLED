@@ -569,13 +569,13 @@ void Segment::drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA col, boo
         plot(cx + dx, cy + dy, 255);
         plot(cx + dy, cy + dx, 255);
       }
-      x++;
       if (d > 0) {
-        y--;
         d += 4 * (x - y) + 10;
+        y--;
       } else {
         d += 4 * x + 6;
       }
+      x++;
     }
   }
 }
