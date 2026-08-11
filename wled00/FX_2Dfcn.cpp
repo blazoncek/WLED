@@ -563,12 +563,20 @@ void Segment::drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA col, boo
     int y = r, x = 0;
     while (y >= x) {
       // plot the 8 octants
-      for (int i = 0; i < 4; i++) {
-        int dx = (i & 1) ? -x : x;
-        int dy = (i & 2) ? -y : y;
-        plot(cx + dx, cy + dy, 255);
-        plot(cx + dy, cy + dx, 255);
-      }
+      //for (int i = 0; i < 4; i++) {
+      //  int dx = (i & 1) ? -x : x;
+      //  int dy = (i & 2) ? -y : y;
+      //  plot(cx + dx, cy + dy, 255);
+      //  plot(cx + dy, cy + dx, 255);
+      //}
+      plot(cx + x, cy + y, 255);
+      plot(cx + y, cy + x, 255);
+      plot(cx - x, cy + y, 255);
+      plot(cx + y, cy - x, 255);
+      plot(cx + x, cy - y, 255);
+      plot(cx - y, cy + x, 255);
+      plot(cx - x, cy - y, 255);
+      plot(cx - y, cy - x, 255);
       if (d > 0) {
         d += 4 * (x - y) + 10;
         y--;
