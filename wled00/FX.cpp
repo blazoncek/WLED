@@ -5920,7 +5920,7 @@ uint16_t mode_2Dscrollingtext(void) {
   const uint8_t fade = SEGMENT.custom3;
 
   char text[2*WLED_MAX_SEGNAME_LEN+1];
-  size_t len = strlen(SEGMENT.name);
+  const size_t len = SEGMENT.name ? strlen(SEGMENT.name) : 0;
 
   char sec[5];
   int  AmPmHour = hour(localTime);
