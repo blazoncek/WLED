@@ -1292,12 +1292,35 @@ function updatePA()
 	}
 }
 
+function artBtn(id,title,url) {
+	let btn = cE("button");
+	btn.id = id;
+	btn.title = title;
+	btn.classList.add("btn");
+	btn.classList.add("btn-xs");
+	btn.onclick = ()=>{ window.location.href = getURL(url); };
+	btn.innerHTML = "<i class=\"icons btn-icon\">&#xe410;</i>";	//&#x1F6E0; or &#xe410;
+	const pxart = gId(id);
+	if (pxart) pxart.replaceWith(btn);
+	else {
+		gId("edit").insertAdjacentElement("afterend", btn);
+		gId("edit").insertAdjacentText("afterend", ' '); // keep formatting/button spacing
+	}
+}
+
 function updateUI()
 {
 	gId('buttonPower').className = (isOn) ? 'active':'';
 	gId('buttonNl').className = (nlA) ? 'active':'';
 	gId('buttonSync').className = (syncSend) ? 'active':'';
-	gId('pxmb').style.display = (isM) ? "inline-block" : "none";
+	const opt = lastinfo.opt;
+	gId("edit").style.display = (opt&0x08) ? "inline-block" : "none";
+	if (isM) {
+		// oldest first, replaced by newest
+		if (opt&0x200) artBtn("pxmb","PixelArt","/pixart.htm");
+		if (opt&0x020) artBtn("pxmb","PixelMagic","/pxmagic.htm");
+		if (opt&0x400) artBtn("pxmb","PixelForge Lite","/pixelforge.htm");
+	}
 
 	updateSelectedFx();
 	updateSelectedPalette(selectedPal); // must be after updateSelectedFx() to un-hide color slots for * palettes
@@ -1437,7 +1460,7 @@ function cmpP(a, b)
 }
 
 function makeWS() {
-	if (ws || lastinfo.ws < 0) return;
+	if (ws || lastinfo.ws < 0) return; // already established or not available
 	let url = loc ? getURL('/ws').replace("http","ws") : "ws://"+window.location.hostname+"/ws";
 	ws = new WebSocket(url);
 	ws.binaryType = "arraybuffer";
@@ -1729,7 +1752,7 @@ async function requestJson(command=null, retry=0) {
 	return new Promise((resolve, reject) => {
 		gId('connind').style.backgroundColor = "var(--c-y)";
 		if (command && !reqsLegal) {resolve(); return;}
-		if (!jsonTimeout) jsonTimeout = setTimeout(()=>{if (ws) ws.close(); ws=null; showErrorToast()}, 3000);
+		if (!jsonTimeout) jsonTimeout = setTimeout(()=>{if (ws) ws.close(); ws=null; showErrorToast();}, 3000);
 
 		var useWs = (ws && ws.readyState === WebSocket.OPEN);
 		var req = null;

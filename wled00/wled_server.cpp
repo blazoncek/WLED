@@ -16,6 +16,9 @@
 #ifndef WLED_DISABLE_PXMAGIC
   #include "html_pxmagic.h"
 #endif
+#ifdef WLED_ENABLE_PIXELFORGE
+  #include "html_pxforge.h"
+#endif
 #include "html_cpal.h"
 
 // define flash strings once (saves flash memory)
@@ -695,6 +698,17 @@ void initServer()
   static const char _pxmagic_htm[] PROGMEM = "/pxmagic.htm";
   server.on(_pxmagic_htm, HTTP_GET, [](AsyncWebServerRequest *request) {
     handleStaticContent(request, FPSTR(_pxmagic_htm), 200, FPSTR(CONTENT_TYPE_HTML), PAGE_pxmagic, PAGE_pxmagic_length);
+  });
+  #endif
+
+  #ifdef WLED_ENABLE_PIXELFORGE
+  static const char _pxforge_htm[] PROGMEM = "/pixelforge.htm";
+  server.on(_pxforge_htm, HTTP_GET, [](AsyncWebServerRequest *request) {
+    handleStaticContent(request, FPSTR(_pxforge_htm), 200, FPSTR(CONTENT_TYPE_HTML), PAGE_pxforge, PAGE_pxforge_length);
+  });
+  static const char _omggif_js[] PROGMEM = "/omggif.js";
+  server.on(_omggif_js, HTTP_GET, [](AsyncWebServerRequest *request) {
+    handleStaticContent(request, FPSTR(_omggif_js), 200, FPSTR(CONTENT_TYPE_HTML), JS_omggif, JS_omggif_length);
   });
   #endif
 #endif

@@ -245,6 +245,7 @@ writeHtmlGzipped("wled00/data/index.htm", "wled00/html_ui.h", 'index');
 writeHtmlGzipped("wled00/data/pixart/pixart.htm", "wled00/html_pixart.h", 'pixart');
 //writeHtmlGzipped("wled00/data/cpal/cpal.htm", "wled00/html_cpal.h", 'cpal');
 writeHtmlGzipped("wled00/data/pxmagic/pxmagic.htm", "wled00/html_pxmagic.h", 'pxmagic');
+writeHtmlGzipped("wled00/data/pixelforge.htm", "wled00/html_pxforge.h", 'pxforge');
 
 writeChunks(
   "wled00/data/cpal",
@@ -415,6 +416,12 @@ const char PAGE_dmxmap[] PROGMEM = R"=====()=====";
       name: "PAGE_404",
       method: "gzip",
       filter: "html-minify",
+    },
+    {
+      file: "omggif.js",
+      name: "JS_omggif",
+      method: "gzip",
+      filter: "js-minify",
     },
     {
       file: "favicon.ico",

@@ -927,22 +927,40 @@ void serializeInfo(JsonObject root)
     if (!netDebugEnabled) os &= ~0x0080;
     #endif
   #endif
+  #ifdef WLED_USE_ETHERNET
+  os += 0x1000;
+  #endif
+  #ifdef WLED_ENABLE_DMX
+  os += 0x800;
+  #endif
   #ifndef WLED_DISABLE_ALEXA
   os += 0x40;
   #endif
-
-  //os += 0x20; // indicated now removed Blynk support, may be reused to indicate another build-time option
-
+  #ifdef WLED_ENABLE_PIXELFORGE
+  os += 0x400;
+  #else
+  os += WLED_FS.exists(F("/pixelforge.htm")) ? 0x400 : 0;
+  #endif
+  #ifdef WLED_ENABLE_PIXART
+  os += 0x200;
+  #else
+  os += WLED_FS.exists(F("/pixart.htm")) ? 0x200 : 0;
+  #endif
+  #ifndef WLED_DISABLE_PXMAGIC
+  os += 0x20; // used to be now removed Blynk support
+  #else
+  os += WLED_FS.exists(F("/pxmagic.htm")) ? 0x20 : 0;
+  #endif
   #ifdef USERMOD_CRONIXIE
   os += 0x10;
   #endif
-  #ifndef WLED_DISABLE_FILESYSTEM
-  os += 0x08;
+  #ifdef WLED_ENABLE_FS_EDITOR
+  os += 0x08; // mandatory file system support
   #endif
   #ifndef WLED_DISABLE_HUESYNC
   os += 0x04;
   #endif
-  #ifdef WLED_ENABLE_ADALIGHT
+  #ifndef WLED_DISABLE_ADALIGHT
   os += 0x02;
   #endif
   #ifndef WLED_DISABLE_OTA

@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2608070
+#define VERSION 2608120
 #else
 #define VERSION BUILD
 #endif
@@ -83,6 +83,9 @@
 // Library inclusions.
 #include <Arduino.h>
 #ifdef ESP8266
+  #ifdef WLED_ENABLE_HUB75MATRIX
+    #undef WLED_ENABLE_HUB75MATRIX
+  #endif
   #include <ESP8266WiFi.h>
   #include <ESP8266mDNS.h>
   #include <ESPAsyncTCP.h>
@@ -100,6 +103,11 @@
     #include <QuickEspNow.h>
   #endif
 #else // ESP32
+  #if defined(CONFIG_IDF_TARGET_ESP32C3)
+    #ifdef WLED_ENABLE_HUB75MATRIX
+      #undef WLED_ENABLE_HUB75MATRIX
+    #endif
+  #endif
   #include <HardwareSerial.h>  // ensure we have the correct "Serial" on new MCUs (depends on ARDUINO_USB_MODE and ARDUINO_USB_CDC_ON_BOOT)
   #include <WiFi.h>
   #include <ETH.h>

@@ -155,12 +155,15 @@ function B()          { window.open(getURL("/settings"),"_self"); }
 var timeout;
 function showToast(text, error = false) {
 	var x = gId("toast");
-	if (!x) return;
+	if (!x) {
+		x = cE('div');
+		x.id="toast";
+	}
 	x.innerHTML = text;
-	x.className = error ? "error":"show";
+	x.className = error ? "error" : "show";
 	clearTimeout(timeout);
 	x.style.animation = 'none';
-	timeout = setTimeout(function(){ x.className = x.className.replace("show", ""); }, 2900);
+	timeout = setTimeout(()=>x.remove(), 3000+(error*7000));
 }
 function uploadFile(fileObj, name) {
 	var req = new XMLHttpRequest();
