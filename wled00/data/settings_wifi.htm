@@ -111,7 +111,7 @@
 			var b = `<div id="net${i}"><hr class="sml">
 Network name (SSID${i==0?", empty to not connect":""}):<br><input type="text" id="CS${i}" name="CS${i}" maxlength="32" value="${ssid}" ${i>0?"required":""}><br>
 Network password:<br><input type="password" name="PW${i}" maxlength="64" value="${pass}"><br>
-BSSID (optional):<br><input type="text" id="BS${i}" name="BS${i}" maxlength="12" value="${bssid}"><br>
+BSSID (optional):<br><input type="text" id="BS${i}" name="BS${i}" minlength="12" maxlength="12" value="${fltrMAC(bssid)}" pattern="[0-9A-Fa-f]*" oninput="isMAC(this);"><br>
 Static IP (leave at 0.0.0.0 for DHCP)${i==0?"<br>Also used by Ethernet":""}:<br>
 <input name="IP${i}0" type="number" class="s" min="0" max="255" value="${ip&0xFF}" required>.<input name="IP${i}1" type="number" class="s" min="0" max="255" value="${(ip>>8)&0xFF}" required>.<input name="IP${i}2" type="number" class="s" min="0" max="255" value="${(ip>>16)&0xFF}" required>.<input name="IP${i}3" type="number" class="s" min="0" max="255" value="${(ip>>24)&0xFF}" required><br>
 Static gateway:<br>
@@ -120,6 +120,7 @@ Static subnet mask:<br>
 <input name="SN${i}0" type="number" class="s" min="0" max="255" value="${sn&0xFF}" required>.<input name="SN${i}1" type="number" class="s" min="0" max="255" value="${(sn>>8)&0xFF}" required>.<input name="SN${i}2" type="number" class="s" min="0" max="255" value="${(sn>>16)&0xFF}" required>.<input name="SN${i}3" type="number" class="s" min="0" max="255" value="${(sn>>24)&0xFF}" required></div>`;
 			gId("wifi_entries").insertAdjacentHTML("beforeend", b);
 			btnWiFi(i+1);
+			isMAC(gId(`BS${i}`));
 		}
 		function remWiFi() {
 			const entries = gId("wifi_entries").children;
@@ -145,14 +146,20 @@ Static subnet mask:<br>
 			gId('rml').innerHTML = ''; // clear remote list
 			uR(); // update remote list
 		}
-		function isMAC(v) { return /^[0-9A-F]{12}$/i.test(v); };
+		function fltrMAC(mac){ return mac.replace(/[^0-9A-F]/gi, '').toUpperCase(); }
+		function isMAC(v) {
+			v.value = fltrMAC(v.value);
+			let valid = /^[0-9A-F]{12}$/gi.test(v.value) || v.value === "";
+			v.style.color = valid ? "white" : "red";
+			return valid;
+		}
 		// add remote MAC to the list
 		function aR(mac) {
 			let rC = gId("rml").childElementCount;
 			if (rC >= 10) return;
 			let id = 'RM' + rC;
-			mac = mac.replace(/:/g, '').replace(/-/g, '').toUpperCase();
-			if (!isMAC(mac)) mac = 'FFFFFFFFFFFF'; // check for valid hex string
+			mac = fltrMAC(mac)
+			if (mac.length<12 && mac.length>0) mac = 'FFFFFFFFFFFF'; // check for valid hex string
 			let inputs = qSA('#rml input[type="text"]');
 			for (let input of inputs||[]) {
 				if (input.value === '') return;
@@ -166,9 +173,10 @@ Static subnet mask:<br>
 			i.style.width = '13ch'
 			i.maxLength = 12;
 			i.minLength = 12;
+			i.pattern =  "[0-9a-fA-F]*";
 			i.onchange = uR;
 			i.oninput = (e) => {
-				e.target.style.color = !isMAC(e.target.value) ? 'red' : 'white';
+				isMAC(e.target);
 			};
 			r.appendChild(i);
 			let btn = cE('button');
@@ -186,11 +194,9 @@ Static subnet mask:<br>
 		}
 		// update remote list
 		function uR() {
-			let j = 0;
-			qSA('#rml input[type="text"]').forEach((i) => {
-				i.style.color = !isMAC(i.value) ? 'red' : 'white';
-				i.value = i.value.toUpperCase();
-				i.name = 'RM' + j++;
+			qSA('#rml input[type="text"]').forEach((i,j) => {
+				isMAC(i);
+				i.name = 'RM' + j;
 			});
 			gId('+').style.display = gId("rml").childElementCount < 10 ? 'inline' : 'none';
 			return true; // Allow form submission to continue
@@ -258,8 +264,8 @@ Static subnet mask:<br>
 				<option value="1">WT32-ETH01</option>
 			</select><br>
 			<i class="warn">ESP-NOW is incompatible with Ethernet.</i>
+			<hr class="sml">
 		</div>
-		<hr class="sml">
 		<h3>ESP-NOW Wireless</h3>
 		<div id="NoESPNOW" class="hide">
 			<i class="warn">This firmware build does not include ESP-NOW support.<br></i>
