@@ -341,6 +341,15 @@ function onLoad()
 			else await loadPresets();    // load and populate presets
 			if (cfg.comp.css) await loadSkinCSS('skinCss');
 			if (!ws) makeWS();
+			const opt = lastinfo.opt;
+			gId("edit").style.display = (opt&0x08) ? "inline-block" : "none";
+			if (isM) {
+				// oldest first, replaced by newest
+				if (opt&0x200) artBtn("pxmb","PixelArt","/pixart.htm");
+				if (opt&0x020) artBtn("pxmb","PixelMagic","/pxmagic.htm");
+				if (opt&0x400) artBtn("pxmb","PixelForge Lite","/pixelforge.htm");
+				tooltip("#btns");
+			}
 		} catch(e) {
 			showToast("Init failed: " + e, true);
 		}
@@ -1313,14 +1322,6 @@ function updateUI()
 	gId('buttonPower').className = (isOn) ? 'active':'';
 	gId('buttonNl').className = (nlA) ? 'active':'';
 	gId('buttonSync').className = (syncSend) ? 'active':'';
-	const opt = lastinfo.opt;
-	gId("edit").style.display = (opt&0x08) ? "inline-block" : "none";
-	if (isM) {
-		// oldest first, replaced by newest
-		if (opt&0x200) artBtn("pxmb","PixelArt","/pixart.htm");
-		if (opt&0x020) artBtn("pxmb","PixelMagic","/pxmagic.htm");
-		if (opt&0x400) artBtn("pxmb","PixelForge Lite","/pixelforge.htm");
-	}
 
 	updateSelectedFx();
 	updateSelectedPalette(selectedPal); // must be after updateSelectedFx() to un-hide color slots for * palettes
@@ -3231,6 +3232,8 @@ function mergeDeep(target, ...sources)
 function tooltip(cont=null)
 {
 	qSA((cont?cont+" ":"")+"[title]").forEach((element)=>{
+		if (element.getAttribute('data-lsnr') === 'true') return; // tooltip already added
+		element.setAttribute("data-lsnr", 'true');
 		element.addEventListener("pointerover", ()=>{
 			// save title
 			element.setAttribute("data-title", element.getAttribute("title"));
