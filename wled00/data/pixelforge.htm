@@ -1196,12 +1196,12 @@ async function txtSegLoad() {
 		if (j.seg && j.seg[id]) {
 			const s = j.seg[id];
 			if (s.fx !== txtFX) return; // only update when this segment uses scrolling text effect
-			getId('txt').value  = s.n  || '';
-			getId('sx').value   = s.sx || 128;
-			getId('ix').value   = s.ix || 128;
-			getId('c1').value   = s.c1 || 0;
-			getId('c2').value   = s.c2 || 128;
-			getId('c3').value   = s.c3 || 16;
+			getId('txt').value  = s.n  ?? '';
+			getId('sx').value   = s.sx ?? 128;
+			getId('ix').value   = s.ix ?? 128;
+			getId('c1').value   = s.c1 ?? 0;
+			getId('c2').value   = s.c2 ?? 128;
+			getId('c3').value   = s.c3 ?? 16;
 			getId('o1').checked = !(!s.o1);
 			getId('o2').checked = !(!s.o2);
 			getId('o3').checked = !(!s.o3);
