@@ -23,9 +23,9 @@ h3 {
 }
 /* shimmer text animation */
 .title.sh {
-	background: linear-gradient(90deg,
-		#7b47db 0%, #ff6b6b 20%, #feca57 40%, #48dbfb 60%, #7b47db 100%);
+	background: linear-gradient(90deg, #7b47db 0%, #ff6b6b 20%, #feca57 40%, #48dbfb 60%, #7b47db 100%);
 	background-size: 200% 100%;
+	background-clip: text;
 	-webkit-background-clip: text;
 	-webkit-text-fill-color: transparent;
 	animation: shimmer 4s ease-in-out 5;
@@ -44,15 +44,15 @@ h3 {
 }
 
 /* shared border styles */
-.it, #cv, #pv, .dp, button, .btn {
+.it, #cv, #pv, #drop {
 	border: 2px solid #555;
 }
-.it:hover, .dp:hover, button:hover, .btn:hover {
+.it:hover, #drop:hover, button:hover {
 	border-color: #48a;
 }
 
 /* shared transitions */
-.it, .dp {
+.it, #drop {
 	transition: all 0.3s ease;
 }
 
@@ -65,9 +65,21 @@ h3 {
 	image-rendering: pixelated;
 }
 
+/* overlay */
+#ov {
+	background-color: rgba(2, 2, 2, 0.85);
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 100%;
+	height: 100%;
+	transform: translate(-50%,-50%);
+	display: none;
+}
+
 /* shared flex centering */
-.it.loading, .crw, .cs {
-	display: flex;
+.loading, .crw, .cs {
+	display: flex !important;
 	align-items: center;
 	justify-content: center;
 }
@@ -135,22 +147,8 @@ input[type="color"] {
 	border-radius: 4px;
 }
 
-/* toast */
-.t {
-	position: fixed;
-	top: 20px;
-	right: 20px;
-	background: #555;
-	color: #fff;
-	padding: 12px 20px;
-	border-radius: 8px;
-	font-size: 14px;
-	z-index: 888;
-	border: 2px solid #888;
-}
-
 /* drop zone */
-.dp {
+#drop {
 	border: 2px dashed #555;
 	border-radius: 8px;
 	padding: 40px 20px;
@@ -159,13 +157,14 @@ input[type="color"] {
 	margin: 20px auto;
 	max-width: 80%;
 }
-.dp:hover {
+#drop:hover {
 	background: #333;
 }
 
 /* buttons */
-button, .btn {
+button {
 	border: 2px solid #333;
+	margin: 16px 0;
 }
 
 /* sliders */
@@ -260,7 +259,7 @@ button, .btn {
 		<div class="g" id="gr"></div>
 
 		<h3>Upload New Image</h3>
-		<div id="drop" class="dp">
+		<div id="drop">
 			<p>Drop image or click to select</p>
 		</div>
 		<input type="file" id="src" accept="image/*" style="display:none">
@@ -313,22 +312,21 @@ button, .btn {
 			</div>
 		</div>
 
-		<div class="row" style="margin-top:20px">
-			<div class="col">
-				<label for="fn">Filename</label>
-				<input type="text" id="fn" placeholder="image" maxlength="26">
-				<small>.gif will be added</small>
-			</div>
+		<div style="margin:20px 0 0">
+			<label>
+				Filename <input type="text" id="fn" placeholder="image" maxlength="26">
+			</label>
+			<small>.gif will be added</small>
 		</div>
-		<button class="btn" id="up" onclick="upload()">Convert & Upload</button>
+		<button id="up" onclick="upload()">Convert & Upload</button>
 	</div>
 
 	<div id="xTab" class="tabc">
 		<div id="ti">
 			<h3>Text to show</h3>
-			<div class="col" style="display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap">
-				<input type="text" id="txt" placeholder="Enter text" maxlength="64"  style="margin-left:15px;flex:1;min-width:300px;">
-				<button class="btn" id="aTxt" onclick="applyTxt()">✓</button>
+			<div>
+				<input type="text" id="txt" placeholder="Enter text" maxlength="64" width="64" style="min-width:calc(100% - 100px);">
+				<button id="aTxt" onclick="applyTxt()">&#x2713;</button>
 			</div>
 			<small style="display:block;text-align:center;">Preview - actual display may differ</small>
 			<canvas id="tpv" width="100" height="50" style="background:#000;display:block;margin:10px auto;border-radius:8px;width:300px;height:150px;"></canvas>
@@ -337,25 +335,25 @@ button, .btn {
 			<div class="cs">
 					<div class="fr">Speed <input type="range" id="sx" min="0" max="255"></div>
 					<div class="fr">Y Offset <input type="range" id="ix" min="0" max="255"></div>
-					<div class="fr">Trail <input type="range" id="c1" min="0" max="255" value="0"></div>
-					<div class="fr">Font Size<input type="range" id="c2" min="3" max="255" step="63"></div>
-					<div class="fr">Fade <input type="range" id="c3" min="3" max="31" step="7"></div>
+					<div class="fr">Trail <input type="range" id="c1" min="0" max="255"></div>
+					<div class="fr">Font Size<input type="range" id="c2" min="0" max="255" step="32"></div>
+					<div class="fr">Fade <input type="range" id="c3" min="0" max="31"></div>
 			</div>
 
-			<div class="col" style="display:flex;gap:20px;justify-content:center;">
-				<label style="display:flex;align-items:center;gap:5px">
+			<div>
+				<label>
 					<input type="checkbox" id="o1"> Gradient
 				</label>
-				<label style="display:flex;align-items:center;gap:5px">
+				<label>
 					<input type="checkbox" id="o2"> Rotate
 				</label>
-				<label style="display:flex;align-items:center;gap:5px">
+				<label>
 					<input type="checkbox" id="o3"> Reverse
 				</label>
 			</div>
 
 			<h3>Available Tokens</h3>
-			<div style="padding:15px;">
+			<div>
 				<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;text-align:left">
 					<div><a href="#" class="tk" data-t="#TIME">#TIME</a> - HH:MM:SS or HH:MM [AM|PM]</div>
 					<div><a href="#" class="tk" data-t="#DATE">#DATE</a> - DD.MM.YYYY</div>
@@ -388,12 +386,13 @@ button, .btn {
 	</div>
 </div>
 
-<div style="margin:20px 0">
-	<button class="btn" onclick="window.location.href=getURL('/')">Back to the controls</button>
+<div>
+	<button onclick="window.location.href=getURL('/')">Back to the controls</button>
 </div>
 
-<div id="ov"></div><div id="toast"></div>
-<div id="mem" style="display:none;font-size:12px;color:#aaa;"></div>
+<div id="mem" style="font-size:12px;color:#aaa;"></div>
+<div id="ov">Loading...</div>
+<div id="toast" style="display:none;"></div>
 
 <script>
 const imgageFX = 53; // image effect number
@@ -417,15 +416,11 @@ let wv = [0, 0]; // wled version [major, minor], updated in fsMem(), used to che
 // note: the pftools.json must use major.minor for tool versions (e.g. 0.95 or 1.1), otherwise the update check won't work
 //       also the code assumes that the tool url points to a gz file
 
-// HTML entity escaper – use on any remote/user-supplied text inserted into innerHTML
-function esc(s)     { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-// URL sanitizer – blocks javascript: and data: URIs, use for externally supplied URLs for some basic safety
-function safeUrl(u) { return /^https?:\/\//.test(u) ? u : '#'; }
 // load external resources in sequence to avoid 503 errors if heap is low, repeats indefinitely until loaded
 (function loadFiles() {
 	const s = document.createElement('script');
 	s.src = 'common.js';
-	s.onerror = () => setTimeout(loadFiles, 100);
+	s.onerror = () => setTimeout(loadFiles, 250);
 	s.onload = () => {
 		try { loadResources(['style.css','omggif.js'], init); } catch (e) {} // load omggif.js then call init()
 	};
@@ -439,14 +434,16 @@ async function init() {
 	rv = cE('canvas');
 	rvc = rv.getContext('2d',{willReadFrequently:true});
 	rv.width = cv.width; rv.height = cv.height;
+	// add actions to tokens
+	qSA("a.tk").forEach((l)=>{l.onclick=(e)=>{e.preventDefault();txtIns(getId("txt"),e.target.dataset.t)}})
 	await flU(); // update file list
 	tabSw(localStorage.tab||'img'); // switch to last open tab or image tab by default
-	await segLoad(); // load available segments
+	segLoad(); // load available segments
 	fsMem(); // update & show file system memory info, also updates wled version (wv)
 }
 
 /* update file list */
-async function flU(){
+async function flU() {
 	try {
 		const r = await fetch(getURL('/edit?list=/&cb=' + Date.now()));
 		fL = await r.json();
@@ -456,13 +453,15 @@ async function flU(){
 }
 
 /* "loading" overlay */
-function ovShow() { getId('ov').classList.add('loading'); getId('ov').style.display='block'; }
-function ovHide() { getId('ov').classList.remove('loading'); getId('ov').style.display='none'; }
+function ovShow() { getId('ov').classList.add('loading'); }
+function ovHide() { getId('ov').classList.remove('loading'); }
 
 /* segments */
 function segLoad() {
-	const s1=getId('seg'), v1=s1.value;
-	fetch(getURL('/json/state')).then(r=>r.json()).then(j=>{
+	const s1 = getId('seg'), v1 = s1.value;
+	fetch(getURL('/json/state'))
+	.then(r=>r.json())
+	.then(j=>{
 		s1.innerHTML='';
 		if (j.seg&&j.seg.length){
 			j.seg.forEach(({id,n,start,stop,startY,stopY,fx})=>{
@@ -477,18 +476,22 @@ function segLoad() {
 			});
 		}
 		if (s1.options.length == 0) s1.add(new Option('Segment 0',0));
-		if (v1) s1.value=v1;
+		if (v1) s1.value = v1;
 		txtSegLoad();  // load settings for currently selected segment
-		const o=s1.options[s1.selectedIndex];
-		if (o) { getId('w').value=o.dataset.w||16; getId('h').value=o.dataset.h||16; }
-	}).catch(console.error);
+		const o = s1.options[s1.selectedIndex];
+		if (o) {
+			getId('w').value = o.dataset.w || 16;
+			getId('h').value = o.dataset.h || 16;
+		}
+	})
+	.catch(e=>console.error(e));
 }
 
 /* which seg is showing image fx (ID 53) */
-function curImgSeg(){
-	const sel=getId('seg');
-	for (let i=0;i<sel.options.length;i++) {
-		if (parseInt(sel.options[i].dataset.fx)===imgageFX) return parseInt(sel.options[i].value);
+function curImgSeg() {
+	const sel = getId('seg');
+	for (let i = 0; i < sel.options.length; i++) {
+		if (parseInt(sel.options[i].dataset.fx) === imgageFX) return parseInt(sel.options[i].value);
 	}
 	return null;
 }
@@ -496,10 +499,10 @@ function curImgSeg(){
 /* seg change -> update target size */
 function updSeg() {
 	const sel = getId('seg');
-	const is2D = (sel.selectedOptions[0].dataset.h || 1) > 1;
 	const o = sel.selectedOptions[0];
-	getId('w').value=o.dataset.w;
-	getId('h').value=o.dataset.h;
+	const is2D = (o.dataset.h || 1) > 1;
+	getId('w').value = o.dataset.w;
+	getId('h').value = o.dataset.h;
 	getId('ti').style.display = is2D ? 'block' : 'none';
 	getId('Noti').style.display = is2D ? 'none' : 'block';
 	if (cI) crDraw();
@@ -510,11 +513,11 @@ function updSeg() {
 /* image list */
 async function imgLoad() {
 	try {
-		const grid=getId('gr');
-		const types=['gif','png','jpg','jpeg','bmp'];
-		const imgs=fL.filter(f=>types.includes(f.name.split('.').pop()?.toLowerCase()));
-		const newList=imgs.map(f=>f.name.replace('/',''));
-		const miss=newList.filter(n=>!iL.includes(n));
+		const grid = getId('gr');
+		const types = ['gif','png','jpg','jpeg','bmp'];
+		const imgs = fL.filter(f => types.includes(f.name.split('.').pop()?.toLowerCase()));
+		const newList = imgs.map(f => f.name.replace('/',''));
+		const miss = newList.filter(n => !iL.includes(n));
 
 		if (iL.length===0) {
 			grid.innerHTML='';
@@ -536,47 +539,47 @@ async function imgLoad() {
 
 /* load images into grid */
 async function imgLoad2(imgs){
-	const grid=getId('gr');
+	const grid = getId('gr');
 	for(const f of imgs){
-		const url=getURL(f.name);
-		const name=f.name.replace('/','');
-		const isGif=name.toLowerCase().endsWith('.gif');
-		const it=cE('div');
-		it.className='it loading';
-		it.dataset.name=name;
-		it.dataset.url=getURL(url);
-		it.onclick=()=>{
+		const url = getURL(f.name);
+		const name = f.name.replace('/','');
+		const isGif = name.toLowerCase().endsWith('.gif');
+		const it = cE('div');
+		it.className = 'it loading';
+		it.dataset.name = name;
+		it.dataset.url = url;
+		if (!isGif) it.style.border = "5px solid red";
+		it.onclick = () => {
 			if (isGif) imgPlay(url,name);
 			else unsup(url,name);
 		};
-		it.oncontextmenu=e=>{
+		it.oncontextmenu = e => {
 			e.preventDefault();
-			sI={name,url};
+			sI = {name,url};
 			menuShow(e.pageX,e.pageY);
 		};
 		grid.appendChild(it);
-		await new Promise(res=>{
-			const im=new Image();
-			im.onload=()=>{
-				it.style.backgroundImage=`url('${encodeURI(url)}?cb=${Date.now()}')`;
-				if (!isGif) it.style.border="5px solid red";
+		await new Promise(res => {
+			const im = new Image();
+			im.onload = () => {
+				it.style.backgroundImage = `url('${encodeURI(url)}?cb=${Date.now()}')`;
 				it.classList.remove('loading'); res();
-				const kb=Math.round(f.size/1024);
-				it.title=`${name}\n${im.width}x${im.height}\n${kb} KB`;
+				const kb = Math.round(f.size/1024);
+				it.title = `${name}\n${im.width}x${im.height}\n${kb} KB`;
 			};
-			im.onerror=()=>{it.classList.remove('loading');it.style.background='#222';res();};
+			im.onerror = () => {
+				it.classList.remove('loading');
+				it.style.background='#222';res();
+			};
 			im.src=encodeURI(url)+'?cb='+Date.now();
+			//console.log(im.src);
 		});
 	}
 }
 
-function imgRm(nm){
-	iL=iL.filter(n=>n!==nm);
-	const grid=getId('gr');
-	grid.querySelectorAll('.it').forEach(it=>{ if(it.dataset.name===nm) it.remove(); });
-	//if(iL.length===0){
-	//	grid.innerHTML='<div style="grid-column:1/-1;text-align:center;color:#aaa;padding:20px">No images found</div>';
-	//}
+function imgRm(nm) {
+	iL = iL.filter(n => n !== nm);
+	qSA('#gr .it').forEach(it => { if (it.dataset.name === nm) it.remove(); });
 }
 
 /* fs/mem info & wled version */
@@ -585,8 +588,7 @@ function fsMem() {
 	.then(r => r.json() )
 	.then(info=> {
 		if (info.fs) {
-			getId("mem").textContent=`Memory: ${info.fs.u} KB / ${info.fs.t} KB`;
-			getId("mem").style.display="block";
+			getId("mem").textContent=`Filesystem: ${info.fs.u} kB of ${info.fs.t} kB`;
 		}
 		if (info.ver) {
 			const m = info.ver.match(/\d+/g); // extract all numbers from version string (e.g. "16.1.0-beta" → [16, 1])
@@ -597,11 +599,11 @@ function fsMem() {
 }
 
 /* drag-drop + file input */
-getId('drop').onclick=()=>{getId('src').value='';getId('src').click();};
-getId('drop').ondragover=e=>{e.preventDefault();getId('drop').classList.add('active');};
-getId('drop').ondragleave=()=>getId('drop').classList.remove('active');
-getId('drop').ondrop=e=>{e.preventDefault();getId('drop').classList.remove('active');getId('src').files=e.dataTransfer.files;fileHandle();};
-getId('src').onchange=fileHandle;
+getId('drop').onclick     = () => { getId('src').value=''; getId('src').click(); };
+getId('drop').ondragover  = e => { e.preventDefault(); getId('drop').classList.add('active'); };
+getId('drop').ondragleave = () => getId('drop').classList.remove('active');
+getId('drop').ondrop      = e => { e.preventDefault(); getId('drop').classList.remove('active'); getId('src').files=e.dataTransfer.files; fileHandle(); };
+getId('src').onchange     = fileHandle;
 
 /* file handler */
 function fileHandle() {
@@ -1076,20 +1078,18 @@ async function upload() {
 
 /* play on device */
 async function imgPlay(url,name){
-	const tgt=+getId('seg').value,cur=curImgSeg();
-	if(cur!==null && cur!==tgt){
-		if(!confirm(`Segment ${cur} is currently displaying an image. Switch image display to segment ${tgt}?`))return;
-	}
+	const tgt = +getId('seg').value, cur = curImgSeg();
+	if (cur !== null && cur !== tgt && !confirm(`Segment ${cur} is currently displaying an image.\nSwitch image display to segment ${tgt}?`)) return;
 	ovShow();
 	try{
 		const j={
 			on:true,
 			seg: cur!==null && cur!==tgt
-				? [{id:cur,fx:0,n:""},{id:tgt,fx:53,frz:false,sx:128,n:name}]
-				: {id:tgt,fx:53,frz:false,sx:128,ix:0,n:name}
+				? [{id:cur, fx:0, n:""}, {id:tgt, fx:53, frz:false, sx:128, n:name}]
+				: {id:tgt, fx:53, frz:false, sx:128, ix:0, n:name}
 		};
-		const r=await fetch(getURL('/json/state'),{method:'POST',body:JSON.stringify(j)});
-		const out=await r.json();
+		const r = await fetch(getURL('/json/state'),{method:'POST',body:JSON.stringify(j)});
+		const out = await r.json();
 		if (out.success){
 			showToast(`Playing ${name}`);
 			segLoad();
@@ -1113,18 +1113,24 @@ function menuShow(x,y){
 	d.body.appendChild(m);
 	setTimeout(()=>{
 		const h=e=>{
-			if(!e.target.closest('.cm')){menuClose();d.removeEventListener('click',h);}
+			if (!e.target.closest('.cm')) {
+				menuClose();
+				d.removeEventListener('click',h);
+			}
 		};
-		d.addEventListener('click',h);
+		d.addEventListener('click', h);
 	},100);
 }
-function menuClose() {d.querySelectorAll('.cm').forEach(m=>m.remove());}
+function menuClose() { d.querySelectorAll('.cm').forEach(m=>m.remove()); }
 
 async function imgDl() {
 	try {
-		const r=await fetch(sI.url),b=await r.blob();
-		const u=URL.createObjectURL(b),a=cE('a');
-		a.href=u;a.download=sI.name;a.click();
+		const r = await fetch(sI.url), b = await r.blob();
+		const u = URL.createObjectURL(b);
+		const a = cE('a');
+		a.href = u;
+		a.download = sI.name;
+		a.click();
 		URL.revokeObjectURL(u);
 		showToast('Downloaded');
 	}
@@ -1154,8 +1160,8 @@ async function deleteFile(name) {
 	}
 	finally {
 		ovHide();
+		fsMem();   // refresh memory info after delete
 	}
-	fsMem();       // refresh memory info after delete
 	menuClose();   // close menu (used for image delete button)
 	await flU();   // update file list
 }
@@ -1165,60 +1171,54 @@ function tabSw(tab) {
 	'iTab,xTab,tImg,tTxt'.split(',').forEach((id,i)=>{
 		getId(id).classList.toggle('active', tab===['img','txt'][i%2]);
 	});
-	localStorage.tab=tab;
-	({txt:()=>{txtSegLoad();}, img:imgLoad}[tab]||(()=>{}))(); // on tab switch, load images and available fonts
+	localStorage.tab = tab;
+	({'txt':txtSegLoad, 'img':imgLoad}[tab] || (()=>{}))(); // on tab switch, load images and available fonts
 }
 'Img,Txt'.split(',').forEach((s,i)=>{
 	getId('t'+s).onclick=()=>tabSw(['img','txt'][i]);
 });
 
 /* tokens insert */
-function txtIns(el,t){
-	const s=el.selectionStart??el.value.length,e=el.selectionEnd??el.value.length,v=el.value;
-	const nv=(v.slice(0,s)+t+v.slice(e)).slice(0,64);
-	const p=Math.min(s+t.length,nv.length);
-	el.value=nv;
+function txtIns(el, t) {
+	const s = el.selectionStart ?? el.value.length, e = el.selectionEnd ?? el.value.length, v = el.value;
+	const nv = (v.slice(0,s) + t + v.slice(e)).slice(0,64);
+	const p = Math.min(s+t.length,nv.length);
+	el.value = nv;
 	el.focus();
-	el.selectionStart=el.selectionEnd=p;
+	el.selectionStart = el.selectionEnd=p;
 }
-document.addEventListener('click',e=>{
-	const a=e.target.closest('.tk');
-	if(!a) return;
-	e.preventDefault();
-	txtIns(getId('txt'), a.dataset.t);
-	// txtUp();
-});
 
 /* load seg settings into text UI */
-async function txtSegLoad(){
-	const id=+getId('seg').value;
+async function txtSegLoad() {
+	const id = +getId('seg').value;
 	try {
-		const r=await fetch(getURL('/json/state')),j=await r.json();
+		const r = await fetch(getURL('/json/state')), j = await r.json();
 		if (j.seg && j.seg[id]) {
-			const s=j.seg[id];
-			if (s.fx!==txtFX) return; // only update when this segment uses scrolling text effect
-			getId('txt').value=s.n||'';
-			getId('sx').value=s.sx||128;
-			getId('ix').value=s.ix||128;
-			getId('c1').value=s.c1||0;
-			getId('c2').value=s.c2||128;
-			getId('c3').value=s.c3||16;
-			getId('o1').checked=!(!s.o1);
-			getId('o2').checked=!(!s.o2);
-			getId('o3').checked=!(!s.o3);
+			const s = j.seg[id];
+			if (s.fx !== txtFX) return; // only update when this segment uses scrolling text effect
+			getId('txt').value  = s.n  || '';
+			getId('sx').value   = s.sx || 128;
+			getId('ix').value   = s.ix || 128;
+			getId('c1').value   = s.c1 || 0;
+			getId('c2').value   = s.c2 || 128;
+			getId('c3').value   = s.c3 || 16;
+			getId('o1').checked = !(!s.o1);
+			getId('o2').checked = !(!s.o2);
+			getId('o3').checked = !(!s.o3);
 		}
-	} catch(e) { 
+	} catch (e) { 
 		console.error(e);
 	}
 }
 
 /* auto apply on change */
-['sx','ix','c1','c2','c3','o1','o2','o3'].forEach(id=>{ getId(id).onchange=txtUp; });
+['sx','ix','c1','c2','c3','o1','o2','o3'].forEach(id=>{ getId(id).onchange=applyTxt; });
 
 /* send text settings */
-function txtUp(){
-	const id=+getId('seg').value,txt=getId('txt').value.trim().slice(0,64);
-	const j={
+function applyTxt() {
+	const id = +getId('seg').value, txt = getId('txt').value.trim();
+	ovShow();
+	const j = {
 		on:true,
 		seg:{
 			id:id,
@@ -1235,39 +1235,15 @@ function txtUp(){
 		}
 	};
 	fetch(getURL('/json/state'),{method:'POST',body:JSON.stringify(j)})
-		.then(r => { if(r.ok) segLoad(); })
-		.catch(console.error);
-}
-
-/* apply button */
-function applyTxt() {
-	const id=+getId('seg').value, txt=getId('txt').value.trim();
-	ovShow();
-	const j = {
-		on:true,
-		seg:{
-			id:id,
-			fx:122,
-			n:txt,
-			sx:+getId('sx').value,
-			ix:+getId('ix').value,
-			c1:+getId('c1').value,
-			c2:+getId('c2').value,
-			c3:+getId('c3').value,
-			o1:getId('o1').checked,
-			o3:getId('o3').checked
-		}
-	};
-	fetch(getURL('/json/state'),{method:'POST',body:JSON.stringify(j)})
-	.then(r=>r.json())
-	.then(out=>{
-		if (out.success!==false) {
+	.then(r => r.json())
+	.then(out => {
+		if (out.success !== false) {
 			showToast(`Applied to Segment ${id}`);
 			segLoad();
 		} else showToast('Failed to apply', true);
 	})
-	.catch(e=>showToast(`Error: ${e.message}`, true))
-	.finally(()=>ovHide());
+	.catch(e => showToast(`Error: ${e.message}`, true))
+	.finally(() => ovHide());
 }
 
 /* preview canvas - actual display may differ */

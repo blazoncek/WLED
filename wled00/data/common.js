@@ -17,6 +17,10 @@ function isF(n)     { return n === +n && n !== (n|0); } // isFloat
 function isI(n)     { return n === +n && n === (n|0); } // isInteger
 function chrID(x)   { return String.fromCharCode((x<10?48:55)+x); }
 function toggle(el) { gId(el).classList.toggle("hide"); let n = gId('No'+el); if (n) n.classList.toggle("hide"); }
+// HTML entity escaper – use on any remote/user-supplied text inserted into innerHTML
+function esc(s)     { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// URL sanitizer – blocks javascript: and data: URIs, use for externally supplied URLs for some basic safety
+function safeUrl(u) { return /^https?:\/\//.test(u) ? u : '#'; }
 function tooltip(cont=null) {
 	qSA((cont?cont+" ":"")+"[title]").forEach((element)=>{
 		element.addEventListener("mouseover", ()=>{
@@ -158,6 +162,7 @@ function showToast(text, error = false) {
 	if (!x) {
 		x = cE('div');
 		x.id="toast";
+		d.body.appendChild(x);
 	}
 	x.innerHTML = text;
 	x.className = error ? "error" : "show";
