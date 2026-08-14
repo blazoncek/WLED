@@ -4638,7 +4638,7 @@ uint16_t mode_2DColoredBursts() {              // By: ldirko   https://editor.so
   byte numLines = SEGMENT.intensity/16 + 1;
 
   SEGENV.aux0++;  // hue
-  SEGMENT.fadeToBlackBy(40);
+  SEGMENT.fadeOut(40);
   for (size_t i = 0; i < numLines; i++) {
     byte x1 = beatsin8_t(2 + SEGMENT.speed/16, 0, (cols - 1));
     byte x2 = beatsin8_t(1 + SEGMENT.speed/16, 0, (rows - 1));
@@ -4654,8 +4654,8 @@ uint16_t mode_2DColoredBursts() {              // By: ldirko   https://editor.so
       uint8_t rate = j * 255 / steps;
       byte dx = lerp8by8(x1, y1, rate);
       byte dy = lerp8by8(x2, y2, rate);
-      SEGMENT.setPixelColorXY(dx, dy, color); // use setPixelColorXY for different look
-      if (grad) SEGMENT.fadePixelColorXY(dx, dy, rate);
+      CRGBA c = grad ? color.fadeOut(255 - rate) : color;
+      SEGMENT.setPixelColorXY(dx, dy, c);
     }
 
     if (dot) { //add white point at the ends of line
@@ -4706,14 +4706,14 @@ uint16_t mode_2DDNASpiral() {               // By: ldirko  https://editor.soulma
   const int rows = SEG_H;
 
   if (SEGENV.call == 0) {
-    SEGMENT.fill(BLACK);
+    SEGMENT.fill(CRGBA(0,0,0,0));
   }
 
   unsigned speeds = SEGMENT.speed/2 + 7;
   unsigned freq = SEGMENT.intensity/8;
 
   uint32_t ms = strip.now / 20;
-  SEGMENT.fadeToBlackBy(135);
+  SEGMENT.fadeOut(135);
 
   for (int i = 0; i < rows; i++) {
     int x  = beatsin8_t(speeds, 0, cols - 1, 0, i * freq) + beatsin8_t(speeds - 7, 0, cols - 1, 0, i * freq + 128);
@@ -4729,8 +4729,7 @@ uint16_t mode_2DDNASpiral() {               // By: ldirko  https://editor.soulma
         unsigned rate = k * 255 / steps;
         //unsigned dx = lerp8by8(x, x1, rate);
         unsigned dx = positive? (x + k-1) : (x - k+1);   // behaves the same as "lerp8by8" but does not create holes
-        SEGMENT.addPixelColorXY(dx, i, SEGMENT.color_wheel(hue)); // use setPixelColorXY for different look
-        SEGMENT.fadePixelColorXY(dx, i, rate);
+        SEGMENT.setPixelColorXY(dx, i, SEGMENT.color_wheel(hue).nfadeOut(rate));
       }
       SEGMENT.setPixelColorXY(x, i, DARKSLATEGRAY);
       SEGMENT.setPixelColorXY(x1, i, WHITE);
@@ -6033,35 +6032,7 @@ uint16_t mode_2Dscrollingtext(void) {
   for (int i = 0; i < numberOfLetters; i++) {
     int xoffset = int(cols) - int(SEGENV.aux0) + rotLW*i;
     if (xoffset + rotLW < 0) continue; // don't draw characters off-screen
-    SEGMENT.drawCharacter(text[i], xoffset, yoffset, letterWidth, letterHeight, col1, col2, rotate);
-  }
-
-  // apply fading to sides (available only on segments without white channel)
-  if (!SEGMENT.hasWhite()) {
-    int offset = fade * cols / 64;
-    for (int x = 0; x < offset; x++) {
-      uint8_t opacity = map(x, 0, offset, 0, 255);
-      for (int y = 0; y < rows; y++) {
-        SEGMENT.setPixelColorXY(x,        y, SEGMENT.getPixelColorXY(x,        y).setOpacity(opacity));
-        SEGMENT.setPixelColorXY(cols-x-1, y, SEGMENT.getPixelColorXY(cols-x-1, y).setOpacity(opacity));
-      }
-    }
-    // or we can fade only one side
-    /*
-    if (fade > 16) { // fade out right half
-      int offset = cols * (48 - fade) / 32 + 1;
-      for (int x = offset; x < cols; x++) {
-        uint8_t opacity = map(x, offset, cols-1, 255, 0);
-        for (int y = 0; y < rows; y++) SEGMENT.setPixelColorXY(x, y, SEGMENT.getPixelColorXY(x, y).setOpacity(opacity));
-      }
-    } else if (fade < 16) { // fade out left half
-      int offset = (16 - fade) * cols / 32;
-      for (int x = 0; x < offset; x++) {
-        uint8_t opacity = map(x, 0, offset, 0, 255);
-        for (int y = 0; y < rows; y++) SEGMENT.setPixelColorXY(x, y, SEGMENT.getPixelColorXY(x, y).setOpacity(opacity));
-      }
-    }
-    */
+    SEGMENT.drawCharacter(text[i], xoffset, yoffset, letterWidth, letterHeight, col1, col2, rotate, fade<<3);
   }
 
   return FRAMETIME;
