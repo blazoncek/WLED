@@ -550,20 +550,14 @@ class Segment {
     inline static void     addUsedSegmentData(int len)     { Segment::_usedSegmentData += len; }
 
     inline CRGBA *getPixels() const                                                     { return pixels; }
-    inline void  setPixelColorRaw(unsigned i, CRGBA c) const                            { pixels[i] = c; }
-    inline void  addPixelColorRaw(unsigned i, CRGBA c) const                            { pixels[i] = pixels[i].add(c); }           // pixels[i].nadd(c); will crash ESP
-    inline void  blendPixelColorRaw(unsigned i, CRGBA c, uint8_t b) const               { pixels[i].nblend(c, b); }
-    inline void  fadePixelColorRaw(unsigned i, uint8_t b) const                         { pixels[i] = pixels[i].scale8_video(b); }  // pixels[i].nscale8(b); will crash ESP
+    inline void  setPixelColorRaw(unsigned i, const CRGBA &c) const                     { pixels[i] = c; }
     inline CRGBA getPixelColorRaw(unsigned i) const                                     { return pixels[i]; };
-    void setStripPixelColor(unsigned i, CRGBA c) const;
+    void setStripPixelColor(unsigned i, const CRGBA &c) const;
   #ifndef WLED_DISABLE_2D
     inline static unsigned XY(unsigned x, unsigned y)                                   { return x + y*Segment::vWidth(); }
-    inline void  setPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const              { pixels[XY(x,y)] = c; }
-    inline void  addPixelColorXYRaw(unsigned x, unsigned y, CRGBA c) const              { pixels[XY(x,y)] = pixels[XY(x,y)].add(c); }           // pixels[XY(x,y)].nadd(c); will crash ESP
-    inline void  blendPixelColorXYRaw(unsigned x, unsigned y, CRGBA c, uint8_t b) const { pixels[XY(x,y)].nblend(c, b); }
-    inline void  fadePixelColorXYRaw(unsigned x, unsigned y, uint8_t b) const           { pixels[XY(x,y)] = pixels[XY(x,y)].scale8_video(b); }  // pixels[XY(x,y)].nscale8(b); will crash ESP
+    inline void  setPixelColorXYRaw(unsigned x, unsigned y, const CRGBA &c) const       { pixels[XY(x,y)] = c; }
     inline CRGBA getPixelColorXYRaw(unsigned x, unsigned y) const                       { return pixels[XY(x,y)]; };
-    void setStripPixelColorXY(unsigned x, unsigned y, CRGBA c) const;
+    void setStripPixelColorXY(unsigned x, unsigned y, const CRGBA &c) const;
   #endif
     void resetIfRequired();         // sets all SEGENV variables to 0 and clears data buffer
 
@@ -688,9 +682,11 @@ class Segment {
     void fade_out(uint8_t r) const;
     void fadeToSecondaryBy(uint8_t fadeBy) const;
     void fadeToBlackBy(uint8_t fadeBy) const;
+    void fadeOut(uint8_t fadeBy) const;
     inline void blendPixelColor(unsigned n, CRGBA color, uint8_t blend) const         { setPixelColor(n, getPixelColor(n).nblend(color, blend)); }
     inline void addPixelColor(unsigned n, CRGBA color, bool preserveCR = true) const  { setPixelColor(n, getPixelColor(n).add(color, preserveCR)); }
-    inline void fadePixelColor(unsigned n, uint8_t fade) const                        { setPixelColor(n, getPixelColor(n).nscale8_video(fade)); }
+    inline void scalePixelColor(unsigned n, uint8_t fade) const                       { setPixelColor(n, getPixelColor(n).nscale8_video(fade)); }
+    inline void fadePixelColor(unsigned n, uint8_t fade) const                        { setPixelColor(n, getPixelColor(n).nfadeOut(fade)); }
     [[gnu::hot]] CRGBA color_from_palette(uint16_t, bool mapping, bool moving, uint8_t mcol, uint8_t pbri = 255) const;
     inline CRGBA color_wheel(uint8_t pos) const                                       { return color_from_palette(pos, false, true, 255); };
     // 2D matrix
@@ -713,7 +709,8 @@ class Segment {
     inline void addPixelColorXY(unsigned x, unsigned y, CRGBA color, bool preserveCR = true) const { setPixelColorXY(x, y, getPixelColorXY(x,y).add(color, preserveCR)); }
     inline void addPixelColorXY(unsigned x, unsigned y, byte r, byte g, byte b, byte w = 0, bool preserveCR = true)
                                                                                             { addPixelColorXY(x, y, CRGBA(r,g,b), preserveCR); }
-    inline void fadePixelColorXY(unsigned x, unsigned y, uint8_t fade) const                { setPixelColorXY(x, y, getPixelColorXY(x,y).nscale8_video(fade)); }
+    inline void scalePixelColorXY(unsigned x, unsigned y, uint8_t fade) const               { setPixelColorXY(x, y, getPixelColorXY(x,y).nscale8_video(fade)); }
+    inline void fadePixelColorXY(unsigned x, unsigned y, uint8_t fade) const                { setPixelColorXY(x, y, getPixelColorXY(x,y).nfadeOut(fade)); }
     // 2D support functions
     inline void blurCols(uint8_t blur_amount, bool smear = false) const                     { blur2D(0, blur_amount, smear); } // blur all columns (50% faster than full 2D blur)
     inline void blurRows(uint8_t blur_amount, bool smear = false) const                     { blur2D(blur_amount, 0, smear); } // blur all rows (50% faster than full 2D blur)
@@ -727,7 +724,7 @@ class Segment {
     void drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA c, bool soft = false, bool wrapX = false, bool wrapY = false) const; // coodinates and radii are in 10.6 fixed point notation
     void drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool wrapX = false, bool wrapY = false) const; // coodinates and radii are in 10.6 fixed point notation
     void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft = false) const;
-    void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA col2 = 0, int8_t rotate = 0) const;
+    void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA col2 = 0, int8_t rotate = 0, uint8_t fade = 0) const;
     void setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const; // set Wu anti-aliased pixel at (x,y) in 16.8 fixed point notation
   #else
     inline bool is2D() const                                                            { return false; }

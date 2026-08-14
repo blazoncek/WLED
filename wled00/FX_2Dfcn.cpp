@@ -203,7 +203,7 @@ bool Segment::isPixelXYClipped(unsigned x, unsigned y) const {
   return false;
 }
 
-void Segment::setStripPixelColorXY(unsigned x, unsigned y, CRGBA c) const {
+void Segment::setStripPixelColorXY(unsigned x, unsigned y, const CRGBA &c) const {
   // TODO: for now ignore W, CCT and opacity
   const auto XY = [](unsigned X, unsigned Y){ return X + Y*Segment::maxWidth; };
   const unsigned revX = reverse   ? vWidth()  - x - 1 : x;
@@ -255,8 +255,8 @@ void Segment::blur2D(uint8_t blur_x, uint8_t blur_y, bool smear) const {
   const unsigned rows = vHeight();
 
   // support bufferless segment
-  void  (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
-  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const        = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+  void  (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const               = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
 
   if (blur_x) {
     const uint8_t keepx = smear ? 255 : 255 - blur_x;
@@ -369,8 +369,8 @@ void Segment::moveX(int delta, bool wrap) const {
   if (absDelta >= vW) return;
 
   // support bufferless segment
-  void  (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
-  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const        = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+  void  (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const               = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
 
   CRGBA newPxCol[vW];
   int newDelta;
@@ -401,8 +401,8 @@ void Segment::moveY(int delta, bool wrap) const {
   if (absDelta >= vH) return;
 
   // support bufferless segment
-  void  (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
-  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const        = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+  void  (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const               = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
 
   CRGBA newPxCol[vH];
   int newDelta;
@@ -459,8 +459,8 @@ void Segment::fillEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
   const int32_t rySq  = mul106(ry, ry);
 
   // support bufferless segment
-  void  (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
-  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const        = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+  void  (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const               = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
 
   //DEBUG_PRINTF_P(PSTR("Draw ellipse cx=%d cy=%d rx=%d ry=%d pxMin=%d pxMax=%d pyMin=%d pyMax=%d\n"), cx, cy, rx, ry, pxMin, pxMax, pyMin, pyMax);
 
@@ -504,8 +504,8 @@ void Segment::drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA col, boo
   if ((unsigned)int106(radius) > min(vW, vH)/2) return; // too large
 
   // support bufferless segment
-  void  (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
-  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const        = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+  void  (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const               = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
 
   auto plot = [&](int x, int y, uint8_t b) {
     if (wrapX) {
@@ -598,8 +598,8 @@ void Segment::drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
   auto mul106 = [](int16_t a, int16_t b) { return (int16_t)((int32_t)a * b) >> 6; };  // 12.4 fixed point multiplication
 
   // support bufferless segment
-  void (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
-  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const       = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+  void (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const              = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
 
   auto plot   = [&](int32_t x, int32_t y) {
     if (wrapX) {
@@ -682,8 +682,8 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
   const int dy = abs(int(y1)-int(y0)); // y distance
 
   // support bufferless segment
-  void (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
-  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const       = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+  void (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const              = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
 
   // single pixel (line length == 0)
   if (dx+dy == 0) {
@@ -743,14 +743,14 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
 
 // draws a raster font character on canvas
 // only supports: 4x6=24, 5x8=40, 5x12=60, 6x8=48 and 7x9=63 fonts ATM
-void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA col2, int8_t rotate) const {
+void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA col2, int8_t rotate, uint8_t fade) const {
   if (!isActive()) return; // not active
   if (chr < 32 || chr > 126) return; // only ASCII 32-126 supported
   chr -= 32; // align with font table entries
   const int font = w*h;
 
   // support bufferless segment
-  void (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  void (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
   CRGBPalette16 grad = col2 != BLACK ? CRGBPalette16(CRGB(color), CRGB(col2)) : Segment::getCurrentPalette(); // selected palette as gradient
 
   for (int i = 0; i<h; i++) { // character height
@@ -774,8 +774,15 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
         default: x0 = x + (w-1) - j; y0 = y + i;         break; // no rotation
       }
       if (x0 < 0 || x0 >= (int)vWidth() || y0 < 0 || y0 >= (int)vHeight()) continue; // drawing off-screen
+      CRGBA c_a = c;
+      // apply fading to sides (available only on segments without white channel)
+      if (fade) {
+        int offset = ((fade+1) * vWidth()) >> 9;
+        if (x0 < offset) c_a.nfadeOut(map(x0, 0, offset, 255, 0));
+        if (x0 > (int)vWidth() - offset) c_a.nfadeOut(map(vWidth() - x0, 0, offset, 255, 0));
+      }
       if (((bits>>(j+(8-w))) & 0x01)) { // bit set
-        (this->*setPixelXY)(x0, y0, c);
+        (this->*setPixelXY)(x0, y0, c_a);
       }
     }
   }
@@ -790,8 +797,8 @@ void Segment::setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const {
   const unsigned vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const unsigned vH = vHeight();  // segment height in logical pixels (is always >= 1)
   // support bufferless segment
-  void (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
-  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const       = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+  void (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const              = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
   // extract the fractional parts and derive their inverses
   const unsigned xx = x & 0xff, yy = y & 0xff, ix = 255 - xx, iy = 255 - yy;
   x >>= 8; // integer part of x

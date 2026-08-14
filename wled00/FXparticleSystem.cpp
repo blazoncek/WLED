@@ -501,8 +501,8 @@ void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color,
   uint32_t particleRadius = particles[particleindex].size;
 
   // work with bufferless segment
-  void  (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = _segment.getPixels() ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
-  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const        = _segment.getPixels() ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+  void  (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = _segment.getPixels() ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const               = _segment.getPixels() ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
 
   // single pixel non-antialiased rendering
   if (particleRadius == 0) {

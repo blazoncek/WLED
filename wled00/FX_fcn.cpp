@@ -816,7 +816,7 @@ bool Segment::isPixelClipped(unsigned i) const {
   return false;
 }
 
-void Segment::setStripPixelColor(unsigned i, CRGBA c) const {
+void Segment::setStripPixelColor(unsigned i, const CRGBA &c) const {
   // TODO: for now ignore W, CCT and opacity
   const uint32_t col = hasWhite() ? c.color32 : (uint32_t)c;  // explicit uint32_t conversion strips alpha/white channel
   unsigned indx = reverse ? virtualLength() - i - 1 : i;  // might use vLength()
@@ -841,7 +841,7 @@ void Segment::setPixelColor(unsigned i, CRGBA col) const {
 #ifndef WLED_DISABLE_2D
   const unsigned vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const unsigned vH = vHeight();  // segment height in logical pixels (is always >= 1)
-  void (Segment::*setPixelXY)(unsigned, unsigned, CRGBA) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  void (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
   if (is2D()) {
     switch (map1D2D) {
       case M12_Pixels:
@@ -1102,7 +1102,7 @@ void Segment::refreshLightCapabilities() const {
  */
 void Segment::fill(CRGBA c) const {
   if (!isActive()) return; // not active
-  void (Segment::*setPixel)(unsigned, CRGBA) const = pixels ? &Segment::setPixelColorRaw : &Segment::setStripPixelColor;
+  void (Segment::*setPixel)(unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorRaw : &Segment::setStripPixelColor;
   for (unsigned i = 0; i < length(); i++) (this->*setPixel)(i,c); // always fill all pixels (blending will take care of grouping, spacing and clipping)
 }
 
@@ -1155,7 +1155,7 @@ void Segment::fade_out(uint8_t rate) const {
 void Segment::fadeToSecondaryBy(uint8_t fadeBy) const {
   if (!isActive() || fadeBy == 0) return;   // optimization - no scaling to apply
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
-  if (pixels) for (unsigned i = 0; i < length(); i++) blendPixelColorRaw(i, colors[1], fadeBy);
+  if (pixels) for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, getPixelColorRaw(i).nblend(colors[1], fadeBy));
   else        for (unsigned i = 0; i < length(); i++) setStripPixelColor(i, getPixelColor(i).nblend(colors[1], fadeBy));
 }
 
@@ -1164,8 +1164,17 @@ void Segment::fadeToBlackBy(uint8_t fadeBy) const {
   if (!isActive() || fadeBy == 0) return;   // optimization - no scaling to apply
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
   uint8_t scale = 255 - fadeBy; // slight optimization
-  if (pixels) for (unsigned i = 0; i < length(); i++) fadePixelColorRaw(i, scale); // will not fade white channel
-  else        for (unsigned i = 0; i < length(); i++) setStripPixelColor(i, getPixelColor(i).nscale8(scale)); // will not fade white channel
+  if (pixels) for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, getPixelColorRaw(i).nscale8_video(scale)); // will not fade white channel
+  else        for (unsigned i = 0; i < length(); i++) setStripPixelColor(i, getPixelColor(i).nscale8_video(scale)); // will not fade white channel
+}
+
+// fades all pixels to transparent
+void Segment::fadeOut(uint8_t fadeBy) const {
+  if (!isActive() || fadeBy == 0 || hasWhite() ) return;   // optimization - no scaling to apply
+  // always fade all pixels (blending will take care of grouping, spacing and clipping)
+  uint8_t scale = 255 - fadeBy; // slight optimization
+  if (pixels) for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, getPixelColorRaw(i).nfadeOut(scale)); //fadePixelColorRaw(i, scale);
+  else        for (unsigned i = 0; i < length(); i++) setStripPixelColor(i, getPixelColor(i).nfadeOut(scale));
 }
 
 /*
@@ -1198,7 +1207,7 @@ void Segment::blur1D(uint8_t blur_amount, bool smear) const {
       CRGBA part = cur.scale8(seep);
       cur.nscale8(keep);
       cur += carryover;
-      if (i > 0) addPixelColorRaw(i - 1, part);
+      if (i > 0) setPixelColorRaw(i - 1, getPixelColorRaw(i - 1).nadd(part));
       setPixelColorRaw(i, cur); // first pixel
       carryover = part;
     }
