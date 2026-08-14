@@ -2,6 +2,8 @@
 #ifndef WLED_COLORS_H
 #define WLED_COLORS_H
 
+#define FASTLED_ALL_PINS_HARDWARE_SPI
+#define FASTLED_ESP32_SPI_BUS HSPI
 #include <FastLED.h>
 
 //color mangling macros
@@ -105,6 +107,10 @@ struct CRGBA {
   inline bool   isOpaque() const { return a == 255; }
   inline bool   isTransparent() const { return a == 0; }
 
+  // Fade alpha channel (make transparent by amount)
+  inline CRGBA& nfadeOut(uint8_t amount) { a = ((uint16_t)a*(256-amount)) >> 8; return *this; }
+  inline CRGBA  fadeOut(uint8_t amount) { CRGBA c(*this); c.a = ((uint16_t)c.a*(256-amount)) >> 8; return c; }
+
   // maintain compatibility with FastLED
   CRGBA& nscale8(uint8_t scale);
   inline CRGBA& nscale8_white(uint8_t scale) { fast_color_scale(color32, scale); return *this; }
@@ -124,24 +130,21 @@ struct CRGBA {
     color32 += remains; // add back the remains (1 per non-zero channel)
     return *this;
   }
-  inline CRGBA scale8_video(uint8_t scale) const { CRGBA c = *this; c.nscale8_video(scale); return c; }
-  inline CRGBA scale8_video_white(uint8_t scale) const { CRGBA c = *this; c.nscale8_video_white(scale); return c; }
+  inline CRGBA scale8_video(uint8_t scale) const { CRGBA c(*this); c.nscale8_video(scale); return c; }
+  inline CRGBA scale8_video_white(uint8_t scale) const { CRGBA c(*this); c.nscale8_video_white(scale); return c; }
 
   // blend c2 into this color by amount (0-255; 0 = no c2, 255 = full c2)
   inline CRGBA& nblend(CRGBA c2, uint8_t amount) { color32 = color_blend(color32, c2.color32, amount); return *this; }
   inline CRGBA& nblend(CRGBA c2, uint16_t amount) { return nblend(c2, (uint8_t)((amount>>8)+((amount>>7)&1))); }
-  inline CRGBA  blend(const CRGBA c2, uint8_t amount) const { CRGBA c = *this; c.nblend(c2, amount); return c; }
-  inline CRGBA  blend(const CRGBA c2, uint16_t amount) const { CRGBA c = *this; c.nblend(c2, (uint8_t)((amount>>8)+((amount>>7)&1))); return c; }
+  inline CRGBA  blend(const CRGBA c2, uint8_t amount) const { CRGBA c(*this); c.nblend(c2, amount); return c; }
+  inline CRGBA  blend(const CRGBA c2, uint16_t amount) const { CRGBA c(*this); c.nblend(c2, (uint8_t)((amount>>8)+((amount>>7)&1))); return c; }
 
   // add c2 into this color, scaling c2 by its alpha channel; if preserveCR is true, the resulting color is scaled to preserve the original color ratio
-  CRGBA& nadd(CRGBA c2, bool preserveCR = false);
+  CRGBA& nadd(const CRGBA &c2, bool preserveCR = false);
   inline CRGBA& add_white(CRGBA c2, bool preserveCR = false) { color32 = color_add(color32, c2.color32, preserveCR); return *this; }
   inline CRGBA& nadd(uint8_t x) { return nadd(CRGBA(x,x,x)); }
-  inline CRGBA add(CRGBA c2, bool preserveCR = false) { CRGBA c = *this; c.nadd(c2, preserveCR); return c; }
-  inline CRGBA add(uint8_t x) const { CRGBA c = *this; c.nadd(CRGBA(x,x,x)); return c; }
-
-  // Fade alpha channel (make transparent by amount)
-  inline CRGBA& fadeOut(uint8_t amount) { a = ((uint16_t)a*(256-amount)) >> 8; return *this; }
+  inline CRGBA  add(CRGBA c2, bool preserveCR = false) { CRGBA c(*this); c.nadd(c2, preserveCR); return c; }
+  inline CRGBA  add(uint8_t x) const { CRGBA c = *this; c.nadd(CRGBA(x,x,x)); return c; }
 
   // maintain compatibility with FastLED
   inline CRGBA& fadeToBlackBy(uint8_t amount) { return nscale8(255 - amount); }
