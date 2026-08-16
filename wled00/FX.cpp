@@ -5828,7 +5828,7 @@ uint16_t mode_2Dfloatingblobs(void) {
     }
   }
 
-  SEGMENT.fadeToBlackBy(((255-SEGMENT.custom2)>>3)+1);
+  SEGMENT.fadeToBlackBy(255-(SEGMENT.custom2>>2));
 
   int dT = strip.now - SEGENV.step;
   // Bounce balls around
@@ -5876,13 +5876,13 @@ uint16_t mode_2Dfloatingblobs(void) {
       }
     }
   }
-  SEGMENT.blur(SEGMENT.custom1>>2);
+  //SEGMENT.blur(SEGMENT.custom1>>2);
 
   if (dT > 1000) SEGENV.step = strip.now; // change colors every second
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DBLOBS[] PROGMEM = "Blobs@!,# blobs,Blur,Trail,,,,Lines;!,,!;!;2;c1=0,o1=0,o3=0,pal=1";
+static const char _data_FX_MODE_2DBLOBS[] PROGMEM = "Blobs@!,# blobs," /*Blur*/ ",Trail,,Soft,,Lines;!,,!;!;2;c1=0,o1=0,o3=0,pal=1";
 #undef MAX_BLOBS
 #endif
 
