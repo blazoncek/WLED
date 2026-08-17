@@ -2252,7 +2252,7 @@ static uint16_t ripple_base() {
         unsigned cy = rippleorigin & 0xFF;
         unsigned mag = scale8(sin8_t((propF>>2)), amp);
         CRGBA c = col.setOpacity(mag);
-        if (propI > 0) SEGMENT.drawCircle(cx<<6, cy<<6, propI, c, true, true, true);
+        if (propI > 0) SEGMENT.drawCircle(cx<<6, cy<<6, propI, c, true, SEGMENT.check2, SEGMENT.check2);
       } else
       #endif
       {
@@ -2296,7 +2296,7 @@ uint16_t mode_ripple(void) {
   SEGMENT.fill(SEGMENT.check1 ? SEGMENT.color_wheel(SEGENV.aux0).nblend(BLACK,uint8_t(192)) : SEGCOLOR(1));
   return ripple_base();
 }
-static const char _data_FX_MODE_RIPPLE[] PROGMEM = "Ripple@!,Waves,,,,Palette BG;,!;!;12;o1=0";
+static const char _data_FX_MODE_RIPPLE[] PROGMEM = "Ripple@!,Waves,,,,Palette BG,Wrap;,!;!;12;o1=0,o2=1";
 
 
 //  TwinkleFOX by Mark Kriegsman: https://gist.github.com/kriegsman/756ea6dcae8e30845b5a
@@ -5794,19 +5794,18 @@ uint16_t mode_2Dfloatingblobs(void) {
   const int rows = SEG_H;
   const int maxC = (cols-1)<<6;
   const int maxR = (rows-1)<<6;
-  const int rMax = cols>8 ? (cols<<3) : (2<<6); // colos/4 or 2
+  const int rMax = cols>8 ? (cols<<4) : (2<<6); // cols/4 or 2
   //auto abs = [](int16_t x) { return x<0 ? -x : x; };
   auto int106 = [](int16_t a) { return (int16_t)((int32_t)a >> 6); }; // convert 12.4 fixed point to integer
 
   typedef struct Blob {
+    unsigned long nextMove;
     int16_t x[MAX_BLOBS], y[MAX_BLOBS];   // coordinates are in 12.4 fixed point format
     int16_t sX[MAX_BLOBS], sY[MAX_BLOBS]; // speed is in 10.6 fixed point format
     uint16_t r[MAX_BLOBS];                // radius is in 10.6 fixed point format
     byte color[MAX_BLOBS];
     bool grow[MAX_BLOBS];
   } blob_t;
-
-  size_t Amount = map(SEGMENT.intensity, 0, 255, 1, MAX_BLOBS);
 
   if (!SEGENV.allocateData(sizeof(blob_t))) return mode_static(); //allocation failed
   blob_t *blob = reinterpret_cast<blob_t*>(SEGENV.data);
@@ -5816,6 +5815,7 @@ uint16_t mode_2Dfloatingblobs(void) {
     SEGENV.aux1 = rows;
     //SEGMENT.fill(BLACK);
     for (size_t i = 0; i < MAX_BLOBS; i++) {
+      blob->nextMove = strip.now + FRAMETIME;
       blob->r[i]  = hw_random16(1<<6, rMax);
       blob->sX[i] = hw_random16(2<<6, cols<<6) / (256 - SEGMENT.speed);
       blob->sY[i] = hw_random16(2<<6, rows<<6) / (256 - SEGMENT.speed);
@@ -5828,61 +5828,79 @@ uint16_t mode_2Dfloatingblobs(void) {
     }
   }
 
-  SEGMENT.fadeToBlackBy(255-(SEGMENT.custom2>>2));
+  SEGMENT.fadeToBlackBy(map(SEGMENT.custom2, 0, 255, 255, 31));
 
   int dT = strip.now - SEGENV.step;
-  // Bounce balls around
-  for (size_t i = 0; i < Amount; i++) {
-    CRGBA c = SEGMENT.color_from_palette(blob->color[i], false, PALETTE_FIXED, 0); // will use SEGCOLOR(0) if Default palette used
-    if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(int106(blob->x[i-1]), int106(blob->y[i-1]), int106(blob->x[i]), int106(blob->y[i]), SEGCOLOR(2), c, SEGMENT.check1);
-    if (blob->r[i] > (1<<6))     SEGMENT.fillEllipse(blob->x[i], blob->y[i], blob->r[i]+(1<<5), blob->r[i]+(1<<5), c);
-    else                         SEGMENT.setWuPixelColor(blob->x[i]<<2, blob->y[i]<<2, c);
+  int frameTime = 1000 / strip.getFps();  // actual frame time (may be more than strip.getFrameTime())
 
-    if (dT > 1000) blob->color[i] += 4; // slowly change color
+  // Bounce balls around
+  const size_t blobCount = map(SEGMENT.intensity, 0, 255, 1, MAX_BLOBS);
+  for (size_t i = 0; i < blobCount; i++) {
+    CRGBA c = SEGMENT.color_from_palette(blob->color[i], false, PALETTE_FIXED, 0); // will use SEGCOLOR(0) if Default palette used
+    if (blob->r[i] > (1<<6))     SEGMENT.fillEllipse(blob->x[i], blob->y[i], blob->r[i]+(1<<5), blob->r[i]+(1<<5), c, SEGMENT.check2, false);
+    else                         SEGMENT.setWuPixelColor(blob->x[i]<<2, blob->y[i]<<2, c);
+    if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(int106(blob->x[i-1]), int106(blob->y[i-1]), int106(blob->x[i]), int106(blob->y[i]), SEGCOLOR(2), SEGCOLOR(2), true);
+
+    // slowly change color every second
+    if (dT > 1000) blob->color[i] += 4;
+
     // change radius if needed
     if (blob->grow[i]) {
       // enlarge radius until it is >= 4
-      blob->r[i] += !hw_random8(10); // 10% chance to grow
-      if (blob->r[i] >= rMax) { // colos/4 or 2
+      blob->r[i] += !hw_random8(10); // 10% chance to grow (by 1/64 pixel)
+      if (blob->r[i] >= rMax) { // cols/4 or 2
         blob->grow[i] = false;
       }
     } else {
       // reduce radius until it is < 1
-      blob->r[i] -= !hw_random8(10); // 10% chance to shrink
+      blob->r[i] -= !hw_random8(10); // 10% chance to shrink (by 1/64 pixel)
       if (blob->r[i] < (1<<6)) {
         blob->grow[i] = true;
       }
     }
-    if (dT%2) { // slow down movement update
+    // make blob movement FPS independent
+    if (blob->nextMove < strip.now) {
       // move x
       blob->x[i] += blob->sX[i];
       // move y
       blob->y[i] += blob->sY[i];
-      // bounce x
-      if (blob->x[i]-blob->r[i] < 0) {
-        blob->sX[i] =   hw_random16(64, cols<<6) / (256 - SEGMENT.speed) + 1;
-        blob->x[i]  = blob->r[i];
-      } else if (blob->x[i]+blob->r[i] > maxC) {
-        blob->sX[i] = -(hw_random16(64, cols<<6) / (256 - SEGMENT.speed) + 1);
-        blob->x[i]  = maxC - 1 - blob->r[i];
+      if (SEGMENT.check2) {
+        // wrap around
+        if (blob->x[i] < 0) {
+          blob->x[i] += maxC;
+          if (!hw_random8(10)) blob->sX[i] += hw_random8(64) - 32; // ~10% chance of changing speed in x direction
+        }
+        if (blob->x[i] >= maxC) {
+          blob->x[i] -= maxC;
+          if (!hw_random8(10)) blob->sX[i] += hw_random8(64) - 32; // ~10% chance of changing speed in x direction
+        }
+      } else {
+        // bounce x
+        if (blob->x[i]-blob->r[i] < 0) {
+          blob->sX[i] =   hw_random16(4, cols<<2);
+          blob->x[i]  = blob->r[i];
+        } else if (blob->x[i]+blob->r[i] > maxC) {
+          blob->sX[i] = -(hw_random16(4, cols<<2));
+          blob->x[i]  = maxC - 1 - blob->r[i];
+        }
       }
       // bounce y
       if (blob->y[i]-blob->r[i] < 0) {
-        blob->sY[i] =   hw_random16(64, rows<<6) / (256 - SEGMENT.speed) + 1;
+        blob->sY[i] =   hw_random16(4, rows<<2);
         blob->y[i]  = blob->r[i];
       } else if (blob->y[i]+blob->r[i] > maxR) {
-        blob->sY[i] = -(hw_random16(64, rows<<6) / (256 - SEGMENT.speed) + 1);
+        blob->sY[i] = -(hw_random16(4, rows<<2));
         blob->y[i]  = maxR - 1 - blob->r[i];
       }
     }
   }
-  //SEGMENT.blur(SEGMENT.custom1>>2);
 
+  if (blob->nextMove < strip.now) blob->nextMove = strip.now + (FRAMETIME * (256 - SEGMENT.speed)) / frameTime;
   if (dT > 1000) SEGENV.step = strip.now; // change colors every second
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DBLOBS[] PROGMEM = "Blobs@!,# blobs," /*Blur*/ ",Trail,,Soft,,Lines;!,,!;!;2;c1=0,o1=0,o3=0,pal=1";
+static const char _data_FX_MODE_2DBLOBS[] PROGMEM = "Blobs@!,# blobs,,Trail,,,Wrap,Lines;!,,Line;!;2;c2=0,o2=0,o3=0,pal=1";
 #undef MAX_BLOBS
 #endif
 
