@@ -723,8 +723,8 @@ class Segment {
     inline void fillCircle(int16_t cx, int16_t cy, uint16_t r, CRGBA color, bool wrap = false) const { fillEllipse(cx, cy, r, r, color, wrap, wrap); } // coodinates and radii are in 10.6 fixed point notation
     void drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA c, bool soft = false, bool wrapX = false, bool wrapY = false) const; // coodinates and radii are in 10.6 fixed point notation
     void drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool wrapX = false, bool wrapY = false) const; // coodinates and radii are in 10.6 fixed point notation
-    void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft = false) const;
-    void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA col2 = 0, int8_t rotate = 0, uint8_t fade = 0) const;
+    void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, const CRGBA &c1, const CRGBA &c2, bool soft = false) const;
+    void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, const CRGBA &color, const CRGBA &col2 = CRGBA(), int8_t rotate = 0, uint8_t fade = 0) const;
     void setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) const; // set Wu anti-aliased pixel at (x,y) in 16.8 fixed point notation
   #else
     inline bool is2D() const                                                            { return false; }
@@ -746,8 +746,8 @@ class Segment {
     inline void fillEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA c, bool wrapX = false, bool wrapY = false) {}
     inline void drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA c, bool soft = false, bool wrapX = false, bool wrapY = false) {}
     inline void drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA c, bool wrapX = false, bool wrapY = false) {}
-    inline void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft = false) {}
-    inline void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA = 0, int8_t = 0) {}
+    inline void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, const CRGBA &c1, const CRGBA &c2, bool soft = false) {}
+    inline void drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, const CRGBA &color, const CRGBA &col2 = CRGBA(), int8_t = 0) {}
     inline void setWuPixelColor(uint32_t x, uint32_t y, CRGBA c) {}
   #endif
 

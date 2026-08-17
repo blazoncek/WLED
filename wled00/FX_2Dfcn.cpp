@@ -671,8 +671,8 @@ void Segment::drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
   }
 }
 
-//line function
-void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA c, bool soft) const {
+//line function (with starting and optional ending color)
+void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, const CRGBA &c1, const CRGBA &c2, bool soft) const {
   if (!isActive()) return; // not active
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
@@ -687,14 +687,19 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
 
   // single pixel (line length == 0)
   if (dx+dy == 0) {
-    (this->*setPixelXY)(x0, y0, c);
+    (this->*setPixelXY)(x0, y0, c1);
     return;
   }
+
+  CRGBPalette16 colGrad = CRGBPalette16(CRGB(c1), CRGB(c2));
+  const int lLen  = sqrt32_bw((dx*dx + dy*dy) * 100); // times10
+  const int dA = c1.a - c2.a; // transparency gradient
 
   if (soft) {
     // https://en.wikipedia.org/wiki/Xiaolin_Wu%27s_line_algorithm
     // Xiaolin Wu’s algorithm
     const bool steep = dy > dx;
+    bool rev = false;
     if (steep) {
       // we need to go along longest dimension
       std::swap(x0,y0);
@@ -704,6 +709,7 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
       // we need to go in increasing fashion
       std::swap(x0,x1);
       std::swap(y0,y1);
+      rev = true;
     }
     int32_t grad = x1==x0 ? 1 << 8 : ((y1-y0)<<8)/(x1-x0); // gradient in 16.8 fixed point
     int32_t intY = (y0<<8); // y intersection in 16.8 fixed point
@@ -711,11 +717,20 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
       uint8_t keep = (intY & 0xFF); // fractional part of y in 16.8 fixed point
       uint8_t seep = 0xFF - keep;
       int y = intY >> 8;
+      CRGBA c = c1;
+      if (c2 != c1) {
+        const int rX = (x-x0);
+        const int rY = (y-y0);
+        const int l = sqrt32_bw((rX*rX + rY*rY) * 100); // times10
+        const int i = l*255/lLen;
+        const unsigned alpha = (int)(rev ? c2.a : c1.a) + dA*l/lLen;
+        c = ColorFromPaletteWLED(colGrad, rev ? i : 255 - i, 255, LINEARBLEND_NOWRAP).setOpacity(alpha);
+      }
       if (steep) std::swap(x,y);  // temporaryly swap if steep
       // pixel coverage is determined by fractional part of y co-ordinate
-      int x2 = x + steep;
+      int x2 = x +  steep;
       int y2 = y + !steep;
-      if (x  >= 0 && y  >= 0 && x  < vW && y  < vH) (this->*setPixelXY)(x, y, (this->*getPixelXY)(x, y).nblend(c, seep));
+      if (x  >= 0 && y  >= 0 && x  < vW && y  < vH) (this->*setPixelXY)(x,  y,  (this->*getPixelXY)(x,  y ).nblend(c, seep));
       if (x2 >= 0 && y2 >= 0 && x2 < vW && y2 < vH) (this->*setPixelXY)(x2, y2, (this->*getPixelXY)(x2, y2).nblend(c, keep));
       intY += grad;
       if (steep) std::swap(x,y);  // restore if steep
@@ -726,6 +741,14 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
     const int sy = y0<y1 ? 1 : -1;  // y step
     int err = (dx>dy ? dx : -dy)/2; // error direction
     for (;;) {
+      CRGBA c = c1;
+      if (c2 != c1) {
+        const int rX = (x1-x0);
+        const int rY = (y1-y0);
+        const int l = sqrt32_bw((rX*rX + rY*rY) * 100);
+        const unsigned alpha = (int)c1.a + dA*l/lLen;
+        c = ColorFromPaletteWLED(colGrad, l*255/lLen, 255, LINEARBLEND_NOWRAP).setOpacity(alpha);
+      }
       (this->*setPixelXY)(x0, y0, c);
       if (x0==x1 && y0==y1) break;
       int e2 = err;
@@ -743,7 +766,7 @@ void Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, CRGBA
 
 // draws a raster font character on canvas
 // only supports: 4x6=24, 5x8=40, 5x12=60, 6x8=48 and 7x9=63 fonts ATM
-void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, CRGBA color, CRGBA col2, int8_t rotate, uint8_t fade) const {
+void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, const CRGBA &color, const CRGBA &col2, int8_t rotate, uint8_t fade) const {
   if (!isActive()) return; // not active
   if (chr < 32 || chr > 126) return; // only ASCII 32-126 supported
   chr -= 32; // align with font table entries

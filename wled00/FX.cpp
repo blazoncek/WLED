@@ -5834,7 +5834,7 @@ uint16_t mode_2Dfloatingblobs(void) {
   // Bounce balls around
   for (size_t i = 0; i < Amount; i++) {
     CRGBA c = SEGMENT.color_from_palette(blob->color[i], false, PALETTE_FIXED, 0); // will use SEGCOLOR(0) if Default palette used
-    if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(int106(blob->x[i-1]), int106(blob->y[i-1]), int106(blob->x[i]), int106(blob->y[i]), SEGCOLOR(2), SEGMENT.check1);
+    if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(int106(blob->x[i-1]), int106(blob->y[i-1]), int106(blob->x[i]), int106(blob->y[i]), SEGCOLOR(2), c, SEGMENT.check1);
     if (blob->r[i] > (1<<6))     SEGMENT.fillEllipse(blob->x[i], blob->y[i], blob->r[i]+(1<<5), blob->r[i]+(1<<5), c);
     else                         SEGMENT.setWuPixelColor(blob->x[i]<<2, blob->y[i]<<2, c);
 
