@@ -192,7 +192,7 @@ bool Segment::isPixelXYClipped(unsigned x, unsigned y) const {
       if (radius2 == 0) return out;
       const int dx = x - cx;
       const int dy = y - cy;
-      const bool outside = (dx * dx + dy * dy) > radius2;
+      const bool outside = (unsigned)(dx * dx + dy * dy) > radius2;
       return out ? outside : !outside;
     }
     bool xInside = (x >= cStartX && x < cStopX); if (invertX) xInside = !xInside;
@@ -442,36 +442,95 @@ void Segment::move(unsigned dir, unsigned delta, bool wrap) const {
   }
 }
 
+// 10.6 fixed point math
+constexpr int FP_SHIFT = 6;
+constexpr int FP_ONE   = (1 << FP_SHIFT);
+constexpr int FP_HALF  = (FP_ONE >> 1);
+
 // Draws filled ellipse or circle (with smooth edges) at (cx,cy) with given radii (in 10.6 fixed point notation) and color
-void Segment::fillEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool wrapX, bool wrapY) const {
+void Segment::drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool fill, bool wrapX, bool wrapY) const {
   if (!isActive() || rx + ry == 0) return; // not active
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
-  auto int106 = [](int16_t a)            { return (int16_t)((int32_t)a / 64); };  // convert 10.6 fixed point to integer
-  auto mul106 = [](int16_t a, int16_t b) { return ((int32_t)a * b) / 64; };       // 10.6 fixed point multiplication
+  auto int106 = [](int32_t a)            { return (int16_t)((a >= 0 ? a : -((-a) + FP_ONE - 1)) / FP_ONE); };  // convert 10.6 fixed point to integer (floor()ed)
+  auto mul106 = [](int16_t a, int16_t b) { return ((int32_t)a * b) / FP_ONE; };       // 10.6 fixed point multiplication
+
+  if (int106(rx) >= vW/2 || int106(ry) >= vH/2) return; // too big
 
   // pre-calculate drawing bounds
-  const int32_t pxMin = int106(cx - rx);              // minimum pixel coordinate for drawing; rounded down
-  const int32_t pxMax = int106(cx + rx + (1<<6) - 1); // maximum pixel coordinate for drawing; rounded up
+  //const int32_t pxMin = int106(cx - rx);              // minimum pixel coordinate for drawing; rounded down
+  //const int32_t pxMax = int106(cx + rx + FP_ONE - 1); // maximum pixel coordinate for drawing; rounded up
   const int32_t pyMin = int106(cy - ry);              // minimum pixel coordinate for drawing; rounded down
-  const int32_t pyMax = int106(cy + ry + (1<<6) - 1); // maximum pixel coordinate for drawing; rounded up
-  const int32_t rxSq  = mul106(rx, rx);
-  const int32_t rySq  = mul106(ry, ry);
+  const int32_t pyMax = int106(cy + ry + FP_ONE - 1); // maximum pixel coordinate for drawing; rounded up
+  const int32_t rxSq  = rx * rx; //mul106(rx, rx);
+  const int32_t rySq  = ry * ry; //mul106(ry, ry);
 
   // support bufferless segment
   void  (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
   CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const               = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
 
-  //DEBUG_PRINTF_P(PSTR("Draw ellipse cx=%d cy=%d rx=%d ry=%d pxMin=%d pxMax=%d pyMin=%d pyMax=%d\n"), cx, cy, rx, ry, pxMin, pxMax, pyMin, pyMax);
+  auto plot = [&](int x, int y, uint8_t b) {
+    if (wrapX) {
+      while (x < 0)   x += vW;
+      while (x >= vW) x -= vW;
+    }
+    if (wrapY) {
+      while (y < 0)   y += vH;
+      while (y >= vH) y -= vH;
+    }
+    if ((unsigned)x < (unsigned)vW && (unsigned)y < (unsigned)vH) {
+      CRGBA c = color;
+      if (b < 255) c.nblend((this->*getPixelXY)(x, y), (uint8_t)(255 - b)); // using blend instead of add to overcome fadeToBlack/fadeOut (of entire segment) saturation increase
+      (this->*setPixelXY)(x, y, c);
+    }
+  };
 
-  constexpr int deltaDist = 32;
-  // traverse all pixels within bounding box and check if they are within ellipse radius
   for (int y = pyMin; y <= pyMax; y++) {
-    const int32_t dy = (y << 6) - cy;
+    // AI: AI generated code (hand-tuned by human)
+    // traverses all "scan" lines calculating "width" of ellipse at each line
+    // Evaluate at the center of the pixel row. Pixel at y covers [y,y+1) area.
+    const int32_t dy = (y << FP_SHIFT) - cy + FP_HALF;
+    const int32_t dySq = dy * dy;
+    if (dySq >= rySq) continue; // out of ellipse
+
+    // x² = rx² * (ry² - dy²) / ry² => ((20.12 * 20.12 ==> 40.24) / 20.12 ==> 20.12)
+    const uint32_t xSq   = ((int64_t)rxSq * (rySq - dySq)) / rySq;
+    const uint32_t xHalf = sqrt32_bw(xSq);  // sqrt(20.12) ==> 10.6
+
+    // x bounds
+    const int leftFixed  = cx - xHalf;  // in 10.6 fixed point
+    const int rightFixed = cx + xHalf;  // in 10.6 fixed point
+    const int left       = int106(leftFixed);
+    const int right      = int106(rightFixed);
+
+    // fill inetrior
+    if (fill) {
+      for (int x = left + 1; x < right; ++x) {
+        plot(x, y, 255);
+      }
+    }
+    // left and right (partially filled) pixel
+    int8_t frac = (leftFixed<<2) & 255; // we only have .6 expand to .8
+    int8_t alpha = 255 - frac;
+    if (alpha > 0) {
+      plot(left, y, alpha);
+      if (!fill) plot(left+1, y, frac /*255 - alpha*/);
+    }
+    if (right != left) {
+      alpha = (rightFixed<<2) & 255; // we only have .6 expand to .8
+      if (alpha > 0) {
+        plot(right, y, alpha);
+        if (!fill) plot(right-1, y, 255 - alpha);
+      }
+    }
+    // AI: end of AI generated code
+/*
+    // old code
+    // traverse all pixels within bounding box and check if they are within ellipse radius
     for (int x = pxMin; x <= pxMax; x++) {
-      const int32_t dx = (x << 6) - cx;
+      const int32_t dx = (x << FP_SHIFT) - cx;
       const int32_t dist = (mul106(dx,dx)*256/rxSq) + (mul106(dy,dy)*256/rySq);
-      if (dist > 256+deltaDist) continue; // outside ellipse (actually it should be 256 but that will render a smaller ellipse)
+      if (dist > 256 + FP_HALF) continue; // outside ellipse (actually it should be 256 but that will render a smaller ellipse)
       int32_t px = x;
       int32_t py = y;
       if (wrapX) {
@@ -484,26 +543,26 @@ void Segment::fillEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
       }
       if ((unsigned)px < (unsigned)vW && (unsigned)py < (unsigned)vH) { // abuse negative underflow
         CRGBA s = color;
-        if (dist > 256-deltaDist) { // may need tweaking! (224 < dist < 288)
+        if (dist > 256 - FP_HALF) { // may need tweaking! (224 < dist < 288)
           // drawing ellipse border
-          const uint8_t b = map(dist, 256-deltaDist, 256+deltaDist, 0, 255); // may need tweaking!
-          s.fadeOut(b);
+          const uint8_t b = map(dist, 256 - FP_HALF, 256 + FP_HALF, 255, 0); // may need tweaking!
+          s.setOpacity(b);
         }
         (this->*setPixelXY)(px, py, (this->*getPixelXY)(px, py).nadd(s, true));
       }
     }
+*/
   }
 }
 
 // https://gamedev.stackexchange.com/questions/176036/how-to-draw-a-smoother-solid-fill-circle
 // draws a circle at (cx,cy) with given radius (in 10.6 fixed point notation) and color
-void Segment::drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA col, bool soft, bool wrapX, bool wrapY) const {
+void Segment::drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA color, bool soft, bool wrapX, bool wrapY) const {
   if (!isActive() || radius == 0) return; // not active
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
-  // all coodinates and radii are in 10.6 fixed point notation
-  auto int106 = [](int16_t a)            { return (int16_t)((int32_t)a / 64); };  // convert 10.6 fixed point to integer
-  auto mul106 = [](int16_t a, int16_t b) { return ((int32_t)a * b) / 64; };       // 10.6 fixed point multiplication
+  auto int106 = [](int32_t a)            { return (int16_t)((a >= 0 ? a : -((-a) + FP_ONE - 1)) / FP_ONE); };  // convert 10.6 fixed point to integer (floor()ed)
+  auto mul106 = [](int16_t a, int16_t b) { return ((int32_t)a * b) / FP_ONE; };       // 10.6 fixed point multiplication
 
   if (int106(radius) > min(vW, vH)/2) return; // too large
 
@@ -521,24 +580,26 @@ void Segment::drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA col, boo
       while (y >= vH) y -= vH;
     }
     if ((unsigned)x < (unsigned)vW && (unsigned)y < (unsigned)vH) {
-      if (b < 255) (this->*setPixelXY)(x, y, (this->*getPixelXY)(x, y).nblend(col, b)); // blendPixelColorXY
-      else         (this->*setPixelXY)(x, y, col);
+      CRGBA c = color;
+      if (b < 255) c.nblend((this->*getPixelXY)(x, y), (uint8_t)(255 - b)); // using blend instead of add to overcome fadeToBlack/fadeOut (of entire segment) saturation increase
+      (this->*setPixelXY)(x, y, c);
     }
   };
 
-  cx = int106(cx+(1<<5)); // round to nearest integer
-  cy = int106(cy+(1<<5)); // round to nearest integer
+  cx = int106(cx + FP_HALF); // round to nearest integer
+  cy = int106(cy + FP_HALF); // round to nearest integer
 
-  const int r = int106(radius+(1<<5)); // round radius to nearest integer
+  const int r = int106(radius + FP_HALF); // round radius to nearest integer
 
   if (soft) {
     // Xiaolin Wu’s algorithm
-    const int rSq = mul106(radius,radius); // in 10.6 fixed point
+    const int rSq = radius * radius; // in 20.12 fixed point
     int x = 0, y = r;
-    unsigned oldFade = 0;
+    uint8_t oldFade = 0;
     while (x < y) {
-      const uint32_t yInt = sqrt32_bw((rSq - ((x*x)<<6))<<6); // 10.6 representation of y = sqrt(r^2 - x^2)
-      const unsigned fade = 255 - ((yInt & 0x3F) << 2);       // how much color to keep (fractional part of yInt)
+      const int32_t xFixed = x << FP_SHIFT;
+      const int32_t yFixed = sqrt32_bw(rSq - (xFixed*xFixed));  // 10.6 representation of y = sqrt(r^2 - x^2)
+      const uint8_t fade   = 255 - ((yFixed & 0x3F) << 2);      // how much color to keep (fractional part of yInt)
       if (oldFade > fade) y--;
       oldFade = fade;
       int px, py;
@@ -555,7 +616,7 @@ void Segment::drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA col, boo
           px = cx + x * dx;
           py = cy + (y - adj) * dy;
         }
-        plot(px, py, (uint8_t)(adj ? fade : 255 - fade));
+        plot(px, py, (adj ? fade : 255 - fade));
       }
       x++;
     }
@@ -591,19 +652,19 @@ void Segment::drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA col, boo
 }
 
 // see https://www.geeksforgeeks.org/dsa/midpoint-ellipse-drawing-algorithm/
-void Segment::drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool wrapX, bool wrapY) const {
+void Segment::hardEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool wrapX, bool wrapY) const {
   if (!isActive() || rx == 0 || ry == 0) return;
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
   // all coodinates and radii are in 10.6 fixed point notation
-  auto int106 = [](int16_t a)            { return (int16_t)((int32_t)a / 64); };      // convert 10.6 fixed point to integer
-  auto mul106 = [](int16_t a, int16_t b) { return (int16_t)((int32_t)a * b) / 64; };  // 10.6 fixed point multiplication
+  auto int106 = [](int32_t a)            { return (int16_t)((a >= 0 ? a : -((-a) + FP_ONE - 1)) / FP_ONE); };  // convert 10.6 fixed point to integer (floor()ed)
+  auto mul106 = [](int16_t a, int16_t b) { return ((int32_t)a * b) / FP_ONE; };       // 10.6 fixed point multiplication
 
   // support bufferless segment
-  void (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
-  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const              = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+  void  (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
+  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const               = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
 
-  auto plot   = [&](int32_t x, int32_t y) {
+  auto plot = [&](int32_t x, int32_t y) {
     if (wrapX) {
       while (x < 0)   x += vW;
       while (x >= vW) x -= vW;
@@ -612,7 +673,7 @@ void Segment::drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
       while (y < 0)   y += vH;
       while (y >= vH) y -= vH;
     }
-    if ((unsigned)x < (unsigned)vW && (unsigned)y < (unsigned)vH) (this->*setPixelXY)(x, y, (this->*getPixelXY)(x, y).add(color)); // addPixelColorXY
+    if ((unsigned)x < (unsigned)vW && (unsigned)y < (unsigned)vH) (this->*setPixelXY)(x, y, color);
   }; // draws a single point
 
   auto points = [&](int32_t x, int32_t y) { // draws 4 simertically placed points
@@ -629,14 +690,15 @@ void Segment::drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
     plot(c_x - x, c_y - y);
   };
 
+  // TODO: reduce operations by removing int106 and mul106
   int32_t rxSq = mul106(rx,rx);
   int32_t rySq = mul106(ry,ry);
-  int32_t x = 0, y = int106(ry+(1<<5));
+  int32_t x = 0, y = int106(ry + FP_HALF);
 
   int32_t dx = 0;                     // 2 * rySq * x;
   int32_t dy = mul106(2 * rxSq, ry);  // 2 * rxSq * y;
 
-  // Region 1
+  // Region 1 
   int32_t d1 = (rySq - mul106(rxSq, ry)) + (rxSq >> 2); // initial decision parameter
   while (dx < dy) {
     points(x, y);
@@ -654,8 +716,8 @@ void Segment::drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
   }
 
   // Region 2
-  const int32_t x_plus_half = (x<<6) + (1<<5);
-  const int32_t y_minus_1 = (y - 1)<<6;
+  const int32_t x_plus_half = (x << FP_SHIFT) + FP_HALF;
+  const int32_t y_minus_1 = (y - 1) << FP_SHIFT;
   int32_t d2 = mul106(rySq, mul106(x_plus_half,x_plus_half)) + mul106(rxSq, mul106(y_minus_1,y_minus_1)) - mul106(rxSq, rySq);
   while (y >= 0) {
     points(x, y);

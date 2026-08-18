@@ -1170,7 +1170,7 @@ void Segment::fadeToBlackBy(uint8_t fadeBy) const {
 
 // fades all pixels to transparent
 void Segment::fadeOut(uint8_t fadeBy) const {
-  if (!isActive() || fadeBy == 0 || hasWhite() ) return;   // optimization - no scaling to apply
+  if (!isActive() || fadeBy == 0 || hasWhite()) return;   // optimization - no scaling to apply
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
   uint8_t scale = 255 - fadeBy; // slight optimization
   if (pixels) for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, getPixelColorRaw(i).nfadeOut(scale)); //fadePixelColorRaw(i, scale);
