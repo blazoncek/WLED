@@ -453,7 +453,7 @@ void Segment::drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
   auto int106 = [](int32_t a)            { return (int16_t)((a >= 0 ? a : -((-a) + FP_ONE - 1)) / FP_ONE); };  // convert 10.6 fixed point to integer (floor()ed)
-  auto mul106 = [](int16_t a, int16_t b) { return ((int32_t)a * b) / FP_ONE; };       // 10.6 fixed point multiplication
+  //auto mul106 = [](int16_t a, int16_t b) { return ((int32_t)a * b) / FP_ONE; };       // 10.6 fixed point multiplication
 
   if (int106(rx) >= vW/2 || int106(ry) >= vH/2) return; // too big
 
@@ -562,7 +562,7 @@ void Segment::drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA color, b
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
   auto int106 = [](int32_t a)            { return (int16_t)((a >= 0 ? a : -((-a) + FP_ONE - 1)) / FP_ONE); };  // convert 10.6 fixed point to integer (floor()ed)
-  auto mul106 = [](int16_t a, int16_t b) { return ((int32_t)a * b) / FP_ONE; };       // 10.6 fixed point multiplication
+  //auto mul106 = [](int16_t a, int16_t b) { return ((int32_t)a * b) / FP_ONE; };       // 10.6 fixed point multiplication
 
   if (int106(radius) > min(vW, vH)/2) return; // too large
 
@@ -662,7 +662,7 @@ void Segment::hardEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGB
 
   // support bufferless segment
   void  (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
-  CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const               = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
+  //CRGBA (Segment::*getPixelXY)(unsigned, unsigned) const               = pixels ? &Segment::getPixelColorXYRaw : &Segment::getPixelColorXY;
 
   auto plot = [&](int32_t x, int32_t y) {
     if (wrapX) {
