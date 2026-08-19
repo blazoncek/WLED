@@ -514,64 +514,14 @@ void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color,
 
   // this is faster than drawing ellipses for radius 1
   if (particleRadius == 1) {
+    // WUpixel operates in 16.8 fixed point format so adjust coordinates
     const int32_t pxC = particles[particleindex].x << (8 - PS_P_SHIFT);
     const int32_t pyC = (maxY - particles[particleindex].y) << (8 - PS_P_SHIFT);  // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
     if ((uint32_t)(pxC>>8) <= (uint32_t)maxXpixel && (uint32_t)(pyC>>8) <= (uint32_t)maxYpixel) _segment.setWuPixelColor(pxC, pyC, color); // handles bufferless segment on its own
     return;
   }
 
-  particleRadius += 31; // adjust for actual subpixel size (radius 1 means 32 in 10.6 fixed point notation, i.e. 0.5 pixel)
-
-  // Draws filled ellipse or circle
-  // Note: all coordinates and radii are in 10.6 fixed point notation
-  auto drawEllipse = [&](uint16_t cx, uint16_t cy, uint16_t rx, uint16_t ry, bool hollow = false) {
-    auto mul106 = [](int16_t a, int16_t b) { return ((int32_t)a * b) >> PS_P_SHIFT; };      // 10.6 fixed point multiplication
-    auto int106 = [](int16_t a)            { int32_t s=(a<0?-1:1); return (int16_t)(s * ((s*a) >> PS_P_SHIFT)); }; // convert 10.6 fixed point to integer
-    //auto int106 = [](int16_t a)            { return (int16_t)(a / (1<<PS_P_SHIFT)); }; // convert 10.6 fixed point to integer
-
-    // if we want to optimize
-    //if (rx + ry == 0) return; // nothing to draw
-    //if (rx == 0) rx = ry; // make it a circle
-    //if (ry == 0) ry = rx; // make it a circle
-
-    // pre-calculate drawing bounds
-    const int32_t pxMin = int106(cx - rx);                        // minimum pixel coordinate for drawing; rounded down
-    const int32_t pxMax = int106(cx + rx + (1<<PS_P_SHIFT) - 1);  // maximum pixel coordinate for drawing; rounded up
-    const int32_t pyMin = int106(cy - ry);                        // minimum pixel coordinate for drawing; rounded down
-    const int32_t pyMax = int106(cy + ry + (1<<PS_P_SHIFT) - 1);  // maximum pixel coordinate for drawing; rounded up
-    const int32_t rxSq  = mul106(rx, rx);                         // x radius squared
-    const int32_t rySq  = mul106(ry, ry);                         // y radius squared
-
-    // traverse all pixels within bounding box and check if they are within ellipse
-    for (int y = pyMin; y < pyMax; y++) {
-      const int32_t dy = (y << PS_P_SHIFT) - cy;
-      for (int x = pxMin; x < pxMax; x++) {
-        const int32_t dx = (x << PS_P_SHIFT) - cx;
-        const int32_t dist = ((mul106(dx,dx)<<8)/rxSq) + ((mul106(dy,dy)<<8)/rySq); // dx2/rx2 + dy2/ry2 in fixed point (multiplied by 256 for better precision)
-        if (dist > 384 || (hollow && dist < 64)) continue;        // outside ellipse (actually it should be 256 but that will render a smaller ellipse)
-        int32_t px = x;
-        int32_t py = y;
-        if (wrapX) {
-          while (px < 0)         px += (maxXpixel + 1);
-          while (px > maxXpixel) px -= (maxXpixel + 1);
-        }
-        if (wrapY) {
-          while (py < 0)         py += (maxYpixel + 1);
-          while (py > maxYpixel) py -= (maxYpixel + 1);
-        }
-        if ((unsigned)px <= (unsigned)maxXpixel && (unsigned)py <= (unsigned)maxYpixel) {
-          // flip y coordinate (0,0 is bottom left in PS but top left in framebuffer)
-          py = maxYpixel - py;
-          if (dist > 192 || (hollow && dist < 128)) { // may need tuning!
-            CRGBA c = color;
-            // apply antialiasing: 384>dist>192 -> 64 to 255; 64<dist<128 -> 64 to 252
-            uint8_t alpha = dist > 192 ? 448 - dist : (dist*dist) >> 6; // may need tuning! (including inverse gamma according to @DedeHai)
-            (_segment.*setPixelXY)(px, py, (_segment.*getPixelXY)(px, py).nblend(c, alpha)); // may need tuning!
-          } else (_segment.*setPixelXY)(px, py, color);
-        }
-      }
-    }
-  };
+  particleRadius += ((1<<(PS_P_SHIFT-1))-1); // adjust for actual subpixel size (radius 1 means 32 in 10.6 fixed point notation, i.e. 0.5 pixel)
 
   // using ellipse drawing for advanced size control
   uint32_t rx, ry;
@@ -583,8 +533,7 @@ void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color,
   // limit to radius from 0.5 to 5 pixels
   rx = constrain(rx, 32, 320);
   ry = constrain(ry, 32, 320);
-  // use custom ellipse
-  drawEllipse(particles[particleindex].x, particles[particleindex].y, rx, ry, particles[particleindex].hollow);
+  _segment.drawEllipse(particles[particleindex].x, particles[particleindex].y, rx, ry, color, !particles[particleindex].hollow, wrapX, wrapY);
 }
 
 // detect collisions in an array of particles and handle them
