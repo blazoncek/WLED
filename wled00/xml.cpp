@@ -684,7 +684,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       "addI('MISO','%d');"
       "addI('SCLK','%d');"
       "addI('SSEL','%d');"),
-      HW_PIN_SDA, HW_PIN_SCL, HW_PIN_DATASPI, HW_PIN_MISOSPI, HW_PIN_CLOCKSPI, HW_PIN_SSELSPI
+      HW_PIN_SDA, HW_PIN_SCL, HW_PIN_MOSISPI, HW_PIN_MISOSPI, HW_PIN_CLOCKSPI, HW_PIN_SSELSPI
     );
     #ifndef ESP8266
     printSetFormCheckbox(settingsScript,PSTR("SD"),sdCard);

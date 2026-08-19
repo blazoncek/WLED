@@ -662,7 +662,8 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #endif
 
 // HW_PIN_SCLKSPI & HW_PIN_MOSISPI & HW_PIN_MISOSPI are used for information in usermods settings page and usermods themselves
-// which GPIO pins are actually used in a hardware layout (controller board)
+// which GPIO pins are actually used in a hardware layout (controller board) they do not constitute *actual* SPI pins configured
+// fo compile-time configuration use: SPIMOSIPIN, SPIMISOPIN, SPISCLKPIN, SPISSELPIN
 #if defined(SPISCLKPIN) && !defined(HW_PIN_CLOCKSPI)
   #define HW_PIN_CLOCKSPI SPISCLKPIN
 #endif
@@ -672,12 +673,15 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #if defined(SPIMISOPIN) && !defined(HW_PIN_MISOSPI)
   #define HW_PIN_MISOSPI SPIMISOPIN
 #endif
+#if defined(SPISSELPIN) && !defined(HW_PIN_SSELSPI)
+  #define HW_PIN_SSELSPI SPISSELPIN
+#endif
 // you cannot change HW SPI pins on 8266
 #if defined(ESP8266) && defined(HW_PIN_CLOCKSPI)
   #undef HW_PIN_CLOCKSPI
 #endif
-#if defined(ESP8266) && defined(HW_PIN_DATASPI)
-  #undef HW_PIN_DATASPI
+#if defined(ESP8266) && defined(HW_PIN_MOSISPI)
+  #undef HW_PIN_MOSISPI
 #endif
 #if defined(ESP8266) && defined(HW_PIN_MISOSPI)
   #undef HW_PIN_MISOSPI
@@ -686,8 +690,8 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #ifndef HW_PIN_CLOCKSPI
   #define HW_PIN_CLOCKSPI SCK
 #endif
-#ifndef HW_PIN_DATASPI
-  #define HW_PIN_DATASPI MOSI
+#ifndef HW_PIN_MOSISPI
+  #define HW_PIN_MOSISPI MOSI
 #endif
 #ifndef HW_PIN_MISOSPI
   #define HW_PIN_MISOSPI MISO
