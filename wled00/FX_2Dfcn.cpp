@@ -709,7 +709,7 @@ void /*__attribute__((optimize("O2")))*/ Segment::hardEllipse(int16_t cx, int16_
   }
 }
 
-//line function (with starting and optional ending color)
+//line function (with starting and ending color - gradient line)
 void /*__attribute__((optimize("O2")))*/ Segment::drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, const CRGBA &c1, const CRGBA &c2, bool soft) const {
   if (!isActive()) return; // not active
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
@@ -730,8 +730,7 @@ void /*__attribute__((optimize("O2")))*/ Segment::drawLine(uint16_t x0, uint16_t
   }
 
   CRGBPalette16 colGrad = CRGBPalette16(CRGB(c1), CRGB(c2));
-  const int lLen  = sqrt32_bw((dx*dx + dy*dy) * 100); // times10
-  const int dA = c1.a - c2.a; // transparency gradient
+  const int lLen  = sqrt32_bw((dx*dx + dy*dy) * 100); // line length; times10
 
   if (soft) {
     // https://en.wikipedia.org/wiki/Xiaolin_Wu%27s_line_algorithm
@@ -756,13 +755,14 @@ void /*__attribute__((optimize("O2")))*/ Segment::drawLine(uint16_t x0, uint16_t
       uint8_t seep = 0xFF - keep;
       int y = intY >> 8;
       CRGBA c = c1;
-      if (c2 != c1) {
+      if (c2.color32 != c1.color32) {
         const int rX = (x-x0);
         const int rY = (y-y0);
-        const int l = sqrt32_bw((rX*rX + rY*rY) * 100); // times10
+        const int l = sqrt32_bw((rX*rX + rY*rY) * 100); // current position on line; times10
         const int i = l*255/lLen;
-        const unsigned alpha = (int)(rev ? c2.a : c1.a) + dA*l/lLen;
-        c = ColorFromPaletteWLED(colGrad, rev ? i : 255 - i, 255, LINEARBLEND_NOWRAP).setOpacity(alpha);
+        const int indx = (rev ? i : 255 - i);           // palette index [0-255]
+        const unsigned alpha = lerp8by8(c2.a, c1.a, (fract8)indx);
+        c = ColorFromPaletteWLED(colGrad, indx, 255, LINEARBLEND_NOWRAP).setOpacity(alpha);
       }
       if (steep) std::swap(x,y);  // temporaryly swap if steep
       // pixel coverage is determined by fractional part of y co-ordinate
@@ -780,12 +780,13 @@ void /*__attribute__((optimize("O2")))*/ Segment::drawLine(uint16_t x0, uint16_t
     int err = (dx>dy ? dx : -dy)/2; // error direction
     for (;;) {
       CRGBA c = c1;
-      if (c2 != c1) {
+      if (c2.color32 != c1.color32) {
         const int rX = (x1-x0);
         const int rY = (y1-y0);
         const int l = sqrt32_bw((rX*rX + rY*rY) * 100);
-        const unsigned alpha = (int)c1.a + dA*l/lLen;
-        c = ColorFromPaletteWLED(colGrad, l*255/lLen, 255, LINEARBLEND_NOWRAP).setOpacity(alpha);
+        const int i = l*255/lLen;                       // palette index [0-255]
+        const unsigned alpha = lerp8by8(c2.a, c1.a, (fract8)i);
+        c = ColorFromPaletteWLED(colGrad, i, 255, LINEARBLEND_NOWRAP).setOpacity(alpha);
       }
       (this->*setPixelXY)(x0, y0, c);
       if (x0==x1 && y0==y1) break;
