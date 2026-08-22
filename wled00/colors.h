@@ -109,7 +109,7 @@ struct CRGBA {
 
   // Fade alpha channel (make transparent by amount)
   inline CRGBA& nfadeOut(uint8_t amount) { a = ((uint16_t)a*(256-amount)) >> 8; return *this; }
-  inline CRGBA  fadeOut(uint8_t amount) { CRGBA c(*this); c.a = ((uint16_t)c.a*(256-amount)) >> 8; return c; }
+  inline CRGBA  fadeOut(uint8_t amount) const { CRGBA c(*this); c.a = ((uint16_t)c.a*(256-amount)) >> 8; return c; }
 
   // maintain compatibility with FastLED
   CRGBA& nscale8(uint8_t scale);
