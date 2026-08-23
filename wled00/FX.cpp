@@ -3337,7 +3337,7 @@ uint16_t mode_exploding_fireworks(void)
   return FRAMETIME;
 }
 #undef MAX_SPARKS
-static const char _data_FX_MODE_EXPLODING_FIREWORKS[] PROGMEM = "Fireworks 1D@Gravity,Firing side,,,,,,Blur;!,!;!;12;pal=11,ix=128";
+static const char _data_FX_MODE_EXPLODING_FIREWORKS[] PROGMEM = "Fireworks 1D@Gravity,Firing side,,,,,,Blur;!,!;!;12;pal=11,ix=128,o3=0";
 
 
 /*
@@ -4616,7 +4616,7 @@ uint16_t mode_2DBlackHole(void) {            // By: Stepko https://editor.soulma
 
   return FRAMETIME;
 } // mode_2DBlackHole()
-static const char _data_FX_MODE_2DBLACKHOLE[] PROGMEM = "Black Hole@Fade rate,Outer Y freq.,Outer X freq.,Inner X freq.,Inner Y freq.,Solid,,Blur;!;!;2;pal=11";
+static const char _data_FX_MODE_2DBLACKHOLE[] PROGMEM = "Black Hole@Fade rate,Outer Y freq.,Outer X freq.,Inner X freq.,Inner Y freq.,Solid,,Blur;!;!;2;pal=11,o3=0";
 
 
 ////////////////////////////
@@ -4641,33 +4641,36 @@ uint16_t mode_2DColoredBursts() {              // By: ldirko   https://editor.so
   SEGMENT.fadeOut(40);
   for (size_t i = 0; i < numLines; i++) {
     byte x1 = beatsin8_t(2 + SEGMENT.speed/16, 0, (cols - 1));
-    byte x2 = beatsin8_t(1 + SEGMENT.speed/16, 0, (rows - 1));
-    byte y1 = beatsin8_t(5 + SEGMENT.speed/16, 0, (cols - 1), 0, i * 24);
+    byte y1 = beatsin8_t(1 + SEGMENT.speed/16, 0, (rows - 1));
+    byte x2 = beatsin8_t(5 + SEGMENT.speed/16, 0, (cols - 1), 0, i * 24);
     byte y2 = beatsin8_t(3 + SEGMENT.speed/16, 0, (rows - 1), 0, i * 48 + 64);
-    CRGBA color = SEGMENT.color_wheel(i * 255 / numLines + (SEGENV.aux0&0xFF));
+    const CRGBA color = SEGMENT.color_wheel(i * 255 / numLines + (SEGENV.aux0&0xFF));
 
-    byte xsteps = abs8(x1 - y1) + 1;
-    byte ysteps = abs8(x2 - y2) + 1;
+    /*
+    byte xsteps = abs8(x1 - x2) + 1;
+    byte ysteps = abs8(y1 - y2) + 1;
     byte steps = xsteps >= ysteps ? xsteps : ysteps;
     //Draw gradient line
     for (size_t j = 1; j <= steps; j++) {
       uint8_t rate = j * 255 / steps;
-      byte dx = lerp8by8(x1, y1, rate);
-      byte dy = lerp8by8(x2, y2, rate);
+      byte dx = lerp8by8(x1, x2, rate);
+      byte dy = lerp8by8(y1, y2, rate);
       CRGBA c = grad ? color.fadeOut(255 - rate) : color;
       SEGMENT.setPixelColorXY(dx, dy, c);
     }
+    */
+    SEGMENT.drawLine(x1, y1, x2, y2, grad ? color.opacity(0) : color, color, true);
 
     if (dot) { //add white point at the ends of line
-      SEGMENT.setPixelColorXY(x1, x2, DARKSLATEGRAY);
-      SEGMENT.setPixelColorXY(y1, y2, WHITE);
+      SEGMENT.setPixelColorXY(x1, y1, DARKSLATEGRAY);
+      SEGMENT.setPixelColorXY(x2, y2, WHITE);
     }
   }
   if (SEGMENT.custom3) SEGMENT.blur(SEGMENT.custom3/2);
 
   return FRAMETIME;
 } // mode_2DColoredBursts()
-static const char _data_FX_MODE_2DCOLOREDBURSTS[] PROGMEM = "Colored Bursts@Speed,# of lines,,,Blur,Gradient,,Dots;;!;2;c3=16";
+static const char _data_FX_MODE_2DCOLOREDBURSTS[] PROGMEM = "Colored Bursts@Speed,# of lines,,,Blur,Gradient,,Dots;;!;2;c3=0";
 
 
 /////////////////////
@@ -4689,11 +4692,11 @@ uint16_t mode_2Ddna(void) {         // dna originally by by ldirko at https://pa
     SEGMENT.setPixelColorXY(i, y1, c1);
     SEGMENT.setPixelColorXY(i, y2, c2);
   }
-  SEGMENT.blur(SEGMENT.intensity>>3);
+  if (SEGMENT.intensity) SEGMENT.blur(SEGMENT.intensity>>3);
 
   return FRAMETIME;
 } // mode_2Ddna()
-static const char _data_FX_MODE_2DDNA[] PROGMEM = "DNA@Scroll speed,Blur,Phase;;!;2";
+static const char _data_FX_MODE_2DDNA[] PROGMEM = "DNA@Scroll speed,Blur,Phase;;!;2;ix=0";
 
 
 /////////////////////////
@@ -4766,11 +4769,11 @@ uint16_t mode_2DDrift() {              // By: Stepko   https://editor.soulmateli
     SEGMENT.setPixelColorXY(colsCenter + mySin, rowsCenter + myCos, color);
     if (SEGMENT.check1) SEGMENT.setPixelColorXY(colsCenter + myCos, rowsCenter + mySin, color);
   }
-  SEGMENT.blur(SEGMENT.intensity>>3);
+  if (SEGMENT.intensity) SEGMENT.blur(SEGMENT.intensity>>3);
 
   return FRAMETIME;
 } // mode_2DDrift()
-static const char _data_FX_MODE_2DDRIFT[] PROGMEM = "Drift@Rotation speed,Blur amount,,,,Twin;;!;2";
+static const char _data_FX_MODE_2DDRIFT[] PROGMEM = "Drift@Rotation speed,Blur amount,,,,Twin;;!;2;ix=0";
 
 
 //////////////////////////
@@ -4823,11 +4826,11 @@ uint16_t mode_2DFrizzles(void) {                 // By: Stepko https://editor.so
                             SEGMENT.color_from_palette(beatsin8_t(12, 0, 255), false, true, 255));
                             //ColorFromPaletteWLED(SEGPALETTE, beatsin8_t(12, 0, 255), 255, LINEARBLEND));
   }
-  SEGMENT.blur(SEGMENT.custom1>>3);
+  if (SEGMENT.custom1) SEGMENT.blur(SEGMENT.custom1>>3);
 
   return FRAMETIME;
 } // mode_2DFrizzles()
-static const char _data_FX_MODE_2DFRIZZLES[] PROGMEM = "Frizzles@X frequency,Y frequency,Blur;;!;2";
+static const char _data_FX_MODE_2DFRIZZLES[] PROGMEM = "Frizzles@X frequency,Y frequency,Blur;;!;2;c1=0";
 
 
 ///////////////////////////////////////////
@@ -5122,7 +5125,6 @@ uint16_t mode_2DJulia(void) {                           // An animated Julia set
     }
     y += dy;
   }
-//  SEGMENT.blur(64);
 
   return FRAMETIME;
 } // mode_2DJulia()
@@ -5341,11 +5343,11 @@ uint16_t mode_2DPlasmaball(void) {                   // By: Stepko https://edito
                                     (rows - 1 - cy == 0)) ? SEGMENT.color_from_palette(beat8(5), false, true, 255, thisVal) : BLACK);
     }
   }
-  SEGMENT.blur(SEGMENT.custom2>>5);
+  if (SEGMENT.custom2) SEGMENT.blur(SEGMENT.custom2>>5);
 
   return FRAMETIME;
 } // mode_2DPlasmaball()
-static const char _data_FX_MODE_2DPLASMABALL[] PROGMEM = "Plasma Ball@Speed,,Fade,Blur;;!;2";
+static const char _data_FX_MODE_2DPLASMABALL[] PROGMEM = "Plasma Ball@Speed,,Fade,Blur;;!;2;c2=0";
 
 
 ////////////////////////////////
@@ -5417,11 +5419,11 @@ uint16_t mode_2DPulser(void) {                       // By: ldirko   https://edi
   int y = map((sin8_t(a * 5) + sin8_t(a * 4) + sin8_t(a * 2)), 0, 765, rows-1, 0);
   SEGMENT.setPixelColorXY(x, y, SEGMENT.color_from_palette(map(y, 0, rows-1, 0, 255), false, true, 255));
 
-  SEGMENT.blur(SEGMENT.intensity>>4);
+  if (SEGMENT.intensity) SEGMENT.blur(SEGMENT.intensity>>4);
 
   return FRAMETIME;
 } // mode_2DPulser()
-static const char _data_FX_MODE_2DPULSER[] PROGMEM = "Pulser@!,Blur;;!;2";
+static const char _data_FX_MODE_2DPULSER[] PROGMEM = "Pulser@!,Blur;;!;2;ix=0";
 
 
 /////////////////////////
@@ -5446,11 +5448,11 @@ uint16_t mode_2DSindots(void) {                             // By: ldirko   http
     int y = sin8_t(t2 + i * SEGMENT.intensity/8)*(rows-1)/255;  // max index now 255x15/255=15!
     SEGMENT.setPixelColorXY(x, y, SEGMENT.color_wheel(i * 255 / 13));
   }
-  SEGMENT.blur(SEGMENT.custom2>>3);
+  if (SEGMENT.custom2) SEGMENT.blur(SEGMENT.custom2>>3);
 
   return FRAMETIME;
 } // mode_2DSindots()
-static const char _data_FX_MODE_2DSINDOTS[] PROGMEM = "Sindots@!,Dot distance,Fade rate,Blur;;!;2";
+static const char _data_FX_MODE_2DSINDOTS[] PROGMEM = "Sindots@!,Dot distance,Fade rate,Blur;;!;2;c2=0";
 
 
 //////////////////////////////
@@ -5467,7 +5469,7 @@ uint16_t mode_2Dsquaredswirl(void) {            // By: Mark Kriegsman. https://g
   const uint8_t kBorderWidth = 2;
 
   SEGMENT.fadeToBlackBy(24);
-  SEGMENT.blur(SEGMENT.custom3>>1);
+  if (SEGMENT.custom3) SEGMENT.blur(SEGMENT.custom3>>1);
 
   // Use two out-of-sync sine waves
   int i = beatsin8_t(19, kBorderWidth, cols-kBorderWidth);
@@ -5483,7 +5485,7 @@ uint16_t mode_2Dsquaredswirl(void) {            // By: Mark Kriegsman. https://g
 
   return FRAMETIME;
 } // mode_2Dsquaredswirl()
-static const char _data_FX_MODE_2DSQUAREDSWIRL[] PROGMEM = "Squared Swirl@,,,,Blur;;!;2";
+static const char _data_FX_MODE_2DSQUAREDSWIRL[] PROGMEM = "Squared Swirl@,,,,Blur;;!;2;c3=0";
 
 
 //////////////////////////////
@@ -5609,11 +5611,11 @@ uint16_t mode_2Dspaceships(void) {    //// Space ships by stepko (c)05.02.21 [ht
       SEGMENT.addPixelColorXY(x, y-1, color);
     }
   }
-  SEGMENT.blur(SEGMENT.intensity>>3);
+  if (SEGMENT.intensity) SEGMENT.blur(SEGMENT.intensity>>3);
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DSPACESHIPS[] PROGMEM = "Spaceships@!,Blur;;!;2";
+static const char _data_FX_MODE_2DSPACESHIPS[] PROGMEM = "Spaceships@!,Blur;;!;2;ix=0";
 
 
 /////////////////////////
@@ -5681,11 +5683,11 @@ uint16_t mode_2Dcrazybees(void) {
         bee[i].aimed(cols, rows);
       }
     }
-    SEGMENT.blur(SEGMENT.intensity>>4);
+    if (SEGMENT.intensity) SEGMENT.blur(SEGMENT.intensity>>4);
   }
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DCRAZYBEES[] PROGMEM = "Crazy Bees@!,Blur;;;2";
+static const char _data_FX_MODE_2DCRAZYBEES[] PROGMEM = "Crazy Bees@!,Blur;;;2;ix=0";
 #undef MAX_BEES
 
 
@@ -5773,12 +5775,12 @@ uint16_t mode_2Dghostrider(void) {
       }
       SEGMENT.setWuPixelColor(lighter->lightersPosX[i] * 256 / 10, lighter->lightersPosY[i] * 256 / 10, SEGMENT.color_from_palette((256 - lighter->time[i]), false, PALETTE_FIXED, 255)); // AKA color_wheel() with no palette wrapping
     }
-    SEGMENT.blur(SEGMENT.intensity>>3);
+    if (SEGMENT.intensity) SEGMENT.blur(SEGMENT.intensity>>3);
   }
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DGHOSTRIDER[] PROGMEM = "Ghost Rider@Fade rate,Blur;;!;2;pal=35";
+static const char _data_FX_MODE_2DGHOSTRIDER[] PROGMEM = "Ghost Rider@Fade rate,Blur;;!;2;pal=35,ix=0";
 #undef LIGHTERS_AM
 
 
@@ -6084,7 +6086,7 @@ uint16_t mode_2Ddriftrose(void) {
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DDRIFTROSE[] PROGMEM = "Drift Rose@Fade,Blur;;!;2";
+static const char _data_FX_MODE_2DDRIFTROSE[] PROGMEM = "Drift Rose@Fade,Blur;;!;2;ix=0";
 
 /////////////////////////////
 //  2D PLASMA ROTOZOOMER   //
@@ -6173,9 +6175,9 @@ uint16_t mode_2Ddistortionwaves() {
 
       if (SEGMENT.check3) {
         // alternate mode from original code
-        rdistort = cos8_t (((x+y)*8+a2)&255)>>1;
-        gdistort = cos8_t (((x+y)*8+a3+32)&255)>>1;
-        bdistort = cos8_t (((x+y)*8+a+64)&255)>>1;
+        rdistort = cos8_t(((x+y)*8+a2)&255)>>1;
+        gdistort = cos8_t(((x+y)*8+a3+32)&255)>>1;
+        bdistort = cos8_t(((x+y)*8+a+64)&255)>>1;
       } else {
         rdistort = cos8_t((cos8_t(((x<<3)+a )&255)+cos8_t(((y<<3)-a2)&255)+a3   )&255)>>1;
         gdistort = cos8_t((cos8_t(((x<<3)-a2)&255)+cos8_t(((y<<3)+a3)&255)+a+32 )&255)>>1;
@@ -6196,24 +6198,14 @@ uint16_t mode_2Ddistortionwaves() {
       } else {
         // use palette
         uint8_t brightness = (valueR + valueG + valueB) / 3;
-        if (SEGMENT.check1) { // map brightness to palette index
-          SEGMENT.setPixelColorXY(x, y, SEGMENT.color_from_palette(brightness, false, PALETTE_FIXED, 255)); // AKA color_wheel() with no palette wrapping
-        } else {
-          // color mapping: calculate hue from pixel color, map it to palette index
-          CHSV32 hsvclr(CRGBA(valueR>>2, valueG>>2, valueB>>2, 255)); // scale colors down to not saturate for better hue extraction
-          SEGMENT.setPixelColorXY(x, y, SEGMENT.color_from_palette(hsvclr.h, false, PALETTE_FIXED, 255, brightness));
-        }
+        SEGMENT.setPixelColorXY(x, y, SEGMENT.color_from_palette(brightness, false, PALETTE_MOVING, 255));
       }
     }
   }
 
-  // palette mode and not filling: smear-blur to cover up palette wrapping artefacts
-  if(!SEGMENT.check1 && SEGMENT.palette)
-    SEGMENT.blur(200, true);
-
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DDISTORTIONWAVES[] PROGMEM = "Distortion Waves@!,Scale,,,,Fill,Zoom,Alt;;!;2;pal=0";
+static const char _data_FX_MODE_2DDISTORTIONWAVES[] PROGMEM = "Distortion Waves@!,Scale,,,,,Zoom,Alt;;!;2;pal=0";
 
 
 //Soap

@@ -104,6 +104,7 @@ struct CRGBA {
 
   // set opacity (alpha channel) to a specific value (0-255)
   inline CRGBA& setOpacity(uint8_t alpha) { a = alpha; return *this; }
+  inline CRGBA  opacity(uint8_t amount) const { CRGBA c(*this); c.a = amount; return c; }
   inline bool   isOpaque() const { return a == 255; }
   inline bool   isTransparent() const { return a == 0; }
 
