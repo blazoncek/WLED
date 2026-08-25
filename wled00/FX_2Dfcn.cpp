@@ -729,7 +729,8 @@ void /*__attribute__((optimize("O2")))*/ Segment::drawLine(uint16_t x0, uint16_t
     return;
   }
 
-  CRGBPalette16 colGrad = CRGBPalette16(CRGB(c1), CRGB(c2));
+  // if c1 and c2 are transparent black consider them undefined and use selected palette instead
+  const CRGBPalette16 &colGrad = (c1 == CRGBA(0,0,0,0) && c2 == c1) ? Segment::getCurrentPalette() : CRGBPalette16(CRGB(c1), CRGB(c2));
   const int lLen  = sqrt32_bw((dx*dx + dy*dy) * 100); // line length; times10
 
   if (soft) {
@@ -805,7 +806,7 @@ void /*__attribute__((optimize("O2")))*/ Segment::drawLine(uint16_t x0, uint16_t
 
 // draws a raster font character on canvas
 // only supports: 4x6=24, 5x8=40, 5x12=60, 6x8=48 and 7x9=63 fonts ATM
-void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, const CRGBA &color, const CRGBA &col2, int8_t rotate, uint8_t fade) const {
+void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, uint8_t h, const CRGBA &c1, const CRGBA &c2, int8_t rotate, uint8_t fade) const {
   if (!isActive()) return; // not active
   if (chr < 32 || chr > 126) return; // only ASCII 32-126 supported
   chr -= 32; // align with font table entries
@@ -813,7 +814,9 @@ void Segment::drawCharacter(unsigned char chr, int16_t x, int16_t y, uint8_t w, 
 
   // support bufferless segment
   void (Segment::*setPixelXY)(unsigned, unsigned, const CRGBA&) const = pixels ? &Segment::setPixelColorXYRaw : &Segment::setStripPixelColorXY;
-  CRGBPalette16 grad = col2 != BLACK ? CRGBPalette16(CRGB(color), CRGB(col2)) : Segment::getCurrentPalette(); // selected palette as gradient
+
+  // if c1 and c2 are transparent black consider them undefined and use selected palette instead
+  const CRGBPalette16 &grad = (c1 == CRGBA(0,0,0,0) && c2 == c1) ? Segment::getCurrentPalette() : CRGBPalette16(CRGB(c1), CRGB(c2));
 
   for (int i = 0; i<h; i++) { // character height
     uint8_t bits = 0;

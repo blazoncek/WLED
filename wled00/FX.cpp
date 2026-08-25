@@ -2705,7 +2705,7 @@ uint16_t mode_bouncing_balls(void) {
       // non-chosen color is a random color
       unsigned numBalls = (SEGMENT.intensity * (maxNumBalls - 1)) / 255 + 1; // minimum 1 ball
       constexpr int32_t g = -(0x9D00); //-9.81f in 4.12 format; standard value of gravity
-      const bool hasCol2 = SEGCOLOR(2) != CRGBA(BLACK);
+      const bool hasCol2 = SEGCOLOR(2) != BLACK;
 
       if (SEGENV.call == 0) {
         for (size_t i = 0; i < maxNumBalls; i++) balls[i].lastBounceTime = strip.now;
@@ -3707,7 +3707,7 @@ uint16_t mode_pacifica()
   unsigned wave = beat8( 7 );
 
   for (unsigned i = 0; i < SEGLEN; i++) {
-    CRGBA c = CRGBA(2, 6, 10, 255);
+    CRGBA c(2, 6, 10, SEGMENT.hasWhite()?0:255);
     // Render each of four layers, with different scales and speeds, that vary over time
     c += pacifica_one_layer(i, pacifica_palette_1, sCIStart1, beatsin16_t(3, 11 * 256, 14 * 256), beatsin8_t(10, 70, 130), 0-beat16(301));
     c += pacifica_one_layer(i, pacifica_palette_2, sCIStart2, beatsin16_t(4,  6 * 256,  9 * 256), beatsin8_t(17, 40,  80),   beat16(401));
@@ -3721,13 +3721,13 @@ uint16_t mode_pacifica()
     if (l > threshold) {
       unsigned overage = l - threshold;
       unsigned overage2 = qadd8(overage, overage);
-      c += CRGBA(overage, overage2, qadd8(overage2, overage2));
+      c += CRGBA(overage, overage2, qadd8(overage2, overage2), SEGMENT.hasWhite()?0:255);
     }
 
     //deepen the blues and greens
     c.b = scale8(c.b, 145);
     c.g = scale8(c.g, 200);
-    c |= CRGBA(2, 5, 7);
+    c |= CRGBA(2, 5, 7, SEGMENT.hasWhite()?0:255);
 
     SEGMENT.setPixelColor(i, c);
   }
@@ -4352,6 +4352,7 @@ class AuroraWave {
       rgb.r = basecolor.r * factor;
       rgb.g = basecolor.g * factor;
       rgb.b = basecolor.b * factor;
+      rgb.a = SEGMENT.hasWhite() ? 0 : 255;
 
       return rgb;
     };
@@ -4430,7 +4431,7 @@ uint16_t mode_aurora(void) {
   if (SEGCOLOR(2) != BLACK) backlight++;
   //Loop through LEDs to determine color
   for (unsigned i = 0; i < SEGLEN; i++) {
-    CRGBA mixedRgb = CRGBA(backlight, backlight, backlight, 255);
+    CRGBA mixedRgb(backlight, backlight, backlight, SEGMENT.hasWhite()?0:255);
 
     //For each LED we must check each wave if it is "active" at this position.
     //If there are multiple waves active on a LED we multiply their values.
@@ -5940,6 +5941,7 @@ uint16_t mode_2Dscrollingtext(void) {
 
   char text[2*WLED_MAX_SEGNAME_LEN+1];
   const size_t len = SEGMENT.name ? strlen(SEGMENT.name) : 0;
+  const char *origName = SEGMENT.name; // guard against name change during painting (RTOS is preemptive multitasking OS and name changes happen in another thread)
 
   char sec[5];
   int  AmPmHour = hour(localTime);
@@ -5958,18 +5960,19 @@ uint16_t mode_2Dscrollingtext(void) {
     size_t i = 0;
     size_t text_pos = 0;
     while (i < len && text_pos < sizeof(text)-1) {
-      const char c = SEGMENT.name[i++];
+      if (SEGMENT.name != origName) break; // something changed name pointer in another thread, prevent OOB read; see wled#5805
+      const char c = origName[i++];
       if (!std::isprint(c)) continue; // is printable ASCII character
       // # denotes the start of a token
       if (c == '#') {
         char token[5];  // token is up to 4 chars + null terminator
         size_t j = 0;
         for (; j < sizeof(token)-1 && i < len; j++, i++) {
-          token[j] = std::toupper(SEGMENT.name[i]);
+          token[j] = std::toupper(origName[i]);
           if (!std::isalpha(token[j])) break;
         }
         // a 0 suffix means display leading zeros on times and dates
-        const bool zero = (SEGMENT.name[i] == '0');
+        const bool zero = (origName[i] == '0');
         if (zero && j > 0) i++; // don't include it in output text
         token[j] = '\0'; // terminate token string
         // Process token (must be in longest to shortest order not to misinterpret some)
@@ -6036,18 +6039,23 @@ uint16_t mode_2Dscrollingtext(void) {
     SEGENV.step = strip.now + map(SEGMENT.speed, 0, 255, 250, 50); // shift letters every ~250ms to ~50ms
   }
 
-  SEGMENT.fade_out(255 - (SEGMENT.custom1>>4));  // trail
-  CRGBA col1 = SEGMENT.color_from_palette(SEGENV.aux1, false, PALETTE_FIXED, 0); // will use SEGCOLOR(0) if Default palette used
-  CRGBA col2 = BLACK;
+  // fade_out() is used to fade all pixels to background color. This works ok if scrolling text is used
+  // on its own as a top/default layer. However if it is used as a stencil layer then the "trail" will still be
+  // opaque (even when close to being black). If backround color is not black, stencil will not work at all (it will behave as Top/Default).
+  if (SEGCOLOR(1) == BLACK) SEGMENT.fadeOut(map(SEGMENT.custom1,0,255,255,32));   // reduce opacity of pixels thus creating "trail"
+  else                      SEGMENT.fade_out(255 - (SEGMENT.custom1>>4));         // make trail by blending existing pixels into background
+
+  CRGBA col1 = SEGMENT.color_from_palette(SEGENV.aux1, false, PALETTE_FIXED, 0); // will use SEGCOLOR(0) if Default palette is used
+  CRGBA col2(0,0,0,0); // transparent black (used in drawCharacter() as a decision to use palette)
   // if gradient is selected and palette is default (0) drawCharacter() uses gradient from SEGCOLOR(0) to SEGCOLOR(2)
-  // otherwise col2 == BLACK means use currently selected palette for gradient
+  // otherwise set both colors to transparent BLACK which tells drawCharacter() to use currently selected palette for gradient
   // if gradient is not selected set both colors the same
-  if (SEGMENT.check1) { // use gradient
+  if (SEGMENT.check1) {   // use gradient
     if (SEGMENT.palette == 0) { // use colors for gradient
       col1 = SEGCOLOR(0);
       col2 = SEGCOLOR(2);
-    }
-  } else col2 = col1; // force characters to use single color (from palette)
+    } else col1 = col2;   // both transparent -> use palette
+  } else col2 = col1;     // force characters to use single color (from palette)
 
   for (int i = 0; i < numberOfLetters; i++) {
     int xoffset = int(cols) - int(SEGENV.aux0) + rotLW*i;
