@@ -1106,6 +1106,9 @@ void Segment::fill(CRGBA c) const {
   for (unsigned i = 0; i < length(); i++) (this->*setPixel)(i,c); // always fill all pixels (blending will take care of grouping, spacing and clipping)
 }
 
+// formula that converts linear rate into parabolic/non-linear, keeping 0 and 255
+inline static uint8_t getMappedRate(uint8_t rate) { return ((int)rate*rate*240 + 255*(255 - rate)) / 61200; }
+
 /*
  * fade out function, higher rate = quicker fade
  * fading is highly dependant on frame rate (higher frame rates, faster fading)
@@ -1113,13 +1116,13 @@ void Segment::fill(CRGBA c) const {
  */
 void Segment::fade_out(uint8_t rate) const {
   if (!isActive()) return; // not active
-  rate = (256-rate) >> 1;
-  const int mappedRate = 256 / (rate + 1);
+  const uint8_t mappedRate = 256 / (((256-rate) >> 1) + 1) - 1; // range [0, 255] extremely non-linear
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
   if (pixels) {
     for (unsigned j = 0; j < length(); j++) {
       CRGBA color = getPixelColorRaw(j);
       if (color == colors[1]) continue;   // already at target color
+      //color.nblend(colors[1], mappedRate);
       for (int i = 0; i < 4; i ++) {
         uint8_t c2 = colors[1].raw[i];    // get background channel
         uint8_t c1 = color[i];            // get foreground channel
@@ -1136,6 +1139,7 @@ void Segment::fade_out(uint8_t rate) const {
     for (unsigned j = 0; j < length(); j++) {
       CRGBA color = strip.getPixelColor(start + j);
       if (color == colors[1]) continue;   // already at target color
+      //color.nblend(colors[1], mappedRate);
       for (int i = 0; i < 4; i ++) {
         uint8_t c2 = colors[1].raw[i];    // get background channel
         uint8_t c1 = color[i];            // get foreground channel
@@ -1155,11 +1159,13 @@ void Segment::fade_out(uint8_t rate) const {
 void Segment::fadeToSecondaryBy(uint8_t fadeBy) const {
   if (!isActive() || fadeBy == 0) return;   // optimization - no scaling to apply
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
-  if (pixels) for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, getPixelColorRaw(i).nblend(colors[1], fadeBy));
-  else        for (unsigned i = 0; i < length(); i++) setStripPixelColor(i, getPixelColor(i).nblend(colors[1], fadeBy));
+  const uint8_t mappedFade = getMappedRate(fadeBy); // range [0, 255] non-linear; to behave more like fade_out()
+  if (pixels) for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, getPixelColorRaw(i).nblend(colors[1], mappedFade));
+  else        for (unsigned i = 0; i < length(); i++) setStripPixelColor(i, getPixelColor(i).nblend(colors[1], mappedFade));
 }
 
 // fades all pixels to black using nscale8()
+// fading is highly dependant on frame rate (higher frame rates, faster fading)
 void Segment::fadeToBlackBy(uint8_t fadeBy) const {
   if (!isActive() || fadeBy == 0) return;   // optimization - no scaling to apply
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
@@ -1169,11 +1175,13 @@ void Segment::fadeToBlackBy(uint8_t fadeBy) const {
 }
 
 // fades all pixels to transparent
+// fading is highly dependant on frame rate (higher frame rates, faster fading)
 void Segment::fadeOut(uint8_t fadeBy) const {
   if (!isActive() || fadeBy == 0 || hasWhite()) return;   // optimization - no scaling to apply
   // always fade all pixels (blending will take care of grouping, spacing and clipping)
-  if (pixels) for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, getPixelColorRaw(i).nfadeOut(fadeBy)); //fadePixelColorRaw(i, scale);
-  else        for (unsigned i = 0; i < length(); i++) setStripPixelColor(i, getPixelColor(i).nfadeOut(fadeBy));
+  const uint8_t mappedFade = getMappedRate(fadeBy); // range [0, 255] non-linear; to behave more like fade_out()
+  if (pixels) for (unsigned i = 0; i < length(); i++) setPixelColorRaw(i, getPixelColorRaw(i).nfadeOut(mappedFade));
+  else        for (unsigned i = 0; i < length(); i++) setStripPixelColor(i, getPixelColor(i).nfadeOut(mappedFade));
 }
 
 /*

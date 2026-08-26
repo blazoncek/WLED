@@ -4639,7 +4639,7 @@ uint16_t mode_2DColoredBursts() {              // By: ldirko   https://editor.so
   byte numLines = SEGMENT.intensity/16 + 1;
 
   SEGENV.aux0++;  // hue
-  SEGMENT.fadeOut(40);
+  SEGMENT.fadeOut(192);
   for (size_t i = 0; i < numLines; i++) {
     byte x1 = beatsin8_t(2 + SEGMENT.speed/16, 0, (cols - 1));
     byte y1 = beatsin8_t(1 + SEGMENT.speed/16, 0, (rows - 1));
@@ -4717,7 +4717,7 @@ uint16_t mode_2DDNASpiral() {               // By: ldirko  https://editor.soulma
   unsigned freq = SEGMENT.intensity/8;
 
   uint32_t ms = strip.now / 20;
-  SEGMENT.fadeOut(135);
+  SEGMENT.fadeOut(208);
 
   for (int i = 0; i < rows; i++) {
     int x  = beatsin8_t(speeds, 0, cols - 1, 0, i * freq) + beatsin8_t(speeds - 7, 0, cols - 1, 0, i * freq + 128);
@@ -6042,8 +6042,8 @@ uint16_t mode_2Dscrollingtext(void) {
   // fade_out() is used to fade all pixels to background color. This works ok if scrolling text is used
   // on its own as a top/default layer. However if it is used as a stencil layer then the "trail" will still be
   // opaque (even when close to being black). If backround color is not black, stencil will not work at all (it will behave as Top/Default).
-  if (SEGCOLOR(1) == BLACK) SEGMENT.fadeOut(map(SEGMENT.custom1,0,255,255,32));   // reduce opacity of pixels thus creating "trail"
-  else                      SEGMENT.fade_out(255 - (SEGMENT.custom1>>4));         // make trail by blending existing pixels into background
+  if (SEGCOLOR(1) == BLACK) SEGMENT.fadeOut(255 - (SEGMENT.custom1>>1));  // reduce opacity of pixels thus creating "trail"
+  else                      SEGMENT.fade_out(255 - (SEGMENT.custom1>>4)); // make trail by blending existing pixels into background
 
   CRGBA col1 = SEGMENT.color_from_palette(SEGENV.aux1, false, PALETTE_FIXED, 0); // will use SEGCOLOR(0) if Default palette is used
   CRGBA col2(0,0,0,0); // transparent black (used in drawCharacter() as a decision to use palette)

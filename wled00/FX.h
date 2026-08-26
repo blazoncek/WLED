@@ -677,7 +677,7 @@ class Segment {
     void blur(uint8_t amount, bool smear = false) const;
     #endif
     void blur1D(uint8_t amount, bool smear = false) const;
-    void clear() const { fill(BLACK); } // clear segment
+    void clear() const { fill(CRGBA(0,0,0,0)); } // clear segment
     void fill(CRGBA c) const;
     void fade_out(uint8_t r) const;
     void fadeToSecondaryBy(uint8_t fadeBy) const;

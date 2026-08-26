@@ -467,7 +467,7 @@ void ParticleSystem2D::render() {
   TBlendType blend = particlesettings.colorByAge ? LINEARBLEND_NOWRAP : LINEARBLEND; // default color rendering: wrap palette
 
   if (motionBlur) { // motion-blurring active (fade existing pixels before overlaying new frame)
-    _segment.fadeToBlackBy(motionBlur);
+    _segment.fadeOut(motionBlur);
   } else { // no motion blurring: clear buffer
     _segment.clear();
   }
