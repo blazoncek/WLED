@@ -818,7 +818,7 @@ bool Segment::isPixelClipped(unsigned i) const {
 
 void Segment::setStripPixelColor(unsigned i, const CRGBA &c) const {
   // TODO: for now ignore W, CCT and opacity
-  const uint32_t col = hasWhite() ? c.color32 : (uint32_t)c;  // explicit uint32_t conversion strips alpha/white channel
+  const uint32_t col = hasWhite() ? c.color32 : (uint32_t)c.scale8(c.a);  // explicit uint32_t conversion strips alpha/white channel
   unsigned indx = reverse ? virtualLength() - i - 1 : i;  // might use vLength()
   strip.setPixelColor(start + indx, col);
   if (mirror) {
