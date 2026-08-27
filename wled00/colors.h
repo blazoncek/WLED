@@ -115,8 +115,8 @@ struct CRGBA {
   // maintain compatibility with FastLED
   CRGBA& nscale8(uint8_t scale);
   inline CRGBA& nscale8_white(uint8_t scale) { fast_color_scale(color32, scale); return *this; }
-  inline CRGBA  scale8(uint8_t scale) const { CRGBA c = *this; c.nscale8(scale); return c; }
-  inline CRGBA  scale8_white(uint8_t scale) const { CRGBA c = *this; c.nscale8_white(scale); return c; }
+  inline CRGBA  scale8(uint8_t scale) const { CRGBA c(*this); c.nscale8(scale); return c; }
+  inline CRGBA  scale8_white(uint8_t scale) const { CRGBA c(*this); c.nscale8_white(scale); return c; }
 
   // maintain compatibility with FastLED
   inline CRGBA& nscale8_video(uint8_t scale) {
@@ -145,7 +145,7 @@ struct CRGBA {
   inline CRGBA& add_white(CRGBA c2, bool preserveCR = false) { color32 = color_add(color32, c2.color32, preserveCR); return *this; }
   inline CRGBA& nadd(uint8_t x) { return nadd(CRGBA(x,x,x)); }
   inline CRGBA  add(CRGBA c2, bool preserveCR = false) { CRGBA c(*this); c.nadd(c2, preserveCR); return c; }
-  inline CRGBA  add(uint8_t x) const { CRGBA c = *this; c.nadd(CRGBA(x,x,x)); return c; }
+  inline CRGBA  add(uint8_t x) const { CRGBA c(*this); c.nadd(CRGBA(x,x,x)); return c; }
 
   // maintain compatibility with FastLED
   inline CRGBA& fadeToBlackBy(uint8_t amount) { return nscale8(255 - amount); }

@@ -9,14 +9,14 @@ constexpr uint32_t TWO_CHANNEL_MASK = 0x00FF00FF;     // mask for R and B channe
 //#pragma GCC optimize ("-O2")
 
 CRGBA& CRGBA::nscale8(uint8_t scale) {
-  uint8_t aO = a; // save alpha
+  const uint8_t aO = a; // save alpha
   fast_color_scale(color32, scale);
   a = aO;        // restore alpha
   return *this;
 }
 
 CRGBA& CRGBA::desaturate(uint8_t amount) {
-  int v = getPureValue();
+  const unsigned v = getPureValue();
   if (amount == 255) {
     r = g = b = v;
   } else if (amount > 0) {
@@ -62,12 +62,12 @@ CRGBA& __attribute__((optimize("O2"))) CRGBA::nadd(const CRGBA &c, bool preserve
  */
 uint32_t __attribute__((optimize("O2"))) color_blend(uint32_t color1, uint32_t color2, uint8_t blend) {
   // min / max blend checking is omitted: calls with 0 or 255 are rare, checking lowers overall performance
-  uint32_t rb1 =  color1       & TWO_CHANNEL_MASK;  // extract R & B channels from color1
-  uint32_t wg1 = (color1 >> 8) & TWO_CHANNEL_MASK;  // extract W & G channels from color1 (shifted for multiplication later)
-  uint32_t rb2 =  color2       & TWO_CHANNEL_MASK;  // extract R & B channels from color2
-  uint32_t wg2 = (color2 >> 8) & TWO_CHANNEL_MASK;  // extract W & G channels from color2 (shifted for multiplication later)
-  uint32_t rb3 = ((((rb1 << 8) | rb2) + (rb2 * blend) - (rb1 * blend)) >> 8) &  TWO_CHANNEL_MASK; // blend red and blue
-  uint32_t wg3 = ((((wg1 << 8) | wg2) + (wg2 * blend) - (wg1 * blend)))      & ~TWO_CHANNEL_MASK; // negated mask for white and green
+  const uint32_t rb1 =  color1       & TWO_CHANNEL_MASK;  // extract R & B channels from color1
+  const uint32_t wg1 = (color1 >> 8) & TWO_CHANNEL_MASK;  // extract W & G channels from color1 (shifted for multiplication later)
+  const uint32_t rb2 =  color2       & TWO_CHANNEL_MASK;  // extract R & B channels from color2
+  const uint32_t wg2 = (color2 >> 8) & TWO_CHANNEL_MASK;  // extract W & G channels from color2 (shifted for multiplication later)
+  const uint32_t rb3 = ((((rb1 << 8) | rb2) + (rb2 * blend) - (rb1 * blend)) >> 8) &  TWO_CHANNEL_MASK; // blend red and blue
+  const uint32_t wg3 = ((((wg1 << 8) | wg2) + (wg2 * blend) - (wg1 * blend)))      & ~TWO_CHANNEL_MASK; // negated mask for white and green
   return rb3 | wg3;
 }
 
@@ -91,9 +91,9 @@ uint32_t __attribute__((optimize("O2"))) color_add(uint32_t c1, uint32_t c2, boo
 
 // fast color scale function (scales c1 as c1 * scale / 256)
 void __attribute__((optimize("O2"))) fast_color_scale(uint32_t &c1, uint8_t scale) {
-  uint32_t s = scale + 1;
-  uint32_t rb = ((( c1     & TWO_CHANNEL_MASK) * s) >> 8) &  TWO_CHANNEL_MASK;
-  uint32_t wg =  (((c1>>8) & TWO_CHANNEL_MASK) * s)       & ~TWO_CHANNEL_MASK;
+  const uint32_t s = scale + 1;
+  const uint32_t rb = ((( c1     & TWO_CHANNEL_MASK) * s) >> 8) &  TWO_CHANNEL_MASK;
+  const uint32_t wg =  (((c1>>8) & TWO_CHANNEL_MASK) * s)       & ~TWO_CHANNEL_MASK;
   c1 = rb | wg;
 }
 
@@ -142,8 +142,8 @@ CRGBA __attribute__((optimize("O2"))) ColorFromPaletteWLED(const CRGBPalette16& 
   if (blendType == LINEARBLEND_NOWRAP) {
     index = (index*241) >> 8; // Blend range is affected by lo4 blend of values, remap to avoid wrapping
   }
-  unsigned hi4 = (index & 0xF0) >> 4;
-  unsigned lo4 = (index & 0x0F);
+  const unsigned hi4 = (index & 0xF0) >> 4;
+  const unsigned lo4 = (index & 0x0F);
   const CRGB* entry = (CRGB*)&(pal[0]) + hi4;
   unsigned red1   = entry->r;
   unsigned green1 = entry->g;
@@ -151,8 +151,8 @@ CRGBA __attribute__((optimize("O2"))) ColorFromPaletteWLED(const CRGBPalette16& 
   if (lo4 && blendType != NOBLEND) {
     if (hi4 == 15) entry = &(pal[0]);
     else ++entry;
-    unsigned f2 = (lo4 << 4) + 1; // +1 so we scale by 256 as a max value, then result can just be shifted by 8
-    unsigned f1 = (257 - f2); // f2 is 1 minimum, so this is 256 max
+    const unsigned f2 = (lo4 << 4) + 1; // +1 so we scale by 256 as a max value, then result can just be shifted by 8
+    const unsigned f1 = (257 - f2); // f2 is 1 minimum, so this is 256 max
     // actually color_blend(c1, c2, lo4<<4);
     red1   = (red1   * f1 + entry->r * f2) >> 8;
     green1 = (green1 * f1 + entry->g * f2) >> 8;
@@ -160,7 +160,7 @@ CRGBA __attribute__((optimize("O2"))) ColorFromPaletteWLED(const CRGBPalette16& 
   }
   if (brightness < 255) { // note: zero checking could be done to return black but that is hardly ever used so it is omitted
     // actually color_fade(c1, brightness)
-    uint32_t scale = brightness + 1; // adjust for rounding (bitshift)
+    const uint32_t scale = brightness + 1; // adjust for rounding (bitshift)
     red1   = (red1   * scale) >> 8;
     green1 = (green1 * scale) >> 8;
     blue1  = (blue1  * scale) >> 8;
