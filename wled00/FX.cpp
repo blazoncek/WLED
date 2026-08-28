@@ -5802,36 +5802,40 @@ uint16_t mode_2Dfloatingblobs(void) {
   auto int106 = [](int16_t a) { return (int16_t)((int32_t)a >> 6); }; // convert 12.4 fixed point to integer
 
   typedef struct Blob {
-    unsigned long nextMove;
-    int16_t x[MAX_BLOBS], y[MAX_BLOBS];   // coordinates are in 12.4 fixed point format
-    int16_t sX[MAX_BLOBS], sY[MAX_BLOBS]; // speed is in 10.6 fixed point format
-    uint16_t r[MAX_BLOBS];                // radius is in 10.6 fixed point format
-    byte color[MAX_BLOBS];
-    bool grow[MAX_BLOBS];
+    int16_t x, y;   // coordinates are in 12.4 fixed point format
+    int16_t sX, sY; // speed is in 10.6 fixed point format
+    uint16_t r;                // radius is in 10.6 fixed point format
+    byte color;
+    struct {
+      bool    grow : 1;
+      uint8_t blur : 4;
+    };
   } blob_t;
 
-  if (!SEGENV.allocateData(sizeof(blob_t))) return mode_static(); //allocation failed
+  if (!SEGENV.allocateData(sizeof(blob_t) * MAX_BLOBS + sizeof(unsigned long))) return mode_static(); //allocation failed
   blob_t *blob = reinterpret_cast<blob_t*>(SEGENV.data);
+  unsigned long &nextMove = reinterpret_cast<unsigned long &>(*(SEGENV.data+sizeof(blob_t) * MAX_BLOBS));
 
   if (SEGENV.aux0 != cols || SEGENV.aux1 != rows) {
     SEGENV.aux0 = cols; // re-initialise if virtual size changes
     SEGENV.aux1 = rows;
-    //SEGMENT.fill(BLACK);
+    nextMove = strip.now + FRAMETIME;
+    //SEGMENT.clear();
     for (size_t i = 0; i < MAX_BLOBS; i++) {
-      blob->nextMove = strip.now + FRAMETIME;
-      blob->r[i]  = hw_random16(1<<6, rMax);
-      blob->sX[i] = hw_random16(2<<6, cols<<6) / (256 - SEGMENT.speed);
-      blob->sY[i] = hw_random16(2<<6, rows<<6) / (256 - SEGMENT.speed);
-      blob->x[i]  = hw_random16(0, maxC);
-      blob->y[i]  = hw_random16(0, maxR);
-      blob->color[i] = hw_random8();
-      blob->grow[i]  = (blob->r[i] <= (1<<6)); // start growing if radius <= 1
-      if (blob->sX[i] == 0) blob->sX[i] = 2<<6;
-      if (blob->sY[i] == 0) blob->sY[i] = 2<<6;
+      blob[i].r  = hw_random16(1<<6, rMax);
+      blob[i].sX = hw_random16(2<<6, cols<<6) / (256 - SEGMENT.speed);
+      blob[i].sY = hw_random16(2<<6, rows<<6) / (256 - SEGMENT.speed);
+      blob[i].x  = hw_random16(0, maxC);
+      blob[i].y  = hw_random16(0, maxR);
+      blob[i].color = hw_random8();
+      blob[i].blur  = hw_random8(3);
+      blob[i].grow  = (blob[i].r <= (1<<6)); // start growing if radius <= 1
+      if (blob[i].sX == 0) blob[i].sX = 2<<6;
+      if (blob[i].sY == 0) blob[i].sY = 2<<6;
     }
   }
 
-  SEGMENT.fadeToBlackBy(map(SEGMENT.custom2, 0, 255, 255, 31));
+  SEGMENT.fadeOut(map(SEGMENT.custom2, 0, 255, 255, 32));
 
   int dT = strip.now - SEGENV.step;
   int frameTime = 1000 / strip.getFps();  // actual frame time (may be more than strip.getFrameTime())
@@ -5839,66 +5843,70 @@ uint16_t mode_2Dfloatingblobs(void) {
   // Bounce balls around
   const size_t blobCount = map(SEGMENT.intensity, 0, 255, 1, MAX_BLOBS);
   for (size_t i = 0; i < blobCount; i++) {
-    CRGBA c = SEGMENT.color_from_palette(blob->color[i], false, PALETTE_FIXED, 0); // will use SEGCOLOR(0) if Default palette used
-    if (blob->r[i] > (1<<6))     SEGMENT.fillEllipse(blob->x[i], blob->y[i], blob->r[i]+(1<<5), blob->r[i]+(1<<5), c, SEGMENT.check2, false);
-    else                         SEGMENT.setWuPixelColor(blob->x[i]<<2, blob->y[i]<<2, c);
-    if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(int106(blob->x[i-1]), int106(blob->y[i-1]), int106(blob->x[i]), int106(blob->y[i]), SEGCOLOR(2), SEGCOLOR(2), true);
+    CRGBA c = SEGMENT.color_from_palette(blob[i].color, false, PALETTE_FIXED, 0); // will use SEGCOLOR(0) if Default palette used
+    if (blob[i].r > (1<<6))      SEGMENT.drawEllipse(blob[i].x, blob[i].y, blob[i].r+(1<<5), blob[i].r+(1<<5), c, true, SEGMENT.check2, false, blob[i].blur);
+    else                         SEGMENT.setWuPixelColor(blob[i].x<<2, blob[i].y<<2, c);
+    if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(int106(blob[i-1].x), int106(blob[i-1].y), int106(blob[i].x), int106(blob[i].y), SEGCOLOR(2), SEGCOLOR(2), true);
 
     // slowly change color every second
-    if (dT > 1000) blob->color[i] += 4;
+    if (dT > 1000) blob[i].color += 4;
 
     // change radius if needed
-    if (blob->grow[i]) {
+    if (blob[i].grow) {
       // enlarge radius until it is >= 4
-      blob->r[i] += !hw_random8(10); // 10% chance to grow (by 1/64 pixel)
-      if (blob->r[i] >= rMax) { // cols/4 or 2
-        blob->grow[i] = false;
+      blob[i].r += !hw_random8(10); // 10% chance to grow (by 1/64 pixel)
+      if (blob[i].r >= rMax) { // cols/4 or 2
+        blob[i].grow = false;
       }
     } else {
       // reduce radius until it is < 1
-      blob->r[i] -= !hw_random8(10); // 10% chance to shrink (by 1/64 pixel)
-      if (blob->r[i] < (1<<6)) {
-        blob->grow[i] = true;
+      blob[i].r -= !hw_random8(10); // 10% chance to shrink (by 1/64 pixel)
+      if (blob[i].r < (1<<6)) {
+        blob[i].grow = true;
       }
     }
+    if (!hw_random8(10)) {
+      int blur = blob[i].blur + (int)hw_random8(2)-1;
+      blob[i].blur = constrain(blur, 0, 3);
+    }
     // make blob movement FPS independent
-    if (blob->nextMove < strip.now) {
+    if (nextMove < strip.now) {
       // move x
-      blob->x[i] += blob->sX[i];
+      blob[i].x += blob[i].sX;
       // move y
-      blob->y[i] += blob->sY[i];
+      blob[i].y += blob[i].sY;
       if (SEGMENT.check2) {
         // wrap around
-        if (blob->x[i] < 0) {
-          blob->x[i] += maxC;
-          if (!hw_random8(10)) blob->sX[i] += hw_random8(64) - 32; // ~10% chance of changing speed in x direction
+        if (blob[i].x < 0) {
+          blob[i].x += maxC;
+          if (!hw_random8(10)) blob[i].sX += hw_random8(64) - 32; // ~10% chance of changing speed in x direction
         }
-        if (blob->x[i] >= maxC) {
-          blob->x[i] -= maxC;
-          if (!hw_random8(10)) blob->sX[i] += hw_random8(64) - 32; // ~10% chance of changing speed in x direction
+        if (blob[i].x >= maxC) {
+          blob[i].x -= maxC;
+          if (!hw_random8(10)) blob[i].sX += hw_random8(64) - 32; // ~10% chance of changing speed in x direction
         }
       } else {
         // bounce x
-        if (blob->x[i]-blob->r[i] < 0) {
-          blob->sX[i] =   hw_random16(4, cols<<2);
-          blob->x[i]  = blob->r[i];
-        } else if (blob->x[i]+blob->r[i] > maxC) {
-          blob->sX[i] = -(hw_random16(4, cols<<2));
-          blob->x[i]  = maxC - 1 - blob->r[i];
+        if (blob[i].x-blob[i].r < 0) {
+          blob[i].sX =   hw_random16(4, cols<<2);
+          blob[i].x  = blob[i].r;
+        } else if (blob[i].x+blob[i].r > maxC) {
+          blob[i].sX = -(hw_random16(4, cols<<2));
+          blob[i].x  = maxC - 1 - blob[i].r;
         }
       }
       // bounce y
-      if (blob->y[i]-blob->r[i] < 0) {
-        blob->sY[i] =   hw_random16(4, rows<<2);
-        blob->y[i]  = blob->r[i];
-      } else if (blob->y[i]+blob->r[i] > maxR) {
-        blob->sY[i] = -(hw_random16(4, rows<<2));
-        blob->y[i]  = maxR - 1 - blob->r[i];
+      if (blob[i].y-blob[i].r < 0) {
+        blob[i].sY =   hw_random16(4, rows<<2);
+        blob[i].y  = blob[i].r;
+      } else if (blob[i].y+blob[i].r > maxR) {
+        blob[i].sY = -(hw_random16(4, rows<<2));
+        blob[i].y  = maxR - 1 - blob[i].r;
       }
     }
   }
 
-  if (blob->nextMove < strip.now) blob->nextMove = strip.now + (FRAMETIME * (256 - SEGMENT.speed)) / frameTime;
+  if (nextMove < strip.now) nextMove = strip.now + (FRAMETIME * (256 - SEGMENT.speed)) / frameTime;
   if (dT > 1000) SEGENV.step = strip.now; // change colors every second
 
   return FRAMETIME;
@@ -6036,13 +6044,13 @@ uint16_t mode_2Dscrollingtext(void) {
       } else                ++SEGENV.aux0 %= width + cols;
     } else                    SEGENV.aux0  = (cols + width)/2;
     ++SEGENV.aux1 &= 0xFF; // color shift
-    SEGENV.step = strip.now + map(SEGMENT.speed, 0, 255, 250, 50); // shift letters every ~250ms to ~50ms
+    SEGENV.step = strip.now + map(SEGMENT.speed, 0, 255, 250, 25); // shift letters every ~250ms to ~25ms
   }
 
   // fade_out() is used to fade all pixels to background color. This works ok if scrolling text is used
   // on its own as a top/default layer. However if it is used as a stencil layer then the "trail" will still be
   // opaque (even when close to being black). If backround color is not black, stencil will not work at all (it will behave as Top/Default).
-  if (SEGCOLOR(1) == BLACK) SEGMENT.fadeOut(255 - (SEGMENT.custom1>>1));  // reduce opacity of pixels thus creating "trail"
+  if (SEGCOLOR(1) == BLACK) SEGMENT.fadeOut(map(SEGMENT.custom1, 0, 255, 255, 32));  // reduce opacity of pixels thus creating "trail"
   else                      SEGMENT.fade_out(255 - (SEGMENT.custom1>>4)); // make trail by blending existing pixels into background
 
   CRGBA col1 = SEGMENT.color_from_palette(SEGENV.aux1, false, PALETTE_FIXED, 0); // will use SEGCOLOR(0) if Default palette is used
@@ -6700,13 +6708,8 @@ uint16_t mode_particlevortex(void) {
   uint32_t i, j;
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(SEGMENT, PartSys, NUMBEROFSOURCES))
-      return mode_static(); // allocation failed
-    #ifdef ESP8266
-    PartSys->setMotionBlur(180);
-    #else
-    PartSys->setMotionBlur(130);
-    #endif
+    if (!initParticleSystem2D(SEGMENT, PartSys, NUMBEROFSOURCES)) return mode_static(); // allocation failed
+    PartSys->setMotionBlur(128);
     for (i = 0; i < PartSys->numSources; i++) {
       PartSys->sources[i].source.x = (PartSys->maxX + 1) >> 1; // center
       PartSys->sources[i].source.y = (PartSys->maxY + 1) >> 1; // center
@@ -6714,12 +6717,10 @@ uint16_t mode_particlevortex(void) {
       PartSys->sources[i].minLife = 800;
     }
     PartSys->setKillOutOfBounds(true);
-  }
-  else
+  } else
     PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
 
-  if (PartSys == nullptr)
-    return mode_static(); // something went wrong, no data!
+  if (PartSys == nullptr) return mode_static(); // something went wrong, no data!
 
   PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   uint32_t spraycount = 1 + ((PartSys->numSources * SEGMENT.custom1) >> 8) ; // number of sprays to display, 1-8
@@ -6735,7 +6736,7 @@ uint16_t mode_particlevortex(void) {
   }
   #endif
 
-  PartSys->setSmearBlur(SEGMENT.check1 * 90);
+  PartSys->setSmearBlur(SEGMENT.check1 * 80);
 
   // update colors of the sprays
   for (i = 0; i < spraycount; i++) {
@@ -6810,8 +6811,7 @@ uint16_t mode_particlefireworks(void) {
   uint32_t numRockets;
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(SEGMENT, PartSys, NUMBEROFSOURCES))
-      return mode_static(); // allocation failed
+    if (!initParticleSystem2D(SEGMENT, PartSys, NUMBEROFSOURCES)) return mode_static(); // allocation failed
 
     PartSys->setKillOutOfBounds(true); // out of bounds particles dont return (except on top, taken care of by gravity setting)
     PartSys->setWallHardness(120); // ground bounce is fixed
@@ -6824,8 +6824,7 @@ uint16_t mode_particlefireworks(void) {
   else
     PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
 
-  if (PartSys == nullptr)
-    return mode_static(); // something went wrong, no data!
+  if (PartSys == nullptr) return mode_static(); // something went wrong, no data!
 
   PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   numRockets = 1 + ((SEGMENT.speed * PartSys->numSources) >> 8);//map(SEGMENT.speed, 0, 255, 1, PartSys->numSources);
@@ -6833,7 +6832,7 @@ uint16_t mode_particlefireworks(void) {
   PartSys->setWrapX(SEGMENT.check1);
   PartSys->setBounceY(SEGMENT.check2);
   PartSys->setGravity(map(SEGMENT.custom3, 0, 31, SEGMENT.check2 ? 1 : 0, 10)); // if bounded, set gravity to minimum of 1 or they will bounce at top
-  PartSys->setMotionBlur(map(SEGMENT.custom2, 0, 255, 0, 245)); // enable motion blur
+  PartSys->setMotionBlur(map(SEGMENT.custom2, 0, 255, 0, 224)); // enable motion blur
 
   // update the rockets, set the speed state
   for (uint32_t j = 0; j < numRockets; j++) {
@@ -6956,13 +6955,12 @@ uint16_t mode_particlevolcano(void) {
   uint32_t i = 0;
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(SEGMENT, PartSys, NUMBEROFSOURCES)) // init, no additional data needed
-      return mode_static(); // allocation failed or not 2D
+    if (!initParticleSystem2D(SEGMENT, PartSys, NUMBEROFSOURCES)) return mode_static(); // allocation failed or not 2D
 
     PartSys->setBounceY(true);
     PartSys->setGravity(); // enable with default gforce
     PartSys->setKillOutOfBounds(true); // out of bounds particles dont return (except on top, taken care of by gravity setting)
-    PartSys->setMotionBlur(230); // anable motion blur
+    PartSys->setMotionBlur(128); // enable motion blur
 
     numSprays = PartSys->numSources; // number of sprays
     for (i = 0; i < numSprays; i++) {
@@ -6973,12 +6971,10 @@ uint16_t mode_particlevolcano(void) {
       PartSys->sources[i].source.collide = true; // seeded particles will collide (if enabled)
       PartSys->sources[i].source.perpetual = true; // source never dies
     }
-  }
-  else
+  } else
     PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
 
-  if (PartSys == nullptr)
-    return mode_static(); // something went wrong, no data!
+  if (PartSys == nullptr) return mode_static(); // something went wrong, no data!
 
   numSprays = PartSys->numSources; // number of volcanoes
 
@@ -7023,17 +7019,15 @@ uint16_t mode_particlepit(void) {
   ParticleSystem2D *PartSys = nullptr;
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(SEGMENT, PartSys, 0)) // init
-      return mode_static(); // allocation failed or not 2D
+    if (!initParticleSystem2D(SEGMENT, PartSys, 0)) return mode_static(); // allocation failed or not 2D
     PartSys->setKillOutOfBounds(true);
     PartSys->setGravity(); // enable with default gravity
     PartSys->setUsedParticles(170); // use 75% of available particles
     PartSys->setWallRoughness(128);
-  }
-  else
+  } else
     PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
-  if (PartSys == nullptr)
-    return mode_static(); // something went wrong, no data!
+
+  if (PartSys == nullptr) return mode_static(); // something went wrong, no data!
 
   PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
 
@@ -7094,13 +7088,11 @@ uint16_t mode_particlewaterfall(void) {
   uint32_t i = 0;
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(SEGMENT, PartSys, 12)) // init, request 12 sources
-      return mode_static(); // allocation failed or not 2D
-
+    if (!initParticleSystem2D(SEGMENT, PartSys, 12)) return mode_static(); // allocation failed or not 2D
     PartSys->setGravity();  // enable with default gforce
     PartSys->setKillOutOfBounds(true); // out of bounds particles dont return (except on top, taken care of by gravity setting)
-    PartSys->setMotionBlur(190); // anable motion blur
-    PartSys->setSmearBlur(30); // enable 2D blurring (smearing)
+    PartSys->setMotionBlur(192); // enable motion blur
+    PartSys->setSmearBlur(32); // enable 2D blurring (smearing)
     for (i = 0; i < PartSys->numSources; i++) {
       PartSys->sources[i].source.hue = i*90;
       PartSys->sources[i].source.collide = true; // seeded particles will collide
@@ -7112,11 +7104,10 @@ uint16_t mode_particlewaterfall(void) {
       PartSys->sources[i].minLife = 150;
     #endif
     }
-  }
-  else
+  } else
     PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
-  if (PartSys == nullptr)
-    return mode_static(); // something went wrong, no data!
+
+  if (PartSys == nullptr) return mode_static(); // something went wrong, no data!
 
   // Particle System settings
   PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
@@ -7170,12 +7161,10 @@ uint16_t mode_particlebox(void) {
     PartSys->setBounceX(true);
     PartSys->setBounceY(true);
     SEGENV.aux0 = hw_random16(); // position in perlin noise
-  }
-  else
+  } else
     PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
 
-  if (PartSys == nullptr)
-    return mode_static(); // something went wrong, no data!
+  if (PartSys == nullptr) return mode_static(); // something went wrong, no data!
 
   PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   PartSys->setWallHardness(min(SEGMENT.custom2, (uint8_t)200)); // wall hardness is 200 or more
@@ -7253,19 +7242,16 @@ uint16_t mode_particleperlin(void) {
   uint32_t i;
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(SEGMENT, PartSys, 1))
-      return mode_static(); // allocation failed or not 2D
+    if (!initParticleSystem2D(SEGMENT, PartSys, 1)) return mode_static(); // allocation failed or not 2D
 
     PartSys->setKillOutOfBounds(true); // should never happen, but lets make sure there are no stray particles
-    PartSys->setMotionBlur(230); // anable motion blur
+    PartSys->setMotionBlur(224); // enable motion blur
     PartSys->setBounceY(true);
     SEGENV.aux0 = rand();
-  }
-  else
+  } else
     PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
 
-  if (PartSys == nullptr)
-    return mode_static(); // something went wrong, no data!
+  if (PartSys == nullptr) return mode_static(); // something went wrong, no data!
 
   PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   PartSys->setWrapX(SEGMENT.check1);
@@ -7273,7 +7259,7 @@ uint16_t mode_particleperlin(void) {
   PartSys->setWallHardness(SEGMENT.custom1); // wall hardness
   PartSys->enableParticleCollisions(SEGMENT.check3, SEGMENT.custom1); // enable collisions and set particle collision hardness
   PartSys->setUsedParticles(map(SEGMENT.intensity, 0, 255, 25, 128)); // min is 10%, max is 50%
-  PartSys->setSmearBlur(SEGMENT.check2 * 15); // enable 2D blurring (smearing)
+  PartSys->setSmearBlur(SEGMENT.check2 * 16); // enable 2D blurring (smearing)
 
   // apply 'gravity' from a 2D perlin noise map
   SEGENV.aux0 += 1 + (SEGMENT.speed >> 5); // noise z-position
@@ -7316,8 +7302,7 @@ uint16_t mode_particleimpact(void) {
   PSsettings2D meteorsettings(0b00101000); // PS settings for meteors: bounceY and gravity enabled
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(SEGMENT, PartSys, NUMBEROFSOURCES)) // init, no additional data needed
-      return mode_static(); // allocation failed or not 2D
+    if (!initParticleSystem2D(SEGMENT, PartSys, NUMBEROFSOURCES)) return mode_static(); // allocation failed or not 2D
     PartSys->setKillOutOfBounds(true);
     PartSys->setGravity(); // enable default gravity
     PartSys->setBounceY(true); // always use ground bounce
@@ -7327,12 +7312,10 @@ uint16_t mode_particleimpact(void) {
       PartSys->sources[i].source.ttl = hw_random16(10 * i); // set initial delay for meteors
       PartSys->sources[i].source.vy = 10; // at positive speeds, no particles are emitted and if particle dies, it will be relaunched
     }
-  }
-  else
+  } else
     PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
 
-  if (PartSys == nullptr)
-    return mode_static(); // something went wrong, no data!
+  if (PartSys == nullptr) return mode_static(); // something went wrong, no data!
 
   // Particle System settings
   PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
@@ -7423,8 +7406,7 @@ uint16_t mode_particleattractor(void) {
   PSsettings2D sourcesettings(0b00001100); // PS settings for bounceY, bounceY used for source movement (it always bounces whereas particles do not)
   PSparticle *attractor; // particle pointer to the attractor
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(SEGMENT, PartSys, 1, sizeof(PSparticle))) // init using 1 source and advanced particle settings
-      return mode_static(); // allocation failed or not 2D
+    if (!initParticleSystem2D(SEGMENT, PartSys, 1, sizeof(PSparticle))) return mode_static(); // allocation failed or not 2D
     PartSys->sources[0].source.hue = hw_random16();
     PartSys->sources[0].source.vy = 0;
     PartSys->sources[0].source.vx = -7; // will collide with wall and get random bounce direction
@@ -7442,13 +7424,10 @@ uint16_t mode_particleattractor(void) {
     PartSys->setWallRoughness(200); //randomize wall bounce
     PartSys->setBounceX(true);
     PartSys->setBounceY(true);
-  }
-  else {
+  } else
     PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
-  }
 
-  if (PartSys == nullptr)
-    return mode_static(); // something went wrong, no data!
+  if (PartSys == nullptr) return mode_static(); // something went wrong, no data!
 
   // Particle System settings
   PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
@@ -7514,21 +7493,18 @@ uint16_t mode_particlespray(void) {
   const uint8_t hardness = 200; // collision hardness is fixed
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(SEGMENT, PartSys, 1)) // init, no additional data needed
-      return mode_static(); // allocation failed or not 2D
+    if (!initParticleSystem2D(SEGMENT, PartSys, 1)) return mode_static(); // allocation failed or not 2D
     PartSys->setKillOutOfBounds(true); // out of bounds particles dont return (except on top, taken care of by gravity setting)
     PartSys->setBounceY(true);
-    PartSys->setMotionBlur(200); // anable motion blur
-    PartSys->setSmearBlur(10); // anable motion blur
+    PartSys->setMotionBlur(192); // enable motion blur
+    PartSys->setSmearBlur(16); // enable motion blur
     PartSys->sources[0].source.hue = hw_random16();
     PartSys->sources[0].source.collide = true; // seeded particles will collide (if enabled)
     PartSys->sources[0].var = 3;
-  }
-  else
+  } else
     PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
 
-  if (PartSys == nullptr)
-    return mode_static(); // something went wrong, no data!
+  if (PartSys == nullptr) return mode_static(); // something went wrong, no data!
 
   // Particle System settings
   PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
@@ -7582,21 +7558,18 @@ uint16_t mode_particleghostrider(void) {
   PSsettings2D ghostsettings(0b0000011); //enable wrapX and wrapY
 
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(SEGMENT, PartSys, 1)) // init, no additional data needed
-      return mode_static(); // allocation failed or not 2D
+    if (!initParticleSystem2D(SEGMENT, PartSys, 1)) return mode_static(); // allocation failed or not 2D
     PartSys->setKillOutOfBounds(true); // out of bounds particles dont return (except on top, taken care of by gravity setting)
     PartSys->sources[0].maxLife = 260; // lifetime in frames
     PartSys->sources[0].minLife = 250;
     PartSys->sources[0].source.x = hw_random16(PartSys->maxX);
     PartSys->sources[0].source.y = hw_random16(PartSys->maxY);
     SEGENV.step = hw_random16(MAXANGLESTEP) - (MAXANGLESTEP>>1); // angle increment
-  }
-  else {
+  } else {
     PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
   }
 
-  if (PartSys == nullptr)
-    return mode_static(); // something went wrong, no data!
+  if (PartSys == nullptr) return mode_static(); // something went wrong, no data!
 
   if (SEGMENT.intensity > 0) { // spiraling
     if (SEGENV.aux1) {
@@ -7661,19 +7634,16 @@ uint16_t mode_particleblobs(void) {
   ParticleSystem2D *PartSys = nullptr;
 
   if (SEGENV.call == 0) {
-    if (!initParticleSystem2D(SEGMENT, PartSys, 0, 0, true)) //init, no additional bytes, size control
-      return mode_static(); // allocation failed or not 2D
+    if (!initParticleSystem2D(SEGMENT, PartSys, 0, 0, true)) return mode_static(); // allocation failed or not 2D
     PartSys->setBounceX(true);
     PartSys->setBounceY(true);
     PartSys->setWallHardness(255);
     PartSys->setWallRoughness(255);
     PartSys->setCollisionHardness(255);
-  }
-  else
+  } else
     PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
 
-  if (PartSys == nullptr)
-    return mode_static(); // something went wrong, no data!
+  if (PartSys == nullptr) return mode_static(); // something went wrong, no data!
 
   PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
   PartSys->setUsedParticles(map(SEGMENT.intensity, 0, 255, 5, 128)); // minimum 2%, maximum 50% of available particles (note: PS ensures at least 1)
@@ -7723,7 +7693,7 @@ uint16_t mode_particleblobs(void) {
     }
   }
 
-  PartSys->setMotionBlur(255 - ((SEGMENT.custom3 << 3) + 7));
+  PartSys->setMotionBlur((SEGMENT.custom3 << 3));
   PartSys->update(); // update and render
 
   return FRAMETIME;
@@ -7739,8 +7709,7 @@ uint16_t mode_particlegalaxy(void) {
   ParticleSystem2D *PartSys = nullptr;
   PSsettings2D sourcesettings(0b00001100); // PS settings for bounceY, bounceY used for source movement (it always bounces whereas particles do not)
   if (SEGENV.call == 0) { // initialization
-    if (!initParticleSystem2D(SEGMENT, PartSys, 1)) // init using 1 source
-      return mode_static(); // allocation failed or not 2D
+    if (!initParticleSystem2D(SEGMENT, PartSys, 1)) return mode_static(); // allocation failed or not 2D
     PartSys->sources[0].source.vy = 0;
     PartSys->sources[0].source.vx = -4; // will collide with wall and get random bounce direction
     PartSys->sources[0].source.x = PartSys->maxX >> 1; // start in the center
@@ -7751,15 +7720,14 @@ uint16_t mode_particlegalaxy(void) {
     PartSys->sources[0].source.hue = hw_random16(); // start with random color
     PartSys->setWallHardness(255);  //bounce forever
     PartSys->setWallRoughness(200); //randomize wall bounce
-  }
-  else {
+  }  else
     PartSys = reinterpret_cast<ParticleSystem2D *>(SEGENV.data); // if not first call, just set the pointer to the PS
-  }
-  if (PartSys == nullptr)
-    return mode_static(); // something went wrong, no data!
+
+  if (PartSys == nullptr) return mode_static(); // something went wrong, no data!
+
   // Particle System settings
   PartSys->updateSystem(SEG_W, SEG_H); // update system properties (dimensions and data pointers)
-  PartSys->setMotionBlur(250 * SEGMENT.check3); // adds trails
+  PartSys->setMotionBlur(128 * SEGMENT.check3); // adds trails
 
   if ((SEGENV.call % ((33 - SEGMENT.custom3) >> 1)) == 0) // change hue of emitted particles
     PartSys->sources[0].source.hue+=2;
@@ -7864,7 +7832,7 @@ uint16_t mode_particleDrip(void) {
   PartSys->setBounce(true);
   PartSys->setWallHardness(50);
 
-  PartSys->setMotionBlur(SEGMENT.custom2); // anable motion blur
+  PartSys->setMotionBlur(SEGMENT.custom2); // enable motion blur
   PartSys->setGravity(SEGMENT.custom3 >> 1); // set gravity (8 is default strength)
   PartSys->setParticleSize(SEGMENT.check3); // 1 or 2 pixel rendering
 
@@ -7972,7 +7940,7 @@ uint16_t mode_particlePinball(void) {
   PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   PartSys->setGravity(map(SEGMENT.custom3, 0 , 31, 0 , 16)); // set gravity (8 is default strength)
   PartSys->setBounce(SEGMENT.custom3); // disables bounce if no gravity is used
-  PartSys->setMotionBlur(SEGMENT.custom2); // anable motion blur
+  PartSys->setMotionBlur(SEGMENT.custom2); // enable motion blur
   PartSys->enableParticleCollisions(SEGMENT.check1, 255); // enable collisions and set particle collision to high hardness
   PartSys->setUsedParticles(SEGMENT.intensity);
   PartSys->setColorByPosition(SEGMENT.check3);
@@ -8197,7 +8165,7 @@ uint16_t mode_particleFireworks1D(void) {
   // Particle System settings
   PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   forcecounter = PartSys->PSdataEnd;
-  PartSys->setMotionBlur(SEGMENT.custom2); // anable motion blur
+  PartSys->setMotionBlur(SEGMENT.custom2); // enable motion blur
   int32_t gravity = (1 + (SEGMENT.speed >> 3)); // gravity value used for rocket speed calculation
   PartSys->setGravity(SEGMENT.speed ? gravity : 0); // set gravity
 
@@ -8320,8 +8288,8 @@ uint16_t mode_particleSparkler(void) {
   sparklersettings.bounce = SEGMENT.check2; // note: bounce always takes priority over wrap
 
   numSparklers = PartSys->numSources;
-  PartSys->setMotionBlur(SEGMENT.custom2); // anable motion blur/overlay
-  //PartSys->setSmearBlur(SEGMENT.custom2); // anable smearing blur
+  PartSys->setMotionBlur(SEGMENT.custom2); // enable motion blur/overlay
+  //PartSys->setSmearBlur(SEGMENT.custom2); // enable smearing blur
 
   for (uint32_t i = 0; i < numSparklers; i++) {
     PartSys->sources[i].source.hue = hw_random16();
@@ -8393,7 +8361,7 @@ uint16_t mode_particleHourglass(void) {
   settingTracker = reinterpret_cast<uint32_t *>(PartSys->PSdataEnd);  //assign data pointer
   direction = reinterpret_cast<bool *>(PartSys->PSdataEnd + 4);  //assign data pointer
   PartSys->setUsedParticles(1 + ((SEGMENT.intensity * 255) >> 8));
-  PartSys->setMotionBlur(SEGMENT.custom2); // anable motion blur
+  PartSys->setMotionBlur(SEGMENT.custom2); // enable motion blur
   PartSys->setGravity(map(SEGMENT.custom3, 0, 31, 1, 30));
   PartSys->enableParticleCollisions(true, 32); // hardness value found by experimentation on different settings
 
@@ -8518,7 +8486,7 @@ uint16_t mode_particle1Dspray(void) {
   // Particle System settings
   PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   PartSys->setBounce(SEGMENT.check2);
-  PartSys->setMotionBlur(SEGMENT.custom2); // anable motion blur
+  PartSys->setMotionBlur(SEGMENT.custom2); // enable motion blur
   int32_t gravity = -((int32_t)SEGMENT.custom3 - 16);  // gravity setting, 0-15 is positive (down), 17 - 31 is negative (up)
   PartSys->setGravity(abs(gravity)); // use reversgrav setting to invert gravity (for proper 'floor' and out of bounce handling)
 
@@ -8651,7 +8619,7 @@ uint16_t mode_particleChase(void) {
   // Particle System settings
   PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
   PartSys->setColorByPosition(SEGMENT.check3);
-  PartSys->setMotionBlur(7 + ((SEGMENT.custom3) << 3)); // anable motion blur
+  PartSys->setMotionBlur(7 + ((SEGMENT.custom3) << 3)); // enable motion blur
   uint32_t numParticles = 1 + map(SEGMENT.intensity, 0, 255, 2, 255 / (1 + (SEGMENT.custom1 >> 6))); // depends on intensity and particle size (custom1), minimum 1
   numParticles = min(numParticles, PartSys->usedParticles); // limit to available particles
   int32_t huestep = 1 + ((((uint32_t)SEGMENT.custom2 << 19) / numParticles) >> 16); // hue increment
@@ -8750,7 +8718,7 @@ uint16_t mode_particleStarburst(void) {
 
   // Particle System settings
   PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
-  PartSys->setMotionBlur(SEGMENT.custom2); // anable motion blur
+  PartSys->setMotionBlur(SEGMENT.custom2); // enable motion blur
   PartSys->setGravity(SEGMENT.check1 * 8); // enable gravity
 
   if (PartSys->sources[0].source.ttl-- == 0) { // stanby time elapsed TODO: make it a timer?
@@ -8874,7 +8842,7 @@ uint16_t mode_particleSpringy(void) {
     return mode_static(); // something went wrong, no data!
   // Particle System settings
   PartSys->updateSystem(SEGLEN); // update system properties (dimensions and data pointers)
-  PartSys->setMotionBlur(220 * SEGMENT.check1); // anable motion blur
+  PartSys->setMotionBlur(220 * SEGMENT.check1); // enable motion blur
   PartSys->setSmearBlur(50); // smear a little
   PartSys->setUsedParticles(map(SEGMENT.custom1, 0, 255, 30 >> SEGMENT.check2, 255  >> (SEGMENT.check2*2))); // depends on density and particle size
  // PartSys->enableParticleCollisions(true, 140); // enable particle collisions, can not be set too hard or impulses will not strech the springs if soft.

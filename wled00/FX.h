@@ -187,8 +187,8 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 //#define FX_MODE_CHASE_RAINBOW_WHITE     33  // candidate for removal (was Chase Rainbow White; use Chase with check 1 & check 2 & check 3)
 #define FX_MODE_COLORFUL                34
 #define FX_MODE_TRAFFIC_LIGHT           35
-//#define FX_MODE_COLOR_SWEEP_RANDOM      36  // candidate for removal (was Sweep Random; use Wipe with check 1 & check 3)
-//#define FX_MODE_RUNNING_COLOR           37  // candidate for removal (use Theater)
+//#define FX_MODE_COLOR_SWEEP_RANDOM      36  // FX_MODE_PARTICLEGALAXY
+//#define FX_MODE_RUNNING_COLOR           37  // FX_MODE_PARTICLEVOLCANO
 #define FX_MODE_AURORA                  38
 #define FX_MODE_RUNNING_RANDOM          39
 #define FX_MODE_LARSON_SCANNER          40
@@ -198,12 +198,12 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_TETRIX                  44  //was Merry Christmas prior to 0.12.0 (use "Chase 2" with Red/Green)
 #define FX_MODE_FIRE_FLICKER            45
 #define FX_MODE_GRADIENT                46
-//#define FX_MODE_LOADING                 47  // candidate for removal (use Gradient with check 1)
+//#define FX_MODE_LOADING                 47  // FX_MODE_PARTICLEVORTEX
 #define FX_MODE_ROLLINGBALLS            48  //was Police before 0.14
 #define FX_MODE_FAIRY                   49  //was Police All prior to 0.13.0-b6 (use "Two Dots" with Red/Blue and full intensity)
 #define FX_MODE_TWO_DOTS                50
 #define FX_MODE_FAIRYTWINKLE            51  //was Two Areas prior to 0.13.0-b6 (use "Two Dots" with full intensity)
-//#define FX_MODE_RUNNING_DUAL            52  // candidate for removal (use Running)
+//#define FX_MODE_RUNNING_DUAL            52  // FX_MODE_PARTICLEFIREWORKS
 #define FX_MODE_IMAGE                   53  //was Haloween until 0.14
 #define FX_MODE_TRICOLOR_CHASE          54
 #define FX_MODE_TRICOLOR_WIPE           55
@@ -211,7 +211,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_LIGHTNING               57
 #define FX_MODE_ICU                     58
 #define FX_MODE_MULTI_COMET             59
-//#define FX_MODE_DUAL_LARSON_SCANNER     60  // candidate for removal (use Scanner with with check 1)
+//#define FX_MODE_DUAL_LARSON_SCANNER     60  // FX_MODE_PARTICLEPERLIN
 #define FX_MODE_RANDOM_CHASE            61
 #define FX_MODE_OSCILLATE               62
 #define FX_MODE_PRIDE_2015              63
@@ -228,33 +228,33 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_COLORTWINKLE            74
 #define FX_MODE_LAKE                    75
 #define FX_MODE_METEOR                  76
-//#define FX_MODE_METEOR_SMOOTH           77  // candidate for removal (use Meteor with check 1)
+//#define FX_MODE_METEOR_SMOOTH           77  // FX_MODE_PARTICLEPIT
 #define FX_MODE_RAILWAY                 78
 #define FX_MODE_RIPPLE                  79
 #define FX_MODE_TWINKLEFOX              80
-//#define FX_MODE_TWINKLECAT              81  // candidate for removal (use Twinklefox with check 3)
+//#define FX_MODE_TWINKLECAT              81  // FX_MODE_PARTICLEBOX
 #define FX_MODE_HALLOWEEN_EYES          82
 #define FX_MODE_STATIC_PATTERN          83
 #define FX_MODE_TRI_STATIC_PATTERN      84
 #define FX_MODE_SPOTS                   85
-//#define FX_MODE_SPOTS_FADE              86  // candidate for removal (use Spots with check 1)
+//#define FX_MODE_SPOTS_FADE              86  // FX_MODE_PARTICLEATTRACTOR
 #define FX_MODE_GLITTER                 87
 #define FX_MODE_CANDLE                  88
 #define FX_MODE_STARBURST               89
 #define FX_MODE_EXPLODING_FIREWORKS     90
 #define FX_MODE_BOUNCINGBALLS           91
 #define FX_MODE_SINELON                 92
-//#define FX_MODE_SINELON_DUAL            93  // candidate for removal (use sinelon)
-//#define FX_MODE_SINELON_RAINBOW         94  // candidate for removal (use sinelon)
+//#define FX_MODE_SINELON_DUAL            93  // FX_MODE_PARTICLEIMPACT
+//#define FX_MODE_SINELON_RAINBOW         94  // FX_MODE_PARTICLEWATERFALL
 #define FX_MODE_POPCORN                 95
 #define FX_MODE_DRIP                    96
 #define FX_MODE_PLASMA                  97
 #define FX_MODE_PERCENT                 98
-//#define FX_MODE_RIPPLE_RAINBOW          99  // candidate for removal (use ripple)
+//#define FX_MODE_RIPPLE_RAINBOW          99  // FX_MODE_PARTICLESPRAY
 #define FX_MODE_HEARTBEAT              100
 #define FX_MODE_PACIFICA               101
-//#define FX_MODE_CANDLE_MULTI           102  // candidate for removal (use candle with multi select)
-//#define FX_MODE_SOLID_GLITTER          103  // candidate for removal (use glitter)
+//#define FX_MODE_CANDLE_MULTI           102  // FX_MODE_PARTICLEGHOSTRIDER
+//#define FX_MODE_SOLID_GLITTER          103  // FX_MODE_PARTICLEBLOBS
 #define FX_MODE_SUNRISE                104
 #define FX_MODE_PHASED                 105
 #define FX_MODE_TWINKLEUP              106
@@ -314,7 +314,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #ifndef WLED_DISABLE_PARTICLESYSTEM2D
 #define FX_MODE_PARTICLEVOLCANO         37
 #define FX_MODE_PARTICLEFIREWORKS       52
-#define FX_MODE_PARTICLEVORTEX          53
+#define FX_MODE_PARTICLEVORTEX          47
 #define FX_MODE_PARTICLEPERLIN          60
 #define FX_MODE_PARTICLEPIT             77
 #define FX_MODE_PARTICLEBOX             81
@@ -331,7 +331,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
   #define FX_MODE_PARTICLEGHOSTRIDER     102
   #define FX_MODE_PARTICLEBLOBS          103
 #endif
-#define FX_MODE_PARTICLEGALAXY         109
+#define FX_MODE_PARTICLEGALAXY          36
 #endif
 /*
 // particle 1D
@@ -719,7 +719,7 @@ class Segment {
     void moveX(int delta, bool wrap = false) const;
     void moveY(int delta, bool wrap = false) const;
     void move(unsigned dir, unsigned delta, bool wrap = false) const;
-    void drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool fill = false, bool wrapX = false, bool wrapY = false) const; //coodinates and radii are in 10.6 fixed point notation
+    void drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool fill = false, bool wrapX = false, bool wrapY = false, uint8_t blurRadius = 0) const; // coordinates and radii are in 10.6 fixed point notation
     inline void fillEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool wrapX = false, bool wrapY = false) const { drawEllipse(cx, cy, rx, ry, color, true, wrapX, wrapY); }
     inline void fillCircle(int16_t cx, int16_t cy, uint16_t r, CRGBA color, bool wrap = false) const { drawEllipse(cx, cy, r, r, color, true, wrap, wrap); } // coodinates and radii are in 10.6 fixed point notation
     void drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA c, bool soft = false, bool wrapX = false, bool wrapY = false) const; // coodinates and radii are in 10.6 fixed point notation
@@ -744,7 +744,7 @@ class Segment {
     inline void moveX(int delta, bool wrap = false) {}
     inline void moveY(int delta, bool wrap = false) {}
     inline void move(uint8_t dir, uint8_t delta, bool wrap = false) {}
-    inline void drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA c, bool fill = false, bool wrapX = false, bool wrapY = false) {}
+    inline void drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA c, bool fill = false, bool wrapX = false, bool wrapY = false, uint8_t blurRadius = 0) {}
     inline void fillEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA c, bool wrapX = false, bool wrapY = false) {}
     inline void drawCircle(int16_t cx, int16_t cy, uint16_t radius, CRGBA c, bool soft = false, bool wrapX = false, bool wrapY = false) {}
     inline void hardEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA c, bool wrapX = false, bool wrapY = false) {}

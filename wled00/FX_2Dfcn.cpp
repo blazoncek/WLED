@@ -447,17 +447,86 @@ constexpr int FP_SHIFT = 6;
 constexpr int FP_ONE   = (1 << FP_SHIFT);
 constexpr int FP_HALF  = (FP_ONE >> 1);
 
+// AI: AI generated code
+// Sliding-window horizontal box blur.
+static void __attribute__((optimize("O2"))) boxBlurHorizontal(const uint8_t *src, uint8_t *dst, int width, int height, int radius) {
+  const int window = 2 * radius + 1;
+
+  for (int y = 0; y < height; y++) {
+    const uint8_t *s = src + y * width;
+    uint8_t *d = dst + y * width;
+    uint32_t sum = 0;
+
+    // Initial window. The temporary buffer has a transparent margin,
+    // so using a full window divisor is appropriate.
+    for (int x = 0; x <= radius; x++) {
+      if (x < width) sum += s[x];
+    }
+
+    for (int x = 0; x < width; x++) {
+      d[x] = (uint8_t)(sum / window);
+
+      const int prevX = x - radius;
+      const int nextX = x + radius + 1;
+
+      if ((unsigned)nextX < (unsigned)width) sum += s[nextX];
+      if ((unsigned)prevX < (unsigned)width) sum -= s[prevX];
+    }
+  }
+}
+
+// Sliding-window vertical box blur.
+static void __attribute__((optimize("O2"))) boxBlurVertical(const uint8_t *src, uint8_t *dst, int width, int height, int radius) {
+  const int window = 2 * radius + 1;
+
+  for (int x = 0; x < width; x++) {
+    uint32_t sum = 0;
+
+    // Initial window.
+    for (int y = 0; y <= radius; y++) {
+      if (y < height) sum += src[y * width + x];
+    }
+
+    for (int y = 0; y < height; y++) {
+      dst[y * width + x] = (uint8_t)(sum / window);
+
+      const int nextY = y - radius;
+      const int prevY = y + radius + 1;
+
+      if ((unsigned)nextY < (unsigned)height) sum -= src[nextY * width + x];
+      if ((unsigned)prevY < (unsigned)height) sum += src[prevY * width + x];
+    }
+  }
+}
+// AI: end of AI generated code
+
 // Draws filled ellipse or circle (with smooth edges) at (cx,cy) with given radii (in 10.6 fixed point notation) and color
-void __attribute__((optimize("O2"))) Segment::drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool fill, bool wrapX, bool wrapY) const {
+// blur radius is given in pixel coordinates to simplify blurring
+void __attribute__((optimize("O2"))) Segment::drawEllipse(int16_t cx, int16_t cy, uint16_t rx, uint16_t ry, CRGBA color, bool fill, bool wrapX, bool wrapY, uint8_t blurRadius) const {
   if (!isActive() || rx + ry == 0) return; // not active
   const int vW = vWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   const int vH = vHeight();  // segment height in logical pixels (is always >= 1)
   auto int106 = [](int32_t a) { return (int16_t)((a >= 0 ? a : -((-a) + FP_ONE - 1)) / FP_ONE); };  // convert 10.6 fixed point to integer (floor()ed when negative)
   //auto int106 = [](int32_t a) { int32_t s=(a<0?-1:1); return (int16_t)(s * ((s*a) >> FP_SHIFT)); }; // convert 10.6 fixed point to integer (floor()ed when negative)
 
-  if (int106(rx) >= vW/2 || int106(ry) >= vH/2) return; // too big
+  if (rx >= vW * FP_HALF || ry >= vH * FP_HALF) return; // too big
+
+  if (blurRadius > 0) {
+    // to prevent large allocations and slowdowns limit ellipse radius and blur radius to 5 (hard limit) when blurring
+    #ifdef WLED_ENABLE_LARGE_ELLIPSE
+    constexpr int maxBlurRadius = 15; // may allow future 4.4 fixed point radius
+    #else
+    constexpr int maxEllipseRadius = 5 * FP_ONE;
+    constexpr int maxBlurRadius = 5;
+    rx = min<uint16_t>(rx, maxEllipseRadius);
+    ry = min<uint16_t>(ry, maxEllipseRadius);
+    #endif
+    if (blurRadius > maxBlurRadius) blurRadius = maxBlurRadius;
+  }
 
   // pre-calculate drawing bounds
+  const int32_t pxMin = int106(cx - rx);              // minimum pixel coordinate for drawing; rounded down
+  const int32_t pxMax = int106(cx + rx + FP_ONE - 1); // maximum pixel coordinate for drawing; rounded up
   const int32_t pyMin = int106(cy - ry);              // minimum pixel coordinate for drawing; rounded down
   const int32_t pyMax = int106(cy + ry + FP_ONE - 1); // maximum pixel coordinate for drawing; rounded up
   const int32_t rxSq  = rx * rx;
@@ -484,6 +553,111 @@ void __attribute__((optimize("O2"))) Segment::drawEllipse(int16_t cx, int16_t cy
     }
   };
 
+  // AI: AI generated code (hand-tuned by human)
+  if (blurRadius > 0) {
+    // Blurred path.
+    // 1st we draw ellipse's transparency "pixels" into temporary buffer (large enough to contain final blurred ellipse)
+    // then we apply two-pass box-blur (horizontal then vertical) to "soften" the transparency pixels
+    // when blur is done we transfer temporary buffer to Segment canvas using plot lambda which only depends on transarency
+
+    const int bufferMinX    = pxMin - blurRadius;
+    const int bufferMinY    = pyMin - blurRadius;
+    const int bufferWidth   = (pxMax - pxMin + 1) + 2 * blurRadius;
+    const int bufferHeight  = (pyMax - pyMin + 1) + 2 * blurRadius;
+    const size_t bufferSize = (size_t)bufferWidth * bufferHeight;
+
+    // The temporary buffer contains only ellipse's pixel brightness/opacity to minimize memory requirements.
+    // It is enlarged by radius on all sides so the box-blur kernel is not clipped.
+
+    #ifdef WLED_ENABLE_LARGE_ELLIPSE
+    // heap implementation in case we'd blur larger ellipses (do not forget to uncomment d_free() below when using)
+    uint8_t *buffer = static_cast<uint8_t*>(d_calloc(bufferSize, sizeof(uint8_t)));
+    if (!buffer) return;
+    uint8_t *scratch = static_cast<uint8_t*>(d_malloc(bufferSize));
+    if (!scratch) {
+      d_free(buffer);
+      return;
+    }
+    #else
+    // implementation with stack allocated buffers since they will not be larger than 400 bytes (800 bytes of stack used)
+    uint8_t buffer[bufferSize];
+    uint8_t scratch[bufferSize];
+    memset(buffer, 0, bufferSize);
+    #endif
+
+    // Draw the ellipse into the temporary coverage buffer.
+    auto tempPlot = [&](int x, int y, uint8_t b) {
+      const int bx = x - bufferMinX;
+      const int by = y - bufferMinY;
+      if ((unsigned)bx < (unsigned)bufferWidth && (unsigned)by < (unsigned)bufferHeight) {
+        uint8_t &dst = buffer[by * bufferWidth + bx];
+        // Multiple ellipse edge samples may address the same pixel.
+        // Keep the strongest coverage, matching the original plot semantics.
+        if (b > dst) dst = b;
+      }
+    };
+
+    // Rasterize the ellipse into the temporary buffer.
+    for (int y = pyMin; y <= pyMax; y++) {
+      const int32_t dy = (y << FP_SHIFT) - cy + FP_HALF;
+      const int32_t dySq = dy * dy;
+      if (dySq >= rySq) continue;
+
+      const uint32_t xSq   = ((int64_t)rxSq * (rySq - dySq)) / rySq;
+      const uint32_t xHalf = sqrt32_bw(xSq);
+
+      const int leftFixed  = cx - xHalf;
+      const int rightFixed = cx + xHalf;
+      const int left       = int106(leftFixed);
+      const int right      = int106(rightFixed);
+
+      if (fill) {
+        for (int x = left + 1; x < right; ++x) {
+          tempPlot(x, y, 255);
+        }
+      }
+
+      int8_t frac = (leftFixed << (8-FP_SHIFT)) & 0xFF;
+      int8_t alpha = 255 - frac;
+      if (alpha > 0) {
+        tempPlot(left, y, alpha);
+        if (!fill) tempPlot(left + 1, y, frac /*255 - alpha*/);
+      }
+
+      if (right != left) {
+        alpha = (rightFixed << (8-FP_SHIFT)) & 0xFF;
+        if (alpha > 0) {
+          tempPlot(right, y, alpha);
+          if (!fill) tempPlot(right - 1, y, 255 - alpha);
+        }
+      }
+    }
+
+    // Separable box blur: horizontal pass followed by vertical pass.
+    boxBlurHorizontal(buffer, scratch, bufferWidth, bufferHeight, blurRadius);
+    boxBlurVertical(scratch, buffer, bufferWidth, bufferHeight, blurRadius);
+
+    // Transfer the blurred ellipse through the original plot lambda.
+    // This preserves clipping, wrapping and blending with the canvas.
+    for (int y = 0; y < bufferHeight; y++) {
+      for (int x = 0; x < bufferWidth; x++) {
+        const uint8_t coverage = buffer[y * bufferWidth + x];
+        if (coverage) {
+          plot(bufferMinX + x, bufferMinY + y, coverage);
+        }
+      }
+    }
+
+    #ifdef WLED_ENABLE_LARGE_ELLIPSE
+    d_free(scratch);
+    d_free(buffer);
+    #endif
+
+    return;
+  }
+  // AI: end of AI generated code
+
+  // Fast path: no bluring, draw directly to Segment buffer
   for (int y = pyMin; y <= pyMax; y++) {
     // AI: AI generated code (hand-tuned by human)
     // traverses all "scan" lines calculating "width" of ellipse at each line

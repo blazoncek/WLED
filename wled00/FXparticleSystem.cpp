@@ -467,7 +467,7 @@ void ParticleSystem2D::render() {
   TBlendType blend = particlesettings.colorByAge ? LINEARBLEND_NOWRAP : LINEARBLEND; // default color rendering: wrap palette
 
   if (motionBlur) { // motion-blurring active (fade existing pixels before overlaying new frame)
-    _segment.fadeOut(motionBlur);
+    _segment.fadeOut(255 - motionBlur);
   } else { // no motion blurring: clear buffer
     _segment.clear();
   }
@@ -488,11 +488,6 @@ void ParticleSystem2D::render() {
     baseRGB.nscale8_video(brightness);
     if (!particles[i].hollow) baseRGB.setOpacity((particles[i].mass>>1) + 128); // use mass as opacity (128-255) for advanced particles
     renderParticle(i, baseRGB, particlesettings.wrapX, particlesettings.wrapY);
-  }
-
-  // apply 2D blur to rendered frame
-  if (smearBlur) {
-    _segment.blur2D(smearBlur, smearBlur, true);
   }
 }
 
@@ -533,7 +528,7 @@ void ParticleSystem2D::renderParticle(const uint32_t particleindex, CRGBA color,
   // limit to radius from 0.5 to 5 pixels
   rx = constrain(rx, 32, 320);
   ry = constrain(ry, 32, 320);
-  _segment.drawEllipse(particles[particleindex].x, particles[particleindex].y, rx, ry, color, !particles[particleindex].hollow, wrapX, wrapY);
+  _segment.drawEllipse(particles[particleindex].x, particles[particleindex].y, rx, ry, color, !particles[particleindex].hollow, wrapX, wrapY, (smearBlur+1)>>4);
 }
 
 // detect collisions in an array of particles and handle them
