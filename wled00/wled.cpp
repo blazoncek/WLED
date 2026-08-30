@@ -84,11 +84,21 @@ void WLED::loop()
 
   yield();
   handleButton();
+  #ifdef WLED_DEBUG
+  unsigned long irMillis = millis();
+  #endif
   #ifndef WLED_DISABLE_INFRARED
   handleIR();
   #endif
+  #ifdef WLED_DEBUG
+  unsigned long remoteMillis = millis();
+  irMillis = remoteMillis - irMillis;
+  #endif
   #ifndef WLED_DISABLE_ESPNOW
   handleRemote();
+  #endif
+  #ifdef WLED_DEBUG
+  remoteMillis = millis() - remoteMillis;
   #endif
   #ifndef WLED_DISABLE_ALEXA
   handleAlexa();
@@ -249,6 +259,8 @@ void WLED::loop()
   if (loopMillis - stripMillis - usermodMillis > 30) {
     DEBUG_PRINTLN(F("---- loop() stalled ----"));
     DEBUG_PRINTF_P(PSTR("Loop took %lums.\n"),     loopMillis);
+    DEBUG_PRINTF_P(PSTR("IR took %lums.\n"),       irMillis);
+    DEBUG_PRINTF_P(PSTR("Remote took %lums.\n"),   remoteMillis);
     DEBUG_PRINTF_P(PSTR("Usermods took %lums.\n"), usermodMillis);
     DEBUG_PRINTF_P(PSTR("Strip took %lums.\n"),    stripMillis);
   }
@@ -499,9 +511,6 @@ void WLED::setup()
 #if defined(ARDUINO_ARCH_ESP32) && ESP_IDF_VERSION_MAJOR==4
   WiFi.persistent(true);          // storing credentials in NVM fixes boot-up pause as connection is much faster, is disabled after first connection
   WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
-  #if defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(WLED_ENABLE_HUB75MATRIX)
-  WiFi.useStaticBuffers(true);    // use preallocated buffers (for speed); WARNING: uses 60kB of RAM!!!
-  #endif
 #elif defined(ESP8266)
   WiFi.persistent(false);         // on ESP8266 using NVM for wifi config has no benefit of faster connection
 #endif
@@ -655,6 +664,7 @@ void WLED::stopAP(bool stop) {
   dnsServer.stop();
   WiFi.softAPdisconnect(stop);  // disengage AP mode on stop
   delay(5);                     // wait for hardware to be ready
+  if (apBehavior != AP_BEHAVIOR_ALWAYS) WiFi.mode(WIFI_MODE_STA);
   apActive = false;
 }
 
@@ -717,12 +727,22 @@ void WLED::initConnection(bool force)
   WiFi.disconnect(); // close old connections
   delay(5);          // wait for hardware to be ready
 
+  const bool newConnection = lastReconnectAttempt > 0;
   lastReconnectAttempt = millis();
 
   if (!isWiFiConfigured()) return;
 
+  if (WiFi.SSID() == "") force = true;
+
   if (force) {
-    DEBUG_PRINTF_P(PSTR("WiFi: Connecting to %s... @ %lus\n"), multiWiFi[selectedWiFi].clientSSID, millis()/1000);
+    unsigned i = 0;
+    while (i < sizeof(multiWiFi[selectedWiFi].bssid)) if (multiWiFi[selectedWiFi].bssid[i++]) break;
+    const uint8_t *bssid = newConnection && i < sizeof(multiWiFi[selectedWiFi].bssid) ? multiWiFi[selectedWiFi].bssid : nullptr;
+
+    char macStr[16];
+    if (bssid) fillMAC2Str(macStr, bssid);
+    else strcpy_P(macStr, PSTR("*"));
+    DEBUG_PRINTF_P(PSTR("WiFi: Connecting to %s... [%s] @ %lus\n"), multiWiFi[selectedWiFi].clientSSID, macStr, millis()/1000);
     staActive = true;
 
     // determine if using DHCP or static IP address, will also engage STA mode if not already
@@ -732,9 +752,6 @@ void WLED::initConnection(bool force)
       WiFi.config(IPAddress(), IPAddress(), IPAddress()); // empty IP address == 0.0.0.0
     }
 
-    unsigned i = 0;
-    while (i < sizeof(multiWiFi[selectedWiFi].bssid)) if (multiWiFi[selectedWiFi].bssid[i++]) break;
-    const uint8_t *bssid = i < sizeof(multiWiFi[selectedWiFi].bssid) ? multiWiFi[selectedWiFi].bssid : nullptr;
     // WiFi mode can be either WIFI_MODE_STA or WIFI_MODE_APSTA(==WIFI_MODE_STA | WIFI_MODE_AP)
     WiFi.begin(multiWiFi[selectedWiFi].clientSSID, multiWiFi[selectedWiFi].clientPass, 0, bssid); // no harm if called multiple times
     delay(5);            // wait for hardware to be ready
@@ -1029,7 +1046,6 @@ ESP-NOW  inited in AP mode (channel: 6/1).
       {
         DEBUG_PRINTF_P(PSTR("WiFi: Temporary AP disabled @ %lus.\n"), now/1000);
         stopAP(true);             // stop ESP-NOW in AP mode as well
-        WiFi.mode(WIFI_MODE_STA);
         initConnection();         // will also start ESP-NOW when connected (if enabled)
       }
       wasConnected = true;        // hack to prevent reopeneing AP
@@ -1083,7 +1099,7 @@ ESP-NOW  inited in AP mode (channel: 6/1).
 #endif
     DEBUG_PRINTF_P(PSTR("WiFi: Last reconnect (%lus) too old @ %lus.\n"), lastReconnectAttempt/1000, now/1000);
     int8_t oldWiFi = selectedWiFi;
-    if (++selectedWiFi >= multiWiFi.size()) selectedWiFi = 0; // we couldn't connect, try with another network from the list
+    if (++selectedWiFi >= (int)multiWiFi.size()) selectedWiFi = 0; // we couldn't connect, try with another network from the list
     initConnection(oldWiFi != selectedWiFi);                  // start connecting to selected SSID
     if (multiWiFi.size() == 1 || (selectedWiFi > 0 && selectedWiFi == findWiFi()-1)) lastReconnectAttempt += 120000; // if we selected best SSID then postpone connecting for 2 min (wrapped around/single)
     return;
