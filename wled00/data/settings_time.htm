@@ -80,7 +80,7 @@
 		});
 	}
 	function sPSV(sel, presetOpts, value) { // setPresetSelectValue
-		sel.innerHTML = presetOpts;
+		sel.innerHTML = "<option value=\"0\">Unused/Remove</option>" + presetOpts;
 		if (!(value === undefined || value === null || value === "")) {
 			sel.value = String(value);
 		}
@@ -136,7 +136,7 @@
 </select>
 </td>
 <td><input name="N${i}" id="N${i}" class="l" type="number" min="${isSpecial ? -120 : 0}" max="${isSpecial ? 120 : 59}" value="${minute}"></td>
-<td><select name="T${i}" id="T${i}" class="el"><option value="0">Remove timer</option>${sPO}</select></td>
+<td><select name="T${i}" id="T${i}" class="el"></select></td>
 <td><div id="CB${i}" onclick="expand(this,${i})" title="Date range" class="cal">&#128197;</div></td>
 </tr>`;
 
