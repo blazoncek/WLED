@@ -4660,7 +4660,7 @@ uint16_t mode_2DColoredBursts() {              // By: ldirko   https://editor.so
       SEGMENT.setPixelColorXY(dx, dy, c);
     }
     */
-    SEGMENT.drawLine(x1, y1, x2, y2, grad ? color.opacity(0) : color, color, true);
+    SEGMENT.drawLine(x1, y1, x2, y2, grad ? color.opacity(0) : color, color, grad);
 
     if (dot) { //add white point at the ends of line
       SEGMENT.setPixelColorXY(x1, y1, DARKSLATEGRAY);
