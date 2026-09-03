@@ -151,8 +151,8 @@ void checkTimers();
 void calculateSunriseAndSunset();
 void setTimeFromAPI(uint32_t timein);
 
-const uint8_t TH_SUNRISE = 255;
-const uint8_t TH_SUNSET = 254;
+constexpr uint8_t TH_SUNRISE = 255;
+constexpr uint8_t TH_SUNSET = 254;
 
 struct Timer {
   uint8_t preset;
