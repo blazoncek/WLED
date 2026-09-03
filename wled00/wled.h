@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2608310
+#define VERSION 2609030
 #else
 #define VERSION BUILD
 #endif
@@ -196,18 +196,24 @@
 #include "um_manager.h"
 #include "FX.h"
 
+// generic (stateless) allocator to use custom malloc functions that can use PSRAM if available
+template <class T>
+struct PSRAM_Allocator {
+  typedef T value_type;
+  PSRAM_Allocator() = default;
+  static inline T*   allocate(size_t size) noexcept               { T *p = static_cast<T*>(d_malloc(size * sizeof(T))); if (p) return static_cast<T*>(p); return nullptr; /*throw std::bad_alloc();*/ }
+  static inline T*   reallocate(T* ptr, size_t new_size) noexcept { T *p = static_cast<T*>(d_realloc(ptr, new_size * sizeof(T))); if (p) return p; return ptr; }
+  static inline void deallocate(void* ptr, size_t n=0) noexcept   { d_free(ptr); }
+  static inline void destroy(T* p)                                { p->~T(); }
+};
+
 // ESP32-WROVER features SPI RAM (aka PSRAM) which can be allocated using ps_malloc()
 // we can create custom PSRAMDynamicJsonDocument to use such feature (replacing DynamicJsonDocument)
 // The following is a construct to enable code to compile without it.
 // There is a code that will still not use PSRAM though:
 //    AsyncJsonResponse is a derived class that implements DynamicJsonDocument (AsyncJson-v6.h)
 #if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-struct PSRAM_Allocator {
-  static inline void* allocate(size_t size)                  { return d_malloc(size); }
-  static inline void* reallocate(void* ptr, size_t new_size) { return d_realloc(ptr, new_size); }
-  static inline void  deallocate(void* pointer)              { d_free(pointer); }
-};
-using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
+using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator<uint8_t>>;
 #else
 #define PSRAMDynamicJsonDocument DynamicJsonDocument
 #endif
@@ -731,7 +737,7 @@ WLED_GLOBAL byte       doInit        _INIT(0);    // bitfield: 1 - bus, 2 - 2D, 
 WLED_GLOBAL int8_t     loadLedmap    _INIT(-1);
 WLED_GLOBAL uint8_t    currentLedmap _INIT(0);
 #ifndef ESP8266
-WLED_GLOBAL char  *ledmapNames[WLED_MAX_LEDMAPS-1] _INIT_N(({nullptr}));
+WLED_GLOBAL std::vector<String> ledmapNames;
 #endif
 #if WLED_MAX_LEDMAPS>16
 WLED_GLOBAL uint32_t ledMaps _INIT(0); // bitfield representation of available ledmaps

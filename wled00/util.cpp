@@ -414,16 +414,12 @@ static const char s_ledmap_tmpl[] PROGMEM = "ledmap%d.json";
 // enumerate all ledmapX.json files on FS and extract ledmap names if existing
 void enumerateLedmaps() {
   ledMaps = 1;
+  #ifndef ESP8266
+  ledmapNames.clear();
+  #endif
   for (size_t i=1; i<WLED_MAX_LEDMAPS; i++) {
     char fileName[33] = "/";
     sprintf_P(fileName+1, s_ledmap_tmpl, i);
-
-    #ifndef ESP8266
-    if (ledmapNames[i-1]) { //clear old name
-      d_free(ledmapNames[i-1]);
-      ledmapNames[i-1] = nullptr;
-    }
-    #endif
 
     File f = WLED_FS.open(fileName, "r");
     if (f) {
@@ -436,22 +432,15 @@ void enumerateLedmaps() {
       if (deserializeJson(doc, f, DeserializationOption::Filter(filter)) == DeserializationError::Ok) {
         size_t len = 0;
         JsonObject root = doc.as<JsonObject>();
+        char name[33];
+        snprintf_P(name, 32, s_ledmap_tmpl, i);
         if (!root["n"].isNull()) {
           // name field exists
-          const char *name = root["n"].as<const char*>();
-          if (name != nullptr) len = strlen(name);
-          if (len > 0 && len < 33) {
-            ledmapNames[i-1] = static_cast<char*>(d_malloc(len+1));
-            if (ledmapNames[i-1]) strlcpy(ledmapNames[i-1], name, 33);
-          }
+          const char *tmp = root["n"].as<const char*>();
+          if (tmp != nullptr) len = strnlen(tmp, 32);
+          if (len) strlcpy(name, root["n"].as<const char*>(), 33);
         }
-        if (!ledmapNames[i-1]) {
-          char tmp[33];
-          snprintf_P(tmp, 32, s_ledmap_tmpl, i);
-          len = strlen(tmp);
-          ledmapNames[i-1] = static_cast<char*>(d_malloc(len+1));
-          if (ledmapNames[i-1]) strlcpy(ledmapNames[i-1], tmp, 33);
-        }
+        ledmapNames.push_back(name);
       }
       #endif
       f.close();

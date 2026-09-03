@@ -817,12 +817,12 @@ void serializeInfo(JsonObject root)
   root[F("cpalmax")] = WLED_MAX_CUSTOM_PALETTES;  // maximum number of custom palettes
 
   JsonArray ledmaps = root.createNestedArray(F("maps"));
-  for (size_t i=0; i<WLED_MAX_LEDMAPS; i++) {
-    if ((ledMaps>>i) & 0x00000001U) {
+  for (size_t i=0,j=0; i<WLED_MAX_LEDMAPS; i++) {
+    if (ledMaps & (1<<i)) {
       JsonObject ledmaps0 = ledmaps.createNestedObject();
       ledmaps0["id"] = i;
       #ifndef ESP8266
-      if (i && ledmapNames[i-1]) ledmaps0["n"] = ledmapNames[i-1];
+      if (i && ledmapNames.size() > j) ledmaps0["n"] = ledmapNames[j++];
       #endif
     }
   }
