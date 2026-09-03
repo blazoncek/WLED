@@ -517,7 +517,7 @@ function createEditor(element, file, lang, theme, type){
       // process ledmap (organise by width and height)
       const isSparse = Array.isArray(obj.map[0]); // is it a sparse ledmap?
       const len = obj.map.length;
-      const width = obj.width || len;
+      const width = obj.width || 16;  // split array into rows of 16 columns or as specified
       const digits = Math.max(...obj.map.flat().map(n => String(n).length)); // max # of digits in an element
       let rows = [];
       let i = 0;
@@ -526,9 +526,10 @@ function createEditor(element, file, lang, theme, type){
         i += isSparse ? 1 : width;
         rows.push("    "+(isSparse?'[':'')+arr.map(n => String(n).padStart(digits,' ')).join(', ')+(isSparse?']':'')+(i<len?',':''));
       }
+      // replace "map" with pretty map
       delete obj.map;
-      let pretty = JSON.stringify(obj, null, 2).replace(/\s}$/, ',\n');
-      pretty += [ "  \"map\": [", ...rows, "  ]" ].join("\n") + "\n}\n";
+      let pretty = JSON.stringify(obj, null, 2).replace(/(\s)?}$/, (x,y)=>{return y?",":""}); // remove last "}" and replace it by ",\n" if object is not empty
+      pretty += [ "\n  \"map\": [", ...rows, "  ]" ].join("\n") + "\n}\n";
       return pretty;
     } catch (e) {
       return json;
