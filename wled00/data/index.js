@@ -1534,6 +1534,9 @@ function readState(s,command=false)
 			case 19:
 				errstr = "A filesystem error has occured.";
 				break;
+			case 20:
+				errstr = "Not enough RAM for transition.";
+				break;
 		}
 		showToast('Error ' + s.error + ": " + errstr, true);
 		return s.error != 3;

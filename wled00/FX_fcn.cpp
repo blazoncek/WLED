@@ -309,12 +309,12 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
   }
   if (pixels == nullptr) segmentCopy = false;
 
-  // check if we ahve enough memory to store old segment if requested
-  unsigned freeMem = getFreeHeapSize() - MIN_HEAP_SIZE;
+  // check if we have enough memory to store old segment if requested
+  unsigned freeMem = getFreeHeapSize() - 3*MIN_HEAP_SIZE/4; // allow slight memory overallocation since transitions are temporary
   unsigned segMem = sizeof(uint32_t)*length() + _dataLen + sizeof(Segment) + sizeof(Transition); // pixel buffer + data buffer + segment + transition
   if (segmentCopy && freeMem < segMem) {
     DEBUGFX_PRINTLN(F("!!! Not enough RAM to store old segment for transition !!!"));
-    errorFlag = ERR_NORAM_PX;
+    errorFlag = ERR_TRANSITION;
     segmentCopy = false; // try to continue without segment copy
   }
 
