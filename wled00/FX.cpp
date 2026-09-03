@@ -4723,18 +4723,12 @@ uint16_t mode_2DDNASpiral() {               // By: ldirko  https://editor.soulma
     int x  = beatsin8_t(speeds, 0, cols - 1, 0, i * freq) + beatsin8_t(speeds - 7, 0, cols - 1, 0, i * freq + 128);
     int x1 = beatsin8_t(speeds, 0, cols - 1, 0, 128 + i * freq) + beatsin8_t(speeds - 7, 0, cols - 1, 0, 128 + 64 + i * freq);
     unsigned hue = (i * 128 / rows) + ms;
+    CRGBA c = SEGMENT.color_wheel(hue);
     // skip every 4th row every now and then (fade it more)
     if ((i + ms / 8) & 3) {
       // draw a gradient line between x and x1
-      x = x / 2; x1 = x1 / 2;
-      unsigned steps = abs8(x - x1) + 1;
-      bool positive = (x1 >= x);                         // direction of drawing
-      for (size_t k = 1; k <= steps; k++) {
-        unsigned rate = k * 255 / steps;
-        //unsigned dx = lerp8by8(x, x1, rate);
-        unsigned dx = positive? (x + k-1) : (x - k+1);   // behaves the same as "lerp8by8" but does not create holes
-        SEGMENT.setPixelColorXY(dx, i, SEGMENT.color_wheel(hue).nfadeOut(rate));
-      }
+      x /= 2; x1 /= 2;
+      SEGMENT.drawLine(x, i, x1, i, c.opacity(0), c);
       SEGMENT.setPixelColorXY(x, i, DARKSLATEGRAY);
       SEGMENT.setPixelColorXY(x1, i, WHITE);
     }
