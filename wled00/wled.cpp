@@ -523,7 +523,7 @@ void WLED::setup()
     findWiFi(true);               // start scanning for available WiFi-s
   } else {
     showWelcomePage = true;
-    WiFi.mode(WIFI_MODE_AP);      // WiFi is not configured so we'll most likely open an AP
+    WiFi.mode(WIFI_MODE_AP);      // WiFi is not configured so we'll most likely open an AP (this already opens default AP)
   }
   #ifdef ARDUINO_ARCH_ESP32
   WiFi.setTxPower(wifi_power_t(txPower)); // must set when WiFi is already started

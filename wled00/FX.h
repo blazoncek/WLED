@@ -458,7 +458,7 @@ class Segment {
       bool    check2  : 1;        // checkmark 2
       bool    check3  : 1;        // checkmark 3
     };
-    uint8_t   blendMode;          // segment blending modes: top, bottom, add, subtract, difference, multiply, divide, lighten, darken, screen, overlay, hardlight, softlight, dodge, burn
+    uint8_t   blendMode;          // segment blending modes: top, bottom, add, subtract, difference, multiply, divide, lighten, darken, screen, overlay, hardlight, softlight, dodge, burn, stenci, hue, saturation, value
     struct {
       uint8_t zoomAmount    : 4;  // zoom amount (0-15)
       uint8_t rotateSpeed   : 4;  // rotation speed (0-15)
@@ -957,8 +957,6 @@ class WS2812FX {
     std::vector<Panel> panel;
 #endif
 
-    void setUpMatrix();     // sets up automatic matrix ledmap from panel configuration
-
     inline void     setPixelColorXY(unsigned x, unsigned y, uint32_t c) const { setPixelColor(y * Segment::maxWidth + x, c); }
     inline void     setPixelColorXY(unsigned x, unsigned y, byte r, byte g, byte b, byte w = 0) const { setPixelColorXY(x, y, RGBW32(r,g,b,w)); }
     inline void     setPixelColorXY(unsigned x, unsigned y, CRGB c) const     { setPixelColorXY(x, y, c.r, c.g, c.b); }
@@ -1020,6 +1018,7 @@ class WS2812FX {
 
     unsigned long _lastShow;
 
+    void setUpMatrix();                 // sets up automatic matrix ledmap from panel configuration
     void applySegmentGeometryUpdates(); // applies segment geometry updates (if any) to all segments
 
     friend class Segment;
