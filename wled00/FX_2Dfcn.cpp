@@ -46,9 +46,6 @@ void WS2812FX::setUpMatrix() {
       return;
     }
 
-    customMappingSize = 0; // prevent use of mapping if anything goes wrong
-    d_free(customMappingTable);
-
     // we will try to load a "gap" array (a JSON file)
     // the array has to have the same amount of values as mapping array (or larger)
     // "gap" array is used while building ledmap (mapping array)
@@ -57,19 +54,17 @@ void WS2812FX::setUpMatrix() {
     // there are no other "key":"value" pairs in it
     // allowed values are: -1 (missing pixel/no LED attached), 0 (inactive/unused pixel), 1 (active/used pixel)
     const unsigned matrixSize = Segment::maxWidth * Segment::maxHeight; // less or equal to getLengthTotal()
-    char    fileName[32]; strcpy_P(fileName, PSTR("/2d-gaps.json"));
-    bool    isFile = WLED_FS.exists(fileName);
-    size_t  gapSize = 0;
-    int8_t *gapTable = nullptr;
+    char fileName[32]; strcpy_P(fileName, PSTR("/2d-gaps.json"));
+    File f = WLED_FS.open(fileName, "r");
+    std::vector<int8_t> gapTable; // RAII temporary buffer
 
-    if (isFile) {
+    if (f) {
       DEBUG_PRINTLN(F("Loading gaps."));
-      File f = WLED_FS.open(fileName, "r");
-      if (f && f.find("[")) {
+      if (f.find("[")) {
+        size_t gapSize = 0;
         size_t pos = f.position();
         // count elements first to know how much to allocate
         char token[32]; strcpy_P(token, PSTR(" \n\r\t,-01"));
-        //while (f.available()) if (f.read() == ',') gapSize++;
         while (f.available()) {
           char c = f.read();
           if (strchr(token, c) == nullptr) break; // invalid character, stop
@@ -78,9 +73,9 @@ void WS2812FX::setUpMatrix() {
         gapSize++;  // there's one more entry than there is commas
         if (gapSize >= matrixSize) {
           f.seek(pos);
-          gapTable = static_cast<int8_t*>(d_malloc(gapSize));
-          if (gapTable) {
-            memset(gapTable, 1, gapSize);
+          gapTable.resize(gapSize);
+          if (gapTable.size() == gapSize) {
+            memset(gapTable.data(), 1, gapSize);  // fill with 1s
             pos = 0;
             while (f.available() && pos < gapSize) {
               size_t n = f.readBytesUntil(',', token, sizeof(token)-1);
@@ -95,8 +90,8 @@ void WS2812FX::setUpMatrix() {
         } else {
           DEBUG_PRINTLN(F("Gapfile too small."));
         }
-        f.close();
       }
+      f.close();
     } else if (panel.size() == 1 && !panel[0].bottomStart && !panel[0].rightStart && !panel[0].serpentine && !panel[0].vertical) {
       // if we only have one panel that starts at top-left and is not serpentine and vertically oriented then don't bother with ledmap
       DEBUG_PRINTLN(F("Ledmap not needed."));
@@ -128,8 +123,8 @@ void WS2812FX::setUpMatrix() {
             x = (p.vertical?p.bottomStart:p.rightStart) ? h-i-1 : i;
             x = p.serpentine && j%2 ? h-x-1 : x;
             size_t index = (p.yOffset + (p.vertical?x:y)) * Segment::maxWidth + p.xOffset + (p.vertical?y:x);
-            if (!gapTable || (gapTable && gapTable[index] >  0)) customMappingTable[index] = pix; // a useful pixel (otherwise -1 is retained)
-            if (!gapTable || (gapTable && gapTable[index] >= 0)) pix++; // not a missing pixel
+            if (!gapTable.size() || (index < gapTable.size() && gapTable[index] >  0)) customMappingTable[index] = pix; // a useful pixel (otherwise -1 is retained)
+            if (!gapTable.size() || (index < gapTable.size() && gapTable[index] >= 0)) pix++; // not a missing pixel
           }
         }
       }
@@ -149,9 +144,6 @@ void WS2812FX::setUpMatrix() {
       Segment::maxHeight = 1;
       resetSegments();
     }
-
-    // delete gap array as we no longer need it
-    d_free(gapTable);
   }
 #else
   isMatrix = false; // no matter what config says
@@ -899,7 +891,7 @@ void /*__attribute__((optimize("O2")))*/ Segment::drawLine(uint16_t x0, uint16_t
 
   // single pixel (line length == 0)
   if (dx+dy == 0) {
-    (this->*setPixelXY)(x0, y0, c1);
+    (this->*setPixelXY)(x0, y0, c2);
     return;
   }
 

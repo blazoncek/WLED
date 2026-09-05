@@ -2436,6 +2436,8 @@ bool WS2812FX::deserializeMap(unsigned n) {
   bool isFile = WLED_FS.exists(fileName);
 
   customMappingSize = 0; // prevent use of mapping if anything goes wrong
+  d_free(customMappingTable);
+  customMappingTable = nullptr;
   currentLedmap = 0;
   if (n == 0 || isFile) interfaceUpdateCallMode = CALL_MODE_WS_SEND; // schedule WS update (to inform UI)
 
@@ -2481,15 +2483,11 @@ bool WS2812FX::deserializeMap(unsigned n) {
   // look for "map":[ (which may include spaces/newlines in between tokens)
   if (!f.find("\"map\"") || !f.find(':') || !f.find('[')) { // stops after the "map":[
     DEBUG_PRINTF_P(PSTR("ERROR Invalid ledmap in %s: no map found\n"), fileName);
-    d_free(customMappingTable);
-    customMappingTable = nullptr;
     f.close();
     return false;
   }
 
-  d_free(customMappingTable);
   customMappingTable = static_cast<uint16_t*>(allocate_buffer(sizeof(uint16_t)*getLengthTotal(), BFRALLOC_PREFER_PSRAM));
-
   if (customMappingTable) {
     DEBUG_PRINTF_P(PSTR("ledmap allocated: %uB @ %p\n"), sizeof(uint16_t)*getLengthTotal(), customMappingTable);
     // initialize mapping table with invalid entries (2D part)
@@ -2536,12 +2534,12 @@ bool WS2812FX::deserializeMap(unsigned n) {
       }
     } else
     #endif
-    while (f.available()) { // f.position() < f.size() - 1
+    while (f.available() && customMappingSize < getLengthTotal()) { // f.position() < f.size() - 1
       String strRead = f.readStringUntil(','); // read a single number (may include array terminating "]" but not number separator ',')
       int index = strRead.toInt();
       if (index < 0 || index > MAX_LEDS) index = 0xFFFF;
       customMappingTable[customMappingSize++] = index;
-      if (customMappingSize >= getLengthTotal() || strRead.indexOf(']') >= 0) break;
+      if (strRead.indexOf(']') >= 0) break;
     }
     currentLedmap = n;
     f.close();
