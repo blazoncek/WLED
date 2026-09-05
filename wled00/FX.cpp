@@ -4684,20 +4684,23 @@ uint16_t mode_2Ddna(void) {         // dna originally by by ldirko at https://pa
   const int rows = SEG_H;
   const unsigned phase = SEGMENT.custom1; // idea borrowed from MM
 
-  SEGMENT.fadeToBlackBy(64);
+  SEGMENT.fadeOut(map(SEGMENT.custom3,0, 31, 255, 32));
   for (int i = 0; i < cols; i++) {
     int y1 = beatsin8_t(SEGMENT.speed/8, 0, rows-1, 0, i*4      );
     int y2 = beatsin8_t(SEGMENT.speed/8, 0, rows-1, 0, i*4+phase);
     CRGBA c1 = SEGMENT.color_from_palette(i*5+      strip.now/17, false, true, 255, beatsin8_t(5, 55, 255, 0, i*10      ));
     CRGBA c2 = SEGMENT.color_from_palette(i*5+phase+strip.now/17, false, true, 255, beatsin8_t(5, 55, 255, 0, i*10+phase));
-    SEGMENT.setPixelColorXY(i, y1, c1);
-    SEGMENT.setPixelColorXY(i, y2, c2);
+    if (SEGMENT.check2) SEGMENT.drawLine(i, y1, i, y2, c1, c2);
+    else {
+      SEGMENT.setPixelColorXY(i, y1, c1);
+      SEGMENT.setPixelColorXY(i, y2, c2);
+    }
   }
   if (SEGMENT.intensity) SEGMENT.blur(SEGMENT.intensity>>3);
 
   return FRAMETIME;
 } // mode_2Ddna()
-static const char _data_FX_MODE_2DDNA[] PROGMEM = "DNA@Scroll speed,Blur,Phase;;!;2;ix=0";
+static const char _data_FX_MODE_2DDNA[] PROGMEM = "DNA@!,Blur,Phase,,Trail,,Fill;;!;2;ix=0,c3=15,o2=0";
 
 
 /////////////////////////
@@ -6044,8 +6047,8 @@ uint16_t mode_2Dscrollingtext(void) {
   // fade_out() is used to fade all pixels to background color. This works ok if scrolling text is used
   // on its own as a top/default layer. However if it is used as a stencil layer then the "trail" will still be
   // opaque (even when close to being black). If backround color is not black, stencil will not work at all (it will behave as Top/Default).
-  if (SEGCOLOR(1) == BLACK) SEGMENT.fadeOut(map(SEGMENT.custom1, 0, 255, 255, 32));  // reduce opacity of pixels thus creating "trail"
-  else                      SEGMENT.fade_out(255 - (SEGMENT.custom1>>4)); // make trail by blending existing pixels into background
+  if (SEGCOLOR(1) == BLACK && SEGMENT.blendMode == 16 /*stencil*/) SEGMENT.fadeOut(map(SEGMENT.custom1, 0, 255, 255, 32));  // reduce opacity of pixels thus creating "trail"
+  else SEGMENT.fade_out(255 - (SEGMENT.custom1>>4)); // make trail by blending existing pixels into background
 
   CRGBA col1 = SEGMENT.color_from_palette(SEGENV.aux1, false, PALETTE_FIXED, 0); // will use SEGCOLOR(0) if Default palette is used
   CRGBA col2(0,0,0,0); // transparent black (used in drawCharacter() as a decision to use palette)
