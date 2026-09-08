@@ -155,7 +155,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_BLINK                    1
 #define FX_MODE_BREATH                   2
 #define FX_MODE_COLOR_WIPE               3
-//#define FX_MODE_COLOR_WIPE_RANDOM        4  // candidate for removal (was Wipe; use Wipe with check 3)
+#define FX_MODE_2DTWINKLES               4  // (was Wipe Random; use Wipe with check 3)
 #define FX_MODE_RANDOM_COLOR             5
 //#define FX_MODE_COLOR_SWEEP              6  // candidate for removal (was Sweep; use Wipe with check 1)
 #define FX_MODE_DYNAMIC                  7

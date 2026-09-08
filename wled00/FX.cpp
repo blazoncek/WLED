@@ -35,6 +35,11 @@
   #define indexToVStrip(index, stripNr) (index) // since stripNr will never be > 0
 #endif
 
+// 10.6 fixed point shortcuts
+#define FP_SHIFT 6
+#define FP_ONE (1 << FP_SHIFT)
+#define FP_HALF (1 << (FP_SHIFT-1))
+
 // effect utility functions
 static uint8_t sin_gap(uint16_t in) {
   if (in & 0x100) return 0;
@@ -6266,9 +6271,8 @@ static void soapPixels(bool isRow, uint8_t *noise3d) {
     }
     for (int j = 0; j < tCR; j++) {
       CRGBA c = ledsbuff[j];
-      if (isRow) std::swap(j,i);
-      SEGMENT.setPixelColorXY(i, j, c);
-      if (isRow) std::swap(j,i);
+      if (isRow) SEGMENT.setPixelColorXY(j, i, c);
+      else       SEGMENT.setPixelColorXY(i, j, c);
     }
   }
 }
@@ -6319,7 +6323,7 @@ uint16_t mode_2Dsoap() {
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DSOAP[] PROGMEM = "Soap@!,Smoothness,,Shift,Density;;!;2;;pal=0";
+static const char _data_FX_MODE_2DSOAP[] PROGMEM = "Soap@!,Smoothness,,Shift,Density;;!;2;pal=0";
 
 
 //Idea from https://www.youtube.com/watch?v=HsA-6KIbgto&ab_channel=GreatScott%21
@@ -6381,6 +6385,99 @@ uint16_t mode_2Dwavingcell() {
   return FRAMETIME;
 }
 static const char _data_FX_MODE_2DWAVINGCELL[] PROGMEM = "Waving Cell@!,,Amplitude 1,Amplitude 2,Amplitude 3;;!;2";
+
+
+// 2D Twinkles
+// by Elliott Kember (c)2020 [https://editor.soulmatelights.com/gallery/11-circles]
+// adapted by Blaz Kristan (AKA @blazoncek)
+uint16_t mode_2Dtwinkles() {
+  if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
+
+  const size_t maxDim = max(SEGMENT.width(), SEGMENT.height()) >> 1;
+  const size_t maxTwinkles = min<size_t>(maxDim, 32);
+
+  struct Twinkle {
+    uint16_t cX;      // absolute pixel coortinate
+    uint16_t cY;      // absolute pixel coordinate
+    uint16_t offset;  // phase offset
+    uint8_t hue;
+    uint8_t bpm;      // pusling speed
+
+    void move() {
+      cX = hw_random8(0, SEG_W);
+      cY = hw_random8(0, SEG_H);
+    }
+
+    void speed(unsigned speed) {
+      bpm = hw_random8(speed >> 1, speed << 1);
+      offset = hw_random16(0, 60000 / bpm);
+    }
+
+    void reset() {
+      hue = hw_random8();
+      speed(10);
+      move();
+    }
+
+    uint16_t radius() {
+      return beatsin16_t(bpm, 0, min<uint16_t>(min(SEG_W,SEG_H)/4, 8) << FP_SHIFT, offset); // in 10.6 fixed point format [0,5] pixels
+    }
+
+    void draw() {
+      auto int106 = [](int32_t a) { return (int16_t)((a >= 0 ? a : -((-a) + FP_ONE - 1)) / FP_ONE); };  // convert 10.6 fixed point to integer (floor()ed when negative)
+      auto sq = [](int a) { return a*a; };
+      const int r = radius();
+
+      // pre-calculate drawing bounds
+      const int32_t pxMin = int106((cX << FP_SHIFT) - r);              // minimum pixel coordinate for drawing; rounded down
+      const int32_t pxMax = int106((cX << FP_SHIFT) + r + FP_ONE - 1); // maximum pixel coordinate for drawing; rounded up
+      const int32_t pyMin = int106((cY << FP_SHIFT) - r);              // minimum pixel coordinate for drawing; rounded down
+      const int32_t pyMax = int106((cY << FP_SHIFT) + r + FP_ONE - 1); // maximum pixel coordinate for drawing; rounded up
+      const int32_t rSq   = sq(r) >> (2*FP_SHIFT);
+
+      for (int x = pxMin; x <= pxMax; x++) {
+        for (int y = pyMin; y <= pyMax; y++) {
+          const int32_t distSq = sq(x - cX) + sq(y - cY);
+          if (distSq > rSq) continue;
+          uint8_t brightness;
+          if (r < FP_ONE) { // last pixel
+            brightness = int106(255 * r);
+          } else {
+            const int pct = 255 * distSq / rSq;
+            brightness = 255 - pct;
+          }
+          SEGMENT.addPixelColorXY(x, y, SEGMENT.color_wheel(hue).opacity(brightness));
+        }
+      }
+    }
+  };
+
+  const size_t dataSize = maxTwinkles * sizeof(Twinkle);
+  if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
+
+  Twinkle *twinkles = reinterpret_cast<Twinkle*>(SEGENV.data);
+  const size_t noTwinkles = map(SEGMENT.intensity, 0, 255, 1, maxTwinkles);
+
+  SEGMENT.fadeOut(255); // make canvas transparent
+  //SEGMENT.fadeToBlackBy(255); // make canvas black
+
+  if (SEGENV.call == 0) {
+    for (size_t i = 0; i < maxTwinkles; i++) twinkles[i].reset();
+  }
+
+  if (SEGENV.aux0 != SEGMENT.speed) {
+    SEGENV.aux0 = SEGMENT.speed;
+    for (size_t i = 0; i < maxTwinkles; i++) twinkles[i].speed(map(SEGENV.aux0, 0, 255, 2, 16));
+  }
+
+  for (size_t i = 0; i < noTwinkles; i++) {
+    if (twinkles[i].radius() < 1) twinkles[i].move();
+    twinkles[i].draw();
+  }
+
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_2DTWINKLES[] PROGMEM = "Twinkles 2D@!,!,,,;;!;2";
 
 
 /*
@@ -9132,6 +9229,7 @@ void WS2812FX::setupEffectData() {
   */
   // --- 2D  effects ---
 #ifndef WLED_DISABLE_2D
+  addEffect(FX_MODE_2DTWINKLES, &mode_2Dtwinkles, _data_FX_MODE_2DTWINKLES);
   addEffect(FX_MODE_2DFLOW, &mode_2Dflow, _data_FX_MODE_2DFLOW);
   addEffect(FX_MODE_2DPLASMAROTOZOOM, &mode_2Dplasmarotozoom, _data_FX_MODE_2DPLASMAROTOZOOM);
   addEffect(FX_MODE_2DSPACESHIPS, &mode_2Dspaceships, _data_FX_MODE_2DSPACESHIPS);
@@ -9186,3 +9284,7 @@ void WS2812FX::setupEffectData() {
 #endif // WLED_DISABLE_2D
 
 }
+
+#undef FP_SHIFT
+#undef FP_ONE
+#undef FP_HALF
