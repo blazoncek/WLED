@@ -6439,6 +6439,15 @@ uint16_t mode_2Dtwinkles() {
         for (int y = pyMin; y <= pyMax; y++) {
           const int32_t distSq = sq(x - cX) + sq(y - cY);
           if (distSq > rSq) continue;
+          int i = x, j = y;
+          if (SEGMENT.check2) {
+            if (i <  0    ) i += SEG_W;
+            if (i >= SEG_W) i -= SEG_W;
+          }
+          if (SEGMENT.check3) {
+            if (j <  0    ) j += SEG_H;
+            if (j >= SEG_H) j -= SEG_H;
+          }
           uint8_t brightness;
           if (r < FP_ONE) { // last pixel
             brightness = int106(255 * r);
@@ -6446,7 +6455,7 @@ uint16_t mode_2Dtwinkles() {
             const int pct = 255 * distSq / rSq;
             brightness = 255 - pct;
           }
-          SEGMENT.addPixelColorXY(x, y, SEGMENT.color_wheel(hue).opacity(brightness));
+          SEGMENT.addPixelColorXY(i, j, SEGMENT.color_wheel(hue).opacity(brightness));
         }
       }
     }
@@ -6477,7 +6486,7 @@ uint16_t mode_2Dtwinkles() {
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DTWINKLES[] PROGMEM = "Twinkles 2D@!,!,,,;;!;2";
+static const char _data_FX_MODE_2DTWINKLES[] PROGMEM = "Twinkles 2D@!,!,,,,,Wrap X,Wrap Y;;!;2";
 
 
 /*
