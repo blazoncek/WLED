@@ -605,14 +605,10 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     }
 
     settingsScript.printf_P(PSTR("maxTimers=%d;"), WLED_MAX_TIMERS);
-    if (timers.empty()) {
-      settingsScript.print(F("addTRow();"));
-    } else {
-      for (const Timer& timer : timers) {
-        settingsScript.printf_P(PSTR("addTRow(%d,%d,%d,%d,%d,%d,%d,%d);"),
-                               timer.hour, timer.minute, timer.preset, timer.weekdays,
-                               timer.monthStart, timer.dayStart, timer.monthEnd, timer.dayEnd);
-      }
+    for (const Timer& timer : timers) {
+      settingsScript.printf_P(PSTR("addTRow(%d,%d,%d,%d,%d,%d,%d,%d);"),
+                              timer.hour, timer.minute, timer.preset, timer.weekdays,
+                              timer.monthStart, timer.dayStart, timer.monthEnd, timer.dayEnd);
     }
   }
 

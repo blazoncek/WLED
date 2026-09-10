@@ -570,16 +570,10 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     }
 
     clearTimers();
-    char k[5]; k[4] = 0;
+    char k[3]; k[2] = 0;
     for (int ti = 0; ti < (int)WLED_MAX_TIMERS; ti++) {
-      if (ti < 10) {
-        k[1] = '0' + ti;
-        k[2] = 0;
-      } else {
-        k[1] = '0' + (ti / 10);
-        k[2] = '0' + (ti % 10);
-        k[3] = 0;
-      }
+      unsigned offset = i < 10 ? '0' : 'A' - 10;
+      k[1] = offset + ti;
       k[0] = 'T';
       if (!request->hasArg(k)) break;
       uint8_t p = request->arg(k).toInt();
