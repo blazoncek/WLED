@@ -6425,7 +6425,7 @@ uint16_t mode_2Dtwinkles() {
 
     void draw() {
       auto int106 = [](int32_t a) { return (int16_t)((a >= 0 ? a : -((-a) + FP_ONE - 1)) / FP_ONE); };  // convert 10.6 fixed point to integer (floor()ed when negative)
-      auto sq = [](int a) { return a*a; };
+      auto _sq = [](int a) { return a*a; };
       const int r = radius();
 
       // pre-calculate drawing bounds
@@ -6433,11 +6433,11 @@ uint16_t mode_2Dtwinkles() {
       const int32_t pxMax = int106((cX << FP_SHIFT) + r + FP_ONE - 1); // maximum pixel coordinate for drawing; rounded up
       const int32_t pyMin = int106((cY << FP_SHIFT) - r);              // minimum pixel coordinate for drawing; rounded down
       const int32_t pyMax = int106((cY << FP_SHIFT) + r + FP_ONE - 1); // maximum pixel coordinate for drawing; rounded up
-      const int32_t rSq   = sq(r) >> (2*FP_SHIFT);
+      const int32_t rSq   = _sq(r) >> (2*FP_SHIFT);
 
       for (int x = pxMin; x <= pxMax; x++) {
         for (int y = pyMin; y <= pyMax; y++) {
-          const int32_t distSq = sq(x - cX) + sq(y - cY);
+          const int32_t distSq = _sq(x - cX) + _sq(y - cY);
           if (distSq > rSq) continue;
           int i = x, j = y;
           if (SEGMENT.check2) {

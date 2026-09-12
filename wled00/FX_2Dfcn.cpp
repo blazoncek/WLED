@@ -56,7 +56,8 @@ void WS2812FX::setUpMatrix() {
     const unsigned matrixSize = Segment::maxWidth * Segment::maxHeight; // less or equal to getLengthTotal()
     char fileName[32]; strcpy_P(fileName, PSTR("/2d-gaps.json"));
     File f = WLED_FS.open(fileName, "r");
-    std::vector<int8_t> gapTable; // RAII temporary buffer
+    //std::vector<int8_t> gapTable; // RAII temporary buffer
+    DynamicBuffer gapTable; // RAII temporary buffer
 
     if (f) {
       DEBUG_PRINTLN(F("Loading gaps."));
@@ -73,8 +74,7 @@ void WS2812FX::setUpMatrix() {
         gapSize++;  // there's one more entry than there is commas
         if (gapSize >= matrixSize) {
           f.seek(pos);
-          gapTable.resize(gapSize);
-          if (gapTable.size() == gapSize) {
+          if (gapTable.resize(gapSize) == gapSize) {
             memset(gapTable.data(), 1, gapSize);  // fill with 1s
             pos = 0;
             while (f.available() && pos < gapSize) {
@@ -562,20 +562,18 @@ void __attribute__((optimize("O2"))) Segment::drawEllipse(int16_t cx, int16_t cy
     // It is enlarged by radius on all sides so the box-blur kernel is not clipped.
 
     #ifdef WLED_ENABLE_LARGE_ELLIPSE
-    // heap implementation in case we'd blur larger ellipses (do not forget to uncomment d_free() below when using)
-    uint8_t *buffer = static_cast<uint8_t*>(d_calloc(bufferSize, sizeof(uint8_t)));
-    if (!buffer) return;
-    uint8_t *scratch = static_cast<uint8_t*>(d_malloc(bufferSize));
-    if (!scratch) {
-      d_free(buffer);
-      return;
-    }
+    // heap implementation in case we'd blur larger ellipses
+    DynamicBuffer _b(bufferSize);
+    DynamicBuffer _s(bufferSize);
+    if (!_b.size() || !_s.size()) return;
+    uint8_t *buffer = static_cast<uint8_t*>(_b.data());
+    uint8_t *scratch = static_cast<uint8_t*>(_s.data());
     #else
     // implementation with stack allocated buffers since they will not be larger than 400 bytes (800 bytes of stack used)
     uint8_t buffer[bufferSize];
     uint8_t scratch[bufferSize];
-    memset(buffer, 0, bufferSize);
     #endif
+    memset(buffer, 0, bufferSize);
 
     // Draw the ellipse into the temporary coverage buffer.
     auto tempPlot = [&](int x, int y, uint8_t b) {
@@ -639,12 +637,6 @@ void __attribute__((optimize("O2"))) Segment::drawEllipse(int16_t cx, int16_t cy
         }
       }
     }
-
-    #ifdef WLED_ENABLE_LARGE_ELLIPSE
-    d_free(scratch);
-    d_free(buffer);
-    #endif
-
     return;
   }
   // AI: end of AI generated code

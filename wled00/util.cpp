@@ -507,6 +507,10 @@ static void *validateFreeHeap(void *buffer) {
   return buffer;
 }
 
+#if defined(CONFIG_IDF_TARGET_ESP32) && defined(BOARD_HAS_PSRAM)
+  #warning "If compiling for ESP32 (rev.1), make sure to use '-mfix-esp32-psram-cache-issue' compiler flag to avoid PSRAM cache issues!"
+#endif
+
 #ifndef ESP8266
 // WLED's implementation of STDC malloc() which automatically determines where to allocate memory from (DRAM/PSRAM/RTC)
 // NOTE: classic ESP32 has a write-through PSRAM cache making every write to PSRAM slow, S2/S3 have write-back
@@ -518,8 +522,8 @@ void *d_malloc(size_t size) {
   unsigned caps1 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
   unsigned caps2 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
   // check available (continuous) free heap and if less than 2*MIN_HEAP_SIZE would remain prefer PSRAM
-  if (size > PSRAM_THRESHOLD || getContinuousFreeHeap() < (2*MIN_HEAP_SIZE + size)) std::swap(caps1, caps2);
-  #ifdef WLED_HAVE_RTC_MEMORY_HEAP
+  if (psramFound() && (size > PSRAM_THRESHOLD || getContinuousFreeHeap() < (2*MIN_HEAP_SIZE + size))) std::swap(caps1, caps2);
+  #if WLED_HAVE_RTC_MEMORY_HEAP
   // the newer ESP32 variants have 8k of byte-accessible fast RTC memory that can be used as heap, access speed is on-par with DRAM
   // use RTC RAM for small allocations
   if (size < RTC_RAM_THRESHOLD) buffer = heap_caps_malloc_prefer(size, 3, MALLOC_CAP_RTCRAM, caps1, caps2);
@@ -534,7 +538,7 @@ void *d_realloc(void *ptr, size_t size) {
   unsigned caps1 = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
   unsigned caps2 = MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT;
   // check available (continuous) free heap and if less than 2*MIN_HEAP_SIZE would remain prefer PSRAM
-  if (size > PSRAM_THRESHOLD || getContinuousFreeHeap() < (2*MIN_HEAP_SIZE + size)) std::swap(caps1, caps2);
+  if (psramFound() && (size > PSRAM_THRESHOLD || getContinuousFreeHeap() < (2*MIN_HEAP_SIZE + size))) std::swap(caps1, caps2);
   #if WLED_HAVE_RTC_MEMORY_HEAP
   // the newer ESP32 variants have 8k of byte-accessible fast RTC memory that can be used as heap, access speed is on-par with DRAM
   // use RTC RAM for small allocations
@@ -542,13 +546,8 @@ void *d_realloc(void *ptr, size_t size) {
   else
   #endif
     buffer = heap_caps_realloc_prefer(ptr, 3, size, caps1, caps2, MALLOC_CAP_DEFAULT);
-  if (validateFreeHeap(buffer)) return buffer; // realloc successful
-  else {
-    // this behaviour simplifies the consumer allocation logic in case of failed realloc
-    d_free(ptr); // free old buffer if realloc failed
-    return d_malloc(size); // fallback to malloc if realloc failed
+    return validateFreeHeap(buffer); // make sure there is enough free heap left
   }
-}
 
 void *d_calloc(size_t count, size_t size) {
   void *buffer = d_malloc(count * size);
@@ -562,13 +561,14 @@ void *d_calloc(size_t count, size_t size) {
 void *allocate_buffer(size_t size, uint32_t type) {
   void *buffer = nullptr;
   #if defined(ESP8266) || defined(CONFIG_IDF_TARGET_ESP32C3) // ESP8266 & C3 do not support PSRAM
-  buffer = malloc(size); // use malloc for ESP8266 and ESP32-C3
+  buffer = d_malloc(size); // use malloc for ESP8266 and ESP32-C3
   #else
   if (type & BFRALLOC_ENFORCE_DRAM) {
     buffer = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); // use DRAM only
   } else if (type & BFRALLOC_ENFORCE_PSRAM) {
     #ifdef BOARD_HAS_PSRAM
-    buffer = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); // use PSRAM if available
+    if (psramFound()) buffer = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); // use PSRAM if available
+    else return nullptr;
     #else
     return nullptr; // PSRAM not available, cannot allocate
     #endif
@@ -605,7 +605,7 @@ void *allocate_buffer(size_t size, uint32_t type) {
   return buffer;
 }
 
-#if defined(BOARD_HAS_PSRAM) && (defined(CONFIG_IDF_TARGET_ESP32S2)|| defined(CONFIG_IDF_TARGET_ESP32S3))
+#if defined(BOARD_HAS_PSRAM) && (defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
 // AI-begin: AI generated content
   #if ESP_IDF_VERSION_MAJOR > 4
     #include "esp_memory_utils.h"

@@ -370,22 +370,25 @@ void updateFSInfo() {
 }
 
 
+#if defined(CONFIG_IDF_TARGET_ESP32) && defined(BOARD_HAS_PSRAM)
+  #warning "If compiling for ESP32 (rev.1), make sure to use '-mfix-esp32-psram-cache-issue' compiler flag to avoid PSRAM cache issues!"
+#endif
 #ifdef BOARD_HAS_PSRAM
 // caching presets in PSRAM may prevent occasional flashes seen when HomeAssitant polls WLED
 // original idea by @akaricchi (https://github.com/Akaricchi)
 // returns a pointer to the PSRAM buffer, updates size parameter
 static const uint8_t *getPresetCache(size_t &size) {
   static unsigned long presetsCachedTime = 0;
-  static uint8_t *presetsCached = nullptr;
-  static size_t presetsCachedSize = 0;
   static byte presetsCachedValidate = 0;
+  static uint8_t *presetsCached = nullptr;
+  size_t presetsCachedSize = 0;
 
   //if (presetsModifiedTime != presetsCachedTime) DEBUG_PRINTLN(F("getPresetCache(): presetsModifiedTime changed."));
   //if (presetsCachedValidate != cacheInvalidate) DEBUG_PRINTLN(F("getPresetCache(): cacheInvalidate changed."));
 
   if ((presetsModifiedTime != presetsCachedTime) || (presetsCachedValidate != cacheInvalidate)) {
     if (presetsCached) {
-      p_free(presetsCached);
+      d_free(presetsCached);
       presetsCached = nullptr;
     }
   }
@@ -395,14 +398,14 @@ static const uint8_t *getPresetCache(size_t &size) {
     if (file) {
       presetsCachedTime = presetsModifiedTime;
       presetsCachedValidate = cacheInvalidate;
-      presetsCachedSize = 0;
-      presetsCached = (uint8_t*)d_malloc(file.size() + 1);
+      presetsCachedSize = file.size();
+      presetsCached = (uint8_t*)allocate_buffer(presetsCachedSize + 1, BFRALLOC_ENFORCE_PSRAM);
       if (presetsCached) {
-        presetsCachedSize = file.size();
         file.read(presetsCached, presetsCachedSize);
         presetsCached[presetsCachedSize] = 0;
         file.close();
-      }
+      } else
+        presetsCachedSize = 0;
     }
   }
 
@@ -416,7 +419,7 @@ bool handleFileRead(AsyncWebServerRequest* request, String path){
   if(path.endsWith("/")) path += "index.htm";
   if(path.indexOf(F("sec")) > -1) return false;
   #ifdef BOARD_HAS_PSRAM
-  if (psramFound() && path.endsWith(FPSTR(getPresetsFileName()))) {
+  if (path.endsWith(FPSTR(getPresetsFileName()))) {
     size_t psize;
     const uint8_t *presets = getPresetCache(psize);
     if (presets) {
@@ -426,8 +429,13 @@ bool handleFileRead(AsyncWebServerRequest* request, String path){
     }
   }
   #endif
-  if(WLED_FS.exists(path) || WLED_FS.exists(path + ".gz")) {
-    request->send(request->beginResponse(WLED_FS, path, {}, request->hasArg(F("download")), {}));
+  #ifndef ESP8266
+  fs::FS &_fs = sdCard && SD.cardType() != CARD_NONE && path.indexOf(F("/sd/")) == 0 ? reinterpret_cast<fs::FS&>(SD) : reinterpret_cast<fs::FS&>(WLED_FS);
+  #else
+  fs::FS &_fs = WLED_FS;
+  #endif
+  if(_fs.exists(path) || _fs.exists(path + ".gz")) {
+    request->send(request->beginResponse(_fs, path, {}, request->hasArg(F("download")), {}));
     return true;
   }
   return false;

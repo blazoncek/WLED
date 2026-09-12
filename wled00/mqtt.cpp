@@ -185,7 +185,7 @@ void publishMqtt()
   bufferPrint pbuf(buf.data(), buf.size());
   XML_response(pbuf);
   snprintf_P(subuf, sizeof(subuf), sTopicFormat, MQTT_MAX_TOPIC_LEN, mqttDeviceTopic, "v");
-  mqtt->publish(subuf, 0, retainMqttMsg, buf.data(), pbuf.size());   // optionally retain message (#2263)
+  mqtt->publish(subuf, 0, retainMqttMsg, pbuf.data(), pbuf.size());   // optionally retain message (#2263)
 }
 
 

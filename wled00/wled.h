@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2609050
+#define VERSION 2609120
 #else
 #define VERSION BUILD
 #endif
@@ -793,9 +793,6 @@ WLED_GLOBAL bool sdCard _INIT(false);
 
 // global ArduinoJson buffer
 // we will allocate buffer in PSRAM if possible from setup() otherwise we will use heap
-#if defined(CONFIG_IDF_TARGET_ESP32) && defined(BOARD_HAS_PSRAM)
-  #warning "If compiling for ESP32 (rev.1), make sure to use '-mfix-esp32-psram-cache-issue' compiler flag to avoid PSRAM cache issues!"
-#endif
 #ifndef BOARD_HAS_PSRAM
 WLED_GLOBAL StaticJsonDocument<JSON_BUFFER_SIZE> gDoc;
 WLED_GLOBAL JsonDocument *pDoc _INIT(&gDoc);

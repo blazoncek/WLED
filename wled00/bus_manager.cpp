@@ -33,7 +33,7 @@ uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const
 
 //util.cpp (contraproductive!!)
 // PSRAM allocation wrappers
-#if defined(BOARD_HAS_PSRAM) && defined(ARDUINO_ARCH_ESP32)
+#ifndef ESP8266
 extern "C" {
   void *d_malloc(size_t);
   void *d_calloc(size_t, size_t);
