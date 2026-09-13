@@ -2257,7 +2257,7 @@ static uint16_t ripple_base() {
         unsigned cy = rippleorigin & 0xFF;
         unsigned mag = scale8(sin8_t((propF>>2)), amp);
         CRGBA c = col.setOpacity(mag);
-        if (propI > 0) SEGMENT.drawCircle(cx<<6, cy<<6, propI, c, true, SEGMENT.check2, SEGMENT.check2);
+        if (propI > 0) SEGMENT.drawCircle(cx << FP_SHIFT, cy << FP_SHIFT, propI, c, true, SEGMENT.check2, SEGMENT.check2);
       } else
       #endif
       {
@@ -2921,8 +2921,8 @@ static const char _data_FX_MODE_GLITTER[] PROGMEM = "Glitter@!,!;,,Glitter color
 //each needs 20 bytes
 //Spark type is used for popcorn, 1D fireworks, and drip
 typedef struct Spark {
-  float pos, posX;
-  float vel, velX;
+  float pos, posX; // TODO convert to 10.6 fixed point
+  float vel, velX; // TODO convert to 10.6 fixed point
   uint16_t col;
   uint8_t colIndex;
 } spark;
@@ -3085,7 +3085,7 @@ typedef struct particle {
   CRGBA    color;
   uint32_t birth  =0;
   uint32_t last   =0;
-  float    vel    =0;
+  float    vel    =0; // TODO convert to 10.6 fixed point
   uint16_t pos    =-1;
   float    fragment[STARBURST_MAX_FRAG];
 } star;
@@ -3446,8 +3446,8 @@ static const char _data_FX_MODE_DRIP[] PROGMEM = "Drip@Gravity,# of drips;!,!;;1
  */
 //20 bytes
 typedef struct Tetris {
-  float    pos;
-  float    speed;
+  float    pos;   // TODO convert to 10.6 fixed point
+  float    speed; // TODO convert to 10.6 fixed point
   uint8_t  col;   // color index
   uint16_t brick; // brick size in pixels
   uint16_t stack; // stack size in pixels
@@ -3960,7 +3960,7 @@ static const char _data_FX_MODE_CHUNCHUN[] PROGMEM = "Chunchun@!,Gap size;!,!;!"
 
 //13 bytes
 typedef struct Spotlight {
-  float speed;
+  float speed; // TODO convert to 10.6 fixed point
   uint8_t colorIdx;
   int16_t position;
   unsigned long lastUpdateTime;
@@ -5027,9 +5027,9 @@ static const char _data_FX_MODE_2DHIPHOTIC[] PROGMEM = "Hiphotic@X scale,Y scale
 // Custom2 = Location of Y centerpoint
 // Custom3 = Size of the area (small value = smaller area)
 typedef struct Julia {
-  float xcen;
-  float ycen;
-  float xymag;
+  float xcen; // TODO convert to 10.6 fixed point
+  float ycen; // TODO convert to 10.6 fixed point
+  float xymag; // TODO convert to 10.6 fixed point
 } julia;
 
 uint16_t mode_2DJulia(void) {                           // An animated Julia set by Andrew Tuline.
@@ -5797,16 +5797,16 @@ uint16_t mode_2Dfloatingblobs(void) {
 
   const int cols = SEG_W;
   const int rows = SEG_H;
-  const int maxC = (cols-1)<<6;
-  const int maxR = (rows-1)<<6;
-  const int rMax = cols>8 ? (cols<<4) : (2<<6); // cols/4 or 2
+  const int maxC = (cols-1) << FP_SHIFT;
+  const int maxR = (rows-1) << FP_SHIFT;
+  const int rMax = cols>8 ? (cols << (FP_SHIFT-2)) : (2 << FP_SHIFT); // cols/4 or 2
   //auto abs = [](int16_t x) { return x<0 ? -x : x; };
   auto int106 = [](int16_t a) { return (int16_t)((int32_t)a >> 6); }; // convert 12.4 fixed point to integer
 
   typedef struct Blob {
     int16_t x, y;   // coordinates are in 12.4 fixed point format
     int16_t sX, sY; // speed is in 10.6 fixed point format
-    uint16_t r;                // radius is in 10.6 fixed point format
+    uint16_t r;     // radius is in 10.6 fixed point format
     byte color;
     struct {
       bool    grow : 1;
@@ -5824,16 +5824,16 @@ uint16_t mode_2Dfloatingblobs(void) {
     nextMove = strip.now + FRAMETIME;
     //SEGMENT.clear();
     for (size_t i = 0; i < MAX_BLOBS; i++) {
-      blob[i].r  = hw_random16(1<<6, rMax);
-      blob[i].sX = hw_random16(2<<6, cols<<6) / (256 - SEGMENT.speed);
-      blob[i].sY = hw_random16(2<<6, rows<<6) / (256 - SEGMENT.speed);
+      blob[i].r  = hw_random16(FP_ONE, rMax);
+      blob[i].sX = hw_random16(2*FP_ONE, cols << FP_SHIFT) / (256 - SEGMENT.speed);
+      blob[i].sY = hw_random16(2*FP_ONE, rows << FP_SHIFT) / (256 - SEGMENT.speed);
       blob[i].x  = hw_random16(0, maxC);
       blob[i].y  = hw_random16(0, maxR);
       blob[i].color = hw_random8();
       blob[i].blur  = hw_random8(3);
-      blob[i].grow  = (blob[i].r <= (1<<6)); // start growing if radius <= 1
-      if (blob[i].sX == 0) blob[i].sX = 2<<6;
-      if (blob[i].sY == 0) blob[i].sY = 2<<6;
+      blob[i].grow  = (blob[i].r <= FP_ONE); // start growing if radius <= 1
+      if (blob[i].sX == 0) blob[i].sX = 2 << FP_SHIFT;
+      if (blob[i].sY == 0) blob[i].sY = 2 << FP_SHIFT;
     }
   }
 
@@ -5846,9 +5846,9 @@ uint16_t mode_2Dfloatingblobs(void) {
   const size_t blobCount = map(SEGMENT.intensity, 0, 255, 1, MAX_BLOBS);
   for (size_t i = 0; i < blobCount; i++) {
     CRGBA c = SEGMENT.color_from_palette(blob[i].color, false, PALETTE_FIXED, 0); // will use SEGCOLOR(0) if Default palette used
-    if (blob[i].r > (1<<6))      SEGMENT.drawEllipse(blob[i].x, blob[i].y, blob[i].r+(1<<5), blob[i].r+(1<<5), c, true, SEGMENT.check2, false, blob[i].blur);
-    else                         SEGMENT.setWuPixelColor(blob[i].x<<2, blob[i].y<<2, c);
-    if (i > 0 && SEGMENT.check3) SEGMENT.drawLine(int106(blob[i-1].x), int106(blob[i-1].y), int106(blob[i].x), int106(blob[i].y), SEGCOLOR(2), SEGCOLOR(2), true);
+    if (blob[i].r > (1 << FP_SHIFT)) SEGMENT.drawEllipse(blob[i].x, blob[i].y, blob[i].r+FP_HALF, blob[i].r+FP_HALF, c, true, SEGMENT.check2, false, blob[i].blur);
+    else                             SEGMENT.setWuPixelColor(blob[i].x<<(8-FP_SHIFT), blob[i].y<<(8-FP_SHIFT), c);
+    if (i > 0 && SEGMENT.check3)     SEGMENT.drawLine(int106(blob[i-1].x), int106(blob[i-1].y), int106(blob[i].x), int106(blob[i].y), SEGCOLOR(2), SEGCOLOR(2), true);
 
     // slowly change color every second
     if (dT > 1000) blob[i].color += 4;
@@ -5863,7 +5863,7 @@ uint16_t mode_2Dfloatingblobs(void) {
     } else {
       // reduce radius until it is < 1
       blob[i].r -= !hw_random8(10); // 10% chance to shrink (by 1/64 pixel)
-      if (blob[i].r < (1<<6)) {
+      if (blob[i].r < FP_ONE) {
         blob[i].grow = true;
       }
     }
@@ -5881,11 +5881,11 @@ uint16_t mode_2Dfloatingblobs(void) {
         // wrap around
         if (blob[i].x < 0) {
           blob[i].x += maxC;
-          if (!hw_random8(10)) blob[i].sX += hw_random8(64) - 32; // ~10% chance of changing speed in x direction
+          if (!hw_random8(10)) blob[i].sX += hw_random8(FP_ONE) - FP_HALF; // ~10% chance of changing speed in x direction
         }
         if (blob[i].x >= maxC) {
           blob[i].x -= maxC;
-          if (!hw_random8(10)) blob[i].sX += hw_random8(64) - 32; // ~10% chance of changing speed in x direction
+          if (!hw_random8(10)) blob[i].sX += hw_random8(FP_ONE) - FP_HALF; // ~10% chance of changing speed in x direction
         }
       } else {
         // bounce x
@@ -6397,16 +6397,30 @@ uint16_t mode_2Dtwinkles() {
   const size_t maxTwinkles = min<size_t>(maxDim, 32);
 
   struct Twinkle {
-    uint16_t cX;      // absolute pixel coortinate
-    uint16_t cY;      // absolute pixel coordinate
+    int16_t cX, vX;
+    int16_t cY, vY;
+    uint16_t minR, maxR;
     uint16_t offset;  // phase offset
     uint8_t hue;
     uint8_t bpm;      // pusling speed
 
-    void move() {
-      cX = hw_random8(0, SEG_W);
-      cY = hw_random8(0, SEG_H);
+    void set() {
+      cX = hw_random16(0, SEG_W) << FP_SHIFT;
+      cY = hw_random16(0, SEG_H) << FP_SHIFT;
     }
+  
+    void move(bool wrapX = true, bool wrapY = true) {
+      cX += vX;
+      cY += vY;
+      if (wrapX) {
+        if (cX <  0                ) cX += SEG_W << FP_SHIFT;
+        if (cX >= (SEG_W<<FP_SHIFT)) cX -= SEG_W << FP_SHIFT;
+      }
+      if (wrapY) {
+        if (cY <  0                ) cY += SEG_H << FP_SHIFT;
+        if (cY >= (SEG_H<<FP_SHIFT)) cY -= SEG_H << FP_SHIFT;
+      }
+  }
 
     void speed(unsigned speed) {
       bpm = hw_random8(speed >> 1, speed << 1);
@@ -6414,37 +6428,39 @@ uint16_t mode_2Dtwinkles() {
     }
 
     void reset() {
+      vX = vY = minR = 0;
+      maxR = 5 << FP_SHIFT;
       hue = hw_random8();
       speed(10);
-      move();
+      set();
     }
 
     uint16_t radius() {
-      return beatsin16_t(bpm, 0, min<uint16_t>(min(SEG_W,SEG_H)/4, 8) << FP_SHIFT, offset); // in 10.6 fixed point format [0,5] pixels
+      return beatsin16_t(bpm, minR, maxR, offset); // in 10.6 fixed point format [0,5] pixels
     }
 
-    void draw() {
+    void draw(bool wrapX = false, bool wrapY = false) {
       auto int106 = [](int32_t a) { return (int16_t)((a >= 0 ? a : -((-a) + FP_ONE - 1)) / FP_ONE); };  // convert 10.6 fixed point to integer (floor()ed when negative)
       auto _sq = [](int a) { return a*a; };
       const int r = radius();
 
       // pre-calculate drawing bounds
-      const int32_t pxMin = int106((cX << FP_SHIFT) - r);              // minimum pixel coordinate for drawing; rounded down
-      const int32_t pxMax = int106((cX << FP_SHIFT) + r + FP_ONE - 1); // maximum pixel coordinate for drawing; rounded up
-      const int32_t pyMin = int106((cY << FP_SHIFT) - r);              // minimum pixel coordinate for drawing; rounded down
-      const int32_t pyMax = int106((cY << FP_SHIFT) + r + FP_ONE - 1); // maximum pixel coordinate for drawing; rounded up
-      const int32_t rSq   = _sq(r) >> (2*FP_SHIFT);
+      const int32_t pxMin = int106(cX - r);              // minimum pixel coordinate for drawing; rounded down
+      const int32_t pxMax = int106(cX + r + FP_ONE - 1); // maximum pixel coordinate for drawing; rounded up
+      const int32_t pyMin = int106(cY - r);              // minimum pixel coordinate for drawing; rounded down
+      const int32_t pyMax = int106(cY + r + FP_ONE - 1); // maximum pixel coordinate for drawing; rounded up
+      const int32_t rSq   = _sq(r);
 
       for (int x = pxMin; x <= pxMax; x++) {
         for (int y = pyMin; y <= pyMax; y++) {
-          const int32_t distSq = _sq(x - cX) + _sq(y - cY);
+          const int32_t distSq = _sq((x<<FP_SHIFT) - cX) + _sq((y<<FP_SHIFT) - cY);
           if (distSq > rSq) continue;
           int i = x, j = y;
-          if (SEGMENT.check2) {
+          if (wrapX) {
             if (i <  0    ) i += SEG_W;
             if (i >= SEG_W) i -= SEG_W;
           }
-          if (SEGMENT.check3) {
+          if (wrapY) {
             if (j <  0    ) j += SEG_H;
             if (j >= SEG_H) j -= SEG_H;
           }
@@ -6471,7 +6487,11 @@ uint16_t mode_2Dtwinkles() {
   //SEGMENT.fadeToBlackBy(255); // make canvas black
 
   if (SEGENV.call == 0) {
-    for (size_t i = 0; i < maxTwinkles; i++) twinkles[i].reset();
+    for (size_t i = 0; i < maxTwinkles; i++) {
+      twinkles[i].reset();
+      twinkles[i].minR = SEGMENT.custom1 ? FP_ONE : 0;
+      twinkles[i].maxR = SEGMENT.custom1 ? FP_ONE * 3 : min<uint16_t>(min(SEG_W,SEG_H)/4, 8) << FP_SHIFT;
+    }
   }
 
   if (SEGENV.aux0 != SEGMENT.speed) {
@@ -6479,14 +6499,32 @@ uint16_t mode_2Dtwinkles() {
     for (size_t i = 0; i < maxTwinkles; i++) twinkles[i].speed(map(SEGENV.aux0, 0, 255, 2, 16));
   }
 
+  if (SEGENV.aux1 != SEGMENT.custom1) {
+    SEGENV.aux1 = SEGMENT.custom1;
+    for (size_t i = 0; i < maxTwinkles; i++) {
+      twinkles[i].minR = SEGMENT.custom1 ? FP_ONE : 0;
+      twinkles[i].maxR = SEGMENT.custom1 ? FP_ONE * 3 : min<uint16_t>(min(SEG_W,SEG_H)/4, 8) << FP_SHIFT;
+    }
+  }
+
   for (size_t i = 0; i < noTwinkles; i++) {
-    if (twinkles[i].radius() < 1) twinkles[i].move();
-    twinkles[i].draw();
+    twinkles[i].draw(SEGMENT.check2);
+    if (SEGMENT.custom1) {
+      twinkles[i].vY = (SEGMENT.custom1 >> 3) + 1;
+      if (!hw_random8(25)) twinkles[i].vX = hw_random8(2) - 1; // drift randomly left-right
+      twinkles[i].move(SEGMENT.check2, false);
+      if (twinkles[i].cY >= SEG_H << FP_SHIFT) {
+        twinkles[i].cY -= SEG_H << FP_SHIFT;
+        twinkles[i].cX = hw_random16(0, SEG_W) << FP_SHIFT;
+        twinkles[i].hue = hw_random8();
+      }
+      twinkles[i].cX = constrain(twinkles[i].cX, FP_HALF, (SEG_W << FP_SHIFT) - FP_HALF);
+    } else if (twinkles[i].radius() < 1) twinkles[i].set();
   }
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DTWINKLES[] PROGMEM = "Twinkles 2D@!,!,,,,,Wrap X,Wrap Y;;!;2";
+static const char _data_FX_MODE_2DTWINKLES[] PROGMEM = "Twinkles 2D@!,!,Drift,,,,Wrap,;;!;2;pal=0,c1=0";
 
 
 /*
