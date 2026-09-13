@@ -16,7 +16,7 @@
 	<script>
 		var d = document;
 		// load common.js with retry on error
-		(function common() {
+		(function common(retry=0) {
 			const l = d.createElement('script');
 			l.src = 'common.js';
 			l.onload = S;
