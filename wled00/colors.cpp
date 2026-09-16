@@ -636,7 +636,7 @@ uint32_t NeoGammaWLEDMethod::Correct32(uint32_t color)
   uint8_t r = R(color);
   uint8_t g = G(color);
   uint8_t b = B(color);
-  return RGBW32(gammaT[r], gammaT[g], gammaT[b], gammaT[w]);
+  return RGBW32(Correct(r), Correct(g), Correct(b), Correct(w));
 }
 
 uint32_t nullGamma32(uint32_t c) {
