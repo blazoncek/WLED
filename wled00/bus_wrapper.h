@@ -287,12 +287,12 @@ class PolyBus {
 //      case I_8266_U0_NEODUAL_5: (static_cast<NeoBus(Grbcwx, Esp8266, Uart0, Ws2813)*>(busPtr))->Begin(); break;
 //      case I_8266_U1_NEODUAL_5: (static_cast<NeoBus(Grbcwx, Esp8266, Uart1, Ws2813)*>(busPtr))->Begin(); break;
 //      case I_8266_DM_NEODUAL_5: (static_cast<NeoBus(Grbcwx, Esp8266, Dma, 800Kbps)*>(busPtr))->Begin(); break;
-      case I_HS_DOT_3: beginDotStar<TwoPinBus(DotStarBgr, DotStarSpiHz)*>(busPtr, -1, -1, -1, -1, clock_kHz); break;
+      case I_HS_DOT_3: beginDotStar<TwoPinBus(DotStarLbgr, DotStarSpiHz)*>(busPtr, -1, -1, -1, -1, clock_kHz); break;
       case I_HS_LPD_3: beginDotStar<TwoPinBus(Lpd8806Grb, Lpd8806SpiHz)*>(busPtr, -1, -1, -1, -1, clock_kHz); break;
       case I_HS_LPO_3: beginDotStar<TwoPinBus(Lpd6803Grb, Lpd6803SpiHz)*>(busPtr, -1, -1, -1, -1, clock_kHz); break;
       case I_HS_WS1_3: beginDotStar<TwoPinBus(NeoRbg, Ws2801SpiHz)*>(busPtr, -1, -1, -1, -1, clock_kHz); break;
       case I_HS_P98_3: beginDotStar<TwoPinBus(P9813Bgr, P9813SpiHz)*>(busPtr, -1, -1, -1, -1, clock_kHz); break;
-      case I_HS_HD1_3: beginDotStar<TwoPinBus(NeoBgr48, Hd108SpiHz)*>(busPtr, -1, -1, -1, -1, clock_kHz); break;
+      case I_HS_HD1_3: beginDotStar<TwoPinBus(Hd108Lbgr, Hd108SpiHz)*>(busPtr, -1, -1, -1, -1, clock_kHz); break;
     #endif
     #ifdef ARDUINO_ARCH_ESP32
       // RMT buses
@@ -328,19 +328,19 @@ class PolyBus {
 //      case I_32_I2_NEODUAL_5: if (_useParallelI2S) (static_cast<NeoBus(Grbcwx, Esp32, I2s1X8, Ws2812x)*>(busPtr))->Begin(); else (static_cast<NeoBus(Grbcwx, Esp32, I2s1, Ws2812x)*>(busPtr))->Begin(); break;
       #endif
       // ESP32 can (and should, to avoid inadvertantly driving the chip select signal) specify the pins used for SPI, but only in begin()
-      case I_HS_DOT_3: beginDotStar<TwoPinBus(DotStarBgr, DotStarSpiHz)*>(busPtr, pins[1], -1, pins[0], -1, clock_kHz); break;
+      case I_HS_DOT_3: beginDotStar<TwoPinBus(DotStarLbgr, DotStarSpiHz)*>(busPtr, pins[1], -1, pins[0], -1, clock_kHz); break;
       case I_HS_LPD_3: beginDotStar<TwoPinBus(Lpd8806Grb, Lpd8806SpiHz)*>(busPtr, pins[1], -1, pins[0], -1, clock_kHz); break;
       case I_HS_LPO_3: beginDotStar<TwoPinBus(Lpd6803Grb, Lpd6803SpiHz)*>(busPtr, pins[1], -1, pins[0], -1, clock_kHz); break;
       case I_HS_WS1_3: beginDotStar<TwoPinBus(NeoRbg, Ws2801SpiHz)*>(busPtr, pins[1], -1, pins[0], -1, clock_kHz); break;
       case I_HS_P98_3: beginDotStar<TwoPinBus(P9813Bgr, P9813SpiHz)*>(busPtr, pins[1], -1, pins[0], -1, clock_kHz); break;
-      case I_HS_HD1_3: beginDotStar<TwoPinBus(NeoBgr48, Hd108SpiHz)*>(busPtr, pins[1], -1, pins[0], -1, clock_kHz); break;
+      case I_HS_HD1_3: beginDotStar<TwoPinBus(Hd108Lbgr, Hd108SpiHz)*>(busPtr, pins[1], -1, pins[0], -1, clock_kHz); break;
     #endif
-      case I_SS_DOT_3: (static_cast<TwoPinBus(DotStarBgr, DotStar)*>(busPtr))->Begin(); break;
+      case I_SS_DOT_3: (static_cast<TwoPinBus(DotStarLbgr, DotStar)*>(busPtr))->Begin(); break;
       case I_SS_LPD_3: (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806)*>(busPtr))->Begin(); break;
       case I_SS_LPO_3: (static_cast<TwoPinBus(Lpd6803Grb, Lpd6803)*>(busPtr))->Begin(); break;
       case I_SS_WS1_3: (static_cast<TwoPinBus(NeoRbg, Ws2801)*>(busPtr))->Begin(); break;
       case I_SS_P98_3: (static_cast<TwoPinBus(P9813Bgr, P9813)*>(busPtr))->Begin(); break;
-      case I_SS_HD1_3: (static_cast<TwoPinBus(NeoBgr48, Hd108)*>(busPtr))->Begin(); break;
+      case I_SS_HD1_3: (static_cast<TwoPinBus(Hd108Lbgr, Hd108)*>(busPtr))->Begin(); break;
     }
   }
 
@@ -445,8 +445,8 @@ class PolyBus {
       #endif
     #endif
       // for 2-wire: pins[1] is clk, pins[0] is dat.  begin expects (len, clk, dat)
-      case I_HS_DOT_3: busPtr = new TwoPinBus(DotStarBgr, DotStarSpiHz)(len, pins[1], pins[0]); break;
-      case I_SS_DOT_3: busPtr = new TwoPinBus(DotStarBgr, DotStar)(len, pins[1], pins[0]); break;
+      case I_HS_DOT_3: busPtr = new TwoPinBus(DotStarLbgr, DotStarSpiHz)(len, pins[1], pins[0]); break;
+      case I_SS_DOT_3: busPtr = new TwoPinBus(DotStarLbgr, DotStar)(len, pins[1], pins[0]); break;
       case I_HS_LPD_3: busPtr = new TwoPinBus(Lpd8806Grb, Lpd8806SpiHz)(len, pins[1], pins[0]); break;
       case I_SS_LPD_3: busPtr = new TwoPinBus(Lpd8806Grb, Lpd8806)(len, pins[1], pins[0]); break;
       case I_HS_LPO_3: busPtr = new TwoPinBus(Lpd6803Grb, Lpd6803SpiHz)(len, pins[1], pins[0]); break;
@@ -455,8 +455,8 @@ class PolyBus {
       case I_SS_WS1_3: busPtr = new TwoPinBus(NeoRbg, Ws2801)(len, pins[1], pins[0]); break;
       case I_HS_P98_3: busPtr = new TwoPinBus(P9813Bgr, P9813SpiHz)(len, pins[1], pins[0]); break;
       case I_SS_P98_3: busPtr = new TwoPinBus(P9813Bgr, P9813)(len, pins[1], pins[0]); break;
-      case I_HS_HD1_3: busPtr = new TwoPinBus(NeoBgr48, Hd108SpiHz)(len, pins[1], pins[0]); break;
-      case I_SS_HD1_3: busPtr = new TwoPinBus(NeoBgr48, Hd108)(len, pins[1], pins[0]); break;
+      case I_HS_HD1_3: busPtr = new TwoPinBus(Hd108Lbgr, Hd108SpiHz)(len, pins[1], pins[0]); break;
+      case I_SS_HD1_3: busPtr = new TwoPinBus(Hd108Lbgr, Hd108)(len, pins[1], pins[0]); break;
     }
 
     return busPtr;
@@ -543,8 +543,8 @@ class PolyBus {
 //      case I_32_I2_NEODUAL_5: if (_useParallelI2S) (static_cast<NeoBus(Grbcwx, Esp32, I2s1X8, Ws2812x)*>(busPtr))->Show(consistent); else (static_cast<NeoBus(Grbcwx, Esp32, I2s1, Ws2812x)*>(busPtr))->Show(consistent); break;
       #endif
     #endif
-      case I_HS_DOT_3: (static_cast<TwoPinBus(DotStarBgr, DotStarSpiHz)*>(busPtr))->Show(consistent); break;
-      case I_SS_DOT_3: (static_cast<TwoPinBus(DotStarBgr, DotStar)*>(busPtr))->Show(consistent); break;
+      case I_HS_DOT_3: (static_cast<TwoPinBus(DotStarLbgr, DotStarSpiHz)*>(busPtr))->Show(consistent); break;
+      case I_SS_DOT_3: (static_cast<TwoPinBus(DotStarLbgr, DotStar)*>(busPtr))->Show(consistent); break;
       case I_HS_LPD_3: (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806SpiHz)*>(busPtr))->Show(consistent); break;
       case I_SS_LPD_3: (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806)*>(busPtr))->Show(consistent); break;
       case I_HS_LPO_3: (static_cast<TwoPinBus(Lpd6803Grb, Lpd6803SpiHz)*>(busPtr))->Show(consistent); break;
@@ -553,8 +553,8 @@ class PolyBus {
       case I_SS_WS1_3: (static_cast<TwoPinBus(NeoRbg, Ws2801)*>(busPtr))->Show(consistent); break;
       case I_HS_P98_3: (static_cast<TwoPinBus(P9813Bgr, P9813SpiHz)*>(busPtr))->Show(consistent); break;
       case I_SS_P98_3: (static_cast<TwoPinBus(P9813Bgr, P9813)*>(busPtr))->Show(consistent); break;
-      case I_HS_HD1_3: (static_cast<TwoPinBus(NeoBgr48, Hd108SpiHz)*>(busPtr))->Show(consistent); break;
-      case I_SS_HD1_3: (static_cast<TwoPinBus(NeoBgr48, Hd108)*>(busPtr))->Show(consistent); break;
+      case I_HS_HD1_3: (static_cast<TwoPinBus(Hd108Lbgr, Hd108SpiHz)*>(busPtr))->Show(consistent); break;
+      case I_SS_HD1_3: (static_cast<TwoPinBus(Hd108Lbgr, Hd108)*>(busPtr))->Show(consistent); break;
     }
   }
 
@@ -639,8 +639,8 @@ class PolyBus {
 //      case I_32_I2_NEODUAL_5: if (_useParallelI2S) return (static_cast<NeoBus(Grbcwx, Esp32, I2s1X8, Ws2812x)*>(busPtr))->CanShow(); else return (static_cast<NeoBus(Grbcwx, Esp32, I2s1, Ws2812x)*>(busPtr))->CanShow(); break;
       #endif
     #endif
-      case I_HS_DOT_3: return (static_cast<TwoPinBus(DotStarBgr, DotStarSpiHz)*>(busPtr))->CanShow(); break;
-      case I_SS_DOT_3: return (static_cast<TwoPinBus(DotStarBgr, DotStar)*>(busPtr))->CanShow(); break;
+      case I_HS_DOT_3: return (static_cast<TwoPinBus(DotStarLbgr, DotStarSpiHz)*>(busPtr))->CanShow(); break;
+      case I_SS_DOT_3: return (static_cast<TwoPinBus(DotStarLbgr, DotStar)*>(busPtr))->CanShow(); break;
       case I_HS_LPD_3: return (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806SpiHz)*>(busPtr))->CanShow(); break;
       case I_SS_LPD_3: return (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806)*>(busPtr))->CanShow(); break;
       case I_HS_LPO_3: return (static_cast<TwoPinBus(Lpd6803Grb, Lpd6803SpiHz)*>(busPtr))->CanShow(); break;
@@ -649,8 +649,8 @@ class PolyBus {
       case I_SS_WS1_3: return (static_cast<TwoPinBus(NeoRbg, Ws2801)*>(busPtr))->CanShow(); break;
       case I_HS_P98_3: return (static_cast<TwoPinBus(P9813Bgr, P9813SpiHz)*>(busPtr))->CanShow(); break;
       case I_SS_P98_3: return (static_cast<TwoPinBus(P9813Bgr, P9813)*>(busPtr))->CanShow(); break;
-      case I_HS_HD1_3: return (static_cast<TwoPinBus(NeoBgr48, Hd108SpiHz)*>(busPtr))->CanShow(); break;
-      case I_SS_HD1_3: return (static_cast<TwoPinBus(NeoBgr48, Hd108)*>(busPtr))->CanShow(); break;
+      case I_HS_HD1_3: return (static_cast<TwoPinBus(Hd108Lbgr, Hd108SpiHz)*>(busPtr))->CanShow(); break;
+      case I_SS_HD1_3: return (static_cast<TwoPinBus(Hd108Lbgr, Hd108)*>(busPtr))->CanShow(); break;
     }
     return true;
   }
@@ -673,6 +673,8 @@ class PolyBus {
       case  5: col.G = g; col.R = b; col.B = r; break; //5 = GBR
     }
     // upper nibble contains W swap information
+    // WARNING: APA102/SK9822/HD108 chips employ LED current limiter (5-bit resolution) which is encoded in W channel
+    // in these cases it is inappropriate to swap W channel (UI prevents that)
     switch (co >> 4) {
       default: col.W = w;                break; // no swapping
       case  1: col.W = col.B; col.B = w; break; // swap W & B
@@ -761,8 +763,8 @@ class PolyBus {
 //      case I_32_I2_NEODUAL_5: if (_useParallelI2S) (static_cast<NeoBus(Grbcwx, Esp32, I2s1X8, Ws2812x)*>(busPtr))->SetPixelColor(pix, RgbwwColor(col.R, col.G, col.B, cctCW, cctWW)); else (static_cast<NeoBus(Grbcwx, Esp32, I2s1, Ws2812x)*>(busPtr))->SetPixelColor(pix, RgbwwColor(col.R, col.G, col.B, cctCW, cctWW)); break;
       #endif
     #endif
-      case I_HS_DOT_3: (static_cast<TwoPinBus(DotStarBgr, DotStarSpiHz)*>(busPtr))->SetPixelColor(pix, RgbColor(col)); break;
-      case I_SS_DOT_3: (static_cast<TwoPinBus(DotStarBgr, DotStar)*>(busPtr))->SetPixelColor(pix, RgbColor(col)); break;
+      case I_HS_DOT_3: (static_cast<TwoPinBus(DotStarLbgr, DotStarSpiHz)*>(busPtr))->SetPixelColor(pix, RgbwColor(col)); break;
+      case I_SS_DOT_3: (static_cast<TwoPinBus(DotStarLbgr, DotStar)*>(busPtr))->SetPixelColor(pix, RgbwColor(col)); break;
       case I_HS_LPD_3: (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806SpiHz)*>(busPtr))->SetPixelColor(pix, RgbColor(col)); break;
       case I_SS_LPD_3: (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806)*>(busPtr))->SetPixelColor(pix, RgbColor(col)); break;
       case I_HS_LPO_3: (static_cast<TwoPinBus(Lpd6803Grb, Lpd6803SpiHz)*>(busPtr))->SetPixelColor(pix, RgbColor(col)); break;
@@ -771,8 +773,8 @@ class PolyBus {
       case I_SS_WS1_3: (static_cast<TwoPinBus(NeoRbg, Ws2801)*>(busPtr))->SetPixelColor(pix, RgbColor(col)); break;
       case I_HS_P98_3: (static_cast<TwoPinBus(P9813Bgr, P9813SpiHz)*>(busPtr))->SetPixelColor(pix, RgbColor(col)); break;
       case I_SS_P98_3: (static_cast<TwoPinBus(P9813Bgr, P9813)*>(busPtr))->SetPixelColor(pix, RgbColor(col)); break;
-      case I_HS_HD1_3: (static_cast<TwoPinBus(NeoBgr48, Hd108SpiHz)*>(busPtr))->SetPixelColor(pix, Rgb48Color(col)); break;
-      case I_SS_HD1_3: (static_cast<TwoPinBus(NeoBgr48, Hd108)*>(busPtr))->SetPixelColor(pix, Rgb48Color(col)); break;
+      case I_HS_HD1_3: (static_cast<TwoPinBus(Hd108Lbgr, Hd108SpiHz)*>(busPtr))->SetPixelColor(pix, Rgbw64Color(col)); break;
+      case I_SS_HD1_3: (static_cast<TwoPinBus(Hd108Lbgr, Hd108)*>(busPtr))->SetPixelColor(pix, Rgbw64Color(col)); break;
     }
   }
 
@@ -858,8 +860,8 @@ class PolyBus {
 //      case I_32_I2_NEODUAL_5: { RgbwwColor c = (_useParallelI2S) ? (static_cast<NeoBus(Grbcwx, Esp32, I2s1X8, Ws2812x)*>(busPtr))->GetPixelColor(pix) : (static_cast<NeoBus(Grbcwx, Esp32, I2s1, Ws2812x)*>(busPtr))->GetPixelColor(pix); col = RGBW32(c.R,c.G,c.B,max(c.WW,c.CW)); } break;
       #endif
     #endif
-      case I_HS_DOT_3: col = (static_cast<TwoPinBus(DotStarBgr, DotStarSpiHz)*>(busPtr))->GetPixelColor(pix); break;
-      case I_SS_DOT_3: col = (static_cast<TwoPinBus(DotStarBgr, DotStar)*>(busPtr))->GetPixelColor(pix); break;
+      case I_HS_DOT_3: col = (static_cast<TwoPinBus(DotStarLbgr, DotStarSpiHz)*>(busPtr))->GetPixelColor(pix); break; // W contains 5 bit current limiter
+      case I_SS_DOT_3: col = (static_cast<TwoPinBus(DotStarLbgr, DotStar)*>(busPtr))->GetPixelColor(pix); break; // W contains 5 bit current limiter
       case I_HS_LPD_3: col = (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806SpiHz)*>(busPtr))->GetPixelColor(pix); break;
       case I_SS_LPD_3: col = (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806)*>(busPtr))->GetPixelColor(pix); break;
       case I_HS_LPO_3: col = (static_cast<TwoPinBus(Lpd6803Grb, Lpd6803SpiHz)*>(busPtr))->GetPixelColor(pix); break;
@@ -868,11 +870,13 @@ class PolyBus {
       case I_SS_WS1_3: col = (static_cast<TwoPinBus(NeoRbg, Ws2801)*>(busPtr))->GetPixelColor(pix); break;
       case I_HS_P98_3: col = (static_cast<TwoPinBus(P9813Bgr, P9813SpiHz)*>(busPtr))->GetPixelColor(pix); break;
       case I_SS_P98_3: col = (static_cast<TwoPinBus(P9813Bgr, P9813)*>(busPtr))->GetPixelColor(pix); break;
-      case I_HS_HD1_3: { Rgb48Color c = (static_cast<TwoPinBus(NeoBgr48, Hd108SpiHz)*>(busPtr))->GetPixelColor(pix); col = RGBW32(c.R>>8,c.G>>8,c.B>>8,0); } break;
-      case I_SS_HD1_3: { Rgb48Color c = (static_cast<TwoPinBus(NeoBgr48, Hd108)*>(busPtr))->GetPixelColor(pix); col = RGBW32(c.R>>8,c.G>>8,c.B>>8,0); } break;
+      case I_HS_HD1_3: { Rgbw64Color c = (static_cast<TwoPinBus(Hd108Lbgr, Hd108SpiHz)*>(busPtr))->GetPixelColor(pix); col = RGBW32(c.R>>8,c.G>>8,c.B>>8,c.W); } break; // W contains 5 bit current limiter
+      case I_SS_HD1_3: { Rgbw64Color c = (static_cast<TwoPinBus(Hd108Lbgr, Hd108)*>(busPtr))->GetPixelColor(pix); col = RGBW32(c.R>>8,c.G>>8,c.B>>8,c.W); } break; // W contains 5 bit current limiter
     }
 
     // upper nibble contains W swap information
+    // WARNING: APA102/SK9822/HD108 chips employ LED current limiter (5-bit resolution) which is encoded in W channel
+    // in these cases it is inappropriate to swap W channel (UI prevents that)
     uint8_t w = col.W;
     switch (co >> 4) {
       case 1: col.W = col.B; col.B = w; break; // swap W & B
@@ -973,8 +977,8 @@ class PolyBus {
 //      case I_32_I2_NEODUAL_5: if (_useParallelI2S) delete (static_cast<NeoBus(Grbcwx, Esp32, I2s1X8, Ws2812x)*>(busPtr)); else delete (static_cast<NeoBus(Grbcwx, Esp32, I2s1, Ws2812x)*>(busPtr)); break;
       #endif
     #endif
-      case I_HS_DOT_3: delete (static_cast<TwoPinBus(DotStarBgr, DotStarSpiHz)*>(busPtr)); break;
-      case I_SS_DOT_3: delete (static_cast<TwoPinBus(DotStarBgr, DotStar)*>(busPtr)); break;
+      case I_HS_DOT_3: delete (static_cast<TwoPinBus(DotStarLbgr, DotStarSpiHz)*>(busPtr)); break;
+      case I_SS_DOT_3: delete (static_cast<TwoPinBus(DotStarLbgr, DotStar)*>(busPtr)); break;
       case I_HS_LPD_3: delete (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806SpiHz)*>(busPtr)); break;
       case I_SS_LPD_3: delete (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806)*>(busPtr)); break;
       case I_HS_LPO_3: delete (static_cast<TwoPinBus(Lpd6803Grb, Lpd6803SpiHz)*>(busPtr)); break;
@@ -983,8 +987,8 @@ class PolyBus {
       case I_SS_WS1_3: delete (static_cast<TwoPinBus(NeoRbg, Ws2801)*>(busPtr)); break;
       case I_HS_P98_3: delete (static_cast<TwoPinBus(P9813Bgr, P9813SpiHz)*>(busPtr)); break;
       case I_SS_P98_3: delete (static_cast<TwoPinBus(P9813Bgr, P9813)*>(busPtr)); break;
-      case I_HS_HD1_3: delete (static_cast<TwoPinBus(NeoBgr48, Hd108SpiHz)*>(busPtr)); break;
-      case I_SS_HD1_3: delete (static_cast<TwoPinBus(NeoBgr48, Hd108)*>(busPtr)); break;
+      case I_HS_HD1_3: delete (static_cast<TwoPinBus(Hd108Lbgr, Hd108SpiHz)*>(busPtr)); break;
+      case I_SS_HD1_3: delete (static_cast<TwoPinBus(Hd108Lbgr, Hd108)*>(busPtr)); break;
     }
   }
 
@@ -1133,8 +1137,8 @@ class PolyBus {
 //      case I_32_I2_NEODUAL_5: size = (_useParallelI2S) ? (static_cast<NeoBus(Grbcwx, Esp32, I2s1X8, Ws2812x)*>(busPtr))->PixelsSize() : (static_cast<NeoBus(Grbcwx, Esp32, I2s1, Ws2812x)*>(busPtr))->PixelsSize(); break;
       #endif
     #endif
-      case I_HS_DOT_3: size = (static_cast<TwoPinBus(DotStarBgr, DotStarSpiHz)*>(busPtr))->PixelsSize(); break;
-      case I_SS_DOT_3: size = (static_cast<TwoPinBus(DotStarBgr, DotStar)*>(busPtr))->PixelsSize(); break;
+      case I_HS_DOT_3: size = (static_cast<TwoPinBus(DotStarLbgr, DotStarSpiHz)*>(busPtr))->PixelsSize(); break;
+      case I_SS_DOT_3: size = (static_cast<TwoPinBus(DotStarLbgr, DotStar)*>(busPtr))->PixelsSize(); break;
       case I_HS_LPD_3: size = (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806SpiHz)*>(busPtr))->PixelsSize(); break;
       case I_SS_LPD_3: size = (static_cast<TwoPinBus(Lpd8806Grb, Lpd8806)*>(busPtr))->PixelsSize(); break;
       case I_HS_LPO_3: size = (static_cast<TwoPinBus(Lpd6803Grb, Lpd6803SpiHz)*>(busPtr))->PixelsSize(); break;
@@ -1143,8 +1147,8 @@ class PolyBus {
       case I_SS_WS1_3: size = (static_cast<TwoPinBus(NeoRbg, Ws2801)*>(busPtr))->PixelsSize(); break;
       case I_HS_P98_3: size = (static_cast<TwoPinBus(P9813Bgr, P9813SpiHz)*>(busPtr))->PixelsSize(); break;
       case I_SS_P98_3: size = (static_cast<TwoPinBus(P9813Bgr, P9813)*>(busPtr))->PixelsSize(); break;
-      case I_HS_HD1_3: size = (static_cast<TwoPinBus(NeoBgr48, Hd108SpiHz)*>(busPtr))->PixelsSize(); break;
-      case I_SS_HD1_3: size = (static_cast<TwoPinBus(NeoBgr48, Hd108)*>(busPtr))->PixelsSize(); break;
+      case I_HS_HD1_3: size = (static_cast<TwoPinBus(Hd108Lbgr, Hd108SpiHz)*>(busPtr))->PixelsSize(); break;
+      case I_SS_HD1_3: size = (static_cast<TwoPinBus(Hd108Lbgr, Hd108)*>(busPtr))->PixelsSize(); break;
     }
     return size * multiplier;
   }
@@ -1220,8 +1224,10 @@ class PolyBus {
       case I_32_I2_SM16825_5: size = (size + 2*count)*2 * (1+STEP_MULTIPLIER);   break; // 16 bit, 5 channels
       #endif
     #endif
-      case I_HS_HD1_3       : // fallthrough; 16 bit
-      case I_SS_HD1_3       : size *= 2; break;
+      case I_HS_DOT_3       : // fallthrough (uses 4th byte for current control)
+      case I_SS_DOT_3       : size += count;
+      case I_HS_HD1_3       : // fallthrough; 16 bit (uses 4th word for current control)
+      case I_SS_HD1_3       : size = (size + count) * 2; break;
     }
     return size;
   }

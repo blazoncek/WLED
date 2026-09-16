@@ -144,6 +144,8 @@ BusDigital::BusDigital(const BusConfig &bc, uint8_t nr)
 , _skip(bc.skipAmount) //sacrificial pixels
 , _colorOrder(bc.colorOrder)
 , _milliAmpsPerLed(bc.milliAmpsPerLed)
+, _currentStep(31)  // TODO make this constant
+, _pixelScaling(255)
 {
   DEBUGBUS_PRINTLN(F("Bus: Creating digital bus."));
   if (!isDigital(bc.type) || !bc.count) { DEBUGBUS_PRINTLN(F("Not digial or empty bus!")); return; }
@@ -198,7 +200,7 @@ void BusDigital::estimateCurrentAndLimitBri() {
 
   byte actualMilliampsPerLed = getLEDCurrent() == 255 ? 12 : getLEDCurrent(); // from testing an actual WS2815 strip
 
-  // WARNING: _busPowerSum is accumulated/summed in setPixelColor() calls
+  // WARNING: _busPowerSum is accumulated/summed in setPixelColor() calls to reduce lossy retrieval
 
   if (hasWhite()) {     // RGBW led total output with white LEDs enabled is still 50mA, so each channel uses less
     _busPowerSum *= 3;
@@ -250,30 +252,34 @@ void BusDigital::setStatusPixel(uint32_t c) {
 
 void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
   if (!_valid || pix >= _len) return;
-  unsigned sBri = scaleBri(_bri, _scale);
   if (Bus::_cct >= 1900) c = colorBalanceFromKelvin(Bus::_cct, c); //color correction from CCT
 
   uint8_t cctWW = 0, cctCW = 0;
-  if (hasWhite()) c = autoWhiteCalc(c, cctWW, cctCW);
   uint16_t wwcw = 0;
-  if (hasCCT()) {
-    if (_type == TYPE_WS2812_WWA) {
-      // for WS2812 WWA we need to set WW and CW into R and G channels as these are not treated as RGBW LEDs (will need to account in ABL)
-      c = RGBW32(cctWW, cctCW, 0, 0); // ww, cw, 0, 0; will be scaled using color_fade() and W is lost after sending to NPB
-    } else {
-      // apply brightness to CCT
-      wwcw  = (((unsigned)cctCW + 1) * sBri) & 0xFF00;
-      wwcw |= (((unsigned)cctWW + 1) * sBri) >> 8;
-      wwcw = gamma32Func((uint32_t)wwcw); // upper two bytes ignored
+  if (hasWhite()) {
+    c = autoWhiteCalc(c, cctWW, cctCW);
+    if (hasCCT()) {
+      if (_type == TYPE_WS2812_WWA) {
+        // for WS2812 WWA we need to set WW and CW into R and G channels as these are not treated as RGBW LEDs (will need to account in ABL)
+        c = RGBW32(cctWW, cctCW, 0, 0); // ww, cw, 0, 0; will be scaled using color_fade() and W is lost after sending to NPB
+      } else {
+        // apply brightness to CCT
+        wwcw  = (((unsigned)cctCW + 1) * _pixelScaling) & 0xFF00;
+        wwcw |= (((unsigned)cctWW + 1) * _pixelScaling) >> 8;
+        wwcw = gamma32Func((uint32_t)wwcw); // upper two bytes ignored
+      }
     }
-  }
-  c = gamma32Func(color_fade(c, sBri, true));
+  } else if (hasCurrentLimiter()) c &= 0x00FFFFFF; // for APA102/SK9822/HD108 we can adjust brightness using hardware (so remove W information, just in case)
+  uint32_t cScl = gamma32Func(color_fade(c, _pixelScaling, true));  // apply brightness and gamma adjustments
+  // for APA102/SK9822/HD108 we can adjust brightness using hardware (stored in W channel)
+  if (hasCurrentLimiter()) cScl |= _currentStep << 24;  // move current limiter into white channel
 
-  // pre-calcualte power usage for per-output ABL (a single bus should never have over 2000 LEDs so uint32_t is enough for _busPowerSum)
-  // WARNING: assumes pixel is not modified agin until show() is called
+  // pre-calcualte power usage for per-output ABL
+  // WARNING: assumes pixel is not modified agin until show() is called (which is true with segment blending approach, strip pixel buffer is transfered to bus in a single pass in show())
   if (_milliAmpsLimit > 0) {
+    c = color_fade(c, scaleBri(_bri, _scale), true); // use original brightness scaling (not current limiter adjusted)
     uint8_t r = R(c), g = G(c), b = B(c), w = W(c);
-    int sum = getLEDCurrent() == 255 ? (max(max(r,g),b)) * 3 : (r + g + b + w);
+    int sum = getLEDCurrent() == 255 ? (max(max(r,g),b)) * 3 : (r + g + b + w); // WS2815 (255) has a wacky current consumption
     addPixelCurrent(sum);
   }
 
@@ -285,12 +291,25 @@ void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
     pix = IC_INDEX_WS2812_1CH_3X(pix);
     const uint32_t cOld = PolyBus::getPixelColor(_busPtr, _iType, pix, co); // no need for restoreColorLossy, we just need to modify single channel
     switch (pOld % 3) { // change only the single channel (TODO: this can cause loss because of get/set)
-      case 0: c = RGBW32(R(cOld), W(c)   , B(cOld), 0); break;
-      case 1: c = RGBW32(W(c)   , G(cOld), B(cOld), 0); break;
-      case 2: c = RGBW32(R(cOld), G(cOld), W(c)   , 0); break;
+      case 0: cScl = RGBW32(R(cOld), W(cScl), B(cOld), 0); break;
+      case 1: cScl = RGBW32(W(cScl), G(cOld), B(cOld), 0); break;
+      case 2: cScl = RGBW32(R(cOld), G(cOld), W(cScl), 0); break;
     }
   }
-  PolyBus::setPixelColor(_busPtr, _iType, pix, c, co, (cctCW<<8) | cctWW);
+  PolyBus::setPixelColor(_busPtr, _iType, pix, cScl, co, (cctCW<<8) | cctWW);
+}
+
+// calculate current limiter step from brightness and number of steps available
+void BusDigital::setBrightness(uint8_t brightness) {
+  Bus::setBrightness(brightness); // sets _bri
+  _currentStep = 31;  // maximum brightness
+  _pixelScaling = scaleBri(_bri, _scale); // final brightness
+  if (_pixelScaling > 0 && _pixelScaling < 255 && hasCurrentLimiter()) {
+    constexpr unsigned brightnessSteps = 31; // TODO will need changing if new LED type employs different number of steps
+    unsigned b = (unsigned)_pixelScaling * brightnessSteps;
+    _currentStep = constrain((b + 254) / 255, 1, brightnessSteps); // ceil()
+    _pixelScaling = (b << 8) / (255 * _currentStep); // Q0.8 (<256)
+  }
 }
 
 size_t BusDigital::getPins(uint8_t* pinArray) const {

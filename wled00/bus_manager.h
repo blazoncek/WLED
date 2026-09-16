@@ -239,6 +239,7 @@ class Bus {
     inline  bool     hasRGB() const                             { return _hasRgb; }
     inline  bool     hasWhite() const                           { return _hasWhite; }
     inline  bool     hasCCT() const                             { return _hasCCT; }
+    inline  bool     hasCurrentLimiter() const                  { return hasCurrentLimiter(_type); }
     inline  bool     isDigital() const                          { return isDigital(_type); }
     inline  bool     is2Pin() const                             { return is2Pin(_type); }
     inline  bool     isOnOff() const                            { return isOnOff(_type); }
@@ -279,6 +280,9 @@ class Bus {
               type == TYPE_ANALOG_2CH    || type == TYPE_ANALOG_5CH ||
               type == TYPE_FW1906        || type == TYPE_WS2805     ||
               type == TYPE_SM16825;
+    }
+    static constexpr bool hasCurrentLimiter(uint8_t type) {
+      return  type == TYPE_APA102 || type == TYPE_HD108;
     }
     static constexpr bool  isTypeValid(uint8_t type)  { return (type > 15 && type < 128); }
     static constexpr bool  isDigital(uint8_t type)    { return (type >= TYPE_DIGITAL_MIN && type <= TYPE_DIGITAL_MAX) || is2Pin(type); }
@@ -358,6 +362,7 @@ class BusDigital : public Bus {
     void setStatusPixel(uint32_t c) override;
     [[gnu::hot]] void setPixelColor(unsigned pix, uint32_t c) override;
     void setColorOrder(uint8_t colorOrder) override;
+    void setBrightness(uint8_t brightness) override;
     uint8_t  getColorOrder() const override  { return _colorOrder; }
     size_t   getPins(uint8_t* pinArray = nullptr) const override;
     unsigned skippedLeds() const override    { return _skip; }
@@ -387,6 +392,8 @@ class BusDigital : public Bus {
     uint8_t  _colorOrder;
     uint8_t  _iType;
     uint8_t  _milliAmpsPerLed;
+    uint8_t  _currentStep; // APA102/HD108 current limiter value
+    uint8_t  _pixelScaling; // pixel brightness scaling factor (Q0.8 factional part of Q16.8 (or Q8.8))
     bool     _consistent; // RMT bus needs consistent buffers otherwise skipped LEDs or gaps may show random colors
 
     static uint16_t _milliAmpsTotal; // is overwitten/recalculated on each show()
