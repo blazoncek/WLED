@@ -254,6 +254,8 @@ void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
   if (!_valid || pix >= _len) return;
   if (Bus::_cct >= 1900) c = colorBalanceFromKelvin(Bus::_cct, c); //color correction from CCT
 
+  uint32_t cOrg = c = gamma32Func(c); // color gamma adjustments (prior to brightness scaling)
+
   uint8_t cctWW = 0, cctCW = 0;
   uint16_t wwcw = 0;
   if (hasWhite()) {
@@ -266,19 +268,19 @@ void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
         // apply brightness to CCT
         wwcw  = (((unsigned)cctCW + 1) * _pixelScaling) & 0xFF00;
         wwcw |= (((unsigned)cctWW + 1) * _pixelScaling) >> 8;
-        wwcw = gamma32Func((uint32_t)wwcw); // upper two bytes ignored
       }
     }
-  } else if (hasCurrentLimiter()) c &= 0x00FFFFFF; // for APA102/SK9822/HD108 we can adjust brightness using hardware (so remove W information, just in case)
-  uint32_t cScl = gamma32Func(color_fade(c, _pixelScaling, true));  // apply brightness and gamma adjustments
+  }
+  c = color_fade(c, _pixelScaling, true);  // apply brightness
   // for APA102/SK9822/HD108 we can adjust brightness using hardware (stored in W channel)
-  if (hasCurrentLimiter()) cScl |= _currentStep << 24;  // move current limiter into white channel
+  if (hasCurrentLimiter() && !hasWhite()) c = (c & 0x00FFFFFF) | _currentStep << 24;  // move current limiter into white channel
 
   // pre-calcualte power usage for per-output ABL
   // WARNING: assumes pixel is not modified agin until show() is called (which is true with segment blending approach, strip pixel buffer is transfered to bus in a single pass in show())
   if (_milliAmpsLimit > 0) {
-    c = color_fade(c, scaleBri(_bri, _scale), true); // use original brightness scaling (not current limiter adjusted)
-    uint8_t r = R(c), g = G(c), b = B(c), w = W(c);
+    // we cannot use c as it may have "wrong" scaling (reduced by use of current limiter)
+    cOrg = color_fade(cOrg, scaleBri(_bri, _scale), true); // use original brightness scaling (not current limiter adjusted)
+    uint8_t r = R(cOrg), g = G(cOrg), b = B(cOrg), w = W(cOrg);
     int sum = getLEDCurrent() == 255 ? (max(max(r,g),b)) * 3 : (r + g + b + w); // WS2815 (255) has a wacky current consumption
     addPixelCurrent(sum);
   }
@@ -291,12 +293,12 @@ void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
     pix = IC_INDEX_WS2812_1CH_3X(pix);
     const uint32_t cOld = PolyBus::getPixelColor(_busPtr, _iType, pix, co); // no need for restoreColorLossy, we just need to modify single channel
     switch (pOld % 3) { // change only the single channel (TODO: this can cause loss because of get/set)
-      case 0: cScl = RGBW32(R(cOld), W(cScl), B(cOld), 0); break;
-      case 1: cScl = RGBW32(W(cScl), G(cOld), B(cOld), 0); break;
-      case 2: cScl = RGBW32(R(cOld), G(cOld), W(cScl), 0); break;
+      case 0: c = RGBW32(R(cOld), W(c   ), B(cOld), 0); break;
+      case 1: c = RGBW32(W(c   ), G(cOld), B(cOld), 0); break;
+      case 2: c = RGBW32(R(cOld), G(cOld), W(c   ), 0); break;
     }
   }
-  PolyBus::setPixelColor(_busPtr, _iType, pix, cScl, co, (cctCW<<8) | cctWW);
+  PolyBus::setPixelColor(_busPtr, _iType, pix, c, co, (cctCW<<8) | cctWW);
 }
 
 // calculate current limiter step from brightness and number of steps available
