@@ -172,7 +172,7 @@ function showToast(text, error = false) {
 }
 function uploadFile(fileObj, name) {
 	var req = new XMLHttpRequest();
-	req.onload = ()=>{showToast(this.responseText,this.status >= 400);};
+	req.onload = (e)=>{showToast(e.target.responseText,e.target.status >= 400);};
 	req.onerror = (e)=>{showToast(e.stack,true);};
 	req.open("POST", getURL("/upload"));
 	var formData = new FormData();
