@@ -27,8 +27,9 @@
 			urows="";
 			if (isO(umCfg)) {
 				for (const [k,o] of Object.entries(umCfg)) {
-					urows += `<hr><h3>${k}</h3>`;
+					urows += `<details class="sec"><summary><h3>${k}</h3></summary>`;
 					addField(k,'unknown',o);
+					urows += `</details>`;
 				}
 			}
 			if (urows==="") urows = "Usermods configuration not found.<br>Press <i>Save</i> to initialize defaults.";
@@ -107,8 +108,8 @@
 	}
 	function addField(k,f,o,a=false) {  //key, field, (sub)object, isArray
 		if (isO(o)) {
-			urows += '<hr class="sml">';
-			if (f!=='unknown' && !k.includes(":")) urows += `<p><u>${initCap(f)}</u></p>`; //show group title
+			//urows += '<hr class="sml">';
+			if (f!=='unknown' && !k.includes(":")) urows += `<hr class="sml"><p><u>${initCap(f)}</u></p>`; //show group title
 			for (const [s,v] of Object.entries(o)) {
 				// possibility to nest objects (only 1 level)
 				if (f!=='unknown' && !k.includes(":")) addField(k+":"+f,s,v);
@@ -268,6 +269,9 @@
 		e.preventDefault();
 		if (d.Sf.checkValidity()) d.Sf.submit(); //https://stackoverflow.com/q/37323914
 	}
+	function setAllUM(open) {
+		gId("um").querySelectorAll("details.sec").forEach(e => { e.open = open; });
+	}
 	function onSD() {
 		const isSD = d.Sf.SD.checked;
 		gId('ss').style.display = isSD ? '' : 'none';
@@ -275,6 +279,51 @@
 	}
 	</script>
 	<style>@import url("style.css");</style>
+	<style>
+		p {
+			margin-top: 0;
+		}
+		summary > h3 {
+			margin: 0 0 4px;
+			/*
+			background: #333;
+			color: #fff;
+			font-family: Verdana, sans-serif;
+			border: 1px solid #333;
+			border-radius: 24px;
+			display: inline-block;
+			font-size: 20px;
+			padding: 8px 12px;
+			min-width: 48px;
+			cursor: pointer;
+			text-decoration: none;
+			*/
+		}
+		.sec {
+			background: #1e1e1e;
+			border-radius: 24px;
+			padding: 8px 0;
+			margin: 0 auto 8px;
+			max-width: 520px;
+			border: 1px #333 solid;
+		}
+		details.sec > summary {
+			cursor: pointer;
+			list-style: none; /* custom marker below instead of the default triangle */
+		}
+		details.sec > summary::-webkit-details-marker { display: none; }
+		details.sec > summary h3::after {
+			content: ' ▸';
+			display: inline-block;
+			transition: transform 0.15s ease;
+		}
+		details.sec[open] > summary h3::after {
+			content: ' ▾';
+		}
+		details.sec[open] > summary {
+			border-bottom: 1px solid #333;
+		}
+	</style>
 </head>
 
 <body onload="S()">
@@ -302,6 +351,8 @@
 		</div>
 		<hr class="sml">
 		Reboot after save? <input type="checkbox" name="RBT"><br>
+		<button type="button" onclick="setAllUM(true)">Expand all</button>
+		<button type="button" onclick="setAllUM(false)">Collapse all</button>
 		<div id="um">Loading settings...</div>
 		<hr><button type="button" onclick="B()">Back</button><button type="submit">Save</button>
 	</form>
