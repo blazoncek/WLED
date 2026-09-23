@@ -63,7 +63,6 @@ class UsermodTemperature : public Usermod {
     static const char _resolution[];
     static const char _sensor[];
     static const char _temperature[];
-    static const char _Temperature[];
     static const char _data_fx[];
 
     //Dallas sensor quick (& dirty) reading. Credit to - Author: Peter Scargill, August 17th, 2013
@@ -110,6 +109,20 @@ class UsermodTemperature : public Usermod {
 
     void appendConfigData() override;
 };
+
+// strings to reduce flash memory usage (used more than once, defined here so sizeof() can work)
+const char UsermodTemperature::_name[]         PROGMEM = "Temperature";
+const char UsermodTemperature::_enabled[]      PROGMEM = "enabled";
+const char UsermodTemperature::_readInterval[] PROGMEM = "read-interval-s";
+const char UsermodTemperature::_parasite[]     PROGMEM = "parasite-pwr";
+const char UsermodTemperature::_parasitePin[]  PROGMEM = "parasite-pwr-pin";
+const char UsermodTemperature::_domoticzIDX[]  PROGMEM = "domoticz-idx";
+const char UsermodTemperature::_resolution[]   PROGMEM = "resolution";
+const char UsermodTemperature::_sensor[]       PROGMEM = "sensor";
+const char UsermodTemperature::_temperature[]  PROGMEM = "temperature";
+const char UsermodTemperature::_data_fx[]      PROGMEM = "Temperature@Min,Max;;!;01;pal=54,sx=255,ix=0";
+
+// class implementation
 
 //Dallas sensor quick (& dirty) reading. Credit to - Author: Peter Scargill, August 17th, 2013
 float UsermodTemperature::readDallas() {
@@ -202,22 +215,22 @@ bool UsermodTemperature::findSensor() {
 void UsermodTemperature::publishHomeAssistantAutodiscovery() {
   if (!WLED_MQTT_CONNECTED) return;
 
-  char json_str[1024], buf[128];
+  char buf[MQTT_MAX_TOPIC_LEN + 64]; //some safety margin
+  DynamicBuffer json_str(MQTT_MAX_PACKET_SIZE);
   size_t payload_size;
-  StaticJsonDocument<1024> json;
+  PSRAMDynamicJsonDocument json(1024);
 
-  sprintf_P(buf, PSTR("%s Temperature"), serverDescription);
+  snprintf_P(buf, sizeof(buf), PSTR("%s Temperature"), serverDescription);
   json["name"] = buf;
-  strcpy(buf, mqttDeviceTopic);
-  strcat_P(buf, _Temperature);
+  snprintf_P(buf, sizeof(buf), PSTR("%s/%s"), mqttDeviceTopic, _temperature);
   json[F("state_topic")] = buf;
   json[F("device_class")] = FPSTR(_temperature);
   json[F("unique_id")] = escapedMac;
   json[F("unit_of_measurement")] = F("°C");
-  payload_size = serializeJson(json, json_str);
+  payload_size = serializeJson(json, json_str.data(), json_str.size());
 
-  sprintf_P(buf, PSTR("homeassistant/sensor/%s/config"), escapedMac);
-  mqtt->publish(buf, 0, true, json_str, payload_size);
+  snprintf_P(buf, sizeof(buf), PSTR("homeassistant/%s/%s/config"), _sensor, escapedMac);
+  mqtt->publish(buf, 0, true, json_str.data(), payload_size);
   HApublished = true;
 }
 #endif
@@ -285,13 +298,12 @@ void UsermodTemperature::loop() {
 
 #ifndef WLED_DISABLE_MQTT
     if (WLED_MQTT_CONNECTED) {
-      char subuf[128];
-      strcpy(subuf, mqttDeviceTopic);
       if (temperature > -100.0f) {
         // dont publish super low temperature as the graph will get messed up
         // the DallasTemperature library returns -127C or -196.6F when problem
         // reading the sensor
-        strcat_P(subuf, _Temperature);
+        char subuf[MQTT_MAX_TOPIC_LEN + 96];
+        snprintf_P(subuf, MQTT_MAX_TOPIC_LEN + 125, PSTR("%s/%s"), mqttDeviceTopic, _temperature);
         mqtt->publish(subuf, 0, false, String(getTemperatureC()).c_str());
         strcat_P(subuf, PSTR("_f"));
         mqtt->publish(subuf, 0, false, String(getTemperatureF()).c_str());
@@ -301,7 +313,7 @@ void UsermodTemperature::loop() {
           msg[F("RSSI")]   = WiFi.RSSI();
           msg[F("nvalue")] = 0;
           msg[F("svalue")] = String(getTemperatureC());
-          serializeJson(msg, subuf, 127);
+          serializeJson(msg, subuf, sizeof(subuf));
           mqtt->publish("domoticz/in", 0, false, subuf);
         }
       } else {
@@ -467,19 +479,6 @@ const char *UsermodTemperature::getTemperatureUnit() {
 }
 
 UsermodTemperature* UsermodTemperature::_instance = nullptr;
-
-// strings to reduce flash memory usage (used more than twice)
-const char UsermodTemperature::_name[]         PROGMEM = "Temperature";
-const char UsermodTemperature::_enabled[]      PROGMEM = "enabled";
-const char UsermodTemperature::_readInterval[] PROGMEM = "read-interval-s";
-const char UsermodTemperature::_parasite[]     PROGMEM = "parasite-pwr";
-const char UsermodTemperature::_parasitePin[]  PROGMEM = "parasite-pwr-pin";
-const char UsermodTemperature::_domoticzIDX[]  PROGMEM = "domoticz-idx";
-const char UsermodTemperature::_resolution[]   PROGMEM = "resolution";
-const char UsermodTemperature::_sensor[]       PROGMEM = "sensor";
-const char UsermodTemperature::_temperature[]  PROGMEM = "temperature";
-const char UsermodTemperature::_Temperature[]  PROGMEM = "/temperature";
-const char UsermodTemperature::_data_fx[]      PROGMEM = "Temperature@Min,Max;;!;01;pal=54,sx=255,ix=0";
 
 static uint16_t mode_temperature() {
   float low  = roundf(mapf((float)SEGMENT.speed, 0.f, 255.f, -150.f, 150.f));    // default: 15°C, range: -15°C to 15°C

@@ -106,7 +106,7 @@ class MultiRelay : public Usermod {
     static const char _pcfAddress[];
     static const char _switch[];
     static const char _toggle[];
-    static const char _Command[];
+    static const char _command[];
 
     void handleOffTimer();
     void InitHtmlAPIHandle();
@@ -222,6 +222,21 @@ class MultiRelay : public Usermod {
     bool readFromConfig(JsonObject &root) override;
 };
 
+// strings to reduce flash memory usage (used more than once; defined here so sizeof() can work)
+const char MultiRelay::_name[]            PROGMEM = "MultiRelay";
+const char MultiRelay::_enabled[]         PROGMEM = "enabled";
+const char MultiRelay::_relay_str[]       PROGMEM = "relay";
+const char MultiRelay::_delay_str[]       PROGMEM = "delay-s";
+const char MultiRelay::_activeHigh[]      PROGMEM = "active-high";
+const char MultiRelay::_external[]        PROGMEM = "external";
+const char MultiRelay::_button[]          PROGMEM = "button";
+const char MultiRelay::_broadcast[]       PROGMEM = "broadcast-sec";
+const char MultiRelay::_HAautodiscovery[] PROGMEM = "HA-autodiscovery";
+const char MultiRelay::_pcf8574[]         PROGMEM = "use-PCF8574";
+const char MultiRelay::_pcfAddress[]      PROGMEM = "PCF8574-address";
+const char MultiRelay::_switch[]          PROGMEM = "switch";
+const char MultiRelay::_toggle[]          PROGMEM = "toggle";
+const char MultiRelay::_command[]         PROGMEM = "command";
 
 // class implementation
 
@@ -229,8 +244,8 @@ void MultiRelay::publishMqtt(int relay) {
 #ifndef WLED_DISABLE_MQTT
   //Check if MQTT Connected, otherwise it will crash the 8266
   if (WLED_MQTT_CONNECTED){
-    char subuf[64];
-    sprintf_P(subuf, PSTR("%s/relay/%d"), mqttDeviceTopic, relay);
+    char subuf[MQTT_MAX_TOPIC_LEN + 32];
+    snprintf_P(subuf, sizeof(subuf), PSTR("%s/%s/%d"), mqttDeviceTopic, _relay_str, relay);
     mqtt->publish(subuf, 0, false, _relay[relay].state ? "on" : "off");
   }
 #endif
@@ -423,17 +438,17 @@ uint8_t MultiRelay::getActiveRelayCount() {
  * topic should look like: /relay/X/command; where X is relay number, 0 based
  */
 bool MultiRelay::onMqttMessage(char* topic, char* payload) {
-  if (strlen(topic) > 8 && strncmp_P(topic, PSTR("/relay/"), 7) == 0 && strncmp_P(topic+8, _Command, 8) == 0) {
+  const char *cmdPos = strrchr(topic,'/');
+  if (strlen(topic) > 8 && cmdPos && strncmp_P(topic+1, _relay_str, sizeof(_relay_str)-1) == 0 && strncmp_P(cmdPos+1, _command, sizeof(_command)-1) == 0) {
     uint8_t relay = strtoul(topic+7, NULL, 10);
-    if (relay<MULTI_RELAY_MAX_RELAYS) {
-      String action = payload;
-      if (action == "on") {
+    if (relay < MULTI_RELAY_MAX_RELAYS) {
+      if (strncmp(payload, "on", 2) == 0) {
         if (_relay[relay].external) switchRelay(relay, true);
         return true;
-      } else if (action == "off") {
+      } else if (strncmp(payload, "off", 3) == 0) {
         if (_relay[relay].external) switchRelay(relay, false);
         return true;
-      } else if (action == FPSTR(_toggle)) {
+      } else if (strncmp_P(payload, _toggle, sizeof(_toggle)-1) == 0) {
         if (_relay[relay].external) toggleRelay(relay);
         return true;
       }
@@ -447,55 +462,54 @@ bool MultiRelay::onMqttMessage(char* topic, char* payload) {
  */
 void MultiRelay::onMqttConnect(bool sessionPresent) {
   //(re)subscribe to required topics
-  char subuf[64];
   if (mqttDeviceTopic[0] != 0) {
-    strcpy(subuf, mqttDeviceTopic);
-    strcat_P(subuf, PSTR("/relay/#"));
-    mqtt->subscribe(subuf, 0);
     if (HAautodiscovery) publishHomeAssistantAutodiscovery();
-    for (int i=0; i<MULTI_RELAY_MAX_RELAYS; i++) {
-      if (_relay[i].pin<0) continue;
+    char subuf[MQTT_MAX_TOPIC_LEN + 48];
+    snprintf_P(subuf, sizeof(subuf), PSTR("%s/%s/#"), mqttDeviceTopic, _relay_str);
+    mqtt->subscribe(subuf, 0);
+    for (int i = 0; i < MULTI_RELAY_MAX_RELAYS; i++) {
+      if (_relay[i].pin < 0) continue;
+      if (_relay[i].external) {
+        snprintf_P(subuf, sizeof(subuf), PSTR("%s/%s/%d/%s"), mqttDeviceTopic, _relay_str, i, _command);
+        mqtt->subscribe(subuf, 0);
+      }
       publishMqtt(i); //publish current state
     }
   }
 }
 
 void MultiRelay::publishHomeAssistantAutodiscovery() {
+  PSRAMDynamicJsonDocument json(1024);
+  DynamicBuffer json_str(1024);
+  char uid[24], buf[MQTT_MAX_TOPIC_LEN + 48];
+  size_t payload_size;
   for (int i = 0; i < MULTI_RELAY_MAX_RELAYS; i++) {
-    char uid[24], json_str[1024], buf[128];
-    size_t payload_size;
     sprintf_P(uid, PSTR("%s_sw%d"), escapedMac, i);
-
     if (_relay[i].pin >= 0 && _relay[i].external) {
-      StaticJsonDocument<1024> json;
-      sprintf_P(buf, PSTR("%s Switch %d"), serverDescription, i); //max length: 33 + 8 + 3 = 44
+      json.clear();
+      snprintf_P(buf, sizeof(buf), PSTR("%s Switch %d"), serverDescription, i); //max length: 33 + 8 + 3 = 44
       json["name"] = buf;
-
-      sprintf_P(buf, PSTR("%s/relay/%d"), mqttDeviceTopic, i); //max length: 33 + 7 + 3 = 43
+      snprintf_P(buf, sizeof(buf), PSTR("%s/%s/%d"), mqttDeviceTopic, _relay_str, i); //max length: 33 + 7 + 3 = 43
       json["~"] = buf;
-      strcat_P(buf, _Command);
-      mqtt->subscribe(buf, 0);
-
       json[F("stat_t")]  = "~";
-      json[F("cmd_t")]   = F("~/command");
+      snprintf_P(buf, sizeof(buf), PSTR("~/%s"), _command);
+      json[F("cmd_t")]   = buf;
       json[F("pl_off")]  = "off";
       json[F("pl_on")]   = "on";
       json[F("uniq_id")] = uid;
-
-      strcpy(buf, mqttDeviceTopic); //max length: 33 + 7 = 40
-      strcat_P(buf, PSTR("/status"));
+      snprintf_P(buf, sizeof(buf), PSTR("%s/status"), mqttDeviceTopic); //max length: 33 + 7 = 40
       json[F("avty_t")]       = buf;
       json[F("pl_avail")]     = F("online");
       json[F("pl_not_avail")] = F("offline");
       //TODO: dev
-      payload_size = serializeJson(json, json_str);
+      payload_size = serializeJson(json, json_str.data(), json_str.size());
     } else {
       //Unpublish disabled or internal relays
       json_str[0]  = 0;
       payload_size = 0;
     }
-    sprintf_P(buf, PSTR("homeassistant/switch/%s/config"), uid);
-    mqtt->publish(buf, 0, true, json_str, payload_size);
+    snprintf_P(buf, sizeof(buf), PSTR("homeassistant/%s/%s/config"), _switch, uid);
+    mqtt->publish(buf, 0, true, json_str.data(), payload_size);
   }
 }
 #endif
@@ -826,19 +840,3 @@ bool MultiRelay::readFromConfig(JsonObject &root) {
   // use "return !top["newestParameter"].isNull();" when updating Usermod with new features
   return !top[FPSTR(_pcf8574)].isNull();
 }
-
-// strings to reduce flash memory usage (used more than twice)
-const char MultiRelay::_name[]            PROGMEM = "MultiRelay";
-const char MultiRelay::_enabled[]         PROGMEM = "enabled";
-const char MultiRelay::_relay_str[]       PROGMEM = "relay";
-const char MultiRelay::_delay_str[]       PROGMEM = "delay-s";
-const char MultiRelay::_activeHigh[]      PROGMEM = "active-high";
-const char MultiRelay::_external[]        PROGMEM = "external";
-const char MultiRelay::_button[]          PROGMEM = "button";
-const char MultiRelay::_broadcast[]       PROGMEM = "broadcast-sec";
-const char MultiRelay::_HAautodiscovery[] PROGMEM = "HA-autodiscovery";
-const char MultiRelay::_pcf8574[]         PROGMEM = "use-PCF8574";
-const char MultiRelay::_pcfAddress[]      PROGMEM = "PCF8574-address";
-const char MultiRelay::_switch[]          PROGMEM = "switch";
-const char MultiRelay::_toggle[]          PROGMEM = "toggle";
-const char MultiRelay::_Command[]         PROGMEM = "/command";
