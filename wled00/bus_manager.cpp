@@ -304,14 +304,18 @@ void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
 // calculate current limiter step from brightness and number of steps available
 void BusDigital::setBrightness(uint8_t brightness) {
   Bus::setBrightness(brightness); // sets _bri
-  _currentStep = 31;  // maximum brightness
+  constexpr unsigned maxBrightnessSteps = 31; // TODO will need changing if new LED type employs different number of steps
+
+  _currentStep = maxBrightnessSteps;  // maximum brightness
   _pixelScaling = scaleBri(_bri, _scale); // final brightness
+
   if (_pixelScaling > 0 && _pixelScaling < 255 && hasCurrentLimiter()) {
-    constexpr unsigned brightnessSteps = 31; // TODO will need changing if new LED type employs different number of steps
-    unsigned b = (unsigned)_pixelScaling * brightnessSteps;
-    _currentStep = constrain((b + 254) / 255, 1, brightnessSteps); // ceil()
+    unsigned b = (unsigned)_pixelScaling * maxBrightnessSteps;
+    _currentStep = constrain((b + 254) / 255, 1, maxBrightnessSteps); // ceil()
     _pixelScaling = (b << 8) / (255 * _currentStep); // Q0.8 (<256)
   }
+
+  PolyBus::setCurrentGain(_busPtr, _iType, _currentStep); // apply to strip
 }
 
 size_t BusDigital::getPins(uint8_t* pinArray) const {

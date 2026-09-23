@@ -998,6 +998,43 @@ class PolyBus {
     }
   }
 
+  template <typename S, class T>
+  static void SetCurrentGain3(void* busPtr, uint8_t gain) {
+    static_cast<T*>(busPtr)->SetPixelSettings(typename S::SettingsObject(gain,gain,gain));
+  }
+
+  template <typename S, class T>
+  static void SetCurrentGain4(void* busPtr, uint8_t gain) {
+    static_cast<T*>(busPtr)->SetPixelSettings(typename S::SettingsObject(gain,gain,gain,gain));
+  }
+
+  template <typename S, class T>
+  static void SetCurrentGain5(void* busPtr, uint8_t gain) {
+    static_cast<T*>(busPtr)->SetPixelSettings(typename S::SettingsObject(gain,gain,gain,gain,gain));
+  }
+
+  static void setCurrentGain(void* busPtr, uint8_t busType, uint8_t gain) {
+    if (busPtr == nullptr) return;
+    switch (busType) {
+    #ifdef ESP8266
+      case I_8266_U0_TM1_4:     SetCurrentGain4<NeoFeature(WrgbTm1814), NeoBus(WrgbTm1814, Esp8266, Uart0, Tm1814)>(busPtr, gain); break;
+      case I_8266_U1_TM1_4:     SetCurrentGain4<NeoFeature(WrgbTm1814), NeoBus(WrgbTm1814, Esp8266, Uart1, Tm1814)>(busPtr, gain); break;
+      case I_8266_DM_TM1_4:     SetCurrentGain4<NeoFeature(WrgbTm1814), NeoBus(WrgbTm1814, Esp8266, Dma, Tm1814)>(busPtr, gain); break;
+      case I_8266_U0_SM16825_5: SetCurrentGain5<NeoFeature(RgbwcSm16825e), NeoBus(RgbwcSm16825e, Esp8266, Uart0, Ws2813)>(busPtr, gain); break;
+      case I_8266_U1_SM16825_5: SetCurrentGain5<NeoFeature(RgbwcSm16825e), NeoBus(RgbwcSm16825e, Esp8266, Uart1, Ws2813)>(busPtr, gain); break;
+      case I_8266_DM_SM16825_5: SetCurrentGain5<NeoFeature(RgbwcSm16825e), NeoBus(RgbwcSm16825e, Esp8266, Dma, 800Kbps)>(busPtr, gain); break;
+    #endif
+    #ifdef ARDUINO_ARCH_ESP32
+      case I_32_RN_TM1_4:       SetCurrentGain4<NeoFeature(WrgbTm1814), NeoBus(WrgbTm1814, Esp32, RmtN, Tm1814)>(busPtr, gain); break;
+      case I_32_RN_SM16825_5:   SetCurrentGain5<NeoFeature(RgbwcSm16825e), NeoBus(RgbwcSm16825e, Esp32, RmtN, Ws2812x)>(busPtr, gain); break;
+      #ifndef CONFIG_IDF_TARGET_ESP32C3
+      case I_32_I2_TM1_4:       if (_useParallelI2S) SetCurrentGain4<NeoFeature(WrgbTm1814), NeoBus(WrgbTm1814, Esp32, I2s1X8, Tm1814)>(busPtr, gain); else SetCurrentGain4<NeoFeature(WrgbTm1814), NeoBus(WrgbTm1814, Esp32, I2s1, Tm1814)>(busPtr, gain); break;
+      case I_32_I2_SM16825_5:   if (_useParallelI2S) SetCurrentGain5<NeoFeature(RgbwcSm16825e), NeoBus(RgbwcSm16825e, Esp32, I2s1X8, Ws2812x)>(busPtr, gain); else SetCurrentGain5<NeoFeature(RgbwcSm16825e), NeoBus(RgbwcSm16825e, Esp32, I2s1, Ws2812x)>(busPtr, gain); break;
+      #endif
+    #endif
+    }
+  }
+
   #if defined(NPB_CONF_4STEP_CADENCE)
     #define STEP_MULTIPLIER 4
   #else
