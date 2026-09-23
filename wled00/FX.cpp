@@ -6511,7 +6511,10 @@ uint16_t mode_2Dtwinkles() {
     twinkles[i].draw(SEGMENT.check2);
     if (SEGMENT.custom1) {
       twinkles[i].vY = (SEGMENT.custom1 >> 3) + 1;
-      if (!hw_random8(25)) twinkles[i].vX = hw_random8(2) - 1; // drift randomly left-right
+      if (!hw_random8(25)) {
+        twinkles[i].vX += hw_random8(2) - 1; // drift randomly left-right
+        twinkles[i].vX = constrain(twinkles[i].vX, -4, 4);
+      }
       twinkles[i].move(SEGMENT.check2, false);
       if (twinkles[i].cY >= SEG_H << FP_SHIFT) {
         twinkles[i].cY -= SEG_H << FP_SHIFT;
