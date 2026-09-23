@@ -4,12 +4,12 @@
    Main sketch, global variable declarations
    @title WLED project sketch
    @version 0.15.3-b2
-   @author 2016-2024 Christian Schwinne (@Aircookie), 2021-2026 Blaz Kristan (@blazoncek)
+   @author 2016-2024 Christian Schwinne (@Aircoookie), 2021-2026 Blaz Kristan (@blazoncek)
  */
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2609200
+#define VERSION 2609230
 #else
 #define VERSION BUILD
 #endif
@@ -216,12 +216,6 @@ struct PSRAM_Allocator {
 using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator<uint8_t>>;
 #else
 #define PSRAMDynamicJsonDocument DynamicJsonDocument
-#endif
-
-#ifndef SPIFFS_EDITOR_AIRCOOOKIE
-  #error You are not using the Aircoookie fork of the ESPAsyncWebserver library.\
-  Using upstream puts your WiFi password at risk of being served by the filesystem.\
-  Comment out this error message to build regardless.
 #endif
 
 #ifndef WLED_DISABLE_INFRARED
