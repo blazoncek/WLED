@@ -6507,21 +6507,23 @@ uint16_t mode_2Dtwinkles() {
     }
   }
 
+  const bool wrap = SEGMENT.check2;
   for (size_t i = 0; i < noTwinkles; i++) {
-    twinkles[i].draw(SEGMENT.check2);
+    twinkles[i].draw(wrap);
     if (SEGMENT.custom1) {
       twinkles[i].vY = (SEGMENT.custom1 >> 3) + 1;
       if (!hw_random8(25)) {
-        twinkles[i].vX += hw_random8(2) - 1; // drift randomly left-right
+        twinkles[i].vX += (int)hw_random8(3) - 1; // drift randomly left-right
         twinkles[i].vX = constrain(twinkles[i].vX, -4, 4);
       }
-      twinkles[i].move(SEGMENT.check2, false);
+      twinkles[i].move(wrap, false);
       if (twinkles[i].cY >= SEG_H << FP_SHIFT) {
         twinkles[i].cY -= SEG_H << FP_SHIFT;
         twinkles[i].cX = hw_random16(0, SEG_W) << FP_SHIFT;
         twinkles[i].hue = hw_random8();
       }
-      twinkles[i].cX = constrain(twinkles[i].cX, FP_HALF, (SEG_W << FP_SHIFT) - FP_HALF);
+      // constrain X if not wraping
+      if (!wrap) twinkles[i].cX = constrain(twinkles[i].cX, FP_HALF, (SEG_W << FP_SHIFT) - FP_HALF);
     } else if (twinkles[i].radius() < 1) twinkles[i].set();
   }
 
