@@ -401,9 +401,9 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
 
   // on/off & brightness logic
   bool onBefore = bri;
-
+  byte briBefore = bri;
   getVal(root["bri"], bri);
-  if (bri != briOld) stateChanged = true;
+  if (bri != briBefore) stateChanged = true; // compare to request start, not briOld (transition origin)
 
   bool on = root["on"] | (bri > 0);
   if (!on != !bri) toggleOnOff();
