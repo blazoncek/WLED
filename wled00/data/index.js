@@ -57,6 +57,7 @@ function handleVisibilityChange() {if (!d.hidden && new Date () - lastUpdate > 3
 function sCol(na, col) {d.documentElement.style.setProperty(na, col);}
 function gId(c) {return d.getElementById(c);}
 function gEBCN(c) {return d.getElementsByClassName(c);}
+function qS(s) { return d.querySelector(s); }
 function qSA(s) { return d.querySelectorAll(s); }
 function cE(s) { return d.createElement(s); }
 function isEmpty(o) {for (const i in o) return false; return true;}
@@ -699,6 +700,7 @@ function parseInfo(i) {
 	mw = i.leds.matrix ? i.leds.matrix.w : 0;
 	mh = i.leds.matrix ? i.leds.matrix.h : 0;
 	isM = mw>0 && mh>0;
+	// hide 2D transition styles if this is not matrix set-up
 	if (!isM) {
 		gId("filter2D").classList.add('hide');
 		qSA('#bs option[data-type="2D"]').forEach((o,i)=>{o.style.display='none';o.hidden=true;o.disabled=true;});
@@ -1240,7 +1242,7 @@ function updateLen(s)
 			if (stop-start>1 && stopY-startY>1) {
 				// 2D segment
 				if (tPL) tPL.classList.remove('hide'); // unhide transpose checkbox
-				let sE = d.querySelector(`#fxlist div[data-id="${selectedFx}"]`);
+				let sE = qS(`#fxlist div[data-id="${selectedFx}"]`);
 				if (sE) {
 					let sN = sE.querySelector(".name").innerText;
 					let seg = gId(`seg${s}map2D`);
@@ -1426,14 +1428,11 @@ function updateSelectedFx()
 			gId("fxbtn").innerText = "Effect: " + selectedNameOnlyAscii;
 		}
 
-		// hide 2D mapping and/or sound simulation options
+		// hide 2D mapping options
 		qSA(`#segcont div[data-map="map2D"]`).forEach((seg)=>{
-			let not2Dfx = d.querySelector(`#fxlist div[data-id="${seg.dataset.fx}"] .name`).innerText.indexOf("\u25A6") < 0;
+			let not2Dfx = qS(`#fxlist div[data-id="${seg.dataset.fx}"] .name`).innerText.indexOf("\u25A6") < 0;
 			if (not2Dfx) seg.classList.remove('hide');
 			else seg.classList.add('hide');
-		});
-		qSA(`#segcont div[data-snd="si"]`).forEach((seg)=>{
-			if (selectedName.indexOf("\u266A")<0 && selectedName.indexOf("\u266B")<0) seg.classList.add('hide'); else seg.classList.remove('hide'); // also "♫ "?
 		});
 	}
 }
@@ -1677,7 +1676,7 @@ function setEffectParameters(idx)
 		if (simplifiedUI) return;
 		let top = parseInt(getComputedStyle(gId("sliders")).height);
 		top += 5;
-		let sel = d.querySelector('#fxlist .selected');
+		let sel = qS('#fxlist .selected');
 		if (sel) sel.style.bottom = top + "px"; // we will need to remove this when unselected (in setFX())
 	}
 
@@ -2157,7 +2156,7 @@ function makePUtil()
 	p.innerHTML = `<div class="presin expanded">${makeP(0)}</div>`;
 	let pTx = gId('p0txt');
 	pTx.focus();
-	pTx.value = d.querySelector(`#fxlist div[data-id="${selectedFx}"] .name`).innerText.replace(/[^\x20-\x7F]/g, "").trim(); // remove non-ascii chars
+	pTx.value = qS(`#fxlist div[data-id="${selectedFx}"] .name`).innerText.replace(/[^\x20-\x7F]/g, "").trim(); // remove non-ascii chars
 	pTx.select();
 	p.scrollIntoView({
 		behavior: 'smooth',
@@ -2458,9 +2457,9 @@ function tglFreeze(s=null)
 function setFX(ind = null)
 {
 	if (ind === null) {
-		ind = parseInt(d.querySelector('#fxlist input[name="fx"]:checked').value);
+		ind = parseInt(qS('#fxlist input[name="fx"]:checked').value);
 	} else {
-		d.querySelector(`#fxlist input[name="fx"][value="${ind}"]`).checked = true;
+		qS(`#fxlist input[name="fx"][value="${ind}"]`).checked = true;
 	}
 
 	// Close effect dialog in simplified UI
@@ -2475,9 +2474,9 @@ function setFX(ind = null)
 function setPalette(paletteId = null)
 {
 	if (paletteId === null) {
-		paletteId = parseInt(d.querySelector('#pallist input[name="palette"]:checked').value);
+		paletteId = parseInt(qS('#pallist input[name="palette"]:checked').value);
 	} else {
-		d.querySelector(`#pallist input[name="palette"][value="${paletteId}"]`).checked = true;
+		qS(`#pallist input[name="palette"][value="${paletteId}"]`).checked = true;
 	}
 
 	// Close palette dialog in simplified UI
@@ -2944,10 +2943,10 @@ function search(field, listId = null) {
 	field.nextElementSibling.style.display = (field.value !== '') ? 'block' : 'none';
 	if (!listId) return;
 
-	const search = field.value !== '';
+	const find = field.value !== '';
 
 	// clear filter if searching in fxlist
-	if (listId === 'fxlist' && search) {
+	if (listId === 'fxlist' && find) {
 		qSA("#filters input[type=checkbox]").forEach((e) => { e.checked = false; });
 	}
 
@@ -2961,7 +2960,8 @@ function search(field, listId = null) {
 		const listItemName = listItem.querySelector('.name').innerText.toUpperCase().replace(/[^\x20-\x7F]/g, ""); // ASCII only
 		const searchIndex = listItemName.indexOf(field.value.toUpperCase());
 		listItem.dataset.searchIndex = searchIndex < 0 ? Number.MAX_SAFE_INTEGER : searchIndex;
-		if ((searchIndex < 0) && !listItem.classList.contains("selected")) {
+		let m = listItem.dataset?.opt?.split(";")?.slice(3,4)[0]; // flags
+		if ((searchIndex < 0 && !listItem.classList.contains("selected")) || (!has2D && m?.includes('2') && !m?.includes('1'))) {
 			listItem.classList.add('hide');
 		} else {
 			listItem.classList.remove('hide');
@@ -2994,7 +2994,7 @@ function search(field, listId = null) {
 
 	// scroll to first search result
 	const firstVisibleItem = sortedListItems.find(item => item.style.display !== 'none' && !item.classList.contains('sticky') && !item.classList.contains('selected'));
-	if (firstVisibleItem && search) {
+	if (firstVisibleItem && find) {
 		firstVisibleItem.scrollIntoView({ behavior: "instant", block: "center" });
 	}
 }
@@ -3135,7 +3135,7 @@ function unfocusSliders()
 }
 
 // sliding UI
-const _C = d.querySelector('.container'), N = 4;
+const _C = qS('.container'), N = 4;
 
 let iSlide = 0, x0 = null, scrollS = 0, locked = false;
 
