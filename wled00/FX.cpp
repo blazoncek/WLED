@@ -1929,9 +1929,10 @@ uint16_t mode_fire_2012() {
       }
 
       // Step 4.  Map from heat cells to LED colors
+      const uint8_t o = SEGMENT.hasWhite() ? 0 : 255;
       for (unsigned j = 0; j < SEGLEN; j++) {
         // prevent use of blend region (241-255) from palette by LINEARBLEND_NOWRAP
-        CRGBA color = ColorFromPaletteWLED(SEGPALETTE, heat[j], 255, LINEARBLEND_NOWRAP);
+        CRGBA color = ColorFromPaletteWLED(SEGPALETTE, heat[j], 255, LINEARBLEND_NOWRAP).setOpacity(o);
         SEGMENT.setPixelColor(indexToVStrip(j, stripNr), color);
       }
     }
@@ -2059,11 +2060,12 @@ uint16_t mode_colortwinkle() {
   unsigned dataSize = (SEGLEN+7) >> 3; //1 bit per LED
   if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
 
+  const uint8_t o = SEGMENT.hasWhite() ? 0 : 255;
   CRGBA col, prev;
   fract8 fadeUpAmount = strip.getBrightness()>28 ? 8 + (SEGMENT.speed>>2) : 68-strip.getBrightness();
   fract8 fadeDownAmount = strip.getBrightness()>28 ? 8 + (SEGMENT.speed>>3) : 68-strip.getBrightness();
   for (unsigned i = 0; i < SEGLEN; i++) {
-    prev = col = SEGMENT.getPixelColor(i);
+    prev = col = SEGMENT.getPixelColor(i).setOpacity(255);
     unsigned index = i >> 3;
     unsigned  bitNum = i & 0x07;
     bool fadeUp = bitRead(SEGENV.data[index], bitNum);
@@ -2071,10 +2073,10 @@ uint16_t mode_colortwinkle() {
     if (fadeUp) {
       col += col.scale8_video(fadeUpAmount);
       if (col.r == 255 || col.g == 255 || col.b == 255) bitWrite(SEGENV.data[index], bitNum, false);
-      if (col == prev) col += col;  //fix "stuck" pixels
-      SEGMENT.setPixelColor(i, col);
+      if (col == prev) { SEGMENT.hasWhite() ? col.add_white(col) : col.nadd(col); } //fix "stuck" pixels (nadd is not suitable for RGBW segments)
+      SEGMENT.setPixelColor(i, col.setOpacity(o));
     } else {
-      SEGMENT.setPixelColor(i, col.nscale8(255 - fadeDownAmount));
+      SEGMENT.setPixelColor(i, col.setOpacity(o).nscale8(255 - fadeDownAmount));
     }
   }
 
@@ -2086,7 +2088,7 @@ uint16_t mode_colortwinkle() {
           unsigned index = i >> 3;
           unsigned  bitNum = i & 0x07;
           bitWrite(SEGENV.data[index], bitNum, true);
-          SEGMENT.setPixelColor(i, ColorFromPaletteWLED(SEGPALETTE, hw_random8(), 64, NOBLEND)); // can't use SEGMENT.color_from_palette(), because of fixed NOBLEND
+          SEGMENT.setPixelColor(i, ColorFromPaletteWLED(SEGPALETTE, hw_random8(), 64, NOBLEND).setOpacity(o)); // can't use SEGMENT.color_from_palette(), because of fixed NOBLEND
           break; //only spawn 1 new pixel per frame per 50 LEDs
         }
       }
@@ -2381,7 +2383,7 @@ uint16_t mode_twinklefox()
 
   // Set up the background color, "bg".
   CRGBA bg = SEGCOLOR(1);
-  unsigned bglight = bg.getAverageLight();
+  unsigned bglight = bg.getRGBaverage();
   if (bglight > 64) {
     bg.nscale8_video(16); // very bright, so scale to 1/16th
   } else if (bglight > 16) {
@@ -2390,12 +2392,13 @@ uint16_t mode_twinklefox()
     bg.nscale8_video(86); // dim, scale to 1/3rd.
   }
 
-  unsigned backgroundBrightness = bg.getAverageLight();
+  unsigned backgroundBrightness = bg.getRGBaverage();
 
+  const uint8_t o = SEGMENT.hasWhite() ? 0 : 255;
   for (unsigned i = 0; i < SEGLEN; i++) {
 
     PRNG16 = (uint16_t)(PRNG16 * 2053) + 1384; // next 'random' number
-    unsigned myclockoffset16= PRNG16; // use that number as clock offset
+    unsigned myclockoffset16 = PRNG16; // use that number as clock offset
     PRNG16 = (uint16_t)(PRNG16 * 2053) + 1384; // next 'random' number
     // use that number as clock speed adjustment factor (in 8ths, from 8/8ths to 23/8ths)
     unsigned myspeedmultiplierQ5_3 =  ((((PRNG16 & 0xFF)>>4) + (PRNG16 & 0x0F)) & 0x0F) + 0x08;
@@ -2405,9 +2408,9 @@ uint16_t mode_twinklefox()
     // We now have the adjusted 'clock' for this pixel, now we call
     // the function that computes what color the pixel should be based
     // on the "brightness = f( time )" idea.
-    CRGBA c = twinklefox_one_twinkle(myclock30, myunique8);
+    CRGBA c = twinklefox_one_twinkle(myclock30, myunique8).setOpacity(o);
 
-    unsigned cbright = c.getAverageLight();
+    unsigned cbright = c.getRGBaverage();
     int deltabright = cbright - backgroundBrightness;
     if (deltabright >= 32 || (bg != BLACK)) {
       // If the new pixel is significantly brighter than the background color,
@@ -3711,8 +3714,9 @@ uint16_t mode_pacifica()
   unsigned basethreshold = beatsin8_t( 9, 55, 65);
   unsigned wave = beat8( 7 );
 
+  const uint8_t o = SEGMENT.hasWhite() ? 0 : 255;
   for (unsigned i = 0; i < SEGLEN; i++) {
-    CRGBA c(2, 6, 10, SEGMENT.hasWhite()?0:255);
+    CRGBA c(2, 6, 10);
     // Render each of four layers, with different scales and speeds, that vary over time
     c += pacifica_one_layer(i, pacifica_palette_1, sCIStart1, beatsin16_t(3, 11 * 256, 14 * 256), beatsin8_t(10, 70, 130), 0-beat16(301));
     c += pacifica_one_layer(i, pacifica_palette_2, sCIStart2, beatsin16_t(4,  6 * 256,  9 * 256), beatsin8_t(17, 40,  80),   beat16(401));
@@ -3722,19 +3726,19 @@ uint16_t mode_pacifica()
     // Add extra 'white' to areas where the four layers of light have lined up brightly
     unsigned threshold = scale8( sin8_t( wave), 20) + basethreshold;
     wave += 7;
-    unsigned l = c.getAverageLight();
+    unsigned l = c.getRGBaverage();
     if (l > threshold) {
       unsigned overage = l - threshold;
       unsigned overage2 = qadd8(overage, overage);
-      c += CRGBA(overage, overage2, qadd8(overage2, overage2), SEGMENT.hasWhite()?0:255);
+      c += CRGBA(overage, overage2, qadd8(overage2, overage2));
     }
 
     //deepen the blues and greens
     c.b = scale8(c.b, 145);
     c.g = scale8(c.g, 200);
-    c |= CRGBA(2, 5, 7, SEGMENT.hasWhite()?0:255);
+    c |= CRGBA(2, 5, 7);
 
-    SEGMENT.setPixelColor(i, c);
+    SEGMENT.setPixelColor(i, c.setOpacity(o));
   }
 
   strip.now = nowOld;
@@ -3861,9 +3865,10 @@ uint16_t mode_noisepal(void) {                                    // Slow noise 
 
   nblendPaletteTowardPalette(palettes[0], palettes[1], 48);               // Blend towards the target palette over 48 iterations.
 
+  const uint8_t o = SEGMENT.hasWhite() ? 0 : 255;
   for (unsigned i = 0; i < SEGLEN; i++) {
     unsigned index = inoise8(i*scale, SEGENV.aux0+i*scale);                // Get a value from the noise function. I'm using both x and y axis.
-    SEGMENT.setPixelColor(i,  ColorFromPaletteWLED(palettes[0], index, 255, LINEARBLEND));  // Use my own palette.
+    SEGMENT.setPixelColor(i, ColorFromPaletteWLED(palettes[0], index, 255, LINEARBLEND).setOpacity(o));  // Use my own palette.
   }
 
   SEGENV.aux0 += beatsin8_t(10,1,4);                                        // Moving along the distance. Vary it a bit with a sine wave.
@@ -4801,10 +4806,11 @@ uint16_t mode_2Dfirenoise(void) {               // firenoise2d. By Andrew Tuline
                                                                   CRGB::DarkOrange,CRGB::DarkOrange, CRGB::Orange, CRGB::Orange,
                                                                   CRGB::Yellow,    CRGB::Orange,     CRGB::Yellow, CRGB::Yellow);
 
+  const uint8_t o = SEGMENT.hasWhite() ? 0 : 255;
   for (int j=0; j < cols; j++) {
     for (int i=0; i < rows; i++) {
       indexx = inoise8(j*yscale*rows/255, i*xscale+strip.now/4);                                               // We're moving along our Perlin map.
-      SEGMENT.setPixelColorXY(j, i, ColorFromPaletteWLED(pal, min(i*(indexx)>>4, 255U), i*255/cols, LINEARBLEND)); // With that value, look up the 8 bit colour palette value and assign it to the current LED.
+      SEGMENT.setPixelColorXY(j, i, ColorFromPaletteWLED(pal, min(i*(indexx)>>4, 255U), i*255/cols, LINEARBLEND).setOpacity(o)); // With that value, look up the 8 bit colour palette value and assign it to the current LED.
     } // for i
   } // for j
 
@@ -4827,7 +4833,6 @@ uint16_t mode_2DFrizzles(void) {                 // By: Stepko https://editor.so
     SEGMENT.addPixelColorXY(beatsin8_t(SEGMENT.speed/8 + i, 0, cols - 1),
                             beatsin8_t(SEGMENT.intensity/8 - i, 0, rows - 1),
                             SEGMENT.color_from_palette(beatsin8_t(12, 0, 255), false, true, 255));
-                            //ColorFromPaletteWLED(SEGPALETTE, beatsin8_t(12, 0, 255), 255, LINEARBLEND));
   }
   if (SEGMENT.custom1) SEGMENT.blur(SEGMENT.custom1>>3);
 
@@ -5392,13 +5397,14 @@ uint16_t mode_2DPolarLights(void) {        // By: Kostyantyn Matviyevskyy  https
   unsigned _scale = map(SEGMENT.intensity, 0, 255, 30, adjScale);
   int _speed = map(SEGMENT.speed, 0, 255, 128, 16);
 
+  const uint8_t o = SEGMENT.hasWhite() ? 0 : 255;
   for (int x = 0; x < cols; x++) {
     for (int y = 0; y < rows; y++) {
       SEGENV.step++;
       SEGMENT.setPixelColorXY(x, y, ColorFromPaletteWLED(auroraPalette,
                                       qsub8(
                                         inoise8((SEGENV.step%2) + x * _scale, y * 16 + SEGENV.step % 16, SEGENV.step / _speed),
-                                        fabsf((float)rows / 2.0f - (float)y) * adjustHeight)));
+                                        fabsf((float)rows / 2.0f - (float)y) * adjustHeight)).setOpacity(o));
     }
   }
 

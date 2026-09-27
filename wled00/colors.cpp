@@ -27,6 +27,8 @@ CRGBA& CRGBA::desaturate(uint8_t amount) {
   return *this;
 }
 
+// nadd() and +=() are not suitable for CRGBA used as CGRBW!
+// if color (either *this or c) is CRGBW use add_white()/color_add() instead
 CRGBA& __attribute__((optimize("O2"))) CRGBA::nadd(const CRGBA &c, bool preserveCR) {
   uint32_t c2 = c.color32 & 0x00FFFFFF;             // ignore alpha/white of color2
   if (c.a < 255) fast_color_scale(c2, c.a);         // scale color2 by its alpha

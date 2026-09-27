@@ -149,7 +149,7 @@ struct CRGBA {
   // maintain compatibility with FastLED
   inline CRGBA& fadeToBlackBy(uint8_t amount) { return nscale8(255 - amount); }
 
-  inline uint8_t getAverageLight() const { return (uint16_t(r) + uint16_t(g) + uint16_t(b)) * uint16_t(a) / (3*255); }
+  inline uint8_t getAverageLight() const { return (unsigned(r) + unsigned(g) + unsigned(b)) * unsigned(a) / (3*255); }
   inline uint8_t getPureValue() const { return (unsigned(r) * 77 + unsigned(g) * 150 + unsigned(b) * 29) >> 8; }
   // get the average of the R, G, B values
   inline uint8_t getRGBaverage() const {
