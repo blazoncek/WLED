@@ -1300,7 +1300,7 @@ void WS2812FX::finalizeInit() {
   // the other option is saving UI settings which will cause enumeration
   enumerateLedmaps();
 
-  _hasRGB = _hasWhiteChannel = _hasCCT = _isOffRefreshRequired = false;
+  _options = 0; // _hasRGB = _hasWhiteChannel = _hasCCT = _isOffRefreshRequired = false;
   BusManager::removeAll();
 
   unsigned digitalCount = 0;

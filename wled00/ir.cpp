@@ -205,10 +205,9 @@ static void changeColor(uint32_t c, int16_t cct=-1)
       bool isRGB   = seg.hasRGB();    // is segment RGB capable
       bool hasW    = seg.hasWhite();  // do we have white/CCT channel
       bool isCCT   = seg.isCCT();     // is segment CCT capable
-      bool wSlider = seg.isWmanual(); // is white auto calculated (white slider NOT shown in UI)
       if (isRGB) mask |= 0x00FFFFFF;  // RGB
       if (hasW)  mask |= 0xFF000000;  // white
-      if (hasW && !wSlider && (c & 0xFF000000)) { // segment has white channel & white channel is auto calculated & white specified
+      if (hasW && (c & 0xFF000000)) { // segment has white channel & white channel is auto calculated & white specified
         seg.setColor(0, c | 0xFFFFFF); // for accurate/brighter mode we fake white (since button may not set white color to 0xFFFFFF)
       } else if (c & mask) seg.setColor(0, c & mask); // only apply if not black
       if (isCCT && cct >= 0) seg.setCCT(cct);
@@ -221,10 +220,9 @@ static void changeColor(uint32_t c, int16_t cct=-1)
     bool isRGB   = seg.hasRGB();    // is segment RGB capable
     bool hasW    = seg.hasWhite();  // do we have white/CCT channel
     bool isCCT   = seg.isCCT();     // is segment CCT capable
-    bool wSlider = seg.isWmanual(); // is white auto calculated (white slider NOT shown in UI)
     if (isRGB) mask |= 0x00FFFFFF;  // RGB
     if (hasW)  mask |= 0xFF000000;  // white
-    if (hasW && !wSlider && (c & 0xFF000000)) { // segment has white channel & white channel is auto calculated & white specified
+    if (hasW && (c & 0xFF000000)) { // segment has white channel & white channel is auto calculated & white specified
       seg.setColor(0, c | 0xFFFFFF); // for accurate/brighter mode we fake white (since button may not set white color to 0xFFFFFF)
     } else if (c & mask) seg.setColor(0, c & mask); // only apply if not black
     if (isCCT && cct >= 0) seg.setCCT(cct);

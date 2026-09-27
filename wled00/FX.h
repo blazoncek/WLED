@@ -485,7 +485,6 @@ class Segment {
         bool    _isRGB    : 1;
         bool    _hasW     : 1;
         bool    _isCCT    : 1;
-        bool    _manualW  : 1;
       };
     };
     mutable uint16_t _rotatedAngle;    // current rotation angle (2D)
@@ -612,9 +611,8 @@ class Segment {
     inline bool     isInTransition()       const { return _t != nullptr; }
     inline bool     isActive()             const { return stop > start; }
     inline bool     hasRGB()               const { return _isRGB; }
-    inline bool     hasWhite()             const { return _hasW; }
+    inline bool     hasWhite()             const { return _hasW; }                            // will be false if Auto-white calculation is not Dual or None
     inline bool     isCCT()                const { return _isCCT; }
-    inline bool     isWmanual()            const { return _manualW; }
     inline uint16_t width()                const { return stop > start ? (stop - start) : 0; }// segment width in physical pixels (length if 1D)
     inline uint16_t height()               const { return stopY - startY; }                   // segment height (if 2D) in physical pixels (it *is* always >=1)
     inline uint16_t length()               const { return width() * height(); }               // segment length (count) in physical pixels
