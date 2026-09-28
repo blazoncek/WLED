@@ -282,7 +282,7 @@ class Bus {
               type == TYPE_SM16825;
     }
     static constexpr bool hasCurrentLimiter(uint8_t type) {
-      return  type == TYPE_APA102 || type == TYPE_HD108;
+      return  type == TYPE_APA102 || type == TYPE_HD108  || type == TYPE_TM1814 || type == TYPE_SM16825;
     }
     static constexpr bool  isTypeValid(uint8_t type)  { return (type > 15 && type < 128); }
     static constexpr bool  isDigital(uint8_t type)    { return (type >= TYPE_DIGITAL_MIN && type <= TYPE_DIGITAL_MAX) || is2Pin(type); }
@@ -384,17 +384,17 @@ class BusDigital : public Bus {
   private:
     void    *_busPtr;
     uint32_t _busPowerSum;
+    const uint16_t _milliAmpsMax;
+    const uint16_t _currentStepMax;
+    const uint8_t  _milliAmpsPerLed;
+    const uint8_t  _skip;
     uint16_t _frequencykHz;
-    uint16_t _milliAmpsMax;
     uint16_t _milliAmpsLimit;
+    uint16_t _currentStep; // APA102/HD108/SM16825 current limiter value (in steps 1-31); TM1814 (in steps 1-63 ~ 7mA-38mA)
     uint8_t  _pins[2];
-    uint8_t  _skip;
     uint8_t  _colorOrder;
     uint8_t  _iType;
-    uint8_t  _milliAmpsPerLed;
-    uint8_t  _currentStep; // APA102/HD108 current limiter value
     uint8_t  _pixelScaling; // pixel brightness scaling factor (Q0.8 factional part of Q16.8 (or Q8.8))
-    bool     _consistent; // RMT bus needs consistent buffers otherwise skipped LEDs or gaps may show random colors
 
     static uint16_t _milliAmpsTotal; // is overwitten/recalculated on each show()
 
@@ -541,12 +541,21 @@ struct BusConfig {
   uint8_t autoWhite;
   uint8_t pins[OUTPUT_MAX_PINS] = {255, 255, 255, 255, 255};
   uint16_t frequency;
-  uint8_t milliAmpsPerLed;
+  uint16_t milliAmpsPerLed;
   uint16_t milliAmpsMax;
   String text;
   uint8_t scale;
 
-  BusConfig(uint8_t busType, uint8_t* ppins, uint16_t pstart = 0, uint16_t len = DEFAULT_LED_COUNT, uint8_t pcolorOrder = COL_ORDER_GRB, bool rev = false, uint8_t skip = 0, byte aw=RGBW_MODE_MANUAL_ONLY, uint16_t clock_kHz=0U, uint8_t maPerLed=LED_MILLIAMPS_DEFAULT, uint16_t maMax=ABL_MILLIAMPS_DEFAULT, String sometext = "", uint8_t pscale = 100)
+  BusConfig(uint8_t busType, uint8_t* ppins, uint16_t pstart = 0, uint16_t len = DEFAULT_LED_COUNT
+    , uint8_t pcolorOrder = COL_ORDER_GRB
+    , bool rev = false
+    , uint8_t skip = 0
+    , byte aw = RGBW_MODE_MANUAL_ONLY
+    , uint16_t clock_kHz = 0U
+    , uint16_t maPerLed = LED_MILLIAMPS_DEFAULT
+    , uint16_t maMax = ABL_MILLIAMPS_DEFAULT
+    , String sometext = ""
+    , uint8_t pscale = 100)
   : count(std::max(len,(uint16_t)1))
   , start(pstart)
   , colorOrder(pcolorOrder)

@@ -295,6 +295,8 @@
 <hr class="sml">
 <span id="n${s}">${++i}</span>: <select name="LT${s}" onchange="updTDDs(this);UI()"></select><br>
 <div id="abl${s}">mA/LED: <select name="LL${s}" onchange="enLA(this);UI();">
+<option value="152">38mA/ch (max TM1814)</option>
+<option value="88">22mA/ch (typ TM1814)</option>
 <option value="55" selected>55mA (typ. 5V WS281x)</option>
 <option value="35">35mA (eco WS2812)</option>
 <option value="30">30mA (typ. 12V)</option>
@@ -302,7 +304,7 @@
 <option value="15">15mA (seed/fairy pixels)</option>
 <option value="0">Custom</option>
 </select><br>
-<div id="LAdis${s}" style="display: none;">max. mA/LED: <input name="LA${s}" type="number" min="1" max="255" oninput="UI()"> mA<br></div>
+<div id="LAdis${s}" style="display: none;">max. mA/LED: <input name="LA${s}" type="number" min="1" max="254" oninput="UI()"> mA<br></div>
 <div id="PSU${s}">PSU: <input name="MA${s}" type="number" class="xl" min="250" max="65500" oninput="UI()" value="250"> mA<br></div>
 </div>
 <div id="co${s}" style="display:inline">Color Order:

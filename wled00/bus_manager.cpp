@@ -138,17 +138,17 @@ uint32_t Bus::autoWhiteCalc(uint32_t c, uint8_t &ww, uint8_t &cw) const {
 BusDigital::BusDigital(const BusConfig &bc, uint8_t nr)
 : Bus(bc.type, bc.start, bc.autoWhite, bc.count, bc.reversed, (bc.refreshReq || bc.type == TYPE_TM1814))
 , _busPowerSum(0)
-, _frequencykHz(0)
 , _milliAmpsMax(bc.milliAmpsMax)
-, _milliAmpsLimit(0)
-, _skip(bc.skipAmount) //sacrificial pixels
-, _colorOrder(bc.colorOrder)
+, _currentStepMax(bc.type == TYPE_TM1814 ? (min(1520, max(280, bc.milliAmpsPerLed*10))/4 - 65) / 5 : 31)  // TODO make this user-defined
 , _milliAmpsPerLed(bc.milliAmpsPerLed)
-, _currentStep(31)  // TODO make this constant
+, _skip(bc.skipAmount) //sacrificial pixels
+, _frequencykHz(0)
+, _milliAmpsLimit(0)
+, _currentStep(_currentStepMax)
+, _colorOrder(bc.colorOrder)
 , _pixelScaling(255)
 {
   DEBUGBUS_PRINTLN(F("Bus: Creating digital bus."));
-  if (!isDigital(bc.type) || !bc.count) { DEBUGBUS_PRINTLN(F("Not digial or empty bus!")); return; }
   if (!PinManager::allocatePin(bc.pins[0], true, PinOwner::BusDigital)) { DEBUGBUS_PRINTLN(F("Pin 0 allocated!")); return; }
   _pins[0] = bc.pins[0];
   if (is2Pin(bc.type)) {
@@ -160,7 +160,6 @@ BusDigital::BusDigital(const BusConfig &bc, uint8_t nr)
     _pins[1] = bc.pins[1];
     _frequencykHz = bc.frequency ? bc.frequency : 2000U; // 2MHz clock if undefined
   }
-  _consistent = nr < WLED_MAX_RMT_CHANNELS || _skip > 0;  // TODO: no longer needed once neopixelbus#905 (or similar) is merged or use https://github.com/blazoncek/NeoPixelBus.git#clearto-buffers
   _iType = PolyBus::getI(bc.type, _pins, nr);
   if (_iType == I_NONE) { DEBUGBUS_PRINTLN(F("Incorrect iType!")); return; }
   _scale = bc.scale;
@@ -171,10 +170,10 @@ BusDigital::BusDigital(const BusConfig &bc, uint8_t nr)
   if (bc.type == TYPE_WS2812_1CH_X3) lenToCreate = NUM_ICS_WS2812_1CH_3X(bc.count); // only needs a third of "RGB" LEDs for NeoPixelBus
   _busPtr = PolyBus::create(_iType, _pins, lenToCreate + _skip, nr);
   _valid = (_busPtr != nullptr) && bc.count > 0;
-  // fix for wled#4759
-  if (_valid) for (unsigned i = 0; i < _skip; i++) {
-    PolyBus::setPixelColor(_busPtr, _iType, i, 0, COL_ORDER_GRB); // set sacrificial pixels to black (CO does not matter here)
-  }
+  // fix for wled#4759 (no longer needed since neopixelbus#910)
+  //if (_valid) for (unsigned i = 0; i < _skip; i++) {
+  //  PolyBus::setPixelColor(_busPtr, _iType, i, 0, COL_ORDER_GRB); // set sacrificial pixels to black (CO does not matter here)
+  //}
   DEBUGBUS_PRINTF_P(PSTR("Bus: %successfully inited #%u (len:%u, type:%u (RGB:%d, W:%d, CCT:%d), pins:%u,%u [itype:%u] mA=%d/%d)\n"),
     _valid?"S":"Uns",
     (int)nr,
@@ -185,6 +184,13 @@ BusDigital::BusDigital(const BusConfig &bc, uint8_t nr)
     (unsigned)_iType,
     (int)_milliAmpsPerLed, (int)_milliAmpsMax
   );
+}
+
+void BusDigital::begin() {
+  if (!_valid) return;
+  PolyBus::begin(_busPtr, _iType, _pins);
+  PolyBus::setCurrent(_busPtr, _iType, _currentStep); // some chips need max current settings (TM1814/TM1914/SM16825)
+  PolyBus::setClock(_busPtr, _iType, _frequencykHz); // some chips allow changing transmit clock
 }
 
 //DISCLAIMER
@@ -232,7 +238,7 @@ void BusDigital::show() {
   if (!_valid) return;
   // per-port ABL (will not work well with CCT LEDs)
   estimateCurrentAndLimitBri();  // will also fill _milliAmpsTotal
-  PolyBus::show(_busPtr, _iType, _consistent); // faster if buffer consistency is not important (no skipped LEDs)
+  PolyBus::show(_busPtr, _iType); // faster if buffer consistency is not important (no skipped LEDs)
   clearPixelsCurrent(); // reset for next show
 }
 
@@ -273,7 +279,7 @@ void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
   }
   c = color_fade(c, _pixelScaling, true);  // apply brightness
   // for APA102/SK9822/HD108 we can adjust brightness using hardware (stored in W channel)
-  if (hasCurrentLimiter() && !hasWhite()) c = (c & 0x00FFFFFF) | _currentStep << 24;  // move current limiter into white channel
+  if (hasCurrentLimiter() && !hasWhite()) c = (c & 0x00FFFFFF) | _currentStep << 24;  // move current limiter into white channel (APA102/HD108)
 
   // pre-calcualte power usage for per-output ABL
   // WARNING: assumes pixel is not modified agin until show() is called (which is true with segment blending approach, strip pixel buffer is transfered to bus in a single pass in show())
@@ -304,18 +310,18 @@ void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
 // calculate current limiter step from brightness and number of steps available
 void BusDigital::setBrightness(uint8_t brightness) {
   Bus::setBrightness(brightness); // sets _bri
-  constexpr unsigned maxBrightnessSteps = 31; // TODO will need changing if new LED type employs different number of steps
 
-  _currentStep = maxBrightnessSteps;  // maximum brightness
   _pixelScaling = scaleBri(_bri, _scale); // final brightness
-
-  if (_pixelScaling > 0 && _pixelScaling < 255 && hasCurrentLimiter()) {
-    unsigned b = (unsigned)_pixelScaling * maxBrightnessSteps;
-    _currentStep = constrain((b + 254) / 255, 1, maxBrightnessSteps); // ceil()
-    _pixelScaling = (b << 8) / (255 * _currentStep); // Q0.8 (<256)
+  if (hasCurrentLimiter()) {
+    auto oldCurrentStep = _currentStep;
+    _currentStep = _currentStepMax;  // maximum brightness
+    if (_pixelScaling > 0 && _pixelScaling < 255) {
+      unsigned b = (unsigned)_pixelScaling * _currentStepMax;
+      _currentStep = constrain((b + 254) / 255, 1, _currentStepMax); // ceil()
+      _pixelScaling = (b << 8) / (255 * _currentStep); // Q0.8 (<256)
+    }
+    if (oldCurrentStep != _currentStep) PolyBus::setCurrent(_busPtr, _iType, _currentStep); // apply to strip
   }
-
-  PolyBus::setCurrentGain(_busPtr, _iType, _currentStep); // apply to strip
 }
 
 size_t BusDigital::getPins(uint8_t* pinArray) const {
@@ -363,11 +369,6 @@ std::vector<LEDType> BusDigital::getLEDTypes() {
   };
 }
 
-void BusDigital::begin() {
-  if (!_valid) return;
-  PolyBus::begin(_busPtr, _iType, _pins, _frequencykHz);
-}
-
 void BusDigital::cleanup() {
   DEBUGBUS_PRINTLN(F("Digital Cleanup."));
   PolyBus::cleanup(_busPtr, _iType);
@@ -408,7 +409,6 @@ void BusDigital::cleanup() {
 BusPwm::BusPwm(const BusConfig &bc)
 : Bus(bc.type, bc.start, bc.autoWhite, 1, bc.reversed, bc.refreshReq) // hijack Off refresh flag to indicate usage of dithering
 {
-  if (!isPWM(bc.type)) return;
   unsigned numPins = numPWMPins(bc.type);
   [[maybe_unused]] const bool dithering = _needsRefresh;
   _frequency = bc.frequency ? bc.frequency : WLED_PWM_FREQ;
@@ -595,8 +595,6 @@ BusOnOff::BusOnOff(const BusConfig &bc)
 : Bus(bc.type, bc.start, bc.autoWhite, 1, bc.reversed)
 , _data(0)
 {
-  if (!Bus::isOnOff(bc.type)) return;
-
   uint8_t currentPin = bc.pins[0];
   if (!PinManager::allocatePin(currentPin, true, PinOwner::BusOnOff)) {
     return;
@@ -1211,6 +1209,10 @@ size_t BusManager::memUsage() {
 #endif
 
 int BusManager::add(const BusConfig &bc) {
+  if (!bc.count) {
+    DEBUGBUS_PRINTF_P(PSTR("ERROR: Empty bus t:%d!"), (int)bc.type);
+    return -1;
+  }
   DEBUGBUS_PRINTF_P(PSTR("Bus: Adding bus (p:%d v:%d)\n"), getNumBusses(), getNumVirtualBusses());
   #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)
   const unsigned maxDigital = WLED_MAX_RMT_CHANNELS + (PolyBus::isParallelI2S1Output() ? WLED_MAX_DIGITAL_CHANNELS - WLED_MAX_RMT_CHANNELS : 1);
