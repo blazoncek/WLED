@@ -343,6 +343,17 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   }
   if (hw_led["rev"] && BusManager::getNumBusses()) BusManager::getBus(0)->setReversed(true); //set 0.11 global reversed setting for first bus
 
+  // determine if any (one) of the buses uses HSPI (2-pin digital bus) while at the same time compiled with Ethernet
+  bool hspiInUse = false;
+  #if defined(WLED_USE_ETHERNET) && !defined(ESP8266)
+  for (const auto &bus : busConfigs) {
+    if (bus.type >= TYPE_2PIN_MIN && bus.type <= TYPE_2PIN_MAX) {
+      hspiInUse = true;
+      break;
+    }
+  }
+  #endif
+
   // read color order map configuration
   JsonArray hw_com = hw[F("com")];
   if (!hw_com.isNull()) {
@@ -532,7 +543,8 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   CJSON(spi_miso, hw_if_spi[2]);
   CJSON(spi_ssel, hw_if_spi[3]);
   PinManagerPinType spi[4] = { { spi_mosi, true }, { spi_miso, false }, { spi_sclk, true }, { spi_ssel, true } };
-  if (spi_mosi >= 0 && spi_sclk >= 0 && PinManager::allocateMultiplePins(spi, 4, PinOwner::HW_SPI)) {
+  // if HSPI is used by bus we can't initialise it
+  if (!hspiInUse && spi_mosi >= 0 && spi_sclk >= 0 && PinManager::allocateMultiplePins(spi, 4, PinOwner::HW_SPI)) {
     #ifdef ESP32
     SPI.begin(spi_sclk, spi_miso, spi_mosi);  // SPI global uses VSPI on ESP32 and FSPI on C3, S3 (don't set SS as it will be set by SD card)
     #else
@@ -545,7 +557,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     spi_ssel = -1;
   }
   #ifndef ESP8266
-  bool spiConfigured = spi_mosi > 0 && spi_miso > 0 && spi_sclk > 0 && spi_ssel > 0;
+  bool spiConfigured = !hspiInUse && spi_mosi > 0 && spi_miso > 0 && spi_sclk > 0 && spi_ssel > 0;
   CJSON(sdCard, hw["if"][F("spi-sd")]);
   sdCard = sdCard && spiConfigured;
   if (sdCard) {

@@ -370,10 +370,10 @@ void updateFSInfo() {
 }
 
 
-#if defined(CONFIG_IDF_TARGET_ESP32) && defined(BOARD_HAS_PSRAM)
+#if defined(BOARD_HAS_PSRAM) && !defined(WLED_DISABLE_PRESET_CACHE)
+#if defined(CONFIG_IDF_TARGET_ESP32)
   #warning "If compiling for ESP32 (rev.1), make sure to use '-mfix-esp32-psram-cache-issue' compiler flag to avoid PSRAM cache issues!"
 #endif
-#ifdef BOARD_HAS_PSRAM
 // caching presets in PSRAM may prevent occasional flashes seen when HomeAssitant polls WLED
 // original idea by @akaricchi (https://github.com/Akaricchi)
 // returns a pointer to the PSRAM buffer, updates size parameter
@@ -418,7 +418,7 @@ bool handleFileRead(AsyncWebServerRequest* request, String path){
   DEBUGFS_PRINT(F("WS FileRead: ")); DEBUGFS_PRINTLN(path);
   if(path.endsWith("/")) path += "index.htm";
   if(path.indexOf(F("sec")) > -1) return false;
-  #ifdef BOARD_HAS_PSRAM
+  #if defined(BOARD_HAS_PSRAM) && !defined(WLED_DISABLE_PRESET_CACHE)
   if (path.endsWith(FPSTR(getPresetsFileName()))) {
     size_t psize;
     const uint8_t *presets = getPresetCache(psize);

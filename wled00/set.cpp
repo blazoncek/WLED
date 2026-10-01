@@ -261,6 +261,22 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       busesChanged = true;
     }
 
+    #if defined(WLED_USE_ETHERNET) && !defined(ESP8266)
+    // prevent use of HSPI if one of the buses uses 2-pin LEDs
+    bool hspiInUse = false;
+    for (const auto &bus : busConfigs) {
+      if (bus.type >= TYPE_2PIN_MIN && bus.type <= TYPE_2PIN_MAX) {
+        hspiInUse = true;
+        break;
+      }
+    }
+    if (hspiInUse) {
+      if (sdCard) SD.end();
+      SPI.end();
+      sdCard = false;
+    }
+    #endif
+
     // we will not bother with pre-allocating ColorOrderMappings vector
     BusManager::getColorOrderMap().reset();
     for (int s = 0; s < WLED_MAX_COLOR_ORDER_MAPPINGS; s++) {
@@ -707,6 +723,18 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
         i2c_scl = -1;
       }
     }
+
+    bool hspiInUse = false;
+    #if defined(WLED_USE_ETHERNET) && !defined(ESP8266)
+    for (unsigned b = 0; b < BusManager::getNumBusses(); b++) {
+      const Bus *bus = BusManager::getBus(b);
+      if (!bus || !bus->isOk()) continue;
+      if (bus->getType() >= TYPE_2PIN_MIN && bus->getType() <= TYPE_2PIN_MAX) {
+        hspiInUse = true;
+        break;
+      }
+    }
+    #endif
     bool spiConfigured = spi_mosi > 0 && spi_miso > 0 && spi_sclk > 0;
     int8_t hw_mosi_pin = !request->arg(F("MOSI")).length() ? -1 : (int)request->arg(F("MOSI")).toInt();
     int8_t hw_miso_pin = !request->arg(F("MISO")).length() ? -1 : (int)request->arg(F("MISO")).toInt();
@@ -730,7 +758,8 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       uint8_t old_spi[4] = { static_cast<uint8_t>(spi_mosi), static_cast<uint8_t>(spi_miso), static_cast<uint8_t>(spi_sclk), static_cast<uint8_t>(spi_ssel) };
       PinManager::deallocateMultiplePins(old_spi, 4, PinOwner::HW_SPI); // just in case deallocation of old pins
       PinManagerPinType spi[4] = { { hw_mosi_pin, true }, { hw_miso_pin, false }, { hw_sclk_pin, true }, { hw_ssel_pin, true } };
-      if (hw_mosi_pin >= 0 && hw_sclk_pin >= 0 && PinManager::allocateMultiplePins(spi, 4, PinOwner::HW_SPI)) {
+      // if HSPI is used by bus we can't initialise it
+      if (!hspiInUse && hw_mosi_pin >= 0 && hw_sclk_pin >= 0 && PinManager::allocateMultiplePins(spi, 4, PinOwner::HW_SPI)) {
         spi_mosi = hw_mosi_pin;
         spi_miso = hw_miso_pin;
         spi_sclk = hw_sclk_pin;
@@ -750,7 +779,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     }
     #ifndef ESP8266
     else if (sdCard) SD.end();
-    spiConfigured = spi_mosi > 0 && spi_miso > 0 && spi_sclk > 0 && spi_ssel > 0;
+    spiConfigured = !hspiInUse && spi_mosi > 0 && spi_miso > 0 && spi_sclk > 0 && spi_ssel > 0;
     sdCard = request->hasArg(F("SD")) && spiConfigured;
     if (sdCard) SD.begin(spi_ssel, SPI);
     #endif

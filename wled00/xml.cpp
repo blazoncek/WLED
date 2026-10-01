@@ -670,6 +670,18 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     settingsScript.printf_P(PSTR("numM=%d;"), UsermodManager::getModCount());
     printSetFormValue(settingsScript,PSTR("SDA"),i2c_sda);
     printSetFormValue(settingsScript,PSTR("SCL"),i2c_scl);
+
+    bool hspiInUse = false;
+    #if defined(WLED_USE_ETHERNET) && !defined(ESP8266)
+    for (unsigned b = 0; b < BusManager::getNumBusses(); b++) {
+      const Bus *bus = BusManager::getBus(b);
+      if (!bus || !bus->isOk()) continue;
+      if (bus->getType() >= TYPE_2PIN_MIN && bus->getType() <= TYPE_2PIN_MAX) {
+        hspiInUse = true;
+        break;
+      }
+    }
+    #endif
     printSetFormValue(settingsScript,PSTR("MOSI"),spi_mosi);
     printSetFormValue(settingsScript,PSTR("MISO"),spi_miso);
     printSetFormValue(settingsScript,PSTR("SCLK"),spi_sclk);
@@ -684,7 +696,8 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     );
     #ifndef ESP8266
     printSetFormCheckbox(settingsScript,PSTR("SD"),sdCard);
-    settingsScript.print(F("toggle('sd');"));
+    if (hspiInUse) settingsScript.print(F("toggle('spi');")); // hide SPI fields and SD card checkbox
+    else settingsScript.print(F("toggle('sd');")); // unhide SD card checkbox
     #endif
     UsermodManager::appendConfigData(settingsScript);
   }

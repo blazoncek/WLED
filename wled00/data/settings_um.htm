@@ -340,6 +340,7 @@
 		SDA:<input type="number" min="-1" max="48" name="SDA" onchange="check(this,'if')" class="s pin" placeholder="SDA">
 		SCL:<input type="number" min="-1" max="48" name="SCL" onchange="check(this,'if')" class="s pin" placeholder="SCL">
 		<hr class="sml">
+		<div id="spi">
 		Global SPI GPIOs (HW)<br>
 		<i class="warn">(only changable on ESP32, change requires reboot!)</i><br>
 		MOSI:<input type="number" min="-1" max="48" name="MOSI" onchange="check(this,'if')" class="s pin" placeholder="MOSI">
@@ -349,6 +350,8 @@
 		Use SPI SD card: <input type="checkbox" name="SD" onchange="onSD()">
 		<span id="ss">SS:<input type="number" min="-1" max="48" name="SSEL" onchange="check(this,'if')" class="s pin" placeholder="SSEL"></span>
 		</div>
+		</div>
+		<div id="Nospi" class="warn hide"><i>SPI bus is used by LEDs and/or Ethernet.</i></div>
 		<hr class="sml">
 		Reboot after save? <input type="checkbox" name="RBT"><br>
 		<button type="button" onclick="setAllUM(true)">Expand all</button>

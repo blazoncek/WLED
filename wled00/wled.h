@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2609280
+#define VERSION 2610010
 #else
 #define VERSION BUILD
 #endif
@@ -778,7 +778,7 @@ WLED_GLOBAL int8_t spi_ssel  _INIT(SPISSELPIN);
 #endif
 
 #ifndef ESP8266
-  #if defined(SPIMOSIPIN) && defined(SPIMISOPIN) && defined(SPISCLKPIN) && defined(SPISSELPIN) && defined(WLED_USE_SD_SPI)
+  #if defined(SPIMOSIPIN) && defined(SPIMISOPIN) && defined(SPISCLKPIN) && defined(SPISSELPIN) && defined(WLED_USE_SD_SPI) && !defined(WLED_USE_ETHERNET)
 WLED_GLOBAL bool sdCard _INIT(true);
   #else
 WLED_GLOBAL bool sdCard _INIT(false);
