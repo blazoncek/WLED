@@ -27,14 +27,13 @@ void WLED::reset()
   #ifdef WLED_ENABLE_WEBSOCKETS
   ws.closeAll(1012);
   #endif
+  #ifndef ESP8266
+  if (sdCard) SD.end();
+  #endif
   unsigned long dly = millis() + 450;
   while (millis() < dly) {
     yield();        // enough time to send response to client
   }
-  applyBri();
-  #ifndef ESP8266
-  if (sdCard) SD.end();
-  #endif
   DEBUG_PRINTLN(F("WLED RESET"));
   ESP.restart();
 }
@@ -1175,50 +1174,157 @@ ESP-NOW  inited in AP mode (channel: 6/1).
 }
 
 // If status LED pin is allocated for other uses, does nothing
-// else blink at 1Hz when WLED_CONNECTED is false (no WiFi, ?? no Ethernet ??)
-// else blink at 2Hz when MQTT is enabled but not connected
-// else turn the status LED off
+// else blink according to the patterns specified
 #if defined(STATUSLED)
-void WLED::handleStatusLED()
-{
-  uint32_t c = 0;
-
-  #if STATUSLED>=0
-  if (PinManager::isPinAllocated(STATUSLED)) {
-    return; //lower priority if something else uses the same pin
-  }
+  // AI: AI generated code
+  #ifndef WLED_DISABLE_OTA
+    #ifdef ESP8266
+      #include <Updater.h>
+    #else
+      #include <Update.h>
+    #endif
   #endif
 
-  if (Network.isConnected()) {
-    c = RGBW32(0,255,0,0);
-    ledStatusType = 2;
-  } else if (WLED_MQTT_CONNECTED) {
-    c = RGBW32(0,128,0,0);
-    ledStatusType = 4;
-  } else if (apActive) {
-    c = RGBW32(0,0,255,0);
-    ledStatusType = 1;
+/*
+ * Status LED pattern player
+ *
+ * One bit = approximately 1/16 second.
+ * 16 bits = approximately 1 second.
+ * 32 bits = approximately 2 seconds.
+ *
+ * Bit 31 is played first, bit 0 last.
+ *
+ * The exact timing is not critical; the visual pattern is.
+ *
+ * Network connected + MQTT:                  1111 0000 1111 0000 1111 1111 1111 1111
+ * Network connected, MQTT disconnected: Continuously ON
+ * AP active:                                 1111 1111 0000 0000 1111 1111 0000 0000
+ * AP active and client connected:            1111 0000 1111 0000 1111 0000 1111 0000
+ * Network configured and no AP (connecting): 1111 0000 1111 0000 0000 0000 0000 0000
+ * Firmware update:                           1100 1100 1100 1100 1100 1100 1100 1100
+ */
+#define STATUSLED_SLOT_MS 62UL
+
+#define STATUSLED_PATTERN_MQTT 0xF0F0FFFFUL
+#define STATUSLED_PATTERN_NET  0xFFFFFFFFUL
+#define STATUSLED_PATTERN_AP   0xFF00FF00UL
+#define STATUSLED_PATTERN_CLNT 0xF0F0F0F0UL
+#define STATUSLED_PATTERN_NONE 0xF0F00000UL
+#define STATUSLED_PATTERN_OTA  0xCCCCCCCCUL
+
+void WLED::handleStatusLED()
+{
+  static unsigned long ledStatusLastMillis = 0;
+  static uint32_t ledStatusPattern = 0;
+  static uint8_t ledStatusBit = 0;
+  static bool ledStatusState = false;
+
+  uint32_t pattern;
+  uint32_t color = 0;
+
+#if STATUSLED >= 0
+  // If the STATUSLED pin is being used by something else,
+  // don't interfere with it.
+  if (PinManager::isPinAllocated(STATUSLED)) {
+    return;
   }
-  if (ledStatusType) {
-    if (millis() - ledStatusLastMillis >= (1000/ledStatusType)) {
-      ledStatusLastMillis = millis();
-      ledStatusState = !ledStatusState;
-      #if STATUSLED>=0
-      digitalWrite(STATUSLED, ledStatusState);
-      #else
-      BusManager::setStatusPixel(ledStatusState ? c : 0);
-      #endif
-    }
+#endif
+
+  // Determine the current status.
+#ifndef WLED_DISABLE_OTA
+  if (Update.isRunning()) {
+    pattern = STATUSLED_PATTERN_OTA;
+    color = RGBW32(255, 255, 0, 0);
+  } else
+#endif
+  if (Network.isConnected() && WLED_MQTT_CONNECTED) {
+    pattern = STATUSLED_PATTERN_MQTT;
+    color = RGBW32(255, 255, 0, 0);
+  } else if (Network.isConnected()) {
+    pattern = STATUSLED_PATTERN_NET;
+    color = RGBW32(0, 255, 0, 0);
+  } else if (apActive && apClients) {
+    pattern = STATUSLED_PATTERN_CLNT;
+    color = RGBW32(0, 255, 255, 0);
+  } else if (apActive && !apClients) {
+    pattern = STATUSLED_PATTERN_AP;
+    color = RGBW32(0, 0, 255, 0);
   } else {
-    #if STATUSLED>=0
-      #ifdef STATUSLEDINVERTED
-      digitalWrite(STATUSLED, HIGH);
-      #else
-      digitalWrite(STATUSLED, LOW);
-      #endif
-    #else
-      BusManager::setStatusPixel(0);
-    #endif
+    pattern = STATUSLED_PATTERN_NONE;
+    color = RGBW32(255, 0, 0, 0);
   }
+
+  // If the status changed, restart the pattern.
+  if (pattern != ledStatusPattern) {
+    ledStatusPattern = pattern;
+    // Start at bit 31.
+    ledStatusBit = 31;
+    // Start timing from now.
+    ledStatusLastMillis = millis();
+    // Apply the first bit immediately.
+    ledStatusState = (ledStatusPattern & 0x80000000UL) != 0;
+#if STATUSLED >= 0
+  #ifdef STATUSLEDINVERTED
+    digitalWrite(STATUSLED, !ledStatusState);
+  #else
+    digitalWrite(STATUSLED, ledStatusState);
+  #endif
+#else
+    BusManager::setStatusPixel(ledStatusState ? color : 0);
+#endif
+    return;
+  }
+
+  /*
+   * Advance the pattern according to elapsed time.
+   *
+   * IMPORTANT:
+   *
+   * handleStatusLED() does NOT need to be called exactly every
+   * STATUSLED_SLOT_MS.
+   *
+   * For example, if calls happen at:
+   *
+   *   24 ms
+   *   51 ms
+   *   78 ms
+   *   109 ms
+   *   ...
+   *
+   * the pattern is still (approximately) synchronized to the 62 ms time slots.
+   *
+   * We accumulate STATUSLED_SLOT_MS instead of assigning
+   * millis() to ledStatusLastMillis so that loop jitter doesn't
+   * accumulate over time.
+   */
+  const unsigned long now = millis();
+
+  if (now - ledStatusLastMillis >= STATUSLED_SLOT_MS) {
+    // Normally this loop executes once but
+    // also handles a longer execution delay gracefully.
+    do {
+      ledStatusLastMillis += STATUSLED_SLOT_MS;
+      // Move to the next bit.
+      if (ledStatusBit == 0) {
+        ledStatusBit = 31;
+      } else {
+        ledStatusBit--;
+      }
+      // Get the state represented by the current bit.
+      ledStatusState = (ledStatusPattern & (1UL << ledStatusBit)) != 0;
+    } while (now - ledStatusLastMillis >= STATUSLED_SLOT_MS);
+  }
+
+  // Apply the current state.
+#if STATUSLED >= 0
+  #ifdef STATUSLEDINVERTED
+  digitalWrite(STATUSLED, !ledStatusState);
+  #else
+  digitalWrite(STATUSLED, ledStatusState);
+  #endif
+#else
+  BusManager::setStatusPixel(ledStatusState ? color : 0);
+#endif
 }
 #endif
+// AI: end AI generated code

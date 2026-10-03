@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2610010
+#define VERSION 2610030
 #else
 #define VERSION BUILD
 #endif
@@ -698,13 +698,6 @@ WLED_GLOBAL byte errorFlag _INIT(0);
 
 WLED_GLOBAL volatile bool doSerializeConfig _INIT(false);        // flag to initiate saving of config
 WLED_GLOBAL volatile bool doReboot          _INIT(false);        // flag to initiate reboot from async handlers
-
-// status led
-#if defined(STATUSLED)
-WLED_GLOBAL unsigned long ledStatusLastMillis _INIT(0);
-WLED_GLOBAL uint8_t ledStatusType _INIT(0); // current status type - corresponds to number of blinks per second
-WLED_GLOBAL bool ledStatusState _INIT(false); // the current LED state
-#endif
 
 // server library objects
 WLED_GLOBAL AsyncWebServer server _INIT({{80}});
