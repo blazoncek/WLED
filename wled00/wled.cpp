@@ -651,6 +651,7 @@ void WLED::beginStrip()
   }
 
   strip.setTransition(transitionDelayDefault);  // restore transitions
+  strip.resetTimebase(); // effect timing starts from beginning (offsets millis() so that strip.now will become 0)
 }
 
 // stop AP (optionally also stop ESP-NOW)

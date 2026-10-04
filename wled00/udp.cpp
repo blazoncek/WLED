@@ -431,6 +431,7 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
 void realtimeLock(uint32_t timeoutMs, byte md)
 {
   if (!realtimeMode && !realtimeOverride) {
+    nightlightActive = false; // immediately stop nightlight transition
     if (useMainSegmentOnly) {
       Segment& mainseg = strip.getMainSegment();
       mainseg.clear(); // clear entire segment (in case sender transmits less pixels)
@@ -469,13 +470,11 @@ void exitRealtime() {
   strip.setBrightness(bri, true);
   realtimeTimeout = 0; // cancel realtime mode immediately
   realtimeMode = REALTIME_MODE_INACTIVE; // inform UI immediately
-  realtimeIP[0] = 0;
+  realtimeIP = (uint32_t)0;
   if (useMainSegmentOnly) { // unfreeze live segment again
     strip.getMainSegment().freeze = false;
-    strip.trigger();
-  } else {
-    strip.show(); // possible fix for #3589
   }
+  strip.trigger(); // possible fix for #3589 immediately redraw
   updateInterfaces(CALL_MODE_WS_SEND);
 }
 

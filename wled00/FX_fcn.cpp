@@ -2164,13 +2164,9 @@ void WS2812FX::setBrightness(uint8_t b, bool direct) {
   if (gammaCorrectBri) b = gamma8(b);
   if (_brightness == b) return;
   _brightness = b;
-  if (_brightness == 0) { //unfreeze all segments on power off
-    for (const Segment &seg : _segments) seg.freeze = false; // freeze is mutable
-  }
   BusManager::setBrightness(b);
   if (!direct) {
-    unsigned long t = millis();
-    if (_segments[0].next_time > t + 22 && t - _lastShow > MIN_SHOW_DELAY) trigger(); //apply brightness change immediately if no refresh soon
+    if (millis() - _lastShow > MIN_SHOW_DELAY) trigger(); //apply brightness change immediately if no refresh soon
   }
 }
 

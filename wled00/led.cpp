@@ -44,6 +44,7 @@ void toggleOnOff() {
   if (bri == 0) {
     bri = briLast;
     strip.restartRuntime();
+    strip.resetTimebase(); // effect timing starts from beginning (offsets millis() so that strip.now will become 0)
     // we need to switch relay on immediately for delay to work properly
     toggleRelay(true);
   } else {
@@ -100,12 +101,13 @@ void stateUpdated(byte callMode) {
 
   if (nightlightActive) return;
 
-  // off
-  if (briT == 0) {
-    if (callMode != CALL_MODE_NOTIFICATION) strip.resetTimebase(); //effect start from beginning
-  }
+  // we are off (perhaps switching to on; bri>0) so reset strip.now timebase to produce strip.now == 0 on next service() call
+  // however that is very unlikely (async calls) but will produce small number for strip.now nonetheless
+  //if (briT == 0) {
+  //  if (callMode != CALL_MODE_NOTIFICATION) strip.resetTimebase(); //effect start from beginning
+  //}
 
-  if (bri > 0) briLast = bri;
+  //if (bri > 0) briLast = bri;
 
   // state was updated, notifications were sent, determine if we need to set segments into transition mode and fade brightness
   if (strip.getTransition() == 0) {
