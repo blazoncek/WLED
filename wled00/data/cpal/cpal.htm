@@ -525,8 +525,8 @@
       const responsePalettes = await fetch(getURL('/json/pal'));  // fetch palette names
       const json = await responseInfo.json();
       palName = await responsePalettes.json();
-      cpalc = json.cpalcount;
       cpalm = json.cpalmax;
+      cpalc = Math.min(cpalm, json.cpalcount - json?.cpalextra);
       // fetch palettes from device if working from local file
       if (loc && !localStorage.getItem(lsKey)) {
         getPalettesData(0, ()=>{
@@ -553,6 +553,7 @@
       } catch (error) {
         cpalc--; //remove audio/dynamically generated palettes
         console.error(`Possibly a dynamic palette: ${url} `, error);
+        break;
       }
     }
     //If there is room for more custom palettes, add an empty, gray slot

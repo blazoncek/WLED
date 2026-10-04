@@ -1036,12 +1036,11 @@ function populatePalettes()
 				255-j,
 				'~ Custom '+j+' ~',
 				'setPalette',
-				`<div class="prev" style="${genPalPrevCss(255-j)}"></div>`
+				`<div class="prev" style="${genPalPrevCss(255-j)}"></div>` +
+				((j < lastinfo.cpalcount - lastinfo.cpalextra) ? `<i class="icons e-icon flr " id="sege0" onclick="rmPal(${j})" title="Remove">&#xe037;</i>` : "")
 			);
 		}
-		gId("rmPal").classList.remove("hide");
-	} else gId("rmPal").classList.add("hide");
-
+	}
 	gId('pallist').innerHTML=html;
 }
 
@@ -1732,14 +1731,12 @@ function setEffectParameters(idx)
 			paOnOff[0] = paOnOff[0].substring(0,dPos);
 		}
 		if (paOnOff.length>0 && paOnOff[0] != "!") text = paOnOff[0];
-		gId("adPal").classList.remove("hide");
-		if (lastinfo.cpalcount>0) gId("rmPal").classList.remove("hide");
+		//gId("adPal").classList.remove("hide");
 	} else {
 		// disable palette list
 		text += ' not used';
 		palw.style.display = "none";
-		gId("adPal").classList.add("hide");
-		gId("rmPal").classList.add("hide");
+		//gId("adPal").classList.add("hide");
 		// Close palette dialog if not available
 		if (palw.lastElementChild.tagName == "DIALOG") {
 			palw.lastElementChild.close();
@@ -2492,6 +2489,13 @@ function setBri()
 {
 	var obj = {"bri": parseInt(gId('sliderBri').value)};
 	requestJson(obj);
+}
+
+function rmPal(index = true) {
+	palettesData = null;
+	localStorage.removeItem('wledPalx');
+	requestJson({rmcpal:index});
+	setTimeout(async ()=>{ await loadPalettes(); await loadPalettesData(); },250);
 }
 
 function setSpeed()

@@ -572,12 +572,11 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     else callMode = CALL_MODE_DIRECT_CHANGE;  // possible bugfix for playlist only containing HTTP API preset FX=~
   }
 
-  if (root.containsKey(F("rmcpal")) && root[F("rmcpal")].as<bool>()) {
-    if (customPalettes.size()) {
-      char fileName[32];
-      sprintf_P(fileName, PSTR("/palette%d.json"), customPalettes.size()-1);
-      if (WLED_FS.exists(fileName)) WLED_FS.remove(fileName);
-      loadCustomPalettes();
+  if (root.containsKey(F("rmcpal")) && customPalettes.size()) {
+    if (root[F("rmcpal")].as<bool>()) {
+      removeCustomPalette(customPalettes.size()-1);
+    } else if (root[F("rmcpal")].as<int>()) {
+      removeCustomPalette(root[F("rmcpal")].as<int>());
     }
   }
 
@@ -814,6 +813,7 @@ void serializeInfo(JsonObject root)
   root[F("fxcount")] = strip.getModeCount();
   root[F("palcount")] = getPaletteCount();
   root[F("cpalcount")] = customPalettes.size();   // number of custom palettes
+  root[F("cpalextra")] = customPalettes.size() - permanentCustomPalettes;   // non-permanent/usermod paletes
   root[F("cpalmax")] = WLED_MAX_CUSTOM_PALETTES;  // maximum number of custom palettes
 
   JsonArray ledmaps = root.createNestedArray(F("maps"));
@@ -991,7 +991,7 @@ static void setPaletteColors(JsonArray json, CRGBPalette16 palette)
       colors.add(color.blue);
     }
 }
-
+/*
 static void setPaletteColors(JsonArray json, byte* tcp)
 {
     TRGBGradientPaletteEntryUnion* ent = (TRGBGradientPaletteEntryUnion*)(tcp);
@@ -1019,7 +1019,7 @@ static void setPaletteColors(JsonArray json, byte* tcp)
       u = *ent;
     }
 }
-
+*/
 void serializePalettes(JsonObject root, int page)
 {
   CRGBPalette16 tmpPalette;

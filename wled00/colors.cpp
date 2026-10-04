@@ -287,19 +287,31 @@ CRGBPalette16 generateRandomPalette()  // generate fully random palette
                        CHSV(hw_random8(), hw_random8(160, 255), hw_random8(128, 255)));
 }
 
+
+static const char nameTemplate[] PROGMEM = "/palette%u.json";
+// loads custom palettes from JSON files into customPalettes vector
+// JSON file contains JSON object with 1 key "palette" containing array of RGB entries
+// format: [index, red, green, blue, index, red, green, blue, ...] or [index, "RRGGBBhex", index, "RRGGBBhex", ...]
 void loadCustomPalettes() {
   byte tcp[72]; //support gradient palettes with up to 18 entries
   CRGBPalette16 targetPalette;
   customPalettes.clear(); // start fresh
+
+  PSRAMDynamicJsonDocument doc(1536); // barely enough to fit 72 numbers
+  StaticJsonDocument<64> filter;
+  filter[F("palette")] = true;
+  size_t palCount = 0;
+
   for (unsigned index = 0; index < WLED_MAX_CUSTOM_PALETTES; index++) {
     char fileName[32];
-    sprintf_P(fileName, PSTR("/palette%u.json"), index);
-
-    StaticJsonDocument<1536> pDoc; // barely enough to fit 72 numbers
-    if (WLED_FS.exists(fileName)) {
-      DEBUGFX_PRINTF_P(PSTR("Reading palette from %s\n"), fileName);
-      if (readObjectFromFile(fileName, nullptr, &pDoc)) {
-        JsonArray pal = pDoc[F("palette")];
+    sprintf_P(fileName, nameTemplate, index);
+    File f = WLED_FS.open(fileName,"r");
+    if (f) {
+      DEBUG_PRINTF_P(PSTR("Reading palette from %s\n"), fileName);
+      doc.clear(); // make sure it is empty
+      DeserializationError err = deserializeJson(doc, f, DeserializationOption::Filter(filter));
+      if (err == DeserializationError::Ok) {
+        JsonArray pal = doc[F("palette")];
         if (!pal.isNull() && pal.size()>3) { // not an empty palette (at least 2 entries)
           memset(tcp, 255, sizeof(tcp));
           if (pal[0].is<int>() && pal[1].is<const char *>()) {
@@ -326,13 +338,34 @@ void loadCustomPalettes() {
           }
           customPalettes.push_back(targetPalette.loadDynamicGradientPalette(tcp));
         } else {
-          DEBUGFX_PRINTLN(F("Wrong palette format."));
+          DEBUG_PRINTLN(F("Wrong palette format."));
         }
+      } else {
+        DEBUG_PRINTF_P(PSTR("Palette deserialization error: %s\n"), err.c_str());
       }
-    } else {
-      break;
+      f.close();
+      if (palCount != index) {
+        // if there is a gap in list of files rename file
+        char newName[32];
+        sprintf_P(newName, nameTemplate, palCount);
+        WLED_FS.rename(fileName, newName);
+        DEBUG_PRINTF_P(PSTR("Renamed %s to %s\n"), fileName, newName);
+      }
+      palCount++;
     }
   }
+  permanentCustomPalettes = palCount;
+}
+
+bool removeCustomPalette(size_t index) {
+  char fileName[32];
+  sprintf_P(fileName, nameTemplate, index);
+  if (WLED_FS.exists(fileName)) {
+    WLED_FS.remove(fileName);
+    loadCustomPalettes();
+    return true;
+  }
+  return false;
 }
 
 void hsv2rgb(const CHSV32& hsv, uint32_t& rgb) // convert HSV (16bit hue) to RGB (32bit with white = 0)

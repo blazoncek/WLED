@@ -3332,7 +3332,7 @@ class AudioReactive : public Usermod {
           simulationId = (soundSimulations_t)min(3,max(0,usermod[FPSTR(_soundSim)].as<int>()));
         }
       }
-      if (root.containsKey(F("rmcpal")) && root[F("rmcpal")].as<bool>()) {
+      if (root.containsKey(F("rmcpal"))) {
         // handle removal of custom palettes from JSON call so we don't break things
         // actual custom palette removal is done *after* usermod's readFromJsonState() is called
         removeAudioPalettes();
