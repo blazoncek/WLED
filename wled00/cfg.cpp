@@ -67,10 +67,10 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   getStringFromJson(hostName, nw["name"], sizeof(hostName));
 #ifndef WLED_DISABLE_ESPNOW
   CJSON(enableESPNow, nw[F("espnow")]);
-  masterRemotes.clear();
   JsonVariant lrem = nw[F("linked_remote")];
   if (!lrem.isNull()) {
-     if (lrem.is<JsonArray>()) {
+    masterRemotes.clear();
+    if (lrem.is<JsonArray>()) {
       for (const auto &remote : lrem.as<JsonArray>()) {
         std::array<uint8_t, 6> entry{};
         fillStr2MAC(entry.data(), remote.as<const char*>());
@@ -841,6 +841,7 @@ bool deserializeConfigFromFS() {
   DEBUG_PRINTLN(F("Reading settings from /cfg.json..."));
 
   readObjectFromFile(s_cfg_json, nullptr, pDoc);
+  if (pDoc->overflowed()) pDoc->clear(); // partial content (too many elemnets!), clear and start from scratch
 
   // NOTE: This routine deserializes *and* applies the configuration
   //       Therefore, must also initialize ethernet from this function
@@ -1297,7 +1298,7 @@ bool deserializeConfigSec() {
   if (!requestJSONBufferLock(3)) return false;
 
   bool success = readObjectFromFile(s_wsec_json, nullptr, pDoc);
-  if (!success) {
+  if (!success || pDoc->overflowed()) { // reject if overflowed (noMemory)
     releaseJSONBufferLock();
     return false;
   }
