@@ -105,10 +105,11 @@
 		// enable and update LED Amps
 		function enLA(o) {
 			let abl = d.Sf.ABL.checked;
-			let n = o.name.substring(2,3);               // bus number (0-Z)
-			let t = parseInt(gN("LT"+n).value);          // LED type SELECT
-			gId('LAdis'+n).style.display = o.selectedIndex==5 ? "inline" : "none"; // show/hide custom mA field
-			if (o.value!=="0") gN("LA"+n).value = o.value; // set value from select object
+			let n = o.name.substring(2,3);                 // bus number (0-Z)
+			let t = parseInt(gN("LT"+n).value);            // LED type SELECT
+			let mA = parseInt(o.value);
+			gId('LAdis'+n).style.display = mA === 0 ? "inline" : "none"; // show/hide custom mA field
+			if (mA !== 0) gN("LA"+n).value = mA;           // set value from select object
 			gN("LA"+n).min = (!isDig(t) || !abl) ? 0 : 1;  // set minimum value for validation
 		}
 		function setABL() {
@@ -122,16 +123,10 @@
 			qSA(".iST select[name^=LL]").forEach((sel,i)=>{
 				sel.value = 0; // set custom
 				let n = chrID(i); // bus number (0-Z)
-				if (en)
-					switch (parseInt(gN("LA"+n).value)) {
-						case 0: break; // disable ABL
-						case 15: sel.value = 15; break;
-						case 30: sel.value = 30; break;
-						case 35: sel.value = 35; break;
-						case 55: sel.value = 55; break;
-						case 255: sel.value = 255; break;
-					}
-				else sel.value = 0;
+				if (en) {
+					sel.value = parseInt(gN("LA"+n).value);
+					if (sel.selecteIndex == -1) sel.value = 0;
+				}
 				enLA(sel); // configure individual limiter
 			});
 			enABL();
