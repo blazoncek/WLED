@@ -45,7 +45,7 @@ inline uint8_t scale8(uint8_t i, uint8_t scale) { return (uint16_t(i) * (1 + sca
 CRGBPalette16 generateHarmonicRandomPalette(const CRGBPalette16 &basepalette);
 CRGBPalette16 generateRandomPalette();
 void loadCustomPalettes();
-bool removeCustomPalette(size_t index);
+void removeCustomPalette(size_t index);
 #define getPaletteCount() (FIXED_PALETTE_COUNT + customPalettes.size())
 
 // color conversion functions

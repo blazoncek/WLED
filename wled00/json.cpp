@@ -812,8 +812,8 @@ void serializeInfo(JsonObject root)
 
   root[F("fxcount")] = strip.getModeCount();
   root[F("palcount")] = getPaletteCount();
-  root[F("cpalcount")] = customPalettes.size();   // number of custom palettes
-  root[F("cpalextra")] = customPalettes.size() - permanentCustomPalettes;   // non-permanent/usermod paletes
+  root[F("cpalcount")] = permanentCustomPalettes; // number of custom palettes
+  root[F("umpalcount")] = customPalettes.size() - permanentCustomPalettes;   // non-permanent/usermod paletes
   root[F("cpalmax")] = WLED_MAX_CUSTOM_PALETTES;  // maximum number of custom palettes
 
   JsonArray ledmaps = root.createNestedArray(F("maps"));

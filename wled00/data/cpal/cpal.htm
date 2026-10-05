@@ -522,11 +522,11 @@
     try {
       var arr = [];
       const responseInfo = await fetch(getURL('/json/info'));     // fetch info (includes cpalcount and cpalmax)
-      const responsePalettes = await fetch(getURL('/json/pal'));  // fetch palette names
+      const responsePalettes = await fetch(getURL('/json/palettes'));  // fetch palette names
       const json = await responseInfo.json();
       palName = await responsePalettes.json();
       cpalm = json.cpalmax;
-      cpalc = Math.min(cpalm, json.cpalcount - json?.cpalextra);
+      cpalc = Math.min(cpalm, json.cpalcount);
       // fetch palettes from device if working from local file
       if (loc && !localStorage.getItem(lsKey)) {
         getPalettesData(0, ()=>{

@@ -1029,15 +1029,21 @@ function populatePalettes()
 		);
 	}
 	// append custom palettes (when loading for the 1st time, previews are already loaded)
-	if (lastinfo.cpalcount) {
-		for (let j = 0; j<lastinfo.cpalcount; j++) {
+	const allPalCount = lastinfo.cpalcount + lastinfo.umpalcount;
+	if (allPalCount) {
+		for (let j = 0; j < allPalCount; j++) {
+			let name = "Custom " + j;
+			let rmBtn = `<i class="icons e-icon flr " id="sege0" onclick="rmPal(${j})" title="Remove">&#xe037;</i>`;
+			if (j >= lastinfo.cpalcount) {
+				name = "Usermod " + (j - lastinfo.cpalcount);
+				rmBtn = "";
+			}
 			html += generateListItemHtml(
 				'palette',
-				255-j,
-				'~ Custom '+j+' ~',
+				255 - j,
+				'~ ' + name + ' ~',
 				'setPalette',
-				`<div class="prev" style="${genPalPrevCss(255-j)}"></div>` +
-				((j < lastinfo.cpalcount - lastinfo.cpalextra) ? `<i class="icons e-icon flr " id="sege0" onclick="rmPal(${j})" title="Remove">&#xe037;</i>` : "")
+				`<div class="prev" style="${genPalPrevCss(255 - j)}"></div>` + rmBtn
 			);
 		}
 	}

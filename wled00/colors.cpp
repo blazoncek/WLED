@@ -357,15 +357,14 @@ void loadCustomPalettes() {
   permanentCustomPalettes = palCount;
 }
 
-bool removeCustomPalette(size_t index) {
+void removeCustomPalette(size_t index) {
   char fileName[32];
   sprintf_P(fileName, nameTemplate, index);
   if (WLED_FS.exists(fileName)) {
     WLED_FS.remove(fileName);
     loadCustomPalettes();
-    return true;
+    cacheInvalidate++;  // we need to force refresh of UI
   }
-  return false;
 }
 
 void hsv2rgb(const CHSV32& hsv, uint32_t& rgb) // convert HSV (16bit hue) to RGB (32bit with white = 0)
