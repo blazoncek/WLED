@@ -316,7 +316,7 @@ void BusDigital::setBrightness(uint8_t brightness) {
     auto oldCurrentStep = _currentStep;
     _currentStep = _currentStepMax;  // maximum brightness
     if (_pixelScaling > 0 && _pixelScaling < 255) {
-      unsigned b = (unsigned)_pixelScaling * _currentStepMax;
+      uint32_t b = (uint32_t)_pixelScaling * _currentStepMax;
       _currentStep = constrain((b + 254) / 255, 1, _currentStepMax); // ceil()
       _pixelScaling = (b << 8) / (255 * _currentStep); // Q0.8 (<256)
     }
