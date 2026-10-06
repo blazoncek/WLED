@@ -4597,6 +4597,60 @@ static const char _data_FX_MODE_SHIMMER[] PROGMEM = "Shimmer@Speed,Interval,Size
 //***************************  2D routines  ***********************************
 
 
+/////////////////////////////
+//    2D Analog Clock      //
+/////////////////////////////
+uint16_t mode_2DAnalogClock(void) {                  // By Andras Fekete (bandi13)
+  if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
+  const int cols = SEG_W;
+  const int rows = SEG_H;
+
+  // use odd sized circle, to have a well-defined center pixel
+  const int centerX = (cols - 1) / 2;
+  const int centerY = (rows - 1) / 2;
+
+  const int radius = min(centerX, centerY);
+  const bool soft = radius > 6 && SEGMENT.check2;
+
+  SEGMENT.fadeOut(255);
+  SEGMENT.drawCircle(centerX << FP_SHIFT, centerY << FP_SHIFT, (radius << FP_SHIFT) + (soft ? FP_HALF : 0), DARKGREY, soft);
+  if (radius > 8) SEGMENT.drawCircle(centerX << FP_SHIFT, centerY << FP_SHIFT, (radius << FP_SHIFT) - (soft ? FP_HALF : FP_ONE), DARKGREY, soft); // thicker circle
+
+  const unsigned hoursInDay = hour(localTime) % 12;  // analog clock is always 12 hours not 24 hours
+  const unsigned minutesInDay = minute(localTime);
+  const unsigned secondsInDay = second(localTime);
+
+  const float hourAngle = radians(30.0f * (hoursInDay + minutesInDay / 60.0f) - 90.0f);
+  const int hourLen = (radius * 60) / 100;
+  const int hourX = centerX + hourLen * cos_t(hourAngle);
+  const int hourY = centerY + hourLen * sin_t(hourAngle);
+
+  const float minuteAngle = radians(6.0f * (minutesInDay + secondsInDay / 60.0f) - 90.0f);
+  const int minuteLen = (radius * 75) / 100;
+  const int minuteX = centerX + minuteLen * cos_t(minuteAngle);
+  const int minuteY = centerY + minuteLen * sin_t(minuteAngle);
+
+  const bool gradient = SEGMENT.check3;
+
+  const CRGBA hrCol = SEGCOLOR(0) != BLACK ? SEGCOLOR(0) : RED;
+  SEGMENT.drawLine(centerX, centerY, hourX, hourY, gradient ? hrCol.opacity(127) : hrCol, hrCol, soft);
+  const CRGBA minCol = SEGCOLOR(1) != BLACK ? SEGCOLOR(1) : GREEN;
+  SEGMENT.drawLine(centerX, centerY, minuteX, minuteY, gradient ? minCol.opacity(127) : minCol, minCol, soft);
+
+  if (SEGMENT.check1) {
+    const float secondAngle = radians(6.0f * secondsInDay - 90.0f);
+    const int secondLen = (radius * 95) / 100;
+    const int secondX = centerX + secondLen * cos_t(secondAngle);
+    const int secondY = centerY + secondLen * sin_t(secondAngle);
+    const CRGBA secCol = SEGCOLOR(2) != BLACK ? SEGCOLOR(2) : BLUE;
+    SEGMENT.drawLine(centerX, centerY, secondX, secondY, gradient ? secCol.opacity(127) : secCol, secCol, soft);
+  }
+
+  return FRAMETIME; // only update every second
+} // mode_2DAnalogClock()
+static const char _data_FX_MODE_2DANALOGCLOCK[] PROGMEM = "Analog Clock 2D@,,,,,Seconds,Soft,Gradient;Hour,Minute,Second;;2;o1=1,o2=1,o3=0";
+
+
 // Black hole
 uint16_t mode_2DBlackHole(void) {            // By: Stepko https://editor.soulmatelights.com/gallery/1012 , Modified by: Andrew Tuline
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
@@ -9299,6 +9353,7 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_2DSCROLLTEXT, &mode_2Dscrollingtext, _data_FX_MODE_2DSCROLLTEXT);
   addEffect(FX_MODE_2DDRIFTROSE, &mode_2Ddriftrose, _data_FX_MODE_2DDRIFTROSE);
   addEffect(FX_MODE_2DDISTORTIONWAVES, &mode_2Ddistortionwaves, _data_FX_MODE_2DDISTORTIONWAVES);
+  addEffect(FX_MODE_2DANALOGCLOCK, &mode_2DAnalogClock, _data_FX_MODE_2DANALOGCLOCK);
   addEffect(FX_MODE_2DNOISE, &mode_2Dnoise, _data_FX_MODE_2DNOISE);
   addEffect(FX_MODE_2DFIRENOISE, &mode_2Dfirenoise, _data_FX_MODE_2DFIRENOISE);
   addEffect(FX_MODE_2DSQUAREDSWIRL, &mode_2Dsquaredswirl, _data_FX_MODE_2DSQUAREDSWIRL);

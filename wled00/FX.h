@@ -184,7 +184,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 //#define FX_MODE_CHASE_RAINBOW           30  // candidate for removal (was Chase Rainbow; use Chase with check 1 & check 3)
 #define FX_MODE_CHASE_FLASH             31
 #define FX_MODE_CHASE_FLASH_RANDOM      32
-//#define FX_MODE_CHASE_RAINBOW_WHITE     33  // candidate for removal (was Chase Rainbow White; use Chase with check 1 & check 2 & check 3)
+#define FX_MODE_2DANALOGCLOCK           33  // was Chase Rainbow White; use Chase with check 1 & check 2 & check 3
 #define FX_MODE_COLORFUL                34
 #define FX_MODE_TRAFFIC_LIGHT           35
 //#define FX_MODE_COLOR_SWEEP_RANDOM      36  // FX_MODE_PARTICLEGALAXY
