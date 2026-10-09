@@ -442,7 +442,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   }
 
   // global AWM override
-  Bus::setGlobalAWMode(root[F("awm")] | Bus::getGlobalAWMode());  // override AW mode setting
+  Bus::setGlobalAWMode(root[F("awm")] | Bus::getGlobalAWMode());  // temporarily (until reboot or another change) override global AW mode setting
 
   tr = root[F("tb")] | -1;
   if (tr >= 0) strip.timebase = (unsigned long)tr - millis();
@@ -975,7 +975,7 @@ void serializeInfo(JsonObject root)
   if (Network.isConnected())
   {
     IPAddress localIP = Network.localIP();
-    sprintf(s, "%d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
+    sprintf_P(s, PSTR("%d.%d.%d.%d"), localIP[0], localIP[1], localIP[2], localIP[3]);
   }
   root["ip"] = s;
 }

@@ -85,6 +85,8 @@ private:
   IPAddress ipMulti;
   uint32_t mac24; //bottom 24 bits of mac
   String escapedMac=""; //lowercase mac address
+
+  const char * const _ipTemplate = PSTR("%d.%d.%d.%d");
   
   //private member functions
   const char* modeString(EspalexaColorMode m)
@@ -217,7 +219,7 @@ private:
     EA_DEBUGLN("# Responding to description.xml ... #\n");
     IPAddress localIP = Network.localIP();
     char s[16];
-    snprintf(s, sizeof(s), "%d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
+    snprintf_P(s, sizeof(s), _ipTemplate, localIP[0], localIP[1], localIP[2], localIP[3]);
     char buf[1024];
     
     snprintf_P(buf, sizeof(buf), PSTR("<?xml version=\"1.0\" ?>"
@@ -291,7 +293,7 @@ private:
   {
     IPAddress localIP = Network.localIP();
     char s[16];
-    sprintf(s, "%d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
+    sprintf_P(s, _ipTemplate, localIP[0], localIP[1], localIP[2], localIP[3]);
 
     char buf[1024];
 

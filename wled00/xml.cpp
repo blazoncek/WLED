@@ -263,10 +263,11 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     settingsScript.print(F("gId('ethd').style.display='none';"));
     #endif
 
+    const char * const _ipTemplate = PSTR("%d.%d.%d.%d");
     if (Network.isConnected()) //is connected
     {
       IPAddress localIP = Network.localIP();
-      snprintf(s, sizeof(s), "%d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
+      snprintf_P(s, sizeof(s), _ipTemplate, localIP[0], localIP[1], localIP[2], localIP[3]);
 
       #if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
       if (Network.isEthernet()) strcat_P(s ,PSTR(" (Ethernet)"));
@@ -277,10 +278,10 @@ void getSettingsJS(byte subPage, Print& settingsScript)
       printSetIdHTML(settingsScript,PSTR("cip"),(char*)F("Not connected"));
     }
 
-    if (apActive && WiFi.softAPIP()[0] != 0) //is active
+    if (apActive && WiFi.softAPIP() != (uint32_t)0) //is active
     {
       IPAddress apIP = WiFi.softAPIP();
-      snprintf(s, sizeof(s), "%d.%d.%d.%d", apIP[0], apIP[1], apIP[2], apIP[3]);
+      snprintf_P(s, sizeof(s), _ipTemplate, apIP[0], apIP[1], apIP[2], apIP[3]);
       printSetIdHTML(settingsScript,PSTR("aip"),s);
     } else
     {
