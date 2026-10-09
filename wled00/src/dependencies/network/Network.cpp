@@ -73,15 +73,16 @@ void NetworkClass::localMAC(uint8_t* MAC)
 
 bool NetworkClass::isConnected()
 {
-  return (WiFi.localIP()[0] != 0 && WiFi.status() == WL_CONNECTED) || isEthernet();
+  return (WiFi.localIP() != (uint32_t)0 && WiFi.status() == WL_CONNECTED) || isEthernet();
 }
 
 bool NetworkClass::isEthernet()
 {
 #if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
-  return (ETH.localIP()[0] != 0) && ETH.linkUp() && WiFi.getMode() == WIFI_MODE_NULL;
-#endif
+  return (ETH.localIP() != (uint32_t)0) && ETH.linkUp() /*&& WiFi.getMode() == WIFI_MODE_NULL*/;
+#else
   return false;
+#endif
 }
 
 NetworkClass Network;
