@@ -13,6 +13,7 @@ const managed_pin_type esp32_nonconfigurable_ethernet_pins[WLED_ETH_RSVD_PINS_CO
     { 27, true  }, // RMII EMAC CRS_DV == Carrier Sense and RX Data Valid
 };
 
+// supported types: ETH_PHY_LAN8720, ETH_PHY_TLK110, ETH_PHY_RTL8201, ETH_PHY_DP83848, ETH_PHY_DM9051, ETH_PHY_KSZ8041, ETH_PHY_KSZ8081, ETH_PHY_JL1101
 const ethernet_settings ethernetBoards[] = {
   // None
   {
@@ -195,7 +196,9 @@ bool initEthernet()
     return false;
   }
 
-  if (!PinManager::allocateMultiplePins(pinsToAllocate, 10, PinOwner::Ethernet)) {
+  constexpr size_t numPins = sizeof(pinsToAllocate)/sizeof(pinsToAllocate[0]);
+
+  if (!PinManager::allocateMultiplePins(pinsToAllocate, numPins, PinOwner::Ethernet)) {
     DEBUG_PRINTLN(F("initE: Failed to allocate ethernet pins"));
     return false;
   }
@@ -227,10 +230,8 @@ bool initEthernet()
                 (eth_clock_mode_t) es.eth_clk_mode
                 )) {
     DEBUG_PRINTLN(F("initE: ETH.begin() failed"));
-    // de-allocate the allocated pins
-    for (managed_pin_type mpt : pinsToAllocate) {
-      PinManager::deallocatePin(mpt.pin, PinOwner::Ethernet);
-    }
+    // de-allocate allocated pins
+    PinManager::deallocateMultiplePins(pinsToAllocate, numPins, PinOwner::Ethernet);
     return false;
   }
 

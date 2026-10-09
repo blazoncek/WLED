@@ -977,6 +977,10 @@ void serializeInfo(JsonObject root)
     IPAddress localIP = Network.localIP();
     sprintf_P(s, PSTR("%d.%d.%d.%d"), localIP[0], localIP[1], localIP[2], localIP[3]);
   }
+  #if defined(ARDUINO_ARCH_ESP32) && defined(WLED_USE_ETHERNET)
+  root[F("eth_lnk")] = ETH.linkUp();
+  root[F("eth_spd")] = ETH.linkUp() ? ETH.linkSpeed() : 0;
+  #endif
   root["ip"] = s;
 }
 
