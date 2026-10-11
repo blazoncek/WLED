@@ -869,7 +869,11 @@ Swap: <select id="xw${s}" name="XW${s}">
 			// now enable/disable type options according to limits in dropdowns
 			if (sel) {
 				let n = sel.name.substring(2,3);
-				if (isDig(sel.value)) gN("LL"+n).selectedIndex = 0; // reset LED mA to default for digital
+				if (isDig(sel.value)) {
+					let defOpt = 0;
+					Array.from(gN("LL"+n).options).forEach((e,i)=>{if (e.attributes["selected"]) defOpt = i;});
+					gN("LL"+n).selectedIndex = defOpt; // reset LED mA to default for digital
+				}
 				enLA(gN("LL"+n)); // update LED mA
 				gN("LC"+n).value = 1; // reset LED count on change
 				//if (isS3() && ((sel.dataset.old && isHub75(parseInt(sel.dataset.old))) || isHub75(parseInt(sel.value))))
