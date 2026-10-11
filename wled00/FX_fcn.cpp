@@ -135,7 +135,7 @@ Segment& Segment::operator= (const Segment &orig) {
   if (this != &orig) {
     // clean destination
     clearName();
-    if (isInTransition()) stopTransition(); // also erases _t
+    stopTransition(); // also erases _t
     deallocateData();
     d_free(pixels);
     // copy source
@@ -167,7 +167,7 @@ Segment& Segment::operator= (Segment &&orig) noexcept {
   DEBUGFX_PRINTF_P(PSTR("-- Moving segment: %p -> %p\n"), &orig, this);
   if (this != &orig) {
     clearName(); // free old name
-    if (isInTransition()) stopTransition(); // also erases _t
+    stopTransition(); // also erases _t
     deallocateData(); // free old runtime data
     d_free(pixels);   // free old pixel buffer
     // move source data
@@ -395,6 +395,7 @@ void Segment::startTransition(uint16_t dur, bool segmentCopy) {
 }
 
 void Segment::stopTransition() {
+  if (!isInTransition()) return;
   DEBUGFX_PRINTF_P(PSTR("-- Stopping transition: S=%p T(%p) O[%p]\n"), this, _t, _t->_oldSegment);
   delete _t;  // will also call destructor for _oldSegment and free its memory
   _t = nullptr;
@@ -532,7 +533,7 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
   DEBUGFX_PRINTF_P(PSTR("Geometry: (%d,%d -> %d,%d) [%d,%d] ofs:%d m:%d\n"), (int)i1, (int)i2, (int)i1Y, (int)i2Y, (int)grp, (int)spc, (int)ofs, (int)m12);
 
   markForReset();
-  if (isInTransition()) stopTransition(); // we can't use transition if segment dimensions changed (see WS2812FX::blendSegment())
+  stopTransition(); // we can't use transition if segment dimensions changed (see WS2812FX::blendSegment())
   stateChanged = true;      // send UDP/WS broadcast
 
   // safety check

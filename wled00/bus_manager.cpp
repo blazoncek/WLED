@@ -188,9 +188,12 @@ BusDigital::BusDigital(const BusConfig &bc, uint8_t nr)
 
 void BusDigital::begin() {
   if (!_valid) return;
-  PolyBus::begin(_busPtr, _iType, _pins);
-  PolyBus::setCurrent(_busPtr, _iType, _currentStep); // some chips need max current settings (TM1814/TM1914/SM16825)
-  PolyBus::setClock(_busPtr, _iType, _frequencykHz); // some chips allow changing transmit clock
+  if (PolyBus::begin(_busPtr, _iType, _pins)) {
+    PolyBus::setCurrent(_busPtr, _iType, _currentStep); // some chips need max current settings (TM1814/TM1914/SM16825)
+    PolyBus::setClock(_busPtr, _iType, _frequencykHz); // some chips allow changing transmit clock
+  } else {
+    _valid = false;
+  }
 }
 
 //DISCLAIMER

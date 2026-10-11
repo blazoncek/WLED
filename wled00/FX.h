@@ -590,7 +590,7 @@ class Segment {
       DEBUGFX_PRINTF_P(PSTR(" T[%p]"), _t);
       DEBUGFX_PRINTLN();
       #endif
-      if (_t) stopTransition();
+      stopTransition();
       #ifdef WLED_ENABLE_GIF
       if (mode == FX_MODE_IMAGE) endImagePlayback(this);
       #endif

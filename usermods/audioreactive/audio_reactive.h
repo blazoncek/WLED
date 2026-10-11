@@ -764,9 +764,9 @@ static uint16_t mode_gravcenter() {                // Gravcenter. By Andrew Tuli
   SEGMENT.fade_out(251);  // 30%
 
   float segmentSampleAvg = volumeSmth * (float)SEGMENT.intensity / 255.0f;
-  segmentSampleAvg *= 0.125; // divide by 8, to compensate for later "sensitivity" upscaling
+  segmentSampleAvg *= 0.125f; // divide by 8, to compensate for later "sensitivity" upscaling
 
-  float mySampleAvg = mapf(segmentSampleAvg*2.0, 0, 32, 0, (float)SEGLEN/2.0f); // map to pixels available in current segment
+  float mySampleAvg = mapf(segmentSampleAvg*2.0f, 0.0f, 32.0f, 0.0f, (float)SEGLEN/2.0f); // map to pixels available in current segment
   int tempsamp = constrain(mySampleAvg, 0, SEGLEN/2);     // Keep the sample from overflowing.
   uint8_t gravity = 8 - SEGMENT.speed/32;
 
@@ -809,7 +809,7 @@ static uint16_t mode_gravcentric() {                     // Gravcentric. By Andr
   float segmentSampleAvg = volumeSmth * (float)SEGMENT.intensity / 255.0f;
   segmentSampleAvg *= 0.125f; // divide by 8, to compensate for later "sensitivity" upscaling
 
-  float mySampleAvg = mapf(segmentSampleAvg*2.0, 0.0f, 32.0f, 0.0f, (float)SEGLEN/2.0f); // map to pixels availeable in current segment
+  float mySampleAvg = mapf(segmentSampleAvg*2.0f, 0.0f, 32.0f, 0.0f, (float)SEGLEN/2.0f); // map to pixels availeable in current segment
   int tempsamp = constrain(mySampleAvg, 0, SEGLEN/2);     // Keep the sample from overflowing.
   uint8_t gravity = 8 - SEGMENT.speed/32;
 
@@ -848,10 +848,10 @@ static uint16_t mode_gravimeter() {                // Gravmeter. By Andrew Tulin
   //SEGMENT.fade_out(240);
   SEGMENT.fade_out(249);  // 25%
 
-  float segmentSampleAvg = volumeSmth * (float)SEGMENT.intensity / 255.0;
-  segmentSampleAvg *= 0.25; // divide by 4, to compensate for later "sensitivity" upscaling
+  float segmentSampleAvg = volumeSmth * (float)SEGMENT.intensity / 255.0f;
+  segmentSampleAvg *= 0.25f; // divide by 4, to compensate for later "sensitivity" upscaling
 
-  float mySampleAvg = mapf(segmentSampleAvg*2.0, 0, 64, 0, (SEGLEN-1)); // map to pixels available in current segment
+  float mySampleAvg = mapf(segmentSampleAvg*2.0f, 0.0f, 64.0f, 0.0f, (SEGLEN-1)); // map to pixels available in current segment
   int tempsamp = constrain(mySampleAvg,0,SEGLEN-1);       // Keep the sample from overflowing.
   uint8_t gravity = 8 - SEGMENT.speed/32;
 
@@ -880,7 +880,7 @@ static const char _data_FX_MODE_GRAVIMETER[] PROGMEM = "Gravimeter@Rate of fall,
 //////////////////////
 static uint16_t mode_juggles() {                   // Juggles. By Andrew Tuline.
   SEGMENT.fade_out(224); // 6.25%
-  uint8_t my_sampleAgc = fmax(fmin(volumeSmth, 255.0), 0);
+  uint8_t my_sampleAgc = fmax(fmin(volumeSmth, 255.0f), 0.0f);
 
   for (size_t i=0; i<SEGMENT.intensity/32+1U; i++) {
     // if SEGLEN equals 1, we will always set color to the first and only pixel, but the effect is still good looking
@@ -924,11 +924,11 @@ static uint16_t mode_midnoise() {                  // Midnoise. By Andrew Tuline
   SEGMENT.fade_out(SEGMENT.speed);
   SEGMENT.fade_out(SEGMENT.speed);
 
-  float tmpSound2 = volumeSmth * (float)SEGMENT.intensity / 256.0;  // Too sensitive.
-  tmpSound2 *= (float)SEGMENT.intensity / 128.0;              // Reduce sensitivity/length.
+  float tmpSound2 = volumeSmth * (float)SEGMENT.intensity / 256.0f;  // Too sensitive.
+  tmpSound2 *= (float)SEGMENT.intensity / 128.0f;              // Reduce sensitivity/length.
 
-  unsigned maxLen = mapf(tmpSound2, 0, 127, 0, SEGLEN/2);
-  if (maxLen >SEGLEN/2) maxLen = SEGLEN/2;
+  unsigned maxLen = mapf(tmpSound2, 0.0f, 127.0f, 0.0f, SEGLEN/2);
+  if (maxLen > SEGLEN/2) maxLen = SEGLEN/2;
 
   for (unsigned i=(SEGLEN/2-maxLen); i<(SEGLEN/2+maxLen); i++) {
     uint8_t index = inoise8(i*volumeSmth+SEGENV.aux0, SEGENV.aux1+i*volumeSmth);  // Get a value from the noise function. I'm using both x and y axis.
@@ -976,8 +976,8 @@ static uint16_t mode_noisemeter() {                // Noisemeter. By Andrew Tuli
   uint8_t fadeRate = map(SEGMENT.speed,0,255,200,254);
   SEGMENT.fade_out(fadeRate);
 
-  float tmpSound2 = volumeRaw * 2.0 * (float)SEGMENT.intensity / 255.0;
-  unsigned maxLen = mapf(tmpSound2, 0, 255, 0, SEGLEN); // map to pixels available in current segment              // Still a bit too sensitive.
+  float tmpSound2 = volumeRaw * 2.0f * (float)SEGMENT.intensity / 255.0f;
+  unsigned maxLen = mapf(tmpSound2, 0.0f, 255.0f, 0.0f, SEGLEN); // map to pixels available in current segment              // Still a bit too sensitive.
   if (maxLen < 0) maxLen = 0;
   if (maxLen > SEGLEN) maxLen = SEGLEN;
 
@@ -1315,7 +1315,7 @@ static uint16_t mode_freqwave() {                  // Freqwave. By Andreas Plesc
   if(SEGENV.aux0 != secondHand) {
     SEGENV.aux0 = secondHand;
 
-    float sensitivity = mapf(SEGMENT.custom3, 1, 31, 1, 10); // reduced resolution slider
+    float sensitivity = mapf(SEGMENT.custom3, 1.0f, 31.0f, 1.0f, 10.0f); // reduced resolution slider
     float pixVal = min(255.0f, volumeSmth * (float)SEGMENT.intensity / 256.0f * sensitivity);
     float intensity = mapf(pixVal, 0.0f, 255.0f, 0.0f, 100.0f) / 100.0f;  // make a brightness from the last avg
 
@@ -1359,7 +1359,7 @@ static uint16_t mode_gravfreq() {                  // Gravfreq. By Andrew Tuline
   float segmentSampleAvg = volumeSmth * (float)SEGMENT.intensity / 255.0f;
   segmentSampleAvg *= 0.125f; // divide by 8,  to compensate for later "sensitivity" upscaling
 
-  float mySampleAvg = mapf(segmentSampleAvg*2.0f, 0,32, 0, (float)SEGLEN/2.0f); // map to pixels availeable in current segment
+  float mySampleAvg = mapf(segmentSampleAvg*2.0f, 0.0f,32.0f, 0.0f, (float)SEGLEN/2.0f); // map to pixels availeable in current segment
   int tempsamp = constrain(mySampleAvg,0,SEGLEN/2);     // Keep the sample from overflowing.
   uint8_t gravity = 8 - SEGMENT.speed/32;
 
@@ -1424,9 +1424,9 @@ static uint16_t mode_rocktaves() {                 // Rocktaves. Same note from 
   if (my_magnitude < 48) volTemp = 0;                     // We need to squelch out the background noise.
   if (my_magnitude > 144) volTemp = 255;                  // everything above this is full brightness
 
-  while ( frTemp > 249 ) {
+  while ( frTemp > 249.0f ) {
     octCount++;                                           // This should go up to 5.
-    frTemp = frTemp/2;
+    frTemp = frTemp/2.0f;
   }
 
   frTemp -= 132.0f;                                       // This should give us a base musical note of C3
@@ -1462,7 +1462,7 @@ static uint16_t mode_waterfall() {                   // Waterfall. By: Andrew Tu
     SEGENV.aux0 = secondHand;
 
     //uint8_t pixCol = (log10f((float)FFT_MajorPeak) - 2.26f) * 177;  // 10Khz sampling - log10 frequency range is from 2.26 (182hz) to 3.7 (5012hz). Let's scale accordingly.
-    uint8_t pixCol = (log10f(FFT_MajorPeak) - 2.26f) * 150;           // 22Khz sampling - log10 frequency range is from 2.26 (182hz) to 3.967 (9260hz). Let's scale accordingly.
+    uint8_t pixCol = (log10f(FFT_MajorPeak) - 2.26f) * 150.0f;        // 22Khz sampling - log10 frequency range is from 2.26 (182hz) to 3.967 (9260hz). Let's scale accordingly.
     if (FFT_MajorPeak < 182.0f) pixCol = 0;                           // handle underflow
 
     unsigned k = SEGLEN-1;

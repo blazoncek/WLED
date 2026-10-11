@@ -423,7 +423,10 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
   nightlightActive = udpIn[6];
   if (nightlightActive) nightlightDelayMins = udpIn[7];
 
-  if (receiveNotificationBrightness || !someSel) bri = udpIn[2];
+  if (receiveNotificationBrightness || !someSel) {
+    if ((bool)bri ^ (bool)udpIn[2]) toggleOnOff();  // if on/off state changed toggle relay
+    bri = udpIn[2];                                 // ignore bri set in toggleOnOff()
+  }
   stateUpdated(CALL_MODE_NOTIFICATION);
 }
 

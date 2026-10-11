@@ -282,7 +282,7 @@ class Bus {
               type == TYPE_SM16825;
     }
     static constexpr bool hasCurrentLimiter(uint8_t type) {
-      return  type == TYPE_APA102 || type == TYPE_HD108  || type == TYPE_TM1814 || type == TYPE_SM16825;
+      return  type == TYPE_APA102 || type == TYPE_HD108 /*|| type == TYPE_TM1814 || type == TYPE_SM16825*/;
     }
     static constexpr bool  isTypeValid(uint8_t type)  { return (type > 15 && type < 128); }
     static constexpr bool  isDigital(uint8_t type)    { return (type >= TYPE_DIGITAL_MIN && type <= TYPE_DIGITAL_MAX) || is2Pin(type); }
