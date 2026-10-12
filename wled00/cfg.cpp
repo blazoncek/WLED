@@ -349,6 +349,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   #if defined(WLED_USE_ETHERNET) && !defined(ESP8266)
   for (const auto &bus : busConfigs) {
     if (bus.type >= TYPE_2PIN_MIN && bus.type <= TYPE_2PIN_MAX) {
+      DEBUG_PRINTLN(F("HSPI in use by bus."))
       hspiInUse = true;
       break;
     }
@@ -533,7 +534,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     if (fromFS) {
       i2c_sda = hw_sda_pin;
       i2c_scl = hw_scl_pin;
-      Wire.begin((int)i2c_sda, (int)i2c_scl); // on ESP32 begin() will return false if low-level I2C initialization failed
+      Wire.begin((int)hw_sda_pin, (int)hw_scl_pin); // on ESP32 begin() will return false if low-level I2C initialization failed
     } else {
       // no bus re-initialization as usermods do not get any notification (so send reboot request)
       int8_t i2c[2] = { i2c_sda, i2c_scl };
@@ -584,7 +585,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     spi_sclk = hw_spi_sclk;
     spi_miso = hw_spi_miso;
     spi_ssel = hw_spi_ssel;
-  } if (fromFS) {
+  } else if (fromFS) {
     // if we couldn't allocate pins or we have VSPI/HSPI conflict remove SPI pins
     spi_mosi = -1;
     spi_miso = -1;
@@ -604,7 +605,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       case CARD_NONE: DEBUG_PRINTLN(F("No SD card present.")); break;
       case CARD_SD:
       case CARD_SDHC:
-      case CARD_MMC:  DEBUG_PRINTF_P(PSTR("SD card present: %u"), cardType); break;
+      case CARD_MMC:  DEBUG_PRINTF_P(PSTR("SD card present: %u\n"), cardType); break;
     }
     #endif
   }
