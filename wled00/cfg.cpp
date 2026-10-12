@@ -43,6 +43,7 @@ static inline void getStringFromJson(char* dest, const char* src, size_t len) {
 
 bool deserializeConfig(JsonObject doc, bool fromFS) {
   bool needsSave = false;
+  bool rebootNeeded = doReboot;
   //int rev_major = doc["rev"][0]; // 1
   //int rev_minor = doc["rev"][1]; // 0
 
@@ -522,42 +523,76 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   if (serialBaud < 96 || serialBaud > 15000) serialBaud = 1152;
   updateBaudRate(serialBaud *100);
 
+  int8_t hw_sda_pin = i2c_sda;
+  int8_t hw_scl_pin = i2c_scl;
   JsonArray hw_if_i2c = hw["if"][F("i2c-pin")];
-  CJSON(i2c_sda, hw_if_i2c[0]);
-  CJSON(i2c_scl, hw_if_i2c[1]);
-  PinManagerPinType i2c[2] = { { i2c_sda, true }, { i2c_scl, true } };
-  if (i2c_scl >= 0 && i2c_sda >= 0 && PinManager::allocateMultiplePins(i2c, 2, PinOwner::HW_I2C)) {
-    #ifdef ESP32
-    if (!Wire.setPins(i2c_sda, i2c_scl)) { i2c_scl = i2c_sda = -1; } // this will fail if Wire is initialised (Wire.begin() called prior)
-    else Wire.begin();
-    #else
-    Wire.begin(i2c_sda, i2c_scl);
-    #endif
-  } else {
+  CJSON(hw_sda_pin, hw_if_i2c[0]);
+  CJSON(hw_scl_pin, hw_if_i2c[1]);
+  PinManagerPinType i2c[2] = { { hw_sda_pin, true }, { hw_scl_pin, true } };
+  if (hw_scl_pin >= 0 && hw_sda_pin >= 0 && PinManager::allocateMultiplePins(i2c, 2, PinOwner::HW_I2C)) {
+    if (fromFS) {
+      i2c_sda = hw_sda_pin;
+      i2c_scl = hw_scl_pin;
+      Wire.begin((int)i2c_sda, (int)i2c_scl); // on ESP32 begin() will return false if low-level I2C initialization failed
+    } else {
+      // no bus re-initialization as usermods do not get any notification (so send reboot request)
+      int8_t i2c[2] = { i2c_sda, i2c_scl };
+      PinManager::deallocateMultiplePins(i2c, 2, PinOwner::HW_I2C);
+      i2c_sda = hw_sda_pin;
+      i2c_scl = hw_scl_pin;
+      rebootNeeded = true;
+    }
+  } else if (fromFS) {
+    // if we couldn't allocate pins, remove them
     i2c_sda = -1;
     i2c_scl = -1;
   }
+
+  int8_t hw_spi_mosi = spi_mosi;
+  int8_t hw_spi_sclk = spi_sclk;
+  int8_t hw_spi_miso = spi_miso;
+  int8_t hw_spi_ssel = spi_ssel;
   JsonArray hw_if_spi = hw["if"][F("spi-pin")];
-  CJSON(spi_mosi, hw_if_spi[0]);
-  CJSON(spi_sclk, hw_if_spi[1]);
-  CJSON(spi_miso, hw_if_spi[2]);
-  CJSON(spi_ssel, hw_if_spi[3]);
-  PinManagerPinType spi[4] = { { spi_mosi, true }, { spi_miso, false }, { spi_sclk, true }, { spi_ssel, true } };
-  // if HSPI is used by bus we can't initialise it
-  if (!hspiInUse && spi_mosi >= 0 && spi_sclk >= 0 && PinManager::allocateMultiplePins(spi, 4, PinOwner::HW_SPI)) {
-    #ifdef ESP32
-    SPI.begin(spi_sclk, spi_miso, spi_mosi);  // SPI global uses VSPI on ESP32 and FSPI on C3, S3 (don't set SS as it will be set by SD card)
-    #else
-    SPI.begin();
-    #endif
-  } else {
+  CJSON(hw_spi_mosi, hw_if_spi[0]);
+  CJSON(hw_spi_sclk, hw_if_spi[1]);
+  CJSON(hw_spi_miso, hw_if_spi[2]);
+  CJSON(hw_spi_ssel, hw_if_spi[3]);
+  PinManagerPinType spi[4] = { { hw_spi_mosi, true }, { hw_spi_miso, false }, { hw_spi_sclk, true }, { hw_spi_ssel, true } };
+  PinManager::deallocateMultiplePins(spi, 4, PinOwner::HW_SPI);
+  // when using Ethernet Bus will use HSPI for 2-wire LED chips as apparently Ethernet uses VSPI (or at least makes it non-functional)
+  // if HSPI is used by bus we can't initialise it so don't bother with it (both are used VSPI & HSPI)
+  if (!hspiInUse && hw_spi_mosi >= 0 && hw_spi_sclk >= 0 && hw_spi_miso >= 0 && PinManager::allocateMultiplePins(spi, 4, PinOwner::HW_SPI)) {
+    if (fromFS) {
+      #ifdef ESP32
+      SPI.begin(hw_spi_sclk, hw_spi_miso, hw_spi_mosi, -1);  // SPI global uses VSPI on ESP32 and FSPI on C3, S3 (don't set SS as it will be set by SD card)
+      #else
+      SPI.begin();  // we can't change SPI pins on ESP8266 (hardwired to sck=14, miso=12, mosi=13)
+      #endif
+    } else {
+      // warning: usermods are not notified of reinitialization
+      #ifndef ESP8266
+      if (sdCard) SD.end();
+      #endif
+      SPI.end(); // no harm if called uninitialised
+      #ifdef ESP32
+      SPI.begin(hw_spi_sclk, hw_spi_miso, hw_spi_mosi, -1);  // SPI global uses VSPI on ESP32 and FSPI on C3, S3 (don't set SS as it will be set by SD card)
+      #else
+      SPI.begin();  // we can't change SPI pins on ESP8266 (hardwired to sck=14, miso=12, mosi=13)
+      #endif
+    }
+    spi_mosi = hw_spi_mosi;
+    spi_sclk = hw_spi_sclk;
+    spi_miso = hw_spi_miso;
+    spi_ssel = hw_spi_ssel;
+  } if (fromFS) {
+    // if we couldn't allocate pins or we have VSPI/HSPI conflict remove SPI pins
     spi_mosi = -1;
     spi_miso = -1;
     spi_sclk = -1;
     spi_ssel = -1;
   }
   #ifndef ESP8266
-  bool spiConfigured = !hspiInUse && spi_mosi > 0 && spi_miso > 0 && spi_sclk > 0 && spi_ssel > 0;
+  bool spiConfigured = !hspiInUse && spi_mosi >= 0 && spi_miso >= 0 && spi_sclk >= 0 && spi_ssel >= 0;
   CJSON(sdCard, hw["if"][F("spi-sd")]);
   sdCard = sdCard && spiConfigured;
   if (sdCard) {
@@ -575,7 +610,9 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   }
   #endif
 
+  #if defined(STATUSLED)
   //int hw_status_pin = hw[F("status")]["pin"]; // -1
+  #endif
 
   JsonObject light = doc[F("light")];
   CJSON(briMultiplier, light[F("scale-bri")]);
@@ -825,7 +862,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
 
   if (fromFS) return needsSave;
   // if from /json/cfg
-  doReboot = doc[F("rb")] | doReboot;
+  doReboot = doc[F("rb")] | rebootNeeded;
   if (doInit & INIT_BUS) return false; // no save needed, will do after bus init in wled.cpp loop
   return (doc["sv"] | true);
 }
@@ -1085,8 +1122,10 @@ void serializeConfig() {
   hw_if[F("spi-sd")] = sdCard;
   #endif
 
+  #if defined(STATUSLED)
   //JsonObject hw_status = hw.createNestedObject("status");
-  //hw_status["pin"] = -1;
+  //hw_status["gpio"] = STATUSLED;  // do not use "pin" as it will prevent use of it in usermods or other HW
+  #endif
 
   JsonObject light = root.createNestedObject(F("light"));
   light[F("scale-bri")] = briMultiplier;

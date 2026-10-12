@@ -572,7 +572,7 @@ void FourLineDisplayUsermod::setup() {
 
   if (nullptr == u8x8) {
     DEBUGUM_PRINTLN(F("Display init failed."));
-    PinManager::deallocateMultiplePins((const uint8_t*)ioPin, 4, PinOwner::UM_FourLineDisplay);
+    PinManager::deallocateMultiplePins(ioPin, 4, PinOwner::UM_FourLineDisplay);
     type = NONE;
     return;
   }
@@ -1309,7 +1309,7 @@ bool FourLineDisplayUsermod::readFromConfig(JsonObject& root) {
     if (pinsChanged || type!=newType) {
       bool isSPI = (type == SSD1306_SPI || type == SSD1306_SPI64 || type == SSD1309_SPI64);
       bool newSPI = (newType == SSD1306_SPI || newType == SSD1306_SPI64 || newType == SSD1309_SPI64);
-      if (pinsChanged) PinManager::deallocateMultiplePins((const uint8_t*)oldPin, MAX_PINS, PinOwner::UM_FourLineDisplay);
+      if (pinsChanged) PinManager::deallocateMultiplePins(oldPin, MAX_PINS, PinOwner::UM_FourLineDisplay);
       if (isSPI) {
         if (!newSPI) {
           // was SPI but is no longer SPI

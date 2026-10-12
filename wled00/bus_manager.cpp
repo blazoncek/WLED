@@ -1081,7 +1081,7 @@ void BusHub75Matrix::cleanup() {
 void BusHub75Matrix::deallocatePins() {
   uint8_t pins[HUB75_PIN_COUNT];
   getHub75Pins(_type, pins);
-  PinManager::deallocateMultiplePins(pins, HUB75_PIN_COUNT, PinOwner::HUB75);
+  PinManager::deallocateMultiplePins((int8_t*)pins, HUB75_PIN_COUNT, PinOwner::HUB75);
 }
 
 uint16_t BusHub75Matrix::getFrequency() const { 

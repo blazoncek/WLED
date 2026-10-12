@@ -610,7 +610,7 @@ void WLED::beginStrip()
       JsonArray pins = doc.as<JsonArray>();
       if (!pins.isNull() && pins.size() == 14) {
         uint8_t *pinMem = BusHub75Matrix::getCustomPinsArray();
-        for (size_t i = 0; i < pins.size(); i++) pinMem[i] = pins[i].as<int>() < 0 ? 255 : min(pins[i].as<int>(), 255);
+        for (size_t i = 0; i < pins.size(); i++) pinMem[i] = pins[i].as<int>() < 0 ? 255 : min(pins[i].as<int>(), WLED_NUM_PINS-1);
         DEBUG_PRINTLN(F("Custom Hub75 pins loaded."));
       }
     }
@@ -864,12 +864,12 @@ void WLED::handleConnection()
         sendImprovStateResponse(0x04);
         if (improvActive > 1) sendImprovIPRPCResult(ImprovRPCType::Command_Wifi);
       }
-      connected();  // will init ESP-NOW
       // shut down AP
       if (apBehavior != AP_BEHAVIOR_ALWAYS && apActive) {
-        stopAP(false); // do not stop ESP-NOW
+        stopAP(true);
         DEBUG_PRINTF_P(PSTR("WiFi: AP disabled (connected). @ %lus\n"), now/1000);
       }
+      connected();  // will init ESP-NOW if WiFi is still active
     }
 #ifndef WLED_DISABLE_ESPNOW
     sendESPNowHeartBeat();
@@ -1197,20 +1197,20 @@ ESP-NOW  inited in AP mode (channel: 6/1).
  *
  * The exact timing is not critical; the visual pattern is.
  *
- * Network connected + MQTT:                  1111 0000 1111 0000 1111 1111 1111 1111
- * Network connected, MQTT disconnected: Continuously ON
+ * Network connected + MQTT:                  1100 1100 1111 1111 1111 1111 1111 1111
+ * Network connected, MQTT disconnected:      1100 1111 1111 1111 1111 1111 1111 1111
  * AP active:                                 1111 1111 0000 0000 1111 1111 0000 0000
  * AP active and client connected:            1111 0000 1111 0000 1111 0000 1111 0000
- * Network configured and no AP (connecting): 1111 0000 1111 0000 0000 0000 0000 0000
+ * Network configured and no AP (connecting): 1111 0000 0000 0000 0000 0000 0000 0000
  * Firmware update:                           1100 1100 1100 1100 1100 1100 1100 1100
  */
 #define STATUSLED_SLOT_MS 62UL
 
-#define STATUSLED_PATTERN_MQTT 0xF0F0FFFFUL
-#define STATUSLED_PATTERN_NET  0xFFFFFFFFUL
+#define STATUSLED_PATTERN_MQTT 0xCCFFFFFFUL
+#define STATUSLED_PATTERN_NET  0xCFFFFFFFUL
 #define STATUSLED_PATTERN_AP   0xFF00FF00UL
 #define STATUSLED_PATTERN_CLNT 0xF0F0F0F0UL
-#define STATUSLED_PATTERN_NONE 0xF0F00000UL
+#define STATUSLED_PATTERN_NONE 0xF0000000UL
 #define STATUSLED_PATTERN_OTA  0xCCCCCCCCUL
 
 void WLED::handleStatusLED()
@@ -1238,10 +1238,13 @@ void WLED::handleStatusLED()
     color = RGBW32(255, 255, 0, 0);
   } else
 #endif
+#ifndef WLED_DISABLE_MQTT
   if (Network.isConnected() && WLED_MQTT_CONNECTED) {
     pattern = STATUSLED_PATTERN_MQTT;
     color = RGBW32(255, 255, 0, 0);
-  } else if (Network.isConnected()) {
+  } else
+#endif
+  if (Network.isConnected()) {
     pattern = STATUSLED_PATTERN_NET;
     color = RGBW32(0, 255, 0, 0);
   } else if (apActive && apClients) {

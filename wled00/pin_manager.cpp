@@ -14,9 +14,9 @@
 
 // Pin management state variables
 #ifdef ESP8266
-static uint32_t pinAlloc = 0UL;     // 1 bit per pin, we use first 17bits
+static uint32_t pinAlloc = 0UL;   // 1 bit per pin, we use first 17bits
 #else
-static uint64_t pinAlloc = 0ULL;     // 1 bit per pin, we use 50 bits on ESP32-S3
+static uint64_t pinAlloc = 0ULL;  // 1 bit per pin, we use 50 bits on ESP32-S3
 static uint16_t ledcAlloc = 0;    // up to 16 LEDC channels (WLED_MAX_ANALOG_CHANNELS)
 #endif
 static uint8_t i2cAllocCount = 0; // allow multiple allocation of I2C bus pins but keep track of allocations
@@ -24,10 +24,10 @@ static uint8_t spiAllocCount = 0; // allow multiple allocation of SPI bus pins b
 static PinOwner ownerTag[WLED_NUM_PINS] = { PinOwner::None };
 
 /// Actual allocation/deallocation routines
-bool PinManager::deallocatePin(byte gpio, PinOwner tag)
+bool PinManager::deallocatePin(int8_t gpio, PinOwner tag)
 {
-  if (gpio == 0xFF) return true;           // explicitly allow clients to free -1 as a no-op
-  if (!isPinOk(gpio, false)) return false; // but return false for any other invalid pin
+  if (gpio < 0) return true;                // explicitly allow clients to free -1 as a no-op
+  if (!isPinOk(gpio, false)) return false;  // but return false for any other invalid pin
 
   // if a non-zero ownerTag, only allow de-allocation if the owner's tag is provided
   if ((ownerTag[gpio] != PinOwner::None) && (ownerTag[gpio] != tag)) {
@@ -41,14 +41,14 @@ bool PinManager::deallocatePin(byte gpio, PinOwner tag)
 }
 
 // support function for deallocating multiple pins
-bool PinManager::deallocateMultiplePins(const uint8_t *pinArray, byte arrayElementCount, PinOwner tag)
+bool PinManager::deallocateMultiplePins(const int8_t *pinArray, size_t arrayElementCount, PinOwner tag)
 {
   bool shouldFail = false;
   DEBUGPM_PRINTLN(F("MULTIPIN DEALLOC"));
   // first verify the pins are OK and allocated by selected owner
   for (int i = 0; i < arrayElementCount; i++) {
-    byte gpio = pinArray[i];
-    if (gpio == 0xFF) {
+    int8_t gpio = pinArray[i];
+    if (gpio < 0) {
       // explicit support for io -1 as a no-op (no allocation of pin),
       // as this can greatly simplify configuration arrays
       continue;
@@ -81,26 +81,26 @@ bool PinManager::deallocateMultiplePins(const uint8_t *pinArray, byte arrayEleme
   return true;
 }
 
-bool PinManager::deallocateMultiplePins(const managed_pin_type * mptArray, byte arrayElementCount, PinOwner tag)
+bool PinManager::deallocateMultiplePins(const managed_pin_type * mptArray, size_t arrayElementCount, PinOwner tag)
 {
-  uint8_t pins[arrayElementCount];
+  int8_t pins[arrayElementCount];
   for (int i=0; i<arrayElementCount; i++) pins[i] = mptArray[i].pin;
   return deallocateMultiplePins(pins, arrayElementCount, tag);
 }
 
-bool PinManager::allocateMultiplePins(const managed_pin_type * mptArray, byte arrayElementCount, PinOwner tag)
+bool PinManager::allocateMultiplePins(const managed_pin_type * mptArray, size_t arrayElementCount, PinOwner tag)
 {
   bool shouldFail = false;
   // first verify the pins are OK and not already allocated
   for (int i = 0; i < arrayElementCount; i++) {
-    byte gpio = mptArray[i].pin;
-    if (gpio == 0xFF) {
+    int8_t gpio = mptArray[i].pin;
+    if (gpio < 0) {
       // explicit support for io -1 as a no-op (no allocation of pin),
       // as this can greatly simplify configuration arrays
       continue;
     }
     if (!isPinOk(gpio, mptArray[i].isOutput)) {
-      DEBUGPM_PRINTF_P(PSTR("PIN ALLOC: FAIL Invalid pin attempted to be allocated: GPIO %d as %s\n."), gpio, mptArray[i].isOutput ? PSTR("output"): PSTR("input"));
+      DEBUGPM_PRINTF_P(PSTR("PIN ALLOC: FAIL Invalid pin attempted to be allocated: GPIO %d as %sput\n."), gpio, mptArray[i].isOutput ? PSTR("out"): PSTR("in"));
       shouldFail = true;
     }
     if ((tag==PinOwner::HW_I2C || tag==PinOwner::HW_SPI) && isPinAllocated(gpio, tag)) {
@@ -120,14 +120,13 @@ bool PinManager::allocateMultiplePins(const managed_pin_type * mptArray, byte ar
 
   // all pins are available .. track each one
   for (int i = 0; i < arrayElementCount; i++) {
-    byte gpio = mptArray[i].pin;
-    if (gpio == 0xFF) {
+    int8_t gpio = mptArray[i].pin;
+    if (gpio < 0 || gpio >= WLED_NUM_PINS) {
       // allow callers to include -1 value as non-requested pin
       // as this can greatly simplify configuration arrays
+      // other unexpected GPIO => avoid array bounds violation
       continue;
     }
-    if (gpio >= WLED_NUM_PINS)
-      continue; // other unexpected GPIO => avoid array bounds violation
 
     bitWrite(pinAlloc, gpio, true);
     ownerTag[gpio] = tag;
@@ -137,18 +136,18 @@ bool PinManager::allocateMultiplePins(const managed_pin_type * mptArray, byte ar
   return true;
 }
 
-bool PinManager::allocateMultiplePins(const int8_t * mptArray, byte arrayElementCount, PinOwner tag, bool output) {
+bool PinManager::allocateMultiplePins(const int8_t * mptArray, size_t arrayElementCount, PinOwner tag, bool output) {
   PinManagerPinType pins[arrayElementCount];
   for (int i=0; i<arrayElementCount; i++) pins[i] = {mptArray[i], output};
   return allocateMultiplePins(pins, arrayElementCount, tag);
 }
 
-bool PinManager::allocatePin(byte gpio, bool output, PinOwner tag)
+bool PinManager::allocatePin(int8_t gpio, bool output, PinOwner tag)
 {
   // HW I2C & SPI pins have to be allocated using allocateMultiplePins variant since there is always SCL/SDA pair
-  if (!isPinOk(gpio, output) || (gpio >= WLED_NUM_PINS) || tag==PinOwner::HW_I2C || tag==PinOwner::HW_SPI) {
+  if (!isPinOk(gpio, output) || tag==PinOwner::HW_I2C || tag==PinOwner::HW_SPI) {
     #ifdef WLED_DEBUG_PINMANAGER
-    if (gpio < 255) {  // 255 (-1) is the "not defined GPIO"
+    if (gpio >= 0) {  // -1 is the "not defined GPIO"
       if (!isPinOk(gpio, output)) {
         DEBUGPM_PRINTF_P(PSTR("PIN ALLOC: FAIL for owner 0x%02X: GPIO %d "), static_cast<int>(tag), gpio);
         if (output) DEBUGPM_PRINTLN(F(" cannot be used for i/o on this MCU."));
@@ -175,7 +174,7 @@ bool PinManager::allocatePin(byte gpio, bool output, PinOwner tag)
 
 // if tag is set to PinOwner::None, checks for ANY owner of the pin.
 // if tag is set to any other value, checks if that tag is the current owner of the pin.
-bool PinManager::isPinAllocated(byte gpio, PinOwner tag)
+bool PinManager::isPinAllocated(int8_t gpio, PinOwner tag)
 {
   if (!isPinOk(gpio, false)) return true;
   if ((tag != PinOwner::None) && (ownerTag[gpio] != tag)) return false;
@@ -199,9 +198,9 @@ bool PinManager::isPinAllocated(byte gpio, PinOwner tag)
  */
 
 // Check if supplied GPIO is ok to use
-bool PinManager::isPinOk(byte gpio, bool output)
+bool PinManager::isPinOk(int8_t gpio, bool output)
 {
-  if (gpio >= WLED_NUM_PINS) return false;     // catch error case, to avoid array out-of-bounds access
+  if (gpio < 0 || gpio >= WLED_NUM_PINS) return false;     // catch error case, to avoid array out-of-bounds access
 #ifdef ARDUINO_ARCH_ESP32
   if (digitalPinIsValid(gpio)) {
   #if defined(CONFIG_IDF_TARGET_ESP32C3)
@@ -256,7 +255,7 @@ bool PinManager::isPinOk(byte gpio, bool output)
   return false;
 }
 
-bool PinManager::isReadOnlyPin(byte gpio)
+bool PinManager::isReadOnlyPin(int8_t gpio)
 {
 #ifdef ARDUINO_ARCH_ESP32
   if (gpio < WLED_NUM_PINS) return (digitalPinIsValid(gpio) && !digitalPinCanOutput(gpio));
@@ -264,7 +263,7 @@ bool PinManager::isReadOnlyPin(byte gpio)
   return false;
 }
 
-bool PinManager::isAnalogPin(byte gpio) {
+bool PinManager::isAnalogPin(int8_t gpio) {
   #ifdef ARDUINO_ARCH_ESP32
   // Check ADC capability: only ADC1 channels can be used (ADC2 channels are not usable when WiFi is active)
   #if CONFIG_IDF_TARGET_ESP32
@@ -290,7 +289,7 @@ bool PinManager::isAnalogPin(byte gpio) {
   return false; // not an analog pin if it doesn't have ADC capability
 }
 
-PinOwner PinManager::getPinOwner(byte gpio)
+PinOwner PinManager::getPinOwner(int8_t gpio)
 {
   if (!isPinOk(gpio, false)) return PinOwner::None;
   return ownerTag[gpio];

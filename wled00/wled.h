@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2610110
+#define VERSION 2610120
 #else
 #define VERSION BUILD
 #endif
@@ -869,7 +869,7 @@ public:
 
   void beginStrip();
   void handleConnection();
-  void stopAP(bool stopESPNow = true);
+  void stopAP(bool stopWiFi = true);
   void initAP(bool resetAP = false);
   void initConnection(bool force = false);
   void connected();

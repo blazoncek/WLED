@@ -707,13 +707,14 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     int8_t hw_scl_pin  = !request->arg(F("SCL")).length() ? -1 : (int)request->arg(F("SCL")).toInt();
     if (i2c_sda != hw_sda_pin || i2c_scl != hw_scl_pin) {
       // only if pins changed
-      uint8_t old_i2c[2] = { static_cast<uint8_t>(i2c_scl), static_cast<uint8_t>(i2c_sda) };
+      int8_t old_i2c[2] = { i2c_scl, i2c_sda };
       PinManager::deallocateMultiplePins(old_i2c, 2, PinOwner::HW_I2C); // just in case deallocation of old pins
 
       PinManagerPinType i2c[2] = { { hw_sda_pin, true }, { hw_scl_pin, true } };
       if (hw_sda_pin >= 0 && hw_scl_pin >= 0 && PinManager::allocateMultiplePins(i2c, 2, PinOwner::HW_I2C)) {
         i2c_sda = hw_sda_pin;
         i2c_scl = hw_scl_pin;
+        rebootNeeded = true;
         // no bus re-initialisation as usermods do not get any notification
         //Wire.begin(i2c_sda, i2c_scl);
       } else {
@@ -755,7 +756,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
         #endif
         SPI.end();
       }
-      uint8_t old_spi[4] = { static_cast<uint8_t>(spi_mosi), static_cast<uint8_t>(spi_miso), static_cast<uint8_t>(spi_sclk), static_cast<uint8_t>(spi_ssel) };
+      int8_t old_spi[4] = { spi_mosi, spi_miso, spi_sclk, spi_ssel };
       PinManager::deallocateMultiplePins(old_spi, 4, PinOwner::HW_SPI); // just in case deallocation of old pins
       PinManagerPinType spi[4] = { { hw_mosi_pin, true }, { hw_miso_pin, false }, { hw_sclk_pin, true }, { hw_ssel_pin, true } };
       // if HSPI is used by bus we can't initialise it
