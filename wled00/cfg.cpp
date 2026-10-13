@@ -349,7 +349,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   #if defined(WLED_USE_ETHERNET) && !defined(ESP8266)
   for (const auto &bus : busConfigs) {
     if (bus.type >= TYPE_2PIN_MIN && bus.type <= TYPE_2PIN_MAX) {
-      DEBUG_PRINTLN(F("HSPI in use by bus."))
+      DEBUG_PRINTLN(F("HSPI in use by bus."));
       hspiInUse = true;
       break;
     }
