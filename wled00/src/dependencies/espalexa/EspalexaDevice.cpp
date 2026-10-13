@@ -133,43 +133,43 @@ uint32_t EspalexaDevice::getRGB()
   {
     //TODO tweak a bit to match hue lamp characteristics
     //based on https://gist.github.com/paulkaplan/5184275
-    float temp = (_ct != 0) ? (10000/ _ct) : 2; //kelvins = 1,000,000/mired (and that /100)   softhack007: avoid division by zero - using "2" as substitute
+    float temp = (_ct != 0) ? (10000/ _ct) : 2.0f; //kelvins = 1,000,000/mired (and that /100)   softhack007: avoid division by zero - using "2" as substitute
     float r, g, b;
 
 #ifdef ESPALEXA_DEBUG
-  if (_ct == 0) {EA_DEBUGLN(F("EspalexaDevice::getRGB() Warning: ct = 0!"));}
+    if (_ct == 0) {EA_DEBUGLN(F("EspalexaDevice::getRGB() Warning: ct = 0!"));}
 #endif
-    if (temp <= 66) { 
-      r = 255; 
+    if (temp <= 66.0f) { 
+      r = 255.0f; 
       g = temp;
-      g = 99.470802 * logf(g) - 161.119568;
-      if (temp <= 19) {
+      g = 99.470802f * logf(g) - 161.119568f;
+      if (temp <= 19.0f) {
           b = 0;
       } else {
-          b = temp-10;
-          b = 138.517731 * logf(b) - 305.044793;
+          b = temp-10.0f;
+          b = 138.517731f * logf(b) - 305.044793f;
       }
     } else {
-      r = temp - 60;
-      r = 329.698727 * pow(r, -0.13320476);
-      g = temp - 60;
-      g = 288.12217 * pow(g, -0.07551485 );
-      b = 255;
+      r = temp - 60.0f;
+      r = 329.698727f * powf(r, -0.13320476f);
+      g = temp - 60.0f;
+      g = 288.12217f * powf(g, -0.07551485f );
+      b = 255.0f;
     }
     
-    rgb[0] = (byte)constrain(r,0.1,255.1);
-    rgb[1] = (byte)constrain(g,0.1,255.1);
-    rgb[2] = (byte)constrain(b,0.1,255.1);
+    rgb[0] = (byte)constrain(r,0.1f,255.1f);
+    rgb[1] = (byte)constrain(g,0.1f,255.1f);
+    rgb[2] = (byte)constrain(b,0.1f,255.1f);
     
   } else if (_mode == EspalexaColorMode::hs)
   {
-    float h = ((float)_hue)/65535.0;
-    float s = ((float)_sat)/255.0;
-    byte i = floor(h*6);
+    float h = ((float)_hue)/65535.0f;
+    float s = ((float)_sat)/255.0f;
+    byte i = floorf(h*6);
     float f = h * 6-i;
-    float p = 255 * (1-s);
-    float q = 255 * (1-f*s);
-    float t = 255 * (1-(1-f)*s);
+    float p = 255.0f * (1.0f-s);
+    float q = 255.0f * (1.0f-f*s);
+    float t = 255.0f * (1.0f-(1.0f-f)*s);
     switch (i%6) {
       case 0: rgb[0]=255,rgb[1]=t,rgb[2]=p;break;
       case 1: rgb[0]=q,rgb[1]=255,rgb[2]=p;break;
@@ -230,9 +230,9 @@ uint32_t EspalexaDevice::getRGB()
         b = 1.0f;
       }
     }
-    rgb[0] = 255.0*r;
-    rgb[1] = 255.0*g;
-    rgb[2] = 255.0*b;
+    rgb[0] = 255.0f*r;
+    rgb[1] = 255.0f*g;
+    rgb[2] = 255.0f*b;
   }
   _rgb = ((rgb[0] << 16) | (rgb[1] << 8) | (rgb[2]));
   return _rgb;
