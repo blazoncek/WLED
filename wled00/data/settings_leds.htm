@@ -36,11 +36,13 @@
 		function S() {
 			getLoc();
 			loadJS(getURL('/settings/s.js?p=2'), false, undefined, ()=>{
+				// post GetV() script
 				checkSi();
 				setABL();
 				d.Sf.addEventListener("submit", trySubmit);
 				if (um_p[0]==-1) um_p.shift();
 				updTDDs();
+				UI();
 			});	// If we set async false, file is loaded and executed, then next statement is processed
 			if (loc) d.Sf.action = getURL('/settings/leds');
 		}
@@ -78,7 +80,6 @@
 				// limiter disabled
 				d.Sf.PPL.checked = false;
 			}
-			UI();
 		}
 		// enable per port limiter and calculate current
 		function enPPL(sDI=0) {
@@ -121,7 +122,6 @@
 			d.Sf.ABL.checked = en;
 			// select appropriate LED current
 			qSA(".iST select[name^=LL]").forEach((sel,i)=>{
-				sel.value = 0; // set custom
 				let n = chrID(i); // bus number (0-Z)
 				if (en) {
 					sel.value = parseInt(gN("LA"+n).value);
@@ -160,6 +160,7 @@
 
 		function UI()
 		{
+			const abl = d.Sf.ABL.checked;
 			let gRGBW = false, memu = 0;
 			let busMA = 0;
 			let sLC = 0, sPC = 0, sDI = 0, maxLC = 0, maxCh = 0;
@@ -176,6 +177,7 @@
 					if (sameType != t) sameType = -1;   // different bus type
 					if (maxCh < numChan(t)) maxCh = numChan(t);
 				}
+				gId("abl"+i).style.display = (!abl || !isDig(t)) && t != 31 ? "none" : "inline"; // show/hide individual ABL settings (TM1814 needs mA/LED to set max current)
 			});
 			// enable/disable add/remove buttons for LED busses, color order overrides and "buttons"
 			gId("+").style.display = (LTs.length < 36) ? "inline" : "none"; // now: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".length
@@ -473,7 +475,6 @@ Swap: <select id="xw${s}" name="XW${s}">
 		function tglSi(cs) {
 			customStarts = cs;
 			if (!customStarts) startsDirty = []; //set all starts to clean
-			UI();
 		}
 		function checkSi() { //on load, checks whether there are custom start fields
 			var cs = false;
@@ -900,7 +901,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 				disable(`option[data-type^="${'A'.repeat(maxA - analogB + (isPWM(t) ? numPins(t) : 0) + 1)}"]`);
 				// update UI elements
 				setPinConfig(n,t);
-				gId("abl"+n).style.display = (!abl || !isDig(t)) ? "none" : "inline";       // show/hide individual ABL settings
+				//gId("abl"+n).style.display = (!abl || !isDig(t)) ? "none" : "inline";       // show/hide individual ABL settings (done i UI())
 				if (sel) {                                                               	// did we change LED type?
 					gId("rf"+n).checked = (gId("rf"+n).checked || t == 31);                 // LEDs require data in off state (mandatory for TM1814)
 					if (isAna(t)) gN("LC"+n).value = 1;                                     // for sanity change analog count just to 1 LED
@@ -970,7 +971,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 		<b><span id="psu">?</span></b><br>
 		<span id="psu2"><br></span>
 		<br>
-		Enable automatic brightness limiter: <input type="checkbox" name="ABL" onchange="enABL()"><br>
+		Enable automatic brightness limiter: <input type="checkbox" name="ABL" onchange="enABL();UI()"><br>
 		<div id="abl">
 			<i>Automatically limits brightness to stay close to the limit.<br>
 				Keep at &lt;1A if powering LEDs directly from the ESP 5V pin!<br>
@@ -1003,7 +1004,7 @@ Swap: <select id="xw${s}" name="XW${s}">
 		<hr class="sml">
 		<div id="prl" class="hide">Use parallel I2S: <input type="checkbox" name="PR"><br></div>
 		Make a segment for each output: <input type="checkbox" name="MS" onchange="UI()"><br>
-		Custom bus start indices: <input type="checkbox" onchange="tglSi(this.checked)" id="si"><br>
+		Custom bus start indices: <input type="checkbox" onchange="tglSi(this.checked);UI()" id="si"><br>
 		<hr class="sml">
 		<div id="com">
 			Color Order Override:
