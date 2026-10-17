@@ -192,6 +192,7 @@ void BusDigital::begin() {
     PolyBus::setCurrent(_busPtr, _iType, _currentStep); // some chips need max current settings (TM1814/TM1914/SM16825)
     PolyBus::setClock(_busPtr, _iType, _frequencykHz); // some chips allow changing transmit clock
   } else {
+    DEBUGBUS_PRINTF_P(PSTR("Bus: Failed to start bus type %d, length %d @ %d.\n"), _type, _len, _start);
     _valid = false;
   }
 }
