@@ -113,7 +113,7 @@ Segment::Segment(const Segment &orig) {
     } else {
       DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
       errorFlag = ERR_NORAM_PX;
-      stop = 0; // mark segment as inactive/invalid
+      //stop = 0; // mark segment as inactive/invalid
     }
   } //else stop = 0; // mark segment as inactive/invalid
 }
@@ -133,17 +133,9 @@ Segment::Segment(Segment &&orig) noexcept {
 Segment& Segment::operator= (const Segment &orig) {
   DEBUGFX_PRINTF_P(PSTR("-- Copying segment: %p -> %p\n"), &orig, this);
   if (this != &orig) {
-    // clean destination
-    clearName();
-    stopTransition(); // also erases _t
-    deallocateData();
-    d_free(pixels);
+    cleanup();  // also erases pointers to allocated data
     // copy source
     memcpy((void*)this, (void*)&orig, sizeof(Segment));
-    // erase pointers to allocated data
-    data = nullptr;
-    _dataLen = 0;
-    pixels = nullptr;
     if (!stop) return *this;  // nothing to do if segment is inactive/invalid
     // copy source data
     if (orig.pixels) {
@@ -155,7 +147,7 @@ Segment& Segment::operator= (const Segment &orig) {
       } else {
         DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
         errorFlag = ERR_NORAM_PX;
-        stop = 0; // mark segment as inactive/invalid
+        //stop = 0; // mark segment as inactive/invalid
       }
     } //else stop = 0; // mark segment as inactive/invalid
   }
@@ -166,10 +158,7 @@ Segment& Segment::operator= (const Segment &orig) {
 Segment& Segment::operator= (Segment &&orig) noexcept {
   DEBUGFX_PRINTF_P(PSTR("-- Moving segment: %p -> %p\n"), &orig, this);
   if (this != &orig) {
-    clearName(); // free old name
-    stopTransition(); // also erases _t
-    deallocateData(); // free old runtime data
-    d_free(pixels);   // free old pixel buffer
+    cleanup();
     // move source data
     memcpy((void*)this, (void*)&orig, sizeof(Segment));
     orig.name = nullptr;
@@ -216,10 +205,10 @@ bool Segment::allocateData(size_t len) {
 
 void Segment::deallocateData() {
   if (!data) { _dataLen = 0; return; }
-  if ((Segment::getUsedSegmentData() > 0) && (_dataLen > 0)) { // check that we don't have a dangling / inconsistent data pointer
+  //if ((Segment::getUsedSegmentData() > 0) && (_dataLen > 0)) { // check that we don't have a dangling / inconsistent data pointer
     //DEBUGFX_PRINTF_P(PSTR("---  Released data (%p): %d/%d -> %p\n"), this, _dataLen, Segment::getUsedSegmentData(), data);
     d_free(data);
-  }
+  //}
   data = nullptr;
   Segment::addUsedSegmentData(_dataLen <= Segment::getUsedSegmentData() ? -_dataLen : -Segment::getUsedSegmentData());
   _dataLen = 0;
@@ -690,18 +679,47 @@ Segment &Segment::setPalette(uint8_t pal) {
 
 Segment &Segment::setName(const char *newName) {
   if (newName) {
+    char *oldName = name;
     const size_t newLen = min(strlen(newName), (size_t)WLED_MAX_SEGNAME_LEN);
     if (newLen) {
       if (mode == FX_MODE_2DSCROLLTEXT) {
         DEBUGFX_PRINTLN(F("- Starting name transition\n"));
         startTransition(strip.getTransition(), true); // if the name changes in scrolling text mode, we need to copy the segment for blending
       }
-      // do not reallocate buffer if new name fits into old one
-      if (name && strlen(name) < newLen) clearName();
-      if (!name) name = static_cast<char*>(d_malloc(newLen+1));
-      if (name) strlcpy(name, newName, newLen+1);
+      char *newBuf = static_cast<char*>(d_malloc(newLen+1));
+      if (newBuf) {
+        strlcpy(newBuf, newName, newLen+1);
+        name = newBuf;
+        d_free(oldName);
+      } else {
+        // if allocation failed copy as much as possible into existing buffer
+        DEBUGFX_PRINTLN(F("- New name allocation failed, using old buffer\n"));
+        if (name) strlcpy(name, newName, strlen(name)+1);
+      }
       return *this;
     }
+/*
+    if (mode == FX_MODE_2DSCROLLTEXT) {
+      DEBUGFX_PRINTLN(F("- Starting name transition\n"));
+      startTransition(strip.getTransition(), true); // if the name changes in scrolling text mode, we need to copy the segment for blending
+    }
+    if (name && newLen > strlen(name)) {
+      char *newBuf = static_cast<char*>(d_malloc(newLen+1));
+      if (newBuf) {
+        strlcpy(newBuf, newName, newLen+1);
+        name = newBuf;
+        d_free(oldName);
+      } else {
+        // if allocation failed copy as much as possible into existing buffer
+        strlcpy(name, newName, strlen(name)+1);
+      }
+    } else {
+      // do not reallocate buffer if new name fits into old one (sacrifice a few bytes)
+      if (!name) name = static_cast<char*>(d_malloc(newLen+1));
+      if (name) strlcpy(name, newName, newLen+1);
+    }
+    return *this;
+*/
   }
   return clearName();
 }
@@ -1395,8 +1413,6 @@ void WS2812FX::finalizeInit() {
   Segment::maxHeight = 1;
 
   //segments are created in makeAutoSegments();
-  DEBUG_PRINTLN(F("Loading custom palettes"));
-  loadCustomPalettes(); // (re)load all custom palettes
   DEBUG_PRINTLN(F("Loading custom ledmaps"));
   deserializeMap();     // (re)load default ledmap (will also setUpMatrix() if ledmap does not exist)
   reallocatePixelBuffer();  // fix for wled#5669

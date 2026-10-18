@@ -1029,11 +1029,11 @@ function populatePalettes()
 		);
 	}
 	// append custom palettes (when loading for the 1st time, previews are already loaded)
-	const allPalCount = lastinfo.cpalcount + lastinfo.umpalcount;
+	const allPalCount = Math.min(lastinfo.cpalcount + lastinfo.umpalcount, lastinfo.cpalmax);
 	if (allPalCount) {
 		for (let j = 0; j < allPalCount; j++) {
 			let name = "Custom " + j;
-			let rmBtn = `<i class="icons e-icon flr " id="sege0" onclick="rmPal(${j})" title="Remove">&#xe037;</i>`;
+			let rmBtn = `<i class="icons e-icon flr " id="palrm${j}" onclick="rmPal(${j})" title="Remove">&#xe037;</i>`;
 			if (j >= lastinfo.cpalcount) {
 				name = "Usermod " + (j - lastinfo.cpalcount);
 				rmBtn = "";
@@ -2498,10 +2498,22 @@ function setBri()
 }
 
 function rmPal(index = true) {
+	event.preventDefault();
+	event.stopPropagation();
+	if (typeof index === "number") {
+		if (gId(`palrm${index}`).style.color !== "red") {
+			gId(`palrm${index}`).style.color = "red";
+			return;
+		}
+	}
 	palettesData = null;
 	localStorage.removeItem('wledPalx');
-	requestJson({rmcpal:index});
-	setTimeout(async ()=>{ await loadPalettes(); await loadPalettesData(); },250);
+	(async ()=>{
+		await requestJson({rmcpal:index});
+		//await loadPalettes();
+		await loadPalettesData();
+		populatePalettes();
+	})();
 }
 
 function setSpeed()
@@ -2896,9 +2908,9 @@ function loadPalettesData() {
 		var lsPalData = localStorage.getItem("wledPalx");
 		if (lsPalData) {
 			try {
-				var d = JSON.parse(lsPalData);
-				if (d && d.vid == lastinfo.vid) {
-					palettesData = d.p;
+				let s = JSON.parse(lsPalData);
+				if (s && s.vid == lastinfo.vid && s.count == lastinfo.palcount) {
+					palettesData = s.p;
 					redrawPalPrev();
 					resolve();
 					return;
@@ -2910,10 +2922,10 @@ function loadPalettesData() {
 		getPalettesData(0, () => {
 			localStorage.setItem("wledPalx", JSON.stringify({
 				p: palettesData,
-				vid: lastinfo.vid
+				vid: lastinfo.vid,
+				count: lastinfo.palcount
 			}));
 			redrawPalPrev();
-			//setTimeout(resolve, 99); // delay optional
 			resolve();
 		});
 	});
@@ -2924,7 +2936,7 @@ function getPalettesData(page, callback, retry=0) {
 	.then(res => res.ok ? res.json() : Promise.reject())
 	.then(json => {
 		palettesData = Object.assign({}, palettesData, json.p);
-		if (page < json.m) /*setTimeout(()=>{*/ getPalettesData(page + 1, callback); /*}, 15);*/ // optional throttling
+		if (page < json.m) getPalettesData(page + 1, callback);
 		else callback();
 	})
 	.catch((error)=>{

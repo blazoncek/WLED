@@ -83,6 +83,7 @@ class Usermod {
     virtual void addUIInjectCode(Print &dest) {}
     virtual void onUpdateBegin(bool) {}                                      // fired prior to and after unsuccessful firmware update
     virtual void onStateChange(uint8_t mode) {}                              // fired upon WLED state change
+    virtual void appendPalettes() {}                                         // fired upon loading of custom palettes
     virtual uint16_t getId() {return USERMOD_ID_UNSPECIFIED;}
 
   // API shims
@@ -124,6 +125,7 @@ namespace UsermodManager {
   void addUIInjectCode(Print &dest);
   void onUpdateBegin(bool);
   void onStateChange(uint8_t);
+  void appendPalettes();
   bool add(Usermod* um);
   Usermod* lookup(uint16_t mod_id);
   byte getModCount();

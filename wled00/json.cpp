@@ -572,13 +572,21 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
     else callMode = CALL_MODE_DIRECT_CHANGE;  // possible bugfix for playlist only containing HTTP API preset FX=~
   }
 
-  if (root.containsKey(F("rmcpal")) && customPalettes.size()) {
-    if (root[F("rmcpal")].as<bool>()) {
-      removeCustomPalette(customPalettes.size()-1);
-    } else if (root[F("rmcpal")].as<int>()) {
-      removeCustomPalette(root[F("rmcpal")].as<int>());
+  if (root.containsKey(F("rmcpal")) && savedCustomPalettes > 0) {
+    int rmPal = savedCustomPalettes - 1;
+    if (root[F("rmcpal")].is<int>()) {
+      rmPal = root[F("rmcpal")].as<int>();
     }
-  }
+    // switch to Default palette on all affected segments
+    for (size_t s = 0; s < strip.getSegmentsNum(); s++) {
+      Segment &sg = strip.getSegment(s);
+      if (sg.palette == 255 - rmPal) {
+        sg.palette = 0; // change palette without transition (use: sg.setPalette(0) if you want transition)
+        stateChanged = true;
+      }
+    }
+    removeCustomPalette(rmPal);
+}
 
   doAdvancePlaylist = root[F("np")] | doAdvancePlaylist; //advances to next preset in playlist when true
 
@@ -812,8 +820,8 @@ void serializeInfo(JsonObject root)
 
   root[F("fxcount")] = strip.getModeCount();
   root[F("palcount")] = getPaletteCount();
-  root[F("cpalcount")] = permanentCustomPalettes; // number of custom palettes
-  root[F("umpalcount")] = customPalettes.size() - permanentCustomPalettes;   // non-permanent/usermod paletes
+  root[F("cpalcount")] = (int)savedCustomPalettes; // number of custom palettes
+  root[F("umpalcount")] = (int)(customPalettes.size() > savedCustomPalettes ? customPalettes.size() - savedCustomPalettes : 0);   // non-permanent/usermod paletes
   root[F("cpalmax")] = WLED_MAX_CUSTOM_PALETTES;  // maximum number of custom palettes
 
   JsonArray ledmaps = root.createNestedArray(F("maps"));

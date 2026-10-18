@@ -354,7 +354,9 @@ void loadCustomPalettes() {
       palCount++;
     }
   }
-  permanentCustomPalettes = palCount;
+  savedCustomPalettes = palCount;
+  // append usermod palettes
+  UsermodManager::appendPalettes();
 }
 
 void removeCustomPalette(size_t index) {

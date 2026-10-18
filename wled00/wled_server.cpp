@@ -226,8 +226,11 @@ static void handleUpload(fs::FS &_fs, AsyncWebServerRequest *request, const Stri
       delay(10); // allow some time for response to be sent
       doReboot = true;
     } else {
-      if (filename.indexOf(F("palette")) >= 0 && filename.indexOf(F(".json")) >= 0) loadCustomPalettes();
       request->send(200, FPSTR(CONTENT_TYPE_PLAIN), String(F("UPLOADED: "))+filename);
+      if (filename.indexOf(F(".json")) > 0) {
+        if (filename.indexOf(F("palette")) >= 0) loadCustomPalettes();
+        if (filename.indexOf(F("ledmap")) >= 0) enumerateLedmaps();
+      }
     }
     cacheInvalidate++;
     updateFSInfo(); // refresh memory usage info

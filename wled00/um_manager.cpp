@@ -17,6 +17,7 @@ void UsermodManager::readFromJsonState(JsonObject& obj) { for (const auto &ums :
 void UsermodManager::addToConfig(JsonObject& obj)       { for (const auto &ums : usermods) ums->addToConfig(obj); }
 void UsermodManager::onUpdateBegin(bool init)           { for (const auto &ums : usermods) ums->onUpdateBegin(init); } // notify usermods that update is to begin
 void UsermodManager::onStateChange(uint8_t mode)        { for (const auto &ums : usermods) ums->onStateChange(mode); } // notify usermods that WLED state changed
+void UsermodManager::appendPalettes()                   { for (const auto &ums : usermods) ums->appendPalettes(); }    // notify usermods to append custom palettes
 bool UsermodManager::handleButton(uint8_t b) {
   bool overrideIO = false;
   for (const auto &ums : usermods) {

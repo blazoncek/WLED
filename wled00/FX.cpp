@@ -4711,19 +4711,6 @@ uint16_t mode_2DColoredBursts() {              // By: ldirko   https://editor.so
     byte y2 = beatsin8_t(3 + SEGMENT.speed/16, 0, (rows - 1), 0, i * 48 + 64);
     const CRGBA color = SEGMENT.color_wheel(i * 255 / numLines + (SEGENV.aux0&0xFF));
 
-    /*
-    byte xsteps = abs8(x1 - x2) + 1;
-    byte ysteps = abs8(y1 - y2) + 1;
-    byte steps = xsteps >= ysteps ? xsteps : ysteps;
-    //Draw gradient line
-    for (size_t j = 1; j <= steps; j++) {
-      uint8_t rate = j * 255 / steps;
-      byte dx = lerp8by8(x1, x2, rate);
-      byte dy = lerp8by8(y1, y2, rate);
-      CRGBA c = grad ? color.fadeOut(255 - rate) : color;
-      SEGMENT.setPixelColorXY(dx, dy, c);
-    }
-    */
     SEGMENT.drawLine(x1, y1, x2, y2, grad ? color.opacity(0) : color, color, grad);
 
     if (dot) { //add white point at the ends of line
@@ -5315,6 +5302,8 @@ uint16_t mode_2Dmetaballs(void) {   // Metaballs by Stefan Petrick. Cannot have 
   int x1 = beatsin8_t(23 * speed, 0, cols-1);
   int y1 = beatsin8_t(28 * speed, 0, rows-1);
 
+  int baseDist = (max(cols, rows) <= 32) ? 1000 : (max(cols, rows) <= 48) ? 1800: 4800; // use larger distance calibration for big panels (softhack007)
+
   for (int y = 0; y < rows; y++) {
     for (int x = 0; x < cols; x++) {
       // calculate distances of the 3 points from actual pixel
@@ -5332,7 +5321,7 @@ uint16_t mode_2Dmetaballs(void) {   // Metaballs by Stefan Petrick. Cannot have 
       dist += sqrt16((dx * dx) + (dy * dy));
 
       // inverse result
-      int color = dist ? 1000 / dist : 255;
+      int color = dist ? baseDist / dist : 255;
 
       // map color between thresholds
       if (color > 0 and color < 60) {
@@ -5415,10 +5404,8 @@ static const char _data_FX_MODE_2DPLASMABALL[] PROGMEM = "Plasma Ball@Speed,,Fad
 ////////////////////////////////
 //  2D Polar Lights           //
 ////////////////////////////////
-//static float fmap(const float x, const float in_min, const float in_max, const float out_min, const float out_max) {
-//  return (out_max - out_min) * (x - in_min) / (in_max - in_min) + out_min;
-//}
-uint16_t mode_2DPolarLights(void) {        // By: Kostyantyn Matviyevskyy  https://editor.soulmatelights.com/gallery/762-polar-lights , Modified by: Andrew Tuline
+// By: Kostyantyn Matviyevskyy  https://editor.soulmatelights.com/gallery/762-polar-lights , Modified by: Andrew Tuline
+uint16_t mode_2DPolarLights(void) {
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
 
   const int cols = SEG_W;
@@ -5431,40 +5418,26 @@ uint16_t mode_2DPolarLights(void) {        // By: Kostyantyn Matviyevskyy  https
     SEGENV.step = 0;
   }
 
-  float adjustHeight = (float)map(rows, 8, 32, 28, 12); // maybe use mapf() ???
-  unsigned adjScale = map(cols, 8, 64, 310, 63);
-/*
-  if (SEGENV.aux1 != SEGMENT.custom1/12) {   // Hacky palette rotation. We need that black.
-    SEGENV.aux1 = SEGMENT.custom1/12;
-    for (int i = 0; i < 16; i++) {
-      long ilk;
-      ilk = (long)currentPalette[i].r << 16;
-      ilk += (long)currentPalette[i].g << 8;
-      ilk += (long)currentPalette[i].b;
-      ilk = (ilk << SEGENV.aux1) | (ilk >> (24 - SEGENV.aux1));
-      currentPalette[i].r = ilk >> 16;
-      currentPalette[i].g = ilk >> 8;
-      currentPalette[i].b = ilk;
-    }
-  }
-*/
+  float adjustHeight = (float)map(max(rows,8), 8, 128, 28, 3);
+  unsigned adjScale = map(max(cols,8), 8, 256, 310, 15);
   unsigned _scale = map(SEGMENT.intensity, 0, 255, 30, adjScale);
-  int _speed = map(SEGMENT.speed, 0, 255, 128, 16);
+  unsigned _speed = map(SEGMENT.speed, 0, 255, 128, 16);
 
   const uint8_t o = SEGMENT.hasWhite() ? 0 : 255;
   for (int x = 0; x < cols; x++) {
     for (int y = 0; y < rows; y++) {
       SEGENV.step++;
-      SEGMENT.setPixelColorXY(x, y, ColorFromPaletteWLED(auroraPalette,
-                                      qsub8(
-                                        inoise8((SEGENV.step%2) + x * _scale, y * 16 + SEGENV.step % 16, SEGENV.step / _speed),
-                                        fabsf((float)rows / 2.0f - (float)y) * adjustHeight)).setOpacity(o));
+      SEGMENT.setPixelColorXY(x, y,
+        ColorFromPaletteWLED(SEGMENT.palette ? SEGPALETTE : auroraPalette,
+          qsub8(inoise8((SEGENV.step%2) + x * _scale, y * 16 + SEGENV.step % 16, SEGENV.step / _speed), fabsf((float)rows / 2.0f - (float)y) * adjustHeight)
+        ).setOpacity(o)
+      );
     }
   }
 
   return FRAMETIME;
 } // mode_2DPolarLights()
-static const char _data_FX_MODE_2DPOLARLIGHTS[] PROGMEM = "Polar Lights@!,Scale;;;2";
+static const char _data_FX_MODE_2DPOLARLIGHTS[] PROGMEM = "Polar Lights@!,Scale;;!;2";
 
 
 /////////////////////////
@@ -5559,9 +5532,15 @@ uint16_t mode_2DSunradiation(void) {                   // By: ldirko https://edi
 
   const int cols = SEG_W;
   const int rows = SEG_H;
+  const auto abs  = [](int x) { return x<0 ? -x : x; };
 
-  if (!SEGENV.allocateData(sizeof(byte)*(cols+2)*(rows+2))) return mode_static(); //allocation failed
-  byte *bump = reinterpret_cast<byte*>(SEGENV.data);
+  if (!SEGENV.allocateData(sizeof(int8_t)*(cols+2)*(rows+2))) return mode_static(); //allocation failed
+  int8_t *bump = reinterpret_cast<int8_t*>(SEGENV.data);
+
+  // softhack007
+  const int minSize = min(cols, rows);
+  const int magnify = (minSize <= 32) ? 8 : (minSize < 64) ? 16 : 32; // original effect used 8
+  int downscale = (minSize > 63) ? 1 : 2;        // more detailed bumpmap
 
   if (SEGENV.call == 0) {
     SEGMENT.fill(BLACK);
@@ -5572,7 +5551,7 @@ uint16_t mode_2DSunradiation(void) {                   // By: ldirko https://edi
   uint8_t someVal = SEGMENT.speed/4;             // Was 25.
   for (int j = 0; j < (rows + 2); j++) {
     for (int i = 0; i < (cols + 2); i++) {
-      byte col = (inoise8_raw(i * someVal, j * someVal, t)) / 2;
+      int8_t col = inoise8_raw(i * someVal, j * someVal, t) / downscale;
       bump[index++] = col;
     }
   }
@@ -5584,21 +5563,21 @@ uint16_t mode_2DSunradiation(void) {                   // By: ldirko https://edi
     int vlx = -(cols / 2 + 1);
     for (int x = 0; x < cols; x++) {
       ++vlx;
-      int nx = bump[x + yindex + 1] - bump[x + yindex - 1];
-      int ny = bump[x + yindex + (cols + 2)] - bump[x + yindex - (cols + 2)];
-      unsigned difx = abs8(vlx * 7 - nx);
-      unsigned dify = abs8(vly * 7 - ny);
+      int nx = (int)bump[x + yindex + 1] - bump[x + yindex - 1];
+      int ny = (int)bump[x + yindex + (cols + 2)] - bump[x + yindex - (cols + 2)];
+      unsigned difx = abs(vlx * 7 - nx);
+      unsigned dify = abs(vly * 7 - ny);
       int temp = difx * difx + dify * dify;
-      int col = 255 - temp / 8; //8 its a size of effect
+      int col = 255 - temp / magnify; //8 its a size of effect
       if (col < 0) col = 0;
-      SEGMENT.setPixelColorXY(x, y, HeatColor(col / (3.0f-(float)(SEGMENT.intensity)/128.f)));
+      SEGMENT.setPixelColorXY(x, y, ColorFromPaletteWLED(SEGPALETTE, col / (3.0f-(float)(SEGMENT.intensity)/128.f)));
     }
     yindex += (cols + 2);
   }
 
   return FRAMETIME;
 } // mode_2DSunradiation()
-static const char _data_FX_MODE_2DSUNRADIATION[] PROGMEM = "Sun Radiation@Variance,Brightness;;;2";
+static const char _data_FX_MODE_2DSUNRADIATION[] PROGMEM = "Sun Radiation@Variance,Brightness;;!;2;pal=35";
 
 
 /////////////////////////
@@ -5685,7 +5664,7 @@ static const char _data_FX_MODE_2DSPACESHIPS[] PROGMEM = "Spaceships@!,Blur;;!;2
 //     2D Crazy Bees   //
 /////////////////////////
 //// Crazy bees by stepko (c)12.02.21 [https://editor.soulmatelights.com/gallery/651-crazy-bees], adapted by Blaz Kristan (AKA blazoncek)
-#define MAX_BEES 5
+#define MAX_BEES 8
 uint16_t mode_2Dcrazybees(void) {
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
 
@@ -5695,8 +5674,9 @@ uint16_t mode_2Dcrazybees(void) {
   byte n = MIN(MAX_BEES, (rows * cols) / 256 + 1);
 
   typedef struct Bee {
+    int16_t deltaX, deltaY, error;
     uint8_t posX, posY, aimX, aimY, hue;
-    int8_t deltaX, deltaY, signX, signY, error;
+    int8_t  signX, signY;
     void aimed(uint16_t w, uint16_t h) {
       const auto abs  = [](int x) { return x<0 ? -x : x; };
       aimX   = hw_random8(0, w);
@@ -5724,13 +5704,15 @@ uint16_t mode_2Dcrazybees(void) {
   if (strip.now > SEGENV.step) {
     SEGENV.step = strip.now + (FRAMETIME * 16 / ((SEGMENT.speed>>4)+1));
 
-    SEGMENT.fadeToBlackBy(32);
+    SEGMENT.fadeOut(128);
 
     for (size_t i = 0; i < n; i++) {
+      // draw flowers
       SEGMENT.addPixelColorXY(bee[i].aimX + 1, bee[i].aimY, CHSV32(bee[i].hue, 255, 255));
       SEGMENT.addPixelColorXY(bee[i].aimX, bee[i].aimY + 1, CHSV32(bee[i].hue, 255, 255));
       SEGMENT.addPixelColorXY(bee[i].aimX - 1, bee[i].aimY, CHSV32(bee[i].hue, 255, 255));
       SEGMENT.addPixelColorXY(bee[i].aimX, bee[i].aimY - 1, CHSV32(bee[i].hue, 255, 255));
+      // draw flying bees
       if (bee[i].posX != bee[i].aimX || bee[i].posY != bee[i].aimY) {
         SEGMENT.setPixelColorXY(bee[i].posX, bee[i].posY, CRGBA(CHSV32(bee[i].hue, 60, 255)));
         int error2 = bee[i].error * 2;
@@ -5746,11 +5728,10 @@ uint16_t mode_2Dcrazybees(void) {
         bee[i].aimed(cols, rows);
       }
     }
-    if (SEGMENT.intensity) SEGMENT.blur(SEGMENT.intensity>>4);
   }
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DCRAZYBEES[] PROGMEM = "Crazy Bees@!,Blur;;;2;ix=0";
+static const char _data_FX_MODE_2DCRAZYBEES[] PROGMEM = "Crazy Bees@!;;;2;ix=0";
 #undef MAX_BEES
 
 

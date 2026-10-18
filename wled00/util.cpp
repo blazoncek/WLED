@@ -221,7 +221,11 @@ uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLe
   }
 
   if (src == JSON_palette_names && mode > 255-customPalettes.size()) {
-    snprintf_P(dest, maxLen, PSTR("~ Custom %d ~"), 255-mode);
+    if (255-mode < savedCustomPalettes) {
+      snprintf_P(dest, maxLen, PSTR("~ Custom %d ~"), 255-mode);
+    } else {
+      snprintf_P(dest, maxLen, PSTR("~ Usermod %d ~"), 255-mode-savedCustomPalettes);
+    }
     dest[maxLen-1] = '\0';
     return strlen(dest);
   }
@@ -410,7 +414,7 @@ uint8_t beatsin8_t(accum88 beats_per_minute, uint8_t lowest, uint8_t highest, ui
     return result;
 }
 
-static const char s_ledmap_tmpl[] PROGMEM = "ledmap%d.json";
+static const char s_ledmap_tmpl[] PROGMEM = "/ledmap%d.json";
 // enumerate all ledmapX.json files on FS and extract ledmap names if existing
 void enumerateLedmaps() {
   ledMaps = 1;
@@ -418,8 +422,8 @@ void enumerateLedmaps() {
   ledmapNames.clear();
   #endif
   for (size_t i=1; i<WLED_MAX_LEDMAPS; i++) {
-    char fileName[33] = "/";
-    sprintf_P(fileName+1, s_ledmap_tmpl, i);
+    char fileName[33];
+    snprintf_P(fileName, sizeof(fileName)-1, s_ledmap_tmpl, i);
 
     File f = WLED_FS.open(fileName, "r");
     if (f) {
@@ -433,12 +437,12 @@ void enumerateLedmaps() {
         size_t len = 0;
         JsonObject root = doc.as<JsonObject>();
         char name[33];
-        snprintf_P(name, 32, s_ledmap_tmpl, i);
+        strcpy(name, fileName+1); // skip "/"
         if (!root["n"].isNull()) {
           // name field exists
           const char *tmp = root["n"].as<const char*>();
           if (tmp != nullptr) len = strnlen(tmp, 32);
-          if (len) strlcpy(name, root["n"].as<const char*>(), 33);
+          if (len) strlcpy(name, root["n"].as<const char*>(), sizeof(name));
         }
         ledmapNames.push_back(name);
       }

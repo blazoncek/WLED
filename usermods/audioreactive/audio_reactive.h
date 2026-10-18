@@ -2233,7 +2233,7 @@ class AudioReactive : public Usermod {
 
     bool     initDone = false;
     bool     addPalettes = false;
-    int8_t   palettes = 0;
+    int8_t   paletteStart = 0;
 
     // variables  for UDP sound sync
     WiFiUDP fftUdp;               // UDP object for sound sync (from WiFi UDP, not Async UDP!) 
@@ -2276,8 +2276,6 @@ class AudioReactive : public Usermod {
     static const char UDP_SYNC_HEADER_v1[];
 
     // private methods
-    void removeAudioPalettes();
-    void createAudioPalettes();
     CRGBA getCRGBForBand(int x, int pal);
     void fillAudioPalettes();
 
@@ -2885,7 +2883,7 @@ class AudioReactive : public Usermod {
       }
 #endif
       if (enabled) connectUDPSoundSync();
-      if (enabled && addPalettes) createAudioPalettes();
+
       initDone = true;
     }
 
@@ -3318,9 +3316,6 @@ class AudioReactive : public Usermod {
           enabled = usermod[FPSTR(_enabled)].as<bool>();
           if (prevEnabled != enabled) {
             onUpdateBegin(!enabled);  // create/destroy FFT task
-            // add/remove custom/audioreactive palettes
-            removeAudioPalettes();
-            createAudioPalettes();
           }
         }
         #ifdef ARDUINO_ARCH_ESP32
@@ -3332,20 +3327,14 @@ class AudioReactive : public Usermod {
           simulationId = (soundSimulations_t)min(3,max(0,usermod[FPSTR(_soundSim)].as<int>()));
         }
       }
-      if (root.containsKey(F("rmcpal"))) {
-        // handle removal of custom palettes from JSON call so we don't break things
-        // actual custom palette removal is done *after* usermod's readFromJsonState() is called
-        removeAudioPalettes();
-      }
     }
 
+    /*
     void onStateChange(uint8_t callMode) override {
       if (initDone) {
-        // if palettes were removed during JSON call re-add them
-        // "rmcpal" on its own will not trigger stateChanged but any other change may, so eventually palettes will be re-added
-        createAudioPalettes();
       }
     }
+    */
 
     /*
      * addToConfig() can be used to add custom persistent settings to the cfg.json file in the "um" (usermod) object.
@@ -3467,11 +3456,6 @@ class AudioReactive : public Usermod {
       configComplete &= getJsonValue(top["sync"]["port"], audioSyncPort);
       configComplete &= getJsonValue(top["sync"]["mode"], audioSyncEnabled);
 
-      if (initDone) {
-        // add/remove custom/audioreactive palettes
-        removeAudioPalettes();
-        createAudioPalettes();
-      } // else setup() will create palettes otherwise they would be removed by loading custom palettes
       return configComplete;
     }
 
@@ -3537,6 +3521,7 @@ class AudioReactive : public Usermod {
     }
 
 
+    void appendPalettes() override;
     /*
      * handleOverlayDraw() is called just before every show() (LED strip update frame) after effects have set the colors.
      * Use this to blank out some LEDs or set them to a different color regardless of the set effect mode.
@@ -3559,25 +3544,14 @@ class AudioReactive : public Usermod {
     }
 };
 
-void AudioReactive::removeAudioPalettes() {
-  DEBUGSR_PRINTLN(F("Removing audio palettes."));
-  while (palettes>0) {
-    customPalettes.pop_back();
-    DEBUGSR_PRINTLN(palettes);
-    palettes--;
-  }
+void AudioReactive::appendPalettes() {
   DEBUGSR_PRINT(F("Total # of palettes: ")); DEBUGSR_PRINTLN(customPalettes.size());
-}
-
-void AudioReactive::createAudioPalettes() {
-  DEBUGSR_PRINT(F("Total # of palettes: ")); DEBUGSR_PRINTLN(customPalettes.size());
-  if (palettes || !addPalettes || !enabled) return;
+  if (!addPalettes || !enabled) return;
+  paletteStart = customPalettes.size();
   DEBUGSR_PRINTLN(F("Adding audio palettes."));
   for (int i=0; i<MAX_PALETTES; i++)
-    if (customPalettes.size() < 10) {
+    if (customPalettes.size() < WLED_MAX_CUSTOM_PALETTES) {
       customPalettes.push_back(CRGBPalette16(CRGB(BLACK)));
-      palettes++;
-      DEBUGSR_PRINTLN(palettes);
     } else break;
 }
 
@@ -3608,13 +3582,10 @@ CRGBA AudioReactive::getCRGBForBand(int x, int pal) {
 }
 
 void AudioReactive::fillAudioPalettes() {
-  if (!palettes) return;
-  size_t lastCustPalette = customPalettes.size();
-  if (int(lastCustPalette) >= palettes) lastCustPalette -= palettes;
-  for (int pal=0; pal<palettes; pal++) {
+  if (!addPalettes || !enabled) return;
+  for (int pal = paletteStart; pal < MAX_PALETTES + paletteStart && pal < WLED_MAX_CUSTOM_PALETTES; pal++) {
     uint8_t tcp[16];  // Needs to be 4 times however many colors are being used.
                       // 3 colors = 12, 4 colors = 16, etc.
-
     tcp[0] = 0;  // anchor of first color - must be zero
     tcp[1] = 0;
     tcp[2] = 0;
@@ -3638,7 +3609,7 @@ void AudioReactive::fillAudioPalettes() {
     tcp[14] = rgb.g;
     tcp[15] = rgb.b;
 
-    customPalettes[lastCustPalette+pal].loadDynamicGradientPalette(tcp);
+    customPalettes[pal].loadDynamicGradientPalette(tcp);
   }
 }
 

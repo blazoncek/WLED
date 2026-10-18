@@ -543,6 +543,20 @@ class Segment {
       #endif
     }
 
+  private:
+
+    void cleanup() {
+      // clean destination
+      stopTransition(); // also erases _t
+      #ifdef WLED_ENABLE_GIF
+      if (mode == FX_MODE_IMAGE) endImagePlayback(this);
+      #endif
+      clearName();      // free name buffer
+      deallocateData(); // free runtime data
+      d_free(pixels);   // free pixel buffer
+      pixels = nullptr;
+    }
+
   protected:
 
     inline static unsigned getUsedSegmentData()            { return Segment::_usedSegmentData; }
@@ -590,13 +604,7 @@ class Segment {
       DEBUGFX_PRINTF_P(PSTR(" T[%p]"), _t);
       DEBUGFX_PRINTLN();
       #endif
-      stopTransition();
-      #ifdef WLED_ENABLE_GIF
-      if (mode == FX_MODE_IMAGE) endImagePlayback(this);
-      #endif
-      clearName();
-      deallocateData();
-      d_free(pixels);
+      cleanup();
     }
 
     Segment& operator= (const Segment &orig); // copy assignment

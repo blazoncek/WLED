@@ -500,6 +500,10 @@ void WLED::setup()
   UsermodManager::setup();
   DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 
+  DEBUG_PRINTLN(F("Loading custom palettes"));
+  loadCustomPalettes(); // (re)load all custom palettes
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
+
   if (needsCfgSave) serializeConfig(); // need to wait for strip to be initialised #4752
   if (bootPreset > 0) handlePresets(); // handle boot preset applied in beginStrip(); see wled#5573 for reasons
 
@@ -521,7 +525,6 @@ void WLED::setup()
     WiFi.mode(WIFI_MODE_STA);     // enable SSID scanning
     findWiFi(true);               // start scanning for available WiFi-s
   } else {
-    showWelcomePage = true;
     WiFi.mode(WIFI_MODE_AP);      // WiFi is not configured so we'll most likely open an AP (this already opens default AP)
   }
   #ifdef ARDUINO_ARCH_ESP32
@@ -664,7 +667,7 @@ void WLED::stopAP(bool stop) {
   dnsServer.stop();
   WiFi.softAPdisconnect(stop);  // disengage AP mode on stop
   delay(5);                     // wait for hardware to be ready
-  if (apBehavior != AP_BEHAVIOR_ALWAYS) WiFi.mode(WIFI_MODE_STA);
+  if (isWiFiConfigured() && apBehavior != AP_BEHAVIOR_ALWAYS) WiFi.mode(WIFI_MODE_STA);
   apActive = false;
 }
 
@@ -845,7 +848,6 @@ void WLED::connected()
   if (WiFi.isConnected()) initESPNow(); // if we are connected using Ethernet do not init ESP-NOW
 #endif
 
-  showWelcomePage = false;
   interfacesInited = true;
   DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 
