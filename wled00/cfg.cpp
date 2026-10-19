@@ -179,7 +179,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   JsonObject hw_led = hw["led"];
 
   CJSON(strip.milliAmpsMax, hw_led[F("maxpwr")]); // milliAmps max for strip ABL, 0 means no ABL or PP-ABL
-  Bus::setGlobalAWMode(hw_led[F("rgbwm")] | AW_GLOBAL_DISABLED);  // legacy global AW mode setting (remove at some point)
+  //Bus::setGlobalAWMode(hw_led[F("rgbwm")] | Bus::getGlobalAWMode());  // legacy global AW mode setting (remove at some point)
   CJSON(strip.correctWB, hw_led["cct"]);
   CJSON(strip.cctFromRgb, hw_led[F("cr")]);
   CJSON(cctICused, hw_led[F("ic")]);
@@ -621,16 +621,21 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   CJSON(strip.autoSegments, light[F("aseg")]);
 
   CJSON(gammaCorrectVal, light["gc"]["val"]); // default 2.2
-  float light_gc_bri = light["gc"]["bri"] | 1.0f;
-  float light_gc_col = light["gc"]["col"] | gammaCorrectVal;
-  if (light_gc_bri > 1.0f) gammaCorrectBri = true;
-  else                     gammaCorrectBri = false;
-  if (light_gc_col > 1.0f) gammaCorrectCol = true;
-  else                     gammaCorrectCol = false;
-  if (gammaCorrectVal <= 1.0f || gammaCorrectVal > 3) {
-    gammaCorrectVal = 1.0f; // no gamma correction
+  JsonVariant light_gc_bri = light["gc"]["bri"];
+  JsonVariant light_gc_col = light["gc"]["col"];
+  if (gammaCorrectVal > 1.0f && gammaCorrectVal <= 3.0f) {
+    if (vid <= 2610180) {
+      // legacy format (remove in 0.15.4 or above)
+      if (!light_gc_bri.isNull()) gammaCorrectBri = light_gc_bri.as<float>() > 1.0f;
+      if (!light_gc_col.isNull()) gammaCorrectCol = light_gc_col.as<float>() > 1.0f;
+    } else {
+      if (!light_gc_bri.isNull()) gammaCorrectBri = light_gc_bri.as<bool>();
+      if (!light_gc_col.isNull()) gammaCorrectCol = light_gc_col.as<bool>();
+    }
+  } else {
     gammaCorrectBri = false;
     gammaCorrectCol = false;
+    gammaCorrectVal = 1.0f;
   }
   NeoGammaWLEDMethod::calcGammaTable(gammaCorrectVal); // fill look-up tables
   gamma32Func = gammaCorrectCol ? NeoGammaWLEDMethod::Correct32 : nullGamma32;
@@ -1134,8 +1139,8 @@ void serializeConfig() {
   light[F("aseg")] = strip.autoSegments;
 
   JsonObject light_gc = light.createNestedObject("gc");
-  light_gc["bri"] = (gammaCorrectBri) ? gammaCorrectVal : 1.0f;  // keep compatibility
-  light_gc["col"] = (gammaCorrectCol) ? gammaCorrectVal : 1.0f;  // keep compatibility
+  light_gc["bri"] = gammaCorrectBri;
+  light_gc["col"] = gammaCorrectCol;
   light_gc["val"] = gammaCorrectVal;
 
   JsonObject light_tr = light.createNestedObject("tr");
