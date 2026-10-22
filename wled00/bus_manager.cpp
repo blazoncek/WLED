@@ -27,6 +27,7 @@
 
 extern bool cctICused;
 extern uint32_t (*gamma32Func)(uint32_t);
+extern bool arlsDisableGammaCorrection;
 
 //udp.cpp
 uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const byte *buffer, uint8_t bri=255, bool isRGBW=false);
@@ -673,7 +674,8 @@ void BusNetwork::setPixelColor(unsigned pix, uint32_t c) {
   if (Bus::_cct >= 1900) c = colorBalanceFromKelvin(Bus::_cct, c); //color correction from CCT
   uint8_t ww, cw; // dummy, unused
   if (_hasWhite) c = autoWhiteCalc(c, ww, cw);
-  // we do not apply gamma on network buses
+  // we should apply gamma on network buses only if not disabled in Sync settings
+  if (!arlsDisableGammaCorrection) c = gamma32Func(c);
   unsigned offset = pix * _UDPchannels;
   _data[offset]   = R(c);
   _data[offset+1] = G(c);
