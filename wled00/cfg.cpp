@@ -624,7 +624,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   JsonVariant light_gc_bri = light["gc"]["bri"];
   JsonVariant light_gc_col = light["gc"]["col"];
   if (gammaCorrectVal > 1.0f && gammaCorrectVal <= 3.0f) {
-    if (vid <= 2610180) {
+    if (vid < 2610240) {
       // legacy format (remove in 0.15.4 or above)
       if (!light_gc_bri.isNull()) gammaCorrectBri = light_gc_bri.as<float>() > 1.0f;
       if (!light_gc_col.isNull()) gammaCorrectCol = light_gc_col.as<float>() > 1.0f;
