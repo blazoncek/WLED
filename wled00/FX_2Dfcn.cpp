@@ -9,6 +9,7 @@
 */
 #include "wled.h"
 
+#ifndef WLED_DISABLE_2D
 // setUpMatrix() - constructs ledmap array from matrix of panels with WxH pixels
 // this converts physical (possibly irregular) LED arrangement into well defined
 // array of logical pixels: fist entry corresponds to left-topmost logical pixel
@@ -18,8 +19,7 @@
 // but ledmap takes care of that. ledmap is constructed upon initialization
 // so matrix should disable regular ledmap processing
 // WARNING: effect drawing has to be suspended (strip.suspend()) or must be called from loop() context
-void WS2812FX::setUpMatrix() {
-#ifndef WLED_DISABLE_2D
+bool WS2812FX::setUpMatrix() {
   // isMatrix is set in cfg.cpp or set.cpp
   if (isMatrix) {
     // calculate width dynamically because it may have gaps
@@ -37,13 +37,7 @@ void WS2812FX::setUpMatrix() {
     // safety check
     if (Segment::maxWidth * Segment::maxHeight > MAX_LEDS || Segment::maxWidth > 255 || Segment::maxHeight > 255 || Segment::maxWidth <= 1 || Segment::maxHeight <= 1) {
       DEBUG_PRINTLN(F("2D Bounds error."));
-      isMatrix = false;
-      Segment::maxWidth = _length;
-      Segment::maxHeight = 1;
-      panel.clear(); // release memory allocated by panels
-      panel.shrink_to_fit(); // release memory if allocated
-      resetSegments();
-      return;
+      goto _fail;
     }
 
     // we will try to load a "gap" array (a JSON file)
@@ -95,7 +89,7 @@ void WS2812FX::setUpMatrix() {
     } else if (panel.size() == 1 && !panel[0].bottomStart && !panel[0].rightStart && !panel[0].serpentine && !panel[0].vertical) {
       // if we only have one panel that starts at top-left and is not serpentine and vertically oriented then don't bother with ledmap
       DEBUG_PRINTLN(F("Ledmap not needed."));
-      return;
+      return true;
     }
 
     DEBUG_PRINTLN(F("Creating 2D ledmap"));
@@ -136,26 +130,26 @@ void WS2812FX::setUpMatrix() {
       }
       DEBUG_PRINTLN();
       #endif
+      return true;
     } else { // memory allocation error
       DEBUG_PRINTLN(F("ERROR 2D LED map allocation error."));
-      isMatrix = false;
-      panel.clear();
-      Segment::maxWidth = _length;
-      Segment::maxHeight = 1;
-      resetSegments();
     }
   }
-#else
-  isMatrix = false; // no matter what config says
-#endif
-}
 
+_fail:
+  isMatrix = false;
+  Segment::maxWidth = _length;
+  Segment::maxHeight = 1;
+  panel.clear(); // release memory allocated by panels
+  panel.shrink_to_fit(); // release memory if allocated
+  resetSegments();
+  return false;
+}
 
 ///////////////////////////////////////////////////////////
 // Segment:: routines
 ///////////////////////////////////////////////////////////
 
-#ifndef WLED_DISABLE_2D
 // pixel is clipped if it falls outside clipping range
 // if clipping start > stop the clipping range is inverted
 bool Segment::isPixelXYClipped(unsigned x, unsigned y) const {

@@ -1024,7 +1024,9 @@ class WS2812FX {
 
     unsigned long _lastShow;
 
-    void setUpMatrix();                 // sets up automatic matrix ledmap from panel configuration
+#ifndef WLED_DISABLE_2D
+    bool setUpMatrix();                 // sets up automatic matrix ledmap from panel configuration
+#endif
     void applySegmentGeometryUpdates(); // applies segment geometry updates (if any) to all segments
 
     friend class Segment;

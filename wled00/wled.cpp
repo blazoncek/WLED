@@ -221,6 +221,7 @@ void WLED::loop()
   if (loadLedmap >= 0) {
     unsigned oldLen = strip.getLengthTotal();
     strip.deserializeMap(loadLedmap);
+    strip.fixInvalidSegments(); // if 1D or 2D ledmap changed strip dimensions we need to fix segments (switching form 2D to 1D or reloading of default 2D ledmap)
     if (oldLen != strip.getLengthTotal()) strip.reallocatePixelBuffer(); // fix for wled#5669
     loadLedmap = -1;
   }
@@ -620,6 +621,9 @@ void WLED::beginStrip()
     f.close();
   }
 #endif
+
+  // for the lack of better place enumerate ledmaps here (we also do it after uploading in wled_server.cpp)
+  enumerateLedmaps();
 
   // Initialize NeoPixel Strip and button
   strip.setTransition(0); // temporarily prevent transitions to reduce segment copies

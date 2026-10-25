@@ -1313,12 +1313,6 @@ void WS2812FX::finalizeInit() {
   //reset segment runtimes
   restartRuntime();
 
-  // for the lack of better place enumerate ledmaps here
-  // if we do it in json.cpp (serializeInfo()) we are getting flashes on LEDs
-  // unfortunately this means we do not get updates after uploads
-  // the other option is saving UI settings which will cause enumeration
-  enumerateLedmaps();
-
   _options = 0; // _hasRGB = _hasWhiteChannel = _hasCCT = _isOffRefreshRequired = false;
   BusManager::removeAll();
 
@@ -2365,7 +2359,7 @@ void WS2812FX::makeAutoSegments(bool forceReset) {
     else if (getActiveSegmentsNum() == 1) {
       size_t i = getLastActiveSegmentId();
       #ifndef WLED_DISABLE_2D
-      _segments[i].setGeometry(0, Segment::maxWidth, 1, 0, 0xFFFF, 0, Segment::maxHeight);
+      _segments[i].setGeometry(0, Segment::maxWidth, 1, 0, 0, 0, Segment::maxHeight);
       #else
       _segments[i].setGeometry(0, _length);
       #endif
@@ -2382,19 +2376,21 @@ void WS2812FX::fixInvalidSegments() {
   for (size_t i = getSegmentsNum()-1; i > 0; i--) {
     if (isMatrix) {
     #ifndef WLED_DISABLE_2D
+      uint16_t stop = _segments[i].stop, stopY = _segments[i].stopY; // save old values for comparison
       if (_segments[i].start >= Segment::maxWidth * Segment::maxHeight) {
         // 1D segment at the end of matrix
         if (_segments[i].start >= _length || _segments[i].startY > 0 || _segments[i].stopY > 1) { _segments.erase(_segments.begin()+i); continue; }
-        if (_segments[i].stop  >  _length) _segments[i].stop = _length;
+        if (_segments[i].stop  >  _length) { _segments[i].stop = _length; _segments[i].reallocatePixelBuffer(); }
         continue;
       }
       if (_segments[i].start >= Segment::maxWidth || _segments[i].startY >= Segment::maxHeight) { _segments.erase(_segments.begin()+i); continue; }
       if (_segments[i].stop  >  Segment::maxWidth)  _segments[i].stop  = Segment::maxWidth;
       if (_segments[i].stopY >  Segment::maxHeight) _segments[i].stopY = Segment::maxHeight;
+      if (stop != _segments[i].stop || stopY != _segments[i].stopY) _segments[i].reallocatePixelBuffer();
     #endif
     } else {
       if (_segments[i].start >= _length) { _segments.erase(_segments.begin()+i); continue; }
-      if (_segments[i].stop  >  _length) _segments[i].stop = _length;
+      if (_segments[i].stop  >  _length) { _segments[i].stop = _length; _segments[i].reallocatePixelBuffer(); }
     }
   }
   // if any segments were deleted free memory
@@ -2452,13 +2448,19 @@ bool WS2812FX::deserializeMap(unsigned n) {
   d_free(customMappingTable);
   customMappingTable = nullptr;
   currentLedmap = 0;
+  if (!isMatrix && Segment::maxHeight != 1) {
+    // reset max segment dimensions (force 1D)
+    Segment::maxWidth = _length;
+    Segment::maxHeight = 1;
+  }
+
   if (n == 0 || isFile) interfaceUpdateCallMode = CALL_MODE_WS_SEND; // schedule WS update (to inform UI)
 
   if (!isFile) {
     #ifndef WLED_DISABLE_2D
     if (n==0 && isMatrix) {
       // 2D panel support creates its own ledmap (on the fly) if a ledmap.json does not exist
-      setUpMatrix();
+      return setUpMatrix();
     }
     #endif
     return false;
