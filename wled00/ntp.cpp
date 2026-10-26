@@ -342,7 +342,7 @@ void handleNetworkTime()
     if (millis() - ntpPacketSentTime > 10000)
     {
       #ifdef ARDUINO_ARCH_ESP32   // I had problems using udp.flush() on 8266
-      while (ntpUdp.parsePacket() > 0) ntpUdp.flush(); // flush any existing packets
+      do { ntpUdp.flush(); } while (ntpUdp.parsePacket() > 0); // discard any existing packets
       #endif
       sendNTPPacket();
       ntpPacketSentTime = millis();
@@ -414,6 +414,7 @@ static bool checkNTPResponse()
   DEBUG_PRINTF_P(PSTR("NTP recv, l=%d\n"), cb);
   byte pbuf[NTP_PACKET_SIZE];
   ntpUdp.read(pbuf, NTP_PACKET_SIZE); // read the packet into the buffer
+  if (cb > NTP_PACKET_SIZE) ntpUdp.flush(); // discard any excess
   if (!isValidNtpResponse(pbuf)) return false;  // verify we have a valid response to client
 
   Toki::Time arrived  = toki.fromNTP(pbuf + 32);

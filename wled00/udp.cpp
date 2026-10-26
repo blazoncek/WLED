@@ -516,8 +516,18 @@ void handleNotifications()
 
   bool isSupp = false;
   size_t packetSize = notifierUdp.parsePacket();
+  // discard oversized packet
+  if (packetSize > UDP_IN_MAXSIZE) {
+    packetSize = 0;
+    notifierUdp.flush();
+  }
   if (!packetSize && udp2Connected) {
     packetSize = notifier2Udp.parsePacket();
+    // discard oversized packet
+    if (packetSize > UDP_IN_MAXSIZE) {
+      packetSize = 0;
+      notifier2Udp.flush();
+    }
     isSupp = true;
   }
 
@@ -525,9 +535,14 @@ void handleNotifications()
   if (!packetSize && udpRgbConnected) {
     packetSize = rgbUdp.parsePacket();
     if (packetSize) {
-      if (!receiveDirect) return;
-      if (packetSize > UDP_IN_MAXSIZE || packetSize < 3) return;
+      // discard incorrectly sized or ignoreable packet
+      if (!receiveDirect || packetSize > UDP_IN_MAXSIZE || packetSize < 3) {
+        packetSize = 0;
+        rgbUdp.flush();
+        return;
+      }
       realtimeIP = rgbUdp.remoteIP();
+      DEBUG_PRINT(F("Receiving packet from Hyperion/raw RGB @ "));
       DEBUG_PRINTLN(rgbUdp.remoteIP());
       uint8_t lbuf[packetSize];
       rgbUdp.read(lbuf, packetSize);
@@ -545,10 +560,13 @@ void handleNotifications()
 
   localIP = Network.localIP();
   //notifier and UDP realtime
-  if (!packetSize || packetSize > UDP_IN_MAXSIZE) return;
-  if (!isSupp && notifierUdp.remoteIP() == localIP) return; //don't process broadcasts we send ourselves
+  if (!packetSize) return;
+  if (!isSupp && notifierUdp.remoteIP() == localIP) {
+    notifierUdp.flush();
+    return; //don't process broadcasts we send ourselves
+  }
 
-  uint8_t udpIn[packetSize +1];
+  uint8_t udpIn[packetSize];
   unsigned len;
   if (isSupp) len = notifier2Udp.read(udpIn, packetSize);
   else        len =  notifierUdp.read(udpIn, packetSize);
@@ -570,8 +588,8 @@ void handleNotifications()
       }
       it->second.age = 0; // reset 'age counter'
       char tmpNodeName[33] = { 0 };
-      memcpy(&tmpNodeName[0], reinterpret_cast<byte *>(&udpIn[6]), 32);
-      tmpNodeName[32]     = 0;
+      memcpy(&tmpNodeName[0], reinterpret_cast<byte *>(&udpIn[6]), sizeof(tmpNodeName)-1);
+      tmpNodeName[sizeof(tmpNodeName)-1] = 0;
       it->second.nodeName = tmpNodeName;
       it->second.nodeName.trim();
       it->second.nodeType = udpIn[38];
