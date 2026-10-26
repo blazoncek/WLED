@@ -289,7 +289,7 @@ void BusDigital::setPixelColor(unsigned pix, uint32_t c) {
   // pre-calcualte power usage for per-output ABL
   // WARNING: assumes pixel is not modified agin until show() is called (which is true with segment blending approach, strip pixel buffer is transfered to bus in a single pass in show())
   if (_milliAmpsLimit > 0) {
-    // we cannot use c as it may have "wrong" scaling (reduced by use of current limiter)
+    // we cannot use c as it may have "wrong" scaling (reduced by use of IC current limiter)
     cOrg = color_fade(cOrg, scaleBri(_bri, _scale), true); // use original brightness scaling (not current limiter adjusted)
     uint8_t r = R(cOrg), g = G(cOrg), b = B(cOrg), w = W(cOrg);
     int sum = getLEDCurrent() == 255 ? (max(max(r,g),b)) * 3 : (r + g + b + w); // WS2815 (255) has a wacky current consumption

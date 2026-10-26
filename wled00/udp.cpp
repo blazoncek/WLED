@@ -712,7 +712,8 @@ void setRealtimePixel(uint16_t i, byte r, byte g, byte b, byte w)
   if (realtimeMode == REALTIME_MODE_INACTIVE) return;
   i += arlsOffset;
   if (useMainSegmentOnly) {
-    strip.getMainSegment().setPixelColor(i, CRGBA(r,g,b,w));
+    const Segment &seg = strip.getMainSegment();
+    seg.setPixelColor(i, CRGBA(r, g, b, seg.hasWhite() ? w : 255));
   } else {
     strip.setPixelColor(i, RGBW32(r,g,b,w));
   }
@@ -885,10 +886,15 @@ uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const
         // write the colors, the write write(const uint8_t *buffer, size_t size)
         // function is just a loop internally too
         for (size_t i = 0; i < packetSize; i += (isRGBW?4:3)) {
-          ddpUdp.write(scale8(buffer[bufferOffset++], bri)); // R
-          ddpUdp.write(scale8(buffer[bufferOffset++], bri)); // G
-          ddpUdp.write(scale8(buffer[bufferOffset++], bri)); // B
-          if (isRGBW) ddpUdp.write(scale8(buffer[bufferOffset++], bri)); // W
+          // we need to use same scaling method as digital bus otherwise we may see different output when DDP and native are close together
+          uint8_t r = buffer[bufferOffset++];
+          uint8_t g = buffer[bufferOffset++];
+          uint8_t b = buffer[bufferOffset++];
+          uint32_t c = color_fade(RGBW32(r, g, b, isRGBW ? buffer[bufferOffset++] : 0), bri, true);
+          ddpUdp.write(R(c)); // R
+          ddpUdp.write(G(c)); // G
+          ddpUdp.write(B(c)); // B
+          if (isRGBW) ddpUdp.write(W(c)); // W
         }
 
         if (!ddpUdp.endPacket()) {
