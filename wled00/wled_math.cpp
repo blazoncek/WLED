@@ -94,7 +94,7 @@ int16_t cos16_t(uint16_t theta) {
 uint8_t sin8_t(uint8_t theta) {
   int32_t sin16 = sin16_t((uint16_t)theta * 257); // 255 * 257 = 0xFFFF
   sin16 += 0x7FFF + 128; //shift result to range 0-0xFFFF, +128 for rounding
-  return min(sin16, int32_t(0xFFFF)) >> 8; // min performs saturation, and prevents overflow
+  return min<int32_t>(sin16, 0xFFFF) >> 8; // min performs saturation, and prevents overflow
 }
 
 uint8_t cos8_t(uint8_t theta) {
@@ -102,22 +102,22 @@ uint8_t cos8_t(uint8_t theta) {
 }
 
 float sin_approx(float theta) {
-  uint16_t scaled_theta = (int)(theta * (float)(0xFFFF / M_TWOPI)); // note: do not cast negative float to uint! cast to int first (undefined on C3)
+  uint16_t scaled_theta = (int)(theta * (float)(65535.0 / M_TWOPI)); // note: do not cast negative float to uint! cast to int first (undefined on C3)
   int32_t result = sin16_t(scaled_theta);
-  float sin = float(result) / 0x7FFF;
+  float sin = float(result) / 32767.0f;
   return sin;
 }
 
 float cos_approx(float theta) {
-  uint16_t scaled_theta = (int)(theta * (float)(0xFFFF / M_TWOPI)); // note: do not cast negative float to uint! cast to int first (undefined on C3)
+  uint16_t scaled_theta = (int)(theta * (float)(65535.0 / M_TWOPI)); // note: do not cast negative float to uint! cast to int first (undefined on C3)
   int32_t result = sin16_t(scaled_theta + 0x4000);
-  float cos = float(result) / 0x7FFF;
+  float cos = float(result) / 32767.0f;
   return cos;
 }
 
 float tan_approx(float x) {
   float c = cos_approx(x);
-  if (c==0.0f) return 0;
+  if (c==0.0f) return 0.0f;
   float res = sin_approx(x) / c;
   return res;
 }
@@ -131,12 +131,11 @@ float atan2_t(float y, float x) {
   float abs_x = fabs(x);
   float r = (abs_x - abs_y) / (abs_y + abs_x + 1e-10f); // avoid division by zero by adding a small nubmer
   float angle;
-  if(x < 0) {
+  if (x < 0.0f) {
     r = -r;
-    angle = M_PI_2 + M_PI_4;
-  }
-  else
-    angle = M_PI_2 - M_PI_4;
+    angle = (float)(M_PI_2 + M_PI_4);
+  } else
+    angle = (float)M_PI_4;
 
   float add = (ATAN2_CONST_A * (r * r) - ATAN2_CONST_B) * r;
 	angle += add;
@@ -147,24 +146,23 @@ float atan2_t(float y, float x) {
 //https://stackoverflow.com/questions/3380628
 // Absolute error <= 6.7e-5
 float acos_t(float x) {
-  float negate = float(x < 0);
-  float xabs = std::abs(x);
+  bool negate = x < 0.0f;
+  float xabs = fabs(x);
   float ret = -0.0187293f;
   ret = ret * xabs;
   ret = ret + 0.0742610f;
   ret = ret * xabs;
   ret = ret - 0.2121144f;
   ret = ret * xabs;
-  ret = ret + M_PI_2;
-  ret = ret * sqrt(1.0f-xabs);
-  ret = ret - 2 * negate * ret;
-  float res = negate * M_PI + ret;
-  DEBUGM_PRINTF_P(PSTR("acos: %f,%f,%f,(%f)\n"),x,res,acos(x),res-acos(x));
-  return res;
+  ret = ret + (float)M_PI_2;
+  ret = ret * sqrtf(1.0f-xabs);
+  if (negate) ret = (float)M_PI - ret;
+  DEBUGM_PRINTF_P(PSTR("acos: %f,%f,%f,(%f)\n"),x,ret,acos(x),ret-acos(x));
+  return ret;
 }
 
 float asin_t(float x) {
-  float res = M_PI_2 - acos_t(x);
+  float res = (float)M_PI_2 - acos_t(x);
   DEBUGM_PRINTF_P(PSTR("asin: %f,%f,%f,(%f)\n"),x,res,asin(x),res-asin(x));
   return res;
 }
@@ -190,7 +188,7 @@ float atan_t(float xInput) {
   float x = std::abs(xInput);
   float res;
   if (x > 5.0f) { // atan(x) converges to pi/2 - (1/x) for large values
-    res = M_PI_2 - (1.0f/x);
+    res = (float)M_PI_2 - (1.0f/x);
   } else if (x > 1.0f) { //1 < x < 5
     float xx = x * x;
     res = (C4*xx*xx)+(C3*xx*x)+(C2*xx)+(C1*x)+C0;
