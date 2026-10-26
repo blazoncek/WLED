@@ -630,7 +630,6 @@ void WLED::beginStrip()
   strip.finalizeInit(); // busses created during deserializeConfig() if config existed
   strip.makeAutoSegments();
   strip.setBrightness(0);
-  strip.setShowCallback(handleOverlayDraw);
   doInit = 0;
 
   if (turnOnAtBoot) {
@@ -641,13 +640,15 @@ void WLED::beginStrip()
       // set all segments black (no transition)
       for (unsigned i = 0; i < strip.getSegmentsNum(); i++) {
         Segment &seg = strip.getSegment(i);
-        if (seg.isActive()) seg.colors[0] = BLACK;
+        if (seg.isActive()) seg.colors[0] = seg.hasWhite() ? CRGBA(0,0,0,0) : BLACK;
       }
       colPri[0] = colPri[1] = colPri[2] = colPri[3] = 0;  // needed for colorUpdated()
     }
     briLast = briS; bri = 0;
+    // needed to clear all outputs (On/Off in particular)
     strip.fill(BLACK);
-    strip.show(); // needed to clear all outputs (On/Off in particular)
+    for (size_t i = 0; i < strip.getLengthTotal(); i++) BusManager::setPixelColor(i, BLACK);  // fill all pixels with black
+    BusManager::show(); // force output update
   }
   offMode = !bri;
   toggleRelay(!offMode);
@@ -659,6 +660,7 @@ void WLED::beginStrip()
 
   strip.setTransition(transitionDelayDefault);  // restore transitions
   strip.resetTimebase(); // effect timing starts from beginning (offsets millis() so that strip.now will become 0)
+  strip.setShowCallback(handleOverlayDraw);     // enables Clock and usermod overlays
 }
 
 // stop AP (optionally also stop ESP-NOW)

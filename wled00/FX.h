@@ -870,7 +870,7 @@ class WS2812FX {
                                                               { setPixelColor(n, RGBW32(r,g,b,w)); }
     inline void setPixelColor(unsigned n, CRGB c) const       { setPixelColor(n, c.red, c.green, c.blue); }
     inline void setPixelColor(unsigned n, CRGBA c) const      { setPixelColor(n, (uint32_t)c); }
-    inline void fill(uint32_t c) const                        { for (size_t i = 0; i < getLengthTotal(); i++) setPixelColor(i, c); } // fill whole strip with color (inline)
+    inline void fill(uint32_t c) const                        { for (size_t i = 0; i < getLengthTotal(); i++) _pixels[i] = c; } // fill whole strip with color (inline)
     inline void trigger()                                     { _triggered = true; }  // Forces the next frame to be computed on all active segments.
     inline void setShowCallback(show_callback cb)             { _callback = cb; }
     inline void setTransition(uint16_t t)                     { _transitionDur = t; } // sets transition time (in ms)
