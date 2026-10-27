@@ -152,191 +152,193 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     return true;
   }
 
-  if (elem["n"]) {
-    // name field exists
-    const char * name = elem["n"].as<const char*>();
-    seg.setName(name); // will resolve empty and null correctly
-  } else if (start != seg.start || stop != seg.stop) {
-    // clearing or setting segment without name field
-    seg.clearName();
-  }
+  JsonArray iarr = elem[F("i")]; //setting individual LEDs?
+  if (iarr.isNull()) {
+    // we are not setting individual leds
 
-  uint16_t grp       = elem["grp"] | seg.grouping;
-  uint16_t spc       = elem[F("spc")] | seg.spacing;
-  uint16_t of        = seg.offset;
-  uint8_t  rotateSpeed = elem["rS"] | seg.rotateSpeed;
-  uint8_t  zoomAmount  = elem["zA"] | seg.zoomAmount;
-  bool     zoomWrap    = getBoolVal(elem["zW"], seg.zoomWrap);
-  bool     zoomMirror  = getBoolVal(elem["zM"], seg.zoomMirror);
-  uint8_t  map1D2D   = elem["m12"] | seg.map1D2D;
-  uint8_t  set       = elem[F("set")] | seg.set;
-  bool     selected  = getBoolVal(elem["sel"], seg.selected);
-  bool     reverse   = getBoolVal(elem["rev"], seg.reverse);
-  bool     mirror    = getBoolVal(elem["mi"] , seg.mirror);
-  #ifndef WLED_DISABLE_2D
-  bool     reverse_y = getBoolVal(elem["rY"]   , seg.reverse_y);
-  bool     mirror_y  = getBoolVal(elem["mY"]   , seg.mirror_y);
-  bool     transpose = getBoolVal(elem[F("tp")], seg.transpose);
-  #endif
-
-  // if segment's virtual dimensions change we need to restart effect (segment blending and PS rely on dimensions)
-  if (seg.mirror != mirror || seg.grouping != grp || seg.spacing != spc) seg.markForReset();
-  #ifndef WLED_DISABLE_2D
-  if (seg.mirror_y != mirror_y || seg.transpose != transpose || seg.map1D2D != map1D2D) seg.markForReset();
-  #endif
-
-  if (stop > start) {
-    int len = stop - start;
-    int offset = elem[F("of")] | INT32_MAX;
-    if (offset != INT32_MAX) {
-      int offsetAbs = abs(offset);
-      offsetAbs %= len;
-      if (offset < 0) of = len - offsetAbs;
-      else            of = offsetAbs;
+    if (elem["n"]) {
+      // name field exists
+      const char * name = elem["n"].as<const char*>();
+      seg.setName(name); // will resolve empty and null correctly
+    } else if (start != seg.start || stop != seg.stop) {
+      // clearing or setting segment without name field
+      seg.clearName();
     }
-    if (of > len - 1) of = len - 1;
-  }
 
-  if (newSeg || !strip.isServicing()) {
-    // update new segment or segment not being serviced
-    seg.setGeometry(start, stop, grp, spc, of, startY, stopY, map1D2D);
-    seg.refreshLightCapabilities(); // fix for #3403
-    if (seg.stop == 0) return true;
-  } else {
-    // schedule segment geometry update (to prevent issues if effect is running)
-    if (seg.start != start || seg.stop != stop || seg.startY != startY || seg.stopY != stopY ||
-        seg.grouping != grp || seg.spacing != spc || seg.offset != of || seg.map1D2D != map1D2D) {
-      strip.addSegmentGeometryUpdate(id, start, stop, grp, spc, of, startY, stopY, map1D2D);  // needs to set interfaceUpdateCallMode to inform UI of change
+    uint16_t grp       = elem["grp"] | seg.grouping;
+    uint16_t spc       = elem[F("spc")] | seg.spacing;
+    uint16_t of        = seg.offset;
+    uint8_t  rotateSpeed = elem["rS"] | seg.rotateSpeed;
+    uint8_t  zoomAmount  = elem["zA"] | seg.zoomAmount;
+    bool     zoomWrap    = getBoolVal(elem["zW"], seg.zoomWrap);
+    bool     zoomMirror  = getBoolVal(elem["zM"], seg.zoomMirror);
+    uint8_t  map1D2D   = elem["m12"] | seg.map1D2D;
+    uint8_t  set       = elem[F("set")] | seg.set;
+    bool     selected  = getBoolVal(elem["sel"], seg.selected);
+    bool     reverse   = getBoolVal(elem["rev"], seg.reverse);
+    bool     mirror    = getBoolVal(elem["mi"] , seg.mirror);
+    #ifndef WLED_DISABLE_2D
+    bool     reverse_y = getBoolVal(elem["rY"]   , seg.reverse_y);
+    bool     mirror_y  = getBoolVal(elem["mY"]   , seg.mirror_y);
+    bool     transpose = getBoolVal(elem[F("tp")], seg.transpose);
+    #endif
+
+    // if segment's virtual dimensions change we need to restart effect (segment blending and PS rely on dimensions)
+    if (seg.mirror != mirror || seg.grouping != grp || seg.spacing != spc) seg.markForReset();
+    #ifndef WLED_DISABLE_2D
+    if (seg.mirror_y != mirror_y || seg.transpose != transpose || seg.map1D2D != map1D2D) seg.markForReset();
+    #endif
+
+    if (stop > start) {
+      // offset only makes sense on 1D segments
+      int len = stop - start;
+      int offset = elem[F("of")] | INT32_MAX;
+      if (offset != INT32_MAX) {
+        int offsetAbs = abs(offset);
+        offsetAbs %= len;
+        if (offset < 0) of = len - offsetAbs;
+        else            of = offsetAbs;
+      }
+      if (of > len - 1) of = len - 1;
+    }
+
+    if (newSeg || !strip.isServicing()) {
+      // update new segment or segment not being serviced
+      seg.setGeometry(start, stop, grp, spc, of, startY, stopY, map1D2D);
+      seg.refreshLightCapabilities(); // fix for #3403
+    } else {
+      // schedule segment geometry update (to prevent issues if effect is running)
+      if (seg.start != start || seg.stop != stop || seg.startY != startY || seg.stopY != stopY ||
+          seg.grouping != grp || seg.spacing != spc || seg.offset != of || seg.map1D2D != map1D2D) {
+        strip.addSegmentGeometryUpdate(id, start, stop, grp, spc, of, startY, stopY, map1D2D);  // needs to set interfaceUpdateCallMode to inform UI of change
+      }
     }
     if (stop == 0) return true;
-  }
 
-  byte segbri = seg.opacity;
-  if (getVal(elem["bri"], segbri)) {
-    if (segbri > 0) seg.setOpacity(segbri); // use transition
-    seg.setOption(SEG_OPTION_ON, segbri); // use transition
-  }
+    uint8_t fx = seg.mode;
+    if (getVal(elem["fx"], fx, 0, strip.getModeCount())) {
+      if (!presetId && currentPlaylist>=0) unloadPlaylist();
+      if (fx != seg.mode) seg.setMode(fx, elem[F("fxdef")]); // use transition (WARNING: may change map1D2D causing geometry change)
+    }
 
-  seg.setOption(SEG_OPTION_ON, getBoolVal(elem["on"], seg.on)); // use transition
-  seg.freeze = getBoolVal(elem["frz"], seg.freeze);
+    uint8_t pal = seg.palette;
+    if (seg.getLightCapabilities() & 1) {  // ignore palette for White and On/Off segments
+      if (getVal(elem["pal"], pal, 0, getPaletteCount())) seg.setPalette(pal);
+    }
 
-  seg.setCCT(elem["cct"] | seg.cct);
+    byte segbri = seg.opacity;
+    if (getVal(elem["bri"], segbri)) {
+      if (segbri > 0) seg.setOpacity(segbri); // use transition
+      seg.setOption(SEG_OPTION_ON, segbri); // use transition
+    }
 
-  JsonArray colarr = elem["col"];
-  if (!colarr.isNull())
-  {
-    if (seg.getLightCapabilities() & 3) {
-      // segment has RGB or White
-      for (size_t i = 0; i < NUM_COLORS; i++) {
-        // JSON "col" array can contain the following values for each of segment's colors (primary, background, custom):
-        // "col":[int|string|object|array, int|string|object|array, int|string|object|array]
-        //   int = Kelvin temperature or 0 for black
-        //   string = hex representation of [WW]RRGGBB or "r" for random color
-        //   object = individual channel control {"r":0,"g":127,"b":255,"w":255}, each being optional (valid to send {})
-        //   array = direct channel values [r,g,b,w] (w element being optional)
-        uint8_t rgbw[] = {0,0,0,0};
-        bool colValid = false;
-        JsonArray colX = colarr[i];
-        if (colX.isNull()) {
-          JsonObject oCol = colarr[i];
-          if (!oCol.isNull()) {
-            // we have a JSON object for color {"w":123,"r":123,...}; allows individual channel control
-            rgbw[0] = oCol["r"] | seg.colors[i].r;
-            rgbw[1] = oCol["g"] | seg.colors[i].g;
-            rgbw[2] = oCol["b"] | seg.colors[i].b;
-            if (seg.hasWhite()) rgbw[3] = oCol["w"] | seg.colors[i].a;
-            colValid = true;
-          } else {
-            const char* hexCol = colarr[i];
-            if (hexCol == nullptr) { //Kelvin color temperature (or invalid), e.g 2400
-              int kelvin = colarr[i] | -1;
-              if (kelvin <  0) continue;
-              if (kelvin >  0) colorKtoRGB(kelvin, rgbw);
+    seg.setOption(SEG_OPTION_ON, getBoolVal(elem["on"], seg.on)); // use transition
+    seg.freeze = getBoolVal(elem["frz"], seg.freeze);
+
+    seg.setCCT(elem["cct"] | seg.cct);
+
+    JsonArray colarr = elem["col"];
+    if (!colarr.isNull()) {
+      if (seg.getLightCapabilities() & 3) {
+        // segment has RGB or White
+        for (size_t i = 0; i < NUM_COLORS; i++) {
+          // JSON "col" array can contain the following values for each of segment's colors (primary, background, custom):
+          // "col":[int|string|object|array, int|string|object|array, int|string|object|array]
+          //   int = Kelvin temperature or 0 for black
+          //   string = hex representation of [WW]RRGGBB or "r" for random color
+          //   object = individual channel control {"r":0,"g":127,"b":255,"w":255}, each being optional (valid to send {})
+          //   array = direct channel values [r,g,b,w] (w element being optional)
+          uint8_t rgbw[] = {0,0,0,0};
+          bool colValid = false;
+          JsonArray colX = colarr[i];
+          if (colX.isNull()) {
+            JsonObject oCol = colarr[i];
+            if (!oCol.isNull()) {
+              // we have a JSON object for color {"w":123,"r":123,...}; allows individual channel control
+              rgbw[0] = oCol["r"] | seg.colors[i].r;
+              rgbw[1] = oCol["g"] | seg.colors[i].g;
+              rgbw[2] = oCol["b"] | seg.colors[i].b;
+              if (seg.hasWhite()) rgbw[3] = oCol["w"] | seg.colors[i].a;
               colValid = true;
-            } else { //HEX string, e.g. "FFAA00"
-              colValid = colorFromHexString(rgbw, hexCol);
-              if (!colValid && tolower(hexCol[0]) == 'r') {
-                setRandomColor(rgbw); // "random" color
+            } else {
+              const char* hexCol = colarr[i];
+              if (hexCol == nullptr) { //Kelvin color temperature (or invalid), e.g 2400
+                int kelvin = colarr[i] | -1;
+                if (kelvin <  0) continue;
+                if (kelvin >  0) colorKtoRGB(kelvin, rgbw);
                 colValid = true;
+              } else { //HEX string, e.g. "FFAA00"
+                colValid = colorFromHexString(rgbw, hexCol);
+                if (!colValid && tolower(hexCol[0]) == 'r') {
+                  setRandomColor(rgbw); // "random" color
+                  colValid = true;
+                }
               }
             }
+          } else { //Array of ints (RGB or RGBW color), e.g. [255,160,0]
+            int sz = colX.size();
+            if (sz == 0) continue; //do nothing on empty array
+            int irgbw[4] = {0,0,0,0};
+            copyArray(colX, irgbw, 4);
+            for (size_t c = 0; c < 4; c++) rgbw[c] = constrain(irgbw[c], 0, 255);
+            colValid = true;
           }
-        } else { //Array of ints (RGB or RGBW color), e.g. [255,160,0]
-          int sz = colX.size();
-          if (sz == 0) continue; //do nothing on empty array
-          int irgbw[4] = {0,0,0,0};
-          copyArray(colX, irgbw, 4);
-          for (size_t c = 0; c < 4; c++) rgbw[c] = constrain(irgbw[c], 0, 255);
-          colValid = true;
+
+          if (!colValid) continue;
+
+          // rgbw[3] is ignored on RGB-only segments (and is forced to 255 in setColor() as opacity)
+          seg.setColor(i, RGBW32(rgbw[0],rgbw[1],rgbw[2],rgbw[3])); // use transition and forces opacity to 255 if segment does not have White channel
+          if (seg.mode == FX_MODE_STATIC) strip.trigger(); //instant refresh
         }
-
-        if (!colValid) continue;
-
-        // rgbw[3] is ignored on RGB-only segments (and is forced to 255 in setColor() as opacity)
-        seg.setColor(i, RGBW32(rgbw[0],rgbw[1],rgbw[2],rgbw[3])); // use transition and forces opacity to 255 if segment does not have White channel
-        if (seg.mode == FX_MODE_STATIC) strip.trigger(); //instant refresh
+      } else {
+        // non RGB & non White segment (usually On/Off bus)
+        seg.setColor(0, ULTRAWHITE); // use transition
+        seg.setColor(1, BLACK); // use transition
       }
-    } else {
-      // non RGB & non White segment (usually On/Off bus)
-      seg.setColor(0, ULTRAWHITE); // use transition
-      seg.setColor(1, BLACK); // use transition
     }
-  }
 
-  // lx parser
-  #ifdef WLED_ENABLE_LOXONE
-  int lx = elem[F("lx")] | -1;
-  if (lx >= 0) {
-    parseLxJson(lx, id, false);
-  }
-  int ly = elem[F("ly")] | -1;
-  if (ly >= 0) {
-    parseLxJson(ly, id, true);
-  }
-  #endif
+    // lx parser
+    #ifdef WLED_ENABLE_LOXONE
+    int lx = elem[F("lx")] | -1;
+    if (lx >= 0) {
+      parseLxJson(lx, id, false);
+    }
+    int ly = elem[F("ly")] | -1;
+    if (ly >= 0) {
+      parseLxJson(ly, id, true);
+    }
+    #endif
 
-  seg.rotateSpeed = constrain(rotateSpeed, 0, 15);
-  seg.zoomAmount  = constrain(zoomAmount, 0, 15);
-  seg.zoomWrap    = zoomWrap;
-  seg.zoomMirror  = zoomMirror;
-  seg.set       = constrain(set, 0, 3);
-  seg.selected  = selected;
-  seg.reverse   = reverse;
-  seg.mirror    = mirror;
-  #ifndef WLED_DISABLE_2D
-  seg.reverse_y = reverse_y;
-  seg.mirror_y  = mirror_y;
-  seg.transpose = transpose;
-  #endif
+    getVal(elem["sx"], seg.speed);
+    getVal(elem["ix"], seg.intensity);
 
-  byte fx = seg.mode;
-  if (getVal(elem["fx"], fx, 0, strip.getModeCount())) {
-    if (!presetId && currentPlaylist>=0) unloadPlaylist();
-    if (fx != seg.mode) seg.setMode(fx, elem[F("fxdef")]); // use transition (WARNING: may change map1D2D causing geometry change)
-  }
+    getVal(elem["c1"], seg.custom1);
+    getVal(elem["c2"], seg.custom2);
+    uint8_t cust3 = seg.custom3;
+    getVal(elem["c3"], cust3, 0, 31); // we can't pass reference to bitfield
+    seg.custom3 = constrain(cust3, 0, 31);
 
-  getVal(elem["sx"], seg.speed);
-  getVal(elem["ix"], seg.intensity);
+    seg.check1 = getBoolVal(elem["o1"], seg.check1);
+    seg.check2 = getBoolVal(elem["o2"], seg.check2);
+    seg.check3 = getBoolVal(elem["o3"], seg.check3);
 
-  uint8_t pal = seg.palette;
-  if (seg.getLightCapabilities() & 1) {  // ignore palette for White and On/Off segments
-    if (getVal(elem["pal"], pal, 0, getPaletteCount())) seg.setPalette(pal);
-  }
+    getVal(elem["bm"], seg.blendMode, 0, BLEND_MODE_COUNT-1);
 
-  getVal(elem["c1"], seg.custom1);
-  getVal(elem["c2"], seg.custom2);
-  uint8_t cust3 = seg.custom3;
-  getVal(elem["c3"], cust3, 0, 31); // we can't pass reference to bitfield
-  seg.custom3 = constrain(cust3, 0, 31);
+    seg.rotateSpeed = constrain(rotateSpeed, 0, 15);
+    seg.zoomAmount  = constrain(zoomAmount, 0, 15);
+    seg.zoomWrap    = zoomWrap;
+    seg.zoomMirror  = zoomMirror;
+    seg.set       = constrain(set, 0, 3);
+    seg.selected  = selected;
+    seg.reverse   = reverse;
+    seg.mirror    = mirror;
+    #ifndef WLED_DISABLE_2D
+    seg.reverse_y = reverse_y;
+    seg.mirror_y  = mirror_y;
+    seg.transpose = transpose;
+    #endif
 
-  seg.check1 = getBoolVal(elem["o1"], seg.check1);
-  seg.check2 = getBoolVal(elem["o2"], seg.check2);
-  seg.check3 = getBoolVal(elem["o3"], seg.check3);
-
-  getVal(elem["bm"], seg.blendMode, 0, BLEND_MODE_COUNT-1);
-
-  JsonArray iarr = elem[F("i")]; //set individual LEDs
-  if (!iarr.isNull()) {
+  } else {
     // set brightness immediately and disable transition
     jsonTransitionOnce = true;
     seg.startTransition(0); // setting transition time to 0 will stop transition in next frame
@@ -353,12 +355,12 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     unsigned iSet = 0; //0 nothing set, 1 start set, 2 range set
 
     for (size_t i = 0; i < iarr.size(); i++) {
-      if (iarr[i].is<JsonInteger>()) {
+      if (iarr[i].is<int>()) {
         if (!iSet) {
-          iStart = abs(iarr[i].as<int>());
+          iStart = std::min<int>(std::abs(iarr[i].as<int>()), seg.length()-1);
           iSet++;
         } else {
-          iStop = abs(iarr[i].as<int>());
+          iStop = std::min<int>(std::abs(iarr[i].as<int>()), seg.length());
           iSet++;
         }
       } else { //color
@@ -377,7 +379,7 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
 
         if (iSet < 2 || iStop <= iStart) iStop = iStart + 1;
         uint32_t c = RGBW32(rgbw[0], rgbw[1], rgbw[2], rgbw[3]);
-        while (iStart < iStop) seg.setRawPixelColor(iStart++, c); // sets pixel color without 1D->2D expansion, grouping or spacing
+        while (iStart < iStop) seg.setRawPixelColor(iStart++, c); // sets pixel color without 1D->2D expansion, grouping or spacing (guards against iStart < length())
         iSet = 0;
       }
     }
