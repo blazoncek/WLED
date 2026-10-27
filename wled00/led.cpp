@@ -187,7 +187,6 @@ void handleBrightness() {
       }
       rlyStartTime = 0;                 // reset relay status
     }
-    strip.restartRuntime();             // switching from Off to On requires effects to be restarted
   }
 
   // perform fade global brightness transition

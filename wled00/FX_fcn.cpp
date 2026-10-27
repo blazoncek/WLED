@@ -224,14 +224,18 @@ void Segment::deallocateData() {
 void Segment::resetIfRequired() {
   if (!reset || !isActive()) return;
   DEBUGFX_PRINTF_P(PSTR("-- Segment reset: %p\n"), this);
-  if (data && _dataLen > 0) memset(data, 0, _dataLen);  // prevent heap fragmentation (just erase buffer instead of deallocateData())
-  if (_dataLen > FAIR_DATA_PER_SEG) deallocateData();   // do not keep large allocations
-  if (pixels) for (size_t i = 0; i < length(); i++) pixels[i] = hasWhite() ? BLACK : CRGBA(BLACK); // clear pixel buffer
-  next_time = 0; step = 0; call = 0; aux0 = 0; aux1 = 0;
-  reset = false;
   #ifdef WLED_ENABLE_GIF
   if (mode == FX_MODE_IMAGE) endImagePlayback(this);
   #endif
+  #ifdef ESP8266
+  deallocateData();
+  #else
+  if (data && _dataLen > 0) memset(data, 0, _dataLen);  // prevent heap fragmentation (just erase buffer instead of deallocateData())
+  if (_dataLen > FAIR_DATA_PER_SEG) deallocateData();   // do not keep large allocations
+  #endif
+  if (pixels) for (size_t i = 0; i < length(); i++) pixels[i] = hasWhite() ? BLACK : CRGBA(BLACK); // clear pixel buffer
+  next_time = 0; step = 0; call = 0; aux0 = 0; aux1 = 0;
+  reset = false;
 }
 
 CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) {
