@@ -1,7 +1,7 @@
 #pragma once
 
 #include "wled.h"
-#if defined(ESP32)
+#if defined(ARDUINO_ARCH_ESP32)
 #warning "Usermod FixUnreachableNetServices works only with ESP8266 builds"
 class FixUnreachableNetServices : public Usermod
 {

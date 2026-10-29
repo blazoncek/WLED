@@ -5,7 +5,7 @@
  *
  */
 
-#if defined(__XTENSA__) && defined(ESP32) && !defined(CONFIG_BTDM_CTRL_HLI)
+#if defined(__XTENSA__) && defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_BTDM_CTRL_HLI)
 
 #include <freertos/xtensa_context.h>
 #include "sdkconfig.h"

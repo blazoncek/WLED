@@ -24,7 +24,7 @@
 #ifdef ESP8266
   #include <Hash.h>
 #endif
-#ifdef ESP32
+#ifdef ARDUINO_ARCH_ESP32
   #include "mbedtls/sha1.h"
 #endif
 

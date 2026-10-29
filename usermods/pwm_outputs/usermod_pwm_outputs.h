@@ -1,7 +1,7 @@
 #pragma once
 #include "wled.h"
 
-#ifndef ESP32
+#ifndef ARDUINO_ARCH_ESP32
   #error This usermod does not support the ESP8266.
 #endif
 

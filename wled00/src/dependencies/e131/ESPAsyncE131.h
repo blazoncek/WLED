@@ -26,7 +26,7 @@
 #ifndef ESPASYNCE131_H_
 #define ESPASYNCE131_H_
 
-#ifdef ESP32
+#ifdef ARDUINO_ARCH_ESP32
 #include <WiFi.h>
 #include <AsyncUDP.h>
 #elif defined (ESP8266)

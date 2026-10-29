@@ -276,12 +276,12 @@ bool FSEditor::canHandle(AsyncWebServerRequest *request) {
         if (!request->_tempFile) {
           return false;
         }
-#ifdef ESP32
+        #ifdef ARDUINO_ARCH_ESP32
         if (request->_tempFile.isDirectory()) {
           request->_tempFile.close();
           return false;
         }
-#endif
+        #endif
       }
       if (request->hasParam(FPSTR(v_download))) {
         if (request->arg(FPSTR(v_download)).indexOf(FPSTR(s_wsec)) > -1) return false; //make sure wsec.json is not served
@@ -289,12 +289,12 @@ bool FSEditor::canHandle(AsyncWebServerRequest *request) {
         if (!request->_tempFile) {
           return false;
         }
-#ifdef ESP32
+        #ifdef ARDUINO_ARCH_ESP32
         if (request->_tempFile.isDirectory()) {
           request->_tempFile.close();
           return false;
         }
-#endif
+        #endif
       }
       request->addInterestingHeader(FPSTR(h_modified_since));
       return true;
@@ -319,14 +319,14 @@ void FSEditor::handleRequest(AsyncWebServerRequest *request) {
   if (request->method() == HTTP_GET) {
     if (request->hasParam(FPSTR(v_list))) {
       String path = request->getParam(FPSTR(v_list))->value();
-      #ifdef ESP32
+      #ifdef ARDUINO_ARCH_ESP32
       File dir = _fs.open(path);
       #else
       Dir dir = _fs.openDir(path);
       #endif
       path = String();
       String output = "[";
-      #ifdef ESP32
+      #ifdef ARDUINO_ARCH_ESP32
       File entry = dir.openNextFile();
       while (entry) {
       #else
@@ -343,13 +343,13 @@ void FSEditor::handleRequest(AsyncWebServerRequest *request) {
           output += String(entry.size());
           output += '}';
         }
-        #ifdef ESP32
+        #ifdef ARDUINO_ARCH_ESP32
         entry = dir.openNextFile();
         #else
         entry.close();
         #endif
       }
-      #ifdef ESP32
+      #ifdef ARDUINO_ARCH_ESP32
       dir.close();
       #endif
       output += ']';

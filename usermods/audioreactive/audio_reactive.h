@@ -712,7 +712,7 @@ static uint16_t mode_ripplepeak() {                // * Ripple peak. By Andrew T
 
       case 255:                                           // Initialize ripple variables.
         ripples[i].pos = hw_random16(SEGLEN);
-        #ifdef ESP32
+        #ifdef ARDUINO_ARCH_ESP32
         if (FFT_MajorPeak > 1.0f)                         // log10(0) is "forbidden" (throws exception)
           ripples[i].color = (int)(log10f(FFT_MajorPeak) * 128.0f);
         else ripples[i].color = 0;

@@ -62,7 +62,7 @@ String HttpPullLightControl::generateUniqueId() {
     return sha1(input);
   #endif
 
-  #ifdef ESP32
+  #ifdef ARDUINO_ARCH_ESP32
     // For ESP32 we use the mbedtls library which is built into the ESP32 core
     int status = 0;
     unsigned char shaResult[20]; // SHA1 produces a hash of 20 bytes  (which is 40 HEX characters)

@@ -414,7 +414,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
           if (disablePullUp) {
             pinMode(pin, INPUT);
           } else {
-            #ifdef ESP32
+            #ifdef ARDUINO_ARCH_ESP32
             pinMode(pin, type==BTN_TYPE_PUSH_ACT_HIGH ? INPUT_PULLDOWN : INPUT_PULLUP);
             #else
             pinMode(pin, INPUT_PULLUP);
@@ -474,7 +474,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
         if (disablePullUp) {
           pinMode(defPins[s], INPUT);
         } else {
-          #ifdef ESP32
+          #ifdef ARDUINO_ARCH_ESP32
           pinMode(defPins[s], type==BTN_TYPE_PUSH_ACT_HIGH ? INPUT_PULLDOWN : INPUT_PULLUP);
           #else
           pinMode(defPins[s], INPUT_PULLUP);
@@ -564,7 +564,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   // if HSPI is used by bus we can't initialise it so don't bother with it (both are used VSPI & HSPI)
   if (!hspiInUse && hw_spi_mosi >= 0 && hw_spi_sclk >= 0 && hw_spi_miso >= 0 && PinManager::allocateMultiplePins(spi, 4, PinOwner::HW_SPI)) {
     if (fromFS) {
-      #ifdef ESP32
+      #ifdef ARDUINO_ARCH_ESP32
       SPI.begin(hw_spi_sclk, hw_spi_miso, hw_spi_mosi, -1);  // SPI global uses VSPI on ESP32 and FSPI on C3, S3 (don't set SS as it will be set by SD card)
       #else
       SPI.begin();  // we can't change SPI pins on ESP8266 (hardwired to sck=14, miso=12, mosi=13)
@@ -575,7 +575,7 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
       if (sdCard) SD.end();
       #endif
       SPI.end(); // no harm if called uninitialised
-      #ifdef ESP32
+      #ifdef ARDUINO_ARCH_ESP32
       SPI.begin(hw_spi_sclk, hw_spi_miso, hw_spi_mosi, -1);  // SPI global uses VSPI on ESP32 and FSPI on C3, S3 (don't set SS as it will be set by SD card)
       #else
       SPI.begin();  // we can't change SPI pins on ESP8266 (hardwired to sck=14, miso=12, mosi=13)

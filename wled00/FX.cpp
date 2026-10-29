@@ -6038,7 +6038,7 @@ uint16_t mode_2Dscrollingtext(void) {
         else if (!strcmp_P(token, PSTR("MMMM"))) sprintf  (temp,          ("%s")                               , monthStr(month(localTime)));
         else if (!strcmp_P(token, PSTR("DAYL"))) sprintf  (temp,          ("%s")                               , dayStr(weekday(localTime)));
         else if (!strcmp_P(token, PSTR("DDDD"))) sprintf  (temp,          ("%s")                               , dayStr(weekday(localTime)));
-        #ifdef ESP32
+        #ifdef ARDUINO_ARCH_ESP32
         else if (!strcmp_P(token, PSTR("CPU") )) sprintf_P(temp,      PSTR("%s rev.%d @ %uMHz")                , ESP.getChipModel(), (int)ESP.getChipRevision(), ESP.getCpuFreqMHz());
         else if (!strcmp_P(token, PSTR("MEM") )) sprintf_P(temp,      PSTR("%uk/%uk")                          , getFreeHeapSize()/1024, getContinuousFreeHeap()/1024);
         #else

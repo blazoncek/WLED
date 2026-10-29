@@ -359,7 +359,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
           if (disablePullUp) {
             pinMode(buttons[i].pin, INPUT);
           } else {
-            #ifdef ESP32
+            #ifdef ARDUINO_ARCH_ESP32
             pinMode(buttons[i].pin, buttons[i].type==BTN_TYPE_PUSH_ACT_HIGH ? INPUT_PULLDOWN : INPUT_PULLUP);
             #else
             pinMode(buttons[i].pin, INPUT_PULLUP);
@@ -765,7 +765,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
         spi_miso = hw_miso_pin;
         spi_sclk = hw_sclk_pin;
         spi_ssel = hw_ssel_pin;
-        #ifdef ESP32
+        #ifdef ARDUINO_ARCH_ESP32
         SPI.begin(spi_sclk, spi_miso, spi_mosi, spi_ssel);
         #else
         SPI.begin();
