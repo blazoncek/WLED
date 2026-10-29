@@ -532,7 +532,7 @@ void WLED::setup()
     #ifdef WLED_USE_ETHERNET
     if (ethernetType == WLED_ETH_NONE) initAP();  // (but only if not using ethernet)
     #else
-    DEBUG_PRINTF_P(PSTR("WiFi: Not configured, opening AP! @ %lus\n"), now/1000);
+    DEBUG_PRINTLN(F("WiFi: Not configured, opening AP!"));
     initAP();
     #endif
   }
