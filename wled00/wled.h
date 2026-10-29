@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2610270
+#define VERSION 2610290
 #else
 #define VERSION BUILD
 #endif
@@ -98,6 +98,7 @@
   #define WIFI_MODE_STA WIFI_STA
   #define WIFI_MODE_AP WIFI_AP
   #define WIFI_MODE_APSTA WIFI_AP_STA
+  #define WIFI_MODE_NULL WIFI_OFF
   #ifndef WLED_DISABLE_ESPNOW
     #include <espnow.h>
     #include <QuickEspNow.h>
@@ -674,12 +675,12 @@ WLED_GLOBAL byte interfaceUpdateCallMode _INIT(CALL_MODE_INIT);
   #define WLED_LON 0.0f
 #endif
 #define NTP_NEVER 999000000L
+constexpr uint16_t ntpLocalPort = 2390;
 WLED_GLOBAL bool ntpConnected _INIT(false);
 WLED_GLOBAL time_t localTime _INIT(0);
 WLED_GLOBAL unsigned long ntpLastSyncTime _INIT(NTP_NEVER);
 WLED_GLOBAL unsigned long ntpPacketSentTime _INIT(NTP_NEVER);
 WLED_GLOBAL IPAddress ntpServerIP;
-WLED_GLOBAL uint16_t ntpLocalPort _INIT(2390);
 WLED_GLOBAL uint16_t rolloverMillis _INIT(0);
 WLED_GLOBAL float longitude _INIT(WLED_LON);
 WLED_GLOBAL float latitude _INIT(WLED_LAT);

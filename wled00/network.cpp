@@ -321,11 +321,10 @@ void initESPNow(bool resetAP) {
 
     if (resetAP) {
       DEBUG_PRINTLN(F("ESP-NOW init hidden AP."));
-      WiFi.disconnect();                                // stop STA mode (stop connecting to WiFi)
+      WiFi.disconnect(true);                            // stop STA mode (stop connecting to WiFi)
       delay(5);
-      WiFi.mode(WIFI_MODE_AP);                          // force AP mode to fix channel
       if (!WiFi.softAP(apSSID, apPass, apChannel, true)) DEBUG_PRINTLN(F("WARNING! softAP failed.")); // hide AP (do not bother with initialising interfaces)
-      delay(100);
+      delay(5);
     }
 
     int wifiMode = WiFi.getMode();
@@ -346,6 +345,7 @@ void initESPNow(bool resetAP) {
         break;
     }
     #endif
+    if (wifiMode == WIFI_MODE_NULL) return; // we need radio active
 
     // we have opened AP (on desired channel) so we need to initialise ESP-NOW on the same channel
     // it is going to be used as for sending AND receiving (assuming slave device has no WiFi configured)
@@ -353,7 +353,7 @@ void initESPNow(bool resetAP) {
     quickEspNow.onDataSent(espNowSentCB);     // see udp.cpp
     quickEspNow.onDataRcvd(espNowReceiveCB);  // see udp.cpp
     DEBUG_PRINTF_P(PSTR("ESP-NOW initing in %s mode.\n"), wifiModeStr);
-    #ifdef ESP32
+    #ifdef ARDUINO_ARCH_ESP32
     quickEspNow.setWiFiBandwidth(WIFI_IF_AP, WIFI_BW_HT20); // Only needed for ESP32 in case you need coexistence with ESP8266 in the same network
     #endif //ESP32
     bool espNowOK;
@@ -374,11 +374,11 @@ void stopESPNow() {
 }
 
 void sendESPNowHeartBeat() {
+  if (WiFi.getMode() == WIFI_MODE_NULL || statusESPNow != ESP_NOW_STATE_ON) return; // no WiFi or not trying to connect, do not send heartbeat
   const unsigned long now = millis();
   // send ESP-NOW beacon every 2s if we are in sync mode (AKA master device) regardless of STA or AP mode
   // beacon will contain current/intended channel and local time (for loose synchronisation purposes)
-  if (WiFi.status() == WL_NO_SHIELD || WiFi.status() == WL_IDLE_STATUS) return; // no WiFi or not trying to connect, do not send heartbeat
-  if (enableESPNow && useESPNowSync && sendNotificationsRT && statusESPNow == ESP_NOW_STATE_ON && now > scanESPNow) {
+  if (enableESPNow && useESPNowSync && sendNotificationsRT && now > scanESPNow) {
     EspNowBeacon buffer = {{'W','L','E','D'}, 0, (uint8_t)WiFi.channel(), toki.second(), {0}};
     quickEspNow.send(ESPNOW_BROADCAST_ADDRESS, reinterpret_cast<uint8_t*>(&buffer), sizeof(buffer));
     scanESPNow = now + 2000; // we will use scanESPNow as a timer for heartbeat (will also help when disconnect happens)
@@ -503,6 +503,7 @@ void WiFiEvent(WiFiEvent_t event)
       DEBUG_PRINTF_P(PSTR("WiFi-E: Connected! @ %lus\n"), millis()/1000);
       #ifdef ARDUINO_ARCH_ESP32
       esp_wifi_set_storage(WIFI_STORAGE_RAM); // disable further updates of NVM credentials to prevent wear on flash (same as WiFi.persistent(false) but updates immediately, arduino wifi deficiency workaround)
+      WiFi.persistent(false);                 // we also need to update WiFi's internal status
       #endif
       #ifdef WLED_DEBUG
       WiFi.printDiag(DEBUGOUT);
@@ -552,16 +553,21 @@ void WiFiEvent(WiFiEvent_t event)
       break;
     case ARDUINO_EVENT_ETH_GOT_IP:
       DEBUG_PRINTF_P(PSTR("ETH-E: Got IP. @ %lus\n"), millis()/1000);
-      // ethernet is incompatible with WiFi/ESP-NOW, see #4703
-      // so we need to stop WiFi circuitry
+      // ESP-NOW requires active radio (STA or AP) to function (see wled#4703)
+      // if we want to disable radio entirely, we need to stop ESP-NOW
+      // this prevents Ethernet device to be ESP-NOW broadcaster or receiver
+      // if we want Ethernet device to be ESP-NOW master/broadcaster/receiver,
+      // we need to open hidden AP after Ethernet is active
+      // (done in WLED::connected())
       if (apActive) WLED::instance().stopAP(true);  // stop AP & ESP-NOW
-      else {
-        #ifndef WLED_DISABLE_ESPNOW
-        stopESPNow();
-        #endif
-        WiFi.disconnect(true);          // disable SSID scanning
-        staActive = false;              // disable STA mode
-      }
+      #ifndef WLED_DISABLE_ESPNOW
+      else stopESPNow();                // we are going to stop radio so stop ESP-NOW
+      #endif
+      WiFi.disconnect(true);            // disable SSID scanning/connecting
+      WiFi.softAPdisconnect(true);      // disengage AP mode
+      staActive = false;                // disable STA mode
+      apActive = false;                 // no regular AP available
+      WiFi.mode(WIFI_MODE_NULL);        // disable radio entirely (should be done above, but just-in-case)
       delay(5);
       break;
     case ARDUINO_EVENT_ETH_CONNECTED: {
@@ -576,12 +582,19 @@ void WiFiEvent(WiFiEvent_t event)
       // may be necessary to reconnect the WiFi when
       // ethernet disconnects, as a way to provide
       // alternative access to the device.
+      #ifndef WLED_DISABLE_ESPNOW
+      stopESPNow();                   // we are going to (re)start radio so stop ESP-NOW
+      #endif
       if (isWiFiConfigured()) {
-        WiFi.setAutoReconnect(true);  // use automatic reconnect functionality
-        WiFi.mode(WIFI_MODE_STA);
+        WiFi.softAPdisconnect(true);  // disengage eventual hidden AP mode
+        WiFi.enableSTA(true);         // start connecting to last connected SSID
         findWiFi(true);               // reinit WiFi scan
+        staActive = true;
+        forceReconnect = true;
+      } else {
+        showWelcomePage = true;
+        WLED::instance().initAP();    // open AP so we can control/configure WLED
       }
-      forceReconnect = true;
       interfacesInited = false;
       break;
     #endif

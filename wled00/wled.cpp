@@ -279,7 +279,7 @@ void WLED::loop()
     DEBUG_PRINTLN(F("---DEBUG INFO---"));
     DEBUG_PRINTF_P(PSTR("Runtime: %lus\n"),  now/1000);
     DEBUG_PRINTF_P(PSTR("Unix time: %u,%03u\n"), toki.getTime().sec, toki.getTime().ms);
-  #if defined(ESP32) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
+  #if defined(ARDUINO_ARCH_ESP32) && ESP_IDF_VERSION_MAJOR >= 4
     // Internal DRAM (standard 8-bit accessible heap)
     DEBUG_PRINTF_P(PSTR("DRAM 8-bit:   Total: %7u | Free: %7u | Largest: %7u (bytes)\n")
     , heap_caps_get_total_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL)
@@ -512,21 +512,29 @@ void WLED::setup()
   // configurable WiFi options are set in cfg.cpp
   //WiFi.enableLongRange(true);
   WiFi.onEvent(WiFiEvent);
-#if defined(ARDUINO_ARCH_ESP32) && ESP_IDF_VERSION_MAJOR==4
+#if defined(ARDUINO_ARCH_ESP32) && ESP_IDF_VERSION_MAJOR >= 4
   WiFi.persistent(true);          // storing credentials in NVM fixes boot-up pause as connection is much faster, is disabled after first connection
   WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
-#elif defined(ESP8266)
+#elif defined(ARDUINO_ARCH_ESP32)
+  WiFi.persistent(true);          // storing credentials in NVM fixes boot-up pause as connection is much faster, is disabled after first connection
+#else
   WiFi.persistent(false);         // on ESP8266 using NVM for wifi config has no benefit of faster connection
 #endif
-  delay(15);                      // wait for hardware to be ready
+  WiFi.setAutoReconnect(true);    // use automatic reconnect functionality
 
   if (isWiFiConfigured()) {
     showWelcomePage = false;
-    WiFi.setAutoReconnect(true);  // use automatic reconnect functionality
-    WiFi.mode(WIFI_MODE_STA);     // enable SSID scanning
+    WiFi.enableSTA(true);         // enable SSID scanning/try to connect to saved SSID
     findWiFi(true);               // start scanning for available WiFi-s
+    staActive = true;
   } else {
-    WiFi.mode(WIFI_MODE_AP);      // WiFi is not configured so we'll most likely open an AP (this already opens default AP)
+    // WiFi is not configured so we should open AP immediately
+    #ifdef WLED_USE_ETHERNET
+    if (ethernetType == WLED_ETH_NONE) initAP();  // (but only if not using ethernet)
+    #else
+    DEBUG_PRINTF_P(PSTR("WiFi: Not configured, opening AP! @ %lus\n"), now/1000);
+    initAP();
+    #endif
   }
   #ifdef ARDUINO_ARCH_ESP32
   WiFi.setTxPower(wifi_power_t(txPower)); // must set when WiFi is already started
@@ -667,13 +675,12 @@ void WLED::beginStrip()
 void WLED::stopAP(bool stop) {
   DEBUG_PRINTF_P(PSTR("WiFi: Stopping AP. @ %lus\n"), millis()/1000);
   #ifndef WLED_DISABLE_ESPNOW
-  // we need to stop ESP-NOW as we are stopping AP
+  // we need to stop ESP-NOW as we are stopping AP radio
   if (stop) stopESPNow();
   #endif
   dnsServer.stop();
   WiFi.softAPdisconnect(stop);  // disengage AP mode on stop
   delay(5);                     // wait for hardware to be ready
-  if (isWiFiConfigured() && apBehavior != AP_BEHAVIOR_ALWAYS) WiFi.mode(WIFI_MODE_STA);
   apActive = false;
 }
 
@@ -752,7 +759,6 @@ void WLED::initConnection(bool force)
     if (bssid) fillMAC2Str(macStr, bssid);
     else strcpy_P(macStr, PSTR("*"));
     DEBUG_PRINTF_P(PSTR("WiFi: Connecting to %s... [%s] @ %lus\n"), multiWiFi[selectedWiFi].clientSSID, macStr, millis()/1000);
-    staActive = true;
 
     // determine if using DHCP or static IP address, will also engage STA mode if not already
     if (multiWiFi[selectedWiFi].staticIP != IPAddress() && multiWiFi[selectedWiFi].staticGW != IPAddress()) {
@@ -770,12 +776,14 @@ void WLED::initConnection(bool force)
     scanESPNow = millis() + 30000;
     #endif
   } else {
+    WiFi.enableSTA(true);
     WiFi.reconnect();
     delay(5);            // wait for hardware to be ready
     #ifdef WLED_DEBUG
     WiFi.printDiag(DEBUGOUT);
     #endif
   }
+  staActive = true;
 }
 
 // connected() is called when WiFi connection is established
@@ -832,10 +840,12 @@ void WLED::connected()
 
   if (udpPort > 0 && udpPort != ntpLocalPort) {
     udpConnected = notifierUdp.begin(udpPort);
-    if (udpConnected && udpRgbPort != udpPort)
-      udpRgbConnected = rgbUdp.begin(udpRgbPort);
-    if (udpConnected && udpPort2 != udpPort && udpPort2 != udpRgbPort)
-      udp2Connected = notifier2Udp.begin(udpPort2);
+  }
+  if (udpRgbPort > 0 && udpRgbPort != ntpLocalPort && udpRgbPort != udpPort) {
+    udpRgbConnected = rgbUdp.begin(udpRgbPort);
+  }
+  if (udpPort2 > 0 && udpPort2 != ntpLocalPort && udpPort2 != udpPort && udpPort2 != udpRgbPort) {
+    udp2Connected = notifier2Udp.begin(udpPort2);
   }
   if (ntpEnabled)
     ntpConnected = ntpUdp.begin(ntpLocalPort);
@@ -851,7 +861,7 @@ void WLED::connected()
   lastMqttReconnectAttempt = 0; // force immediate update (MQTT & node broadcast)
 
 #ifndef WLED_DISABLE_ESPNOW
-  if (WiFi.isConnected()) initESPNow(); // if we are connected using Ethernet do not init ESP-NOW
+  initESPNow(!WiFi.isConnected()); // if we are connected using Ethernet init ESP-NOW with hidden AP
 #endif
 
   interfacesInited = true;
@@ -1014,17 +1024,14 @@ ESP-NOW  inited in AP mode (channel: 6/1).
 
   if (!apActive) {
     // WiFi is not configured and soft AP is not yet open
-    if (!wifiConfigured && apBehavior != AP_BEHAVIOR_BUTTON_ONLY) {
-      DEBUG_PRINTF_P(PSTR("WiFi: Not configured, opening AP! @ %lus\n"), now/1000);
-      initAP(); // instantly go to AP mode (WIFI_MODE_AP selected in setup())
-      return;
-    } else if (apBehavior == AP_BEHAVIOR_ALWAYS || (now > lastReconnectAttempt + 12000 && (!wasConnected || apBehavior == AP_BEHAVIOR_NO_CONN))) {
+    if (apBehavior == AP_BEHAVIOR_ALWAYS || (now > lastReconnectAttempt + 12000 && (!wasConnected || apBehavior == AP_BEHAVIOR_NO_CONN))) {
       // open AP if requested to be permanently open or this is 12s after boot connect attempt or any disconnect (_NO_CONN)
       // i.e. initial connect was unsuccessful (12s is enough to connect to SSID if it exists)
       // !wasConnected means this is after boot and we haven't yet successfully connected to SSID
       DEBUG_PRINTF_P(PSTR("WiFi: Opening AP in STA mode (%d) @ %lus.\n"), (int)(apBehavior == AP_BEHAVIOR_ALWAYS), now/1000);
-      WiFi.mode(WIFI_MODE_APSTA);
+      WiFi.enableSTA(true); // most likely already set (but force it anyway)
       initAP();
+      staActive = true;
       return;
     }
     if (wifiConfigured && isSTAmode && wifiState == WL_NO_SSID_AVAIL && now - lastReconnectAttempt > 600000) {
@@ -1072,7 +1079,8 @@ ESP-NOW  inited in AP mode (channel: 6/1).
       quickEspNow.stop();
       WiFi.softAPdisconnect(true);
       delay(5);              // wait for hardware to be ready
-      WiFi.mode(WIFI_MODE_STA);
+      WiFi.enableSTA(true);
+      staActive = true;
     }
     findWiFi(true);
     forceReconnect = true;
