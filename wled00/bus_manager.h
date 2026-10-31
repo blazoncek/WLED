@@ -46,9 +46,6 @@ make_unique(Args&&... args)
   #define DEBUGBUS_PRINTF_P(x...)
 #endif
 
-//colors.cpp
-uint16_t approximateKelvinFromRGB(uint32_t rgb);
-
 #define GET_BIT(var,bit)    (((var)>>(bit))&0x01)
 #define SET_BIT(var,bit)    ((var)|=(uint16_t)(0x0001<<(bit)))
 #define UNSET_BIT(var,bit)  ((var)&=(~(uint16_t)(0x0001<<(bit))))

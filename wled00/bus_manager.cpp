@@ -36,15 +36,11 @@ uint8_t realtimeBroadcast(uint8_t type, IPAddress client, uint16_t length, const
 // PSRAM allocation wrappers
 #ifndef ESP8266
 extern "C" {
-  void *d_malloc(size_t);
   void *d_calloc(size_t, size_t);
-  void *d_realloc(void *, size_t);
   inline void d_free(void *ptr) { heap_caps_free(ptr); }
 }
 #else
-#define d_malloc malloc
 #define d_calloc calloc
-#define d_realloc realloc
 #define d_free free
 #endif
 
