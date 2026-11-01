@@ -12,73 +12,14 @@
 /*
  * JSON API (De)serialization
  */
-namespace {
-  typedef struct {
-    CRGBA    colors[NUM_COLORS];
-    uint16_t start;
-    uint16_t stop;
-    uint16_t offset;
-    uint16_t grouping;
-    uint16_t spacing;
-    uint16_t startY;
-    uint16_t stopY;
-    uint16_t options;
-    uint8_t  mode;
-    uint8_t  palette;
-    uint8_t  opacity;
-    uint8_t  speed;
-    uint8_t  intensity;
-    uint8_t  custom1;
-    uint8_t  custom2;
-    uint8_t  custom3;
-    bool     check1;
-    bool     check2;
-    bool     check3;
-    uint8_t  blendMode;
-    uint8_t  zoomAmount;
-    uint8_t  rotateSpeed;
-  } SegmentCopy;
-
-  uint8_t differs(const Segment& b, const SegmentCopy& a) {
-    uint8_t d = 0;
-    if (a.start != b.start)         d |= SEG_DIFFERS_BOUNDS;
-    if (a.stop != b.stop)           d |= SEG_DIFFERS_BOUNDS;
-    if (a.offset != b.offset)       d |= SEG_DIFFERS_GSO;
-    if (a.grouping != b.grouping)   d |= SEG_DIFFERS_GSO;
-    if (a.spacing != b.spacing)     d |= SEG_DIFFERS_GSO;
-    if (a.opacity != b.opacity)     d |= SEG_DIFFERS_BRI;
-    if (a.mode != b.mode)           d |= SEG_DIFFERS_FX;
-    if (a.speed != b.speed)         d |= SEG_DIFFERS_FX;
-    if (a.intensity != b.intensity) d |= SEG_DIFFERS_FX;
-    if (a.palette != b.palette)     d |= SEG_DIFFERS_FX;
-    if (a.custom1 != b.custom1)     d |= SEG_DIFFERS_FX;
-    if (a.custom2 != b.custom2)     d |= SEG_DIFFERS_FX;
-    if (a.custom3 != b.custom3)     d |= SEG_DIFFERS_FX;
-    if (a.check1 != b.check1)       d |= SEG_DIFFERS_FX;
-    if (a.check2 != b.check2)       d |= SEG_DIFFERS_FX;
-    if (a.check3 != b.check3)       d |= SEG_DIFFERS_FX;
-    if (a.startY != b.startY)       d |= SEG_DIFFERS_BOUNDS;
-    if (a.stopY != b.stopY)         d |= SEG_DIFFERS_BOUNDS;
-    if (a.blendMode != b.blendMode) d |= SEG_DIFFERS_OPT;
-    if (a.zoomAmount != b.zoomAmount)   d |= SEG_DIFFERS_OPT;
-    if (a.rotateSpeed != b.rotateSpeed) d |= SEG_DIFFERS_OPT;
-
-    //bit pattern: (msb first)
-    // set:2, sound:2, mapping:3, transposed, mirrorY, reverseY, [reset,] paused, mirrored, on, reverse, [selected]
-    if ((a.options & 0b1111111111011110U) != (b.options & 0b1111111111011110U)) d |= SEG_DIFFERS_OPT;
-    if ((a.options & 0x0001U) != (b.options & 0x0001U))                         d |= SEG_DIFFERS_SEL;
-    for (unsigned i = 0; i < NUM_COLORS; i++) if (a.colors[i] != b.colors[i])   d |= SEG_DIFFERS_COL;
-
-    return d;
-  }
-}
+//simple macro for ArduinoJSON's or syntax
+#define CJSON(a,b) a = b | a
 
 static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
 {
   byte id = elem["id"] | it;
   if (id >= WS2812FX::getMaxSegments()) return false;
 
-  bool newSeg = false;
   int stop = elem["stop"] | -1;
 
   // append segment
@@ -91,58 +32,41 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     if (len <= 0 || stop <= 0 || 2*(sizeof(uint32_t)*len + sizeof(Segment) + FAIR_DATA_PER_SEG) > (getFreeHeapSize() - MIN_HEAP_SIZE)) return false;
     strip.appendSegment(start, stop, startY, stopY);
     id = strip.getSegmentsNum()-1;  // segments are added at the end of list
-    newSeg = true;
   }
+
+  // lx parser (will set color directly)
+  #ifdef WLED_ENABLE_LOXONE
+  int lx = elem[F("lx")] | -1;
+  if (lx >= 0) {
+    parseLxJson(lx, id, false);
+  }
+  int ly = elem[F("ly")] | -1;
+  if (ly >= 0) {
+    parseLxJson(ly, id, true);
+  }
+  #endif
 
   //DEBUG_PRINTLN(F("-- JSON deserialize segment."));
   Segment& seg = strip.getSegment(id);
-  // we do not want to make segment copy as it may use a lot of RAM (effect data and pixel buffer)
-  // so we will create a copy of segment options and compare it with original segment when done processing
-  SegmentCopy prev = {
-    {seg.colors[0], seg.colors[1], seg.colors[2]},
-    seg.start,
-    seg.stop,
-    seg.offset,
-    seg.grouping,
-    seg.spacing,
-    seg.startY,
-    seg.stopY,
-    seg.options,
-    seg.mode,
-    seg.palette,
-    seg.opacity,
-    seg.speed,
-    seg.intensity,
-    seg.custom1,
-    seg.custom2,
-    seg.custom3,
-    seg.check1,
-    seg.check2,
-    seg.check3,
-    seg.blendMode,
-    seg.zoomAmount,
-    seg.rotateSpeed
-  };
 
-  int start = elem["start"] | seg.start;
+  int start = seg.start;
+  CJSON(start, elem["start"]);
+  if (start < 0) start = 0;
   if (stop < 0) {
-    int len = elem["len"];
-    stop = (len > 0) ? start + len : seg.stop;
+    int len = elem["len"] | -1;
+    if (len >= 0) stop = start + len; // if "stop" is not set and "len" is missing, do not change existing stop (len==0 will deactivate segment)
+    else stop = seg.stop;
   }
-  // 2D segments
-  int startY = elem["startY"] | seg.startY;
-  int stopY = elem["stopY"] | seg.stopY;
+  int len = stop - start;
 
   //repeat, multiplies segment until all LEDs are used, or max segments reached
   bool repeat = elem["rpt"] | false;
-  if (repeat && stop>0) {
+  if (repeat && len > 0) {
     elem.remove("id");  // remove for recursive call
     elem.remove("rpt"); // remove for recursive call
     elem.remove("n");   // remove for recursive call
-    unsigned len = stop - start;
-    for (size_t i=id+1; i<WS2812FX::getMaxSegments(); i++) {
-      start = start + len;
-      if (start >= strip.getLengthTotal()) break;
+    start += len;       // repeated segments start after original segment
+    for (size_t i = id + 1; i < WS2812FX::getMaxSegments() && start < (int)strip.getLengthTotal(); i++, start += len) {
       //TODO: add support for 2D
       elem["start"] = start;
       elem["stop"]  = start + len;
@@ -152,191 +76,144 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     return true;
   }
 
+  // name is set directly (even though it may happen during rendering)
+  // to conserve RAM since transition will take care of releasing old name
+  // buffer. if transitions are not enabled then there is a possibility
+  // that mode_scrollingtext() may use old buffer (read after free) during
+  // single frame rendering (one frame only; read-only access)
+  if (elem["n"]) {
+    // name field exists
+    const char * name = elem["n"].as<const char*>();
+    seg.setName(name); // will resolve empty and null correctly
+  } else if (start != seg.start || stop != seg.stop) {
+    // clearing or setting segment without name field
+    seg.clearName();
+  }
+  // we can apply "set" and "sel" directly as they don't affect runtime
+  CJSON(seg.set, elem[F("set")]);
+  seg.selected = getBoolVal(elem["sel"], seg.selected);
+
+  // we do not want to make segment copy as it may use a lot of RAM (effect data and pixel buffer)
+  // so we will create a copy of segment parameters and compare it with original segment when done processing
+  Segment::Parameters segPar(seg);
+  segPar.start = start;
+  segPar.stop = stop;
+
   JsonArray iarr = elem[F("i")]; //setting individual LEDs?
   if (iarr.isNull()) {
     // we are not setting individual leds
 
-    if (elem["n"]) {
-      // name field exists
-      const char * name = elem["n"].as<const char*>();
-      seg.setName(name); // will resolve empty and null correctly
-    } else if (start != seg.start || stop != seg.stop) {
-      // clearing or setting segment without name field
-      seg.clearName();
-    }
-
-    uint16_t grp       = elem["grp"] | seg.grouping;
-    uint16_t spc       = elem[F("spc")] | seg.spacing;
-    uint16_t of        = seg.offset;
-    uint8_t  rotateSpeed = elem["rS"] | seg.rotateSpeed;
-    uint8_t  zoomAmount  = elem["zA"] | seg.zoomAmount;
-    bool     zoomWrap    = getBoolVal(elem["zW"], seg.zoomWrap);
-    bool     zoomMirror  = getBoolVal(elem["zM"], seg.zoomMirror);
-    uint8_t  map1D2D   = elem["m12"] | seg.map1D2D;
-    uint8_t  set       = elem[F("set")] | seg.set;
-    bool     selected  = getBoolVal(elem["sel"], seg.selected);
-    bool     reverse   = getBoolVal(elem["rev"], seg.reverse);
-    bool     mirror    = getBoolVal(elem["mi"] , seg.mirror);
+    // update parameters for later schedule
+    CJSON(segPar.grouping, elem["grp"]);
+    CJSON(segPar.spacing, elem[F("spc")]);
+    CJSON(segPar.offset, elem["of"]);
+    CJSON(segPar.map1D2D, elem["m12"]);
+    //CJSON(segPar.set, elem[F("set")]);
+    //segPar.selected   = getBoolVal(elem["sel"], segPar.selected);
+    segPar.reverse    = getBoolVal(elem["rev"], segPar.reverse);
+    segPar.mirror     = getBoolVal(elem["mi"] , segPar.mirror);
     #ifndef WLED_DISABLE_2D
-    bool     reverse_y = getBoolVal(elem["rY"]   , seg.reverse_y);
-    bool     mirror_y  = getBoolVal(elem["mY"]   , seg.mirror_y);
-    bool     transpose = getBoolVal(elem[F("tp")], seg.transpose);
+    // 2D segments
+    CJSON(segPar.startY, elem["startY"]);
+    CJSON(segPar.stopY, elem["stopY"]);
+    segPar.reverse_y  = getBoolVal(elem["rY"]   , segPar.reverse_y);
+    segPar.mirror_y   = getBoolVal(elem["mY"]   , segPar.mirror_y);
+    segPar.transpose  = getBoolVal(elem[F("tp")], segPar.transpose);
+    CJSON(segPar.rotateSpeed, elem["rS"]);
+    CJSON(segPar.zoomAmount, elem["zA"]);
+    segPar.zoomWrap   = getBoolVal(elem["zW"], segPar.zoomWrap);
+    segPar.zoomMirror = getBoolVal(elem["zM"], segPar.zoomMirror);
     #endif
+    getVal(elem["sx"], segPar.speed);
+    getVal(elem["ix"], segPar.intensity);
+    getVal(elem["c1"], segPar.custom1);
+    getVal(elem["c2"], segPar.custom2);
+    uint8_t cust3 = segPar.custom3;
+    getVal(elem["c3"], cust3, 0, 31); // we can't pass reference to bitfield
+    segPar.custom3 = constrain(cust3, 0, 31);
+    segPar.check1 = getBoolVal(elem["o1"], segPar.check1);
+    segPar.check2 = getBoolVal(elem["o2"], segPar.check2);
+    segPar.check3 = getBoolVal(elem["o3"], segPar.check3);
+    getVal(elem["bm"], segPar.blendMode, 0, BLEND_MODE_COUNT-1);
 
-    // if segment's virtual dimensions change we need to restart effect (segment blending and PS rely on dimensions)
-    if (seg.mirror != mirror || seg.grouping != grp || seg.spacing != spc) seg.markForReset();
-    #ifndef WLED_DISABLE_2D
-    if (seg.mirror_y != mirror_y || seg.transpose != transpose || seg.map1D2D != map1D2D) seg.markForReset();
-    #endif
-
-    if (stop > start) {
+    if (len > 0) {
       // offset only makes sense on 1D segments
-      int len = stop - start;
       int offset = elem[F("of")] | INT32_MAX;
       if (offset != INT32_MAX) {
         int offsetAbs = abs(offset);
         offsetAbs %= len;
-        if (offset < 0) of = len - offsetAbs;
-        else            of = offsetAbs;
+        if (offset < 0) segPar.offset = len - offsetAbs;
+        else            segPar.offset = offsetAbs;
       }
-      if (of > len - 1) of = len - 1;
+      if (segPar.offset > len - 1) segPar.offset = len - 1;
     }
 
-    if (newSeg || !strip.isServicing()) {
-      // update new segment or segment not being serviced
-      seg.setGeometry(start, stop, grp, spc, of, startY, stopY, map1D2D);
-      seg.refreshLightCapabilities(); // fix for #3403
-    } else {
-      // schedule segment geometry update (to prevent issues if effect is running)
-      if (seg.start != start || seg.stop != stop || seg.startY != startY || seg.stopY != stopY ||
-          seg.grouping != grp || seg.spacing != spc || seg.offset != of || seg.map1D2D != map1D2D) {
-        strip.addSegmentGeometryUpdate(id, start, stop, grp, spc, of, startY, stopY, map1D2D);  // needs to set interfaceUpdateCallMode to inform UI of change
-      }
-    }
-    if (stop == 0) return true;
-
-    uint8_t fx = seg.mode;
-    if (getVal(elem["fx"], fx, 0, strip.getModeCount())) {
+    if (getVal(elem["fx"], segPar.mode, 0, strip.getModeCount())) {
       if (!presetId && currentPlaylist>=0) unloadPlaylist();
-      if (fx != seg.mode) seg.setMode(fx, elem[F("fxdef")]); // use transition (WARNING: may change map1D2D causing geometry change)
+      CJSON(segPar.modeDefaults, elem[F("fxdef")]);
     }
 
-    uint8_t pal = seg.palette;
-    if (seg.getLightCapabilities() & 1) {  // ignore palette for White and On/Off segments
-      if (getVal(elem["pal"], pal, 0, getPaletteCount())) seg.setPalette(pal);
+    getVal(elem["pal"], segPar.palette, 0, getPaletteCount());
+    if (getVal(elem["bri"], segPar.opacity)) {
+      segPar.on = (bool)segPar.opacity;
     }
+    segPar.on = getBoolVal(elem["on"], segPar.on);
+    segPar.freeze = getBoolVal(elem["frz"], segPar.freeze);
 
-    byte segbri = seg.opacity;
-    if (getVal(elem["bri"], segbri)) {
-      if (segbri > 0) seg.setOpacity(segbri); // use transition
-      seg.setOption(SEG_OPTION_ON, segbri); // use transition
-    }
-
-    seg.setOption(SEG_OPTION_ON, getBoolVal(elem["on"], seg.on)); // use transition
-    seg.freeze = getBoolVal(elem["frz"], seg.freeze);
-
-    seg.setCCT(elem["cct"] | seg.cct);
+    CJSON(segPar.cct, elem["cct"]);
 
     JsonArray colarr = elem["col"];
     if (!colarr.isNull()) {
-      if (seg.getLightCapabilities() & 3) {
-        // segment has RGB or White
-        for (size_t i = 0; i < NUM_COLORS; i++) {
-          // JSON "col" array can contain the following values for each of segment's colors (primary, background, custom):
-          // "col":[int|string|object|array, int|string|object|array, int|string|object|array]
-          //   int = Kelvin temperature or 0 for black
-          //   string = hex representation of [WW]RRGGBB or "r" for random color
-          //   object = individual channel control {"r":0,"g":127,"b":255,"w":255}, each being optional (valid to send {})
-          //   array = direct channel values [r,g,b,w] (w element being optional)
-          uint8_t rgbw[] = {0,0,0,0};
-          bool colValid = false;
-          JsonArray colX = colarr[i];
-          if (colX.isNull()) {
-            JsonObject oCol = colarr[i];
-            if (!oCol.isNull()) {
-              // we have a JSON object for color {"w":123,"r":123,...}; allows individual channel control
-              rgbw[0] = oCol["r"] | seg.colors[i].r;
-              rgbw[1] = oCol["g"] | seg.colors[i].g;
-              rgbw[2] = oCol["b"] | seg.colors[i].b;
-              if (seg.hasWhite()) rgbw[3] = oCol["w"] | seg.colors[i].a;
+      for (size_t i = 0; i < NUM_COLORS; i++) {
+        // JSON "col" array can contain the following values for each of segment's colors (primary, background, custom):
+        // "col":[int|string|object|array, int|string|object|array, int|string|object|array]
+        //   int = Kelvin temperature or 0 for black
+        //   string = hex representation of [WW]RRGGBB or "r" for random color
+        //   object = individual channel control {"r":0,"g":127,"b":255,"w":255}, each being optional (valid to send {})
+        //   array = direct channel values [r,g,b,w] (w element being optional)
+        CRGBA rgbw(0,0,0,seg.hasWhite()?0:255);
+        bool colValid = false;
+        JsonArray colX = colarr[i];
+        if (colX.isNull()) {
+          JsonObject oCol = colarr[i];
+          if (!oCol.isNull()) {
+            // we have a JSON object for color {"w":123,"r":123,...}; allows individual channel control
+            rgbw.r = oCol["r"] | segPar.colors[i].r;
+            rgbw.g = oCol["g"] | segPar.colors[i].g;
+            rgbw.b = oCol["b"] | segPar.colors[i].b;
+            rgbw.a = oCol["w"] | segPar.colors[i].a;
+            colValid = true;
+          } else {
+            const char* hexCol = colarr[i];
+            if (hexCol == nullptr) {
+              //Kelvin color temperature (or invalid), e.g 2400
+              int kelvin = colarr[i] | -1;
+              if (kelvin <  0) continue;
+              if (kelvin >  0) colorKtoRGB(kelvin, rgbw);
               colValid = true;
             } else {
-              const char* hexCol = colarr[i];
-              if (hexCol == nullptr) { //Kelvin color temperature (or invalid), e.g 2400
-                int kelvin = colarr[i] | -1;
-                if (kelvin <  0) continue;
-                if (kelvin >  0) colorKtoRGB(kelvin, rgbw);
+              //HEX RRGGBB[WW] string, e.g. "FFAA00" for RGB
+              colValid = colorFromHexString(rgbw, hexCol);
+              if (!colValid && tolower(hexCol[0]) == 'r') {
+                setRandomColor(rgbw); // "random" color
                 colValid = true;
-              } else { //HEX string, e.g. "FFAA00"
-                colValid = colorFromHexString(rgbw, hexCol);
-                if (!colValid && tolower(hexCol[0]) == 'r') {
-                  setRandomColor(rgbw); // "random" color
-                  colValid = true;
-                }
               }
             }
-          } else { //Array of ints (RGB or RGBW color), e.g. [255,160,0]
-            int sz = colX.size();
-            if (sz == 0) continue; //do nothing on empty array
-            int irgbw[4] = {0,0,0,0};
-            copyArray(colX, irgbw, 4);
-            for (size_t c = 0; c < 4; c++) rgbw[c] = constrain(irgbw[c], 0, 255);
-            colValid = true;
           }
-
-          if (!colValid) continue;
-
-          // rgbw[3] is ignored on RGB-only segments (and is forced to 255 in setColor() as opacity)
-          seg.setColor(i, RGBW32(rgbw[0],rgbw[1],rgbw[2],rgbw[3])); // use transition and forces opacity to 255 if segment does not have White channel
-          if (seg.mode == FX_MODE_STATIC) strip.trigger(); //instant refresh
+        } else {
+          //Array of ints (RGB or RGBW color), e.g. [255,160,0[,0]]
+          size_t sz = min(4U, colX.size());
+          if (sz == 0) continue; //do nothing on empty array
+          int irgbw[4] = {0,0,0,0};
+          copyArray(colX, irgbw, 4);
+          std::swap(irgbw[0],irgbw[2]); // b=0,g=1,r=2,a/w=3 in CRGBA
+          for (size_t c = 0; c < sz; c++) rgbw[c] = constrain(irgbw[c], 0, 255);
+          colValid = true;
         }
-      } else {
-        // non RGB & non White segment (usually On/Off bus)
-        seg.setColor(0, ULTRAWHITE); // use transition
-        seg.setColor(1, BLACK); // use transition
+        if (colValid) segPar.colors[i] = rgbw;
       }
     }
-
-    // lx parser
-    #ifdef WLED_ENABLE_LOXONE
-    int lx = elem[F("lx")] | -1;
-    if (lx >= 0) {
-      parseLxJson(lx, id, false);
-    }
-    int ly = elem[F("ly")] | -1;
-    if (ly >= 0) {
-      parseLxJson(ly, id, true);
-    }
-    #endif
-
-    getVal(elem["sx"], seg.speed);
-    getVal(elem["ix"], seg.intensity);
-
-    getVal(elem["c1"], seg.custom1);
-    getVal(elem["c2"], seg.custom2);
-    uint8_t cust3 = seg.custom3;
-    getVal(elem["c3"], cust3, 0, 31); // we can't pass reference to bitfield
-    seg.custom3 = constrain(cust3, 0, 31);
-
-    seg.check1 = getBoolVal(elem["o1"], seg.check1);
-    seg.check2 = getBoolVal(elem["o2"], seg.check2);
-    seg.check3 = getBoolVal(elem["o3"], seg.check3);
-
-    getVal(elem["bm"], seg.blendMode, 0, BLEND_MODE_COUNT-1);
-
-    seg.rotateSpeed = constrain(rotateSpeed, 0, 15);
-    seg.zoomAmount  = constrain(zoomAmount, 0, 15);
-    seg.zoomWrap    = zoomWrap;
-    seg.zoomMirror  = zoomMirror;
-    seg.set       = constrain(set, 0, 3);
-    seg.selected  = selected;
-    seg.reverse   = reverse;
-    seg.mirror    = mirror;
-    #ifndef WLED_DISABLE_2D
-    seg.reverse_y = reverse_y;
-    seg.mirror_y  = mirror_y;
-    seg.transpose = transpose;
-    #endif
+    if (segPar.differsFrom(seg) & (~(SEG_DIFFERS_SEL | SEG_DIFFERS_SET))) strip.addSegmentUpdate(id, segPar);
 
   } else {
     // set brightness immediately and disable transition
@@ -364,29 +241,25 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
           iSet++;
         }
       } else { //color
-        uint8_t rgbw[] = {0,0,0,0};
+        CRGBA rgbw(0,0,0,0);
         JsonArray icol = iarr[i];
         if (!icol.isNull()) { //array, e.g. [255,0,0]
+          uint8_t brgbw[] = {0,0,0,0};
           byte sz = icol.size();
-          if (sz > 0 && sz < 5) copyArray(icol, rgbw);
+          if (sz > 0 && sz < 5) copyArray(icol, brgbw);
+          for (size_t c = 0; c < 4; c++) rgbw[c] = brgbw[3-c]; // reverse order in CRGBA
         } else { //hex string, e.g. "FF0000"
-          byte brgbw[] = {0,0,0,0};
           const char* hexCol = iarr[i];
-          if (colorFromHexString(brgbw, hexCol)) {
-            for (size_t c = 0; c < 4; c++) rgbw[c] = brgbw[c];
-          }
+          colorFromHexString(rgbw, hexCol);
         }
 
         if (iSet < 2 || iStop <= iStart) iStop = iStart + 1;
-        uint32_t c = RGBW32(rgbw[0], rgbw[1], rgbw[2], rgbw[3]);
-        while (iStart < iStop) seg.setRawPixelColor(iStart++, c); // sets pixel color without 1D->2D expansion, grouping or spacing (guards against iStart < length())
+        while (iStart < iStop) seg.setRawPixelColor(iStart++, rgbw); // sets pixel color without 1D->2D expansion, grouping or spacing (guards against iStart < length())
         iSet = 0;
       }
     }
     strip.trigger(); // force segment update
   }
-  // send UDP/WS if segment options changed (except selection; will also deselect current preset)
-  if (differs(seg, prev) & ~SEG_DIFFERS_SEL) stateChanged = true;
 
   return true;
 }
@@ -496,7 +369,7 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   JsonVariant segVar = root["seg"];
   if (!segVar.isNull()) {
     // we may be called during strip.service() so we must not modify segments while effects are executing
-    strip.suspend().waitForIt();
+    //strip.suspend().waitForIt();
     if (segVar.is<const char *>() && tolower(segVar.as<const char *>()[0]) == 'r') {
       strip.makeAutoSegments(true);
       stateChanged = true;
@@ -523,7 +396,8 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
       if (strip.getSegmentsNum() > 3 && deleted >= strip.getSegmentsNum()/2U) strip.purgeSegments(); // batch deleting more than half segments
       if (deleted) stateChanged = true; // if we only deleted segments we still need to set stateChanged
     }
-    strip.resume();
+    strip.applySegmentUpdates();  // is thread and servicing safe
+    //strip.resume();
   }
 
   UsermodManager::readFromJsonState(root);

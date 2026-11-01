@@ -7,14 +7,8 @@
  // applies chosen setment properties to legacy values
 void setValuesFromSegment(uint8_t s) {
   const Segment& seg = strip.getSegment(s);
-  colPri[0] = seg.colors[0].r;
-  colPri[1] = seg.colors[0].g;
-  colPri[2] = seg.colors[0].b;
-  colPri[3] = seg.colors[0].a;
-  colSec[0] = seg.colors[1].r;
-  colSec[1] = seg.colors[1].g;
-  colSec[2] = seg.colors[1].b;
-  colSec[3] = seg.colors[1].a;
+  colPri          = seg.colors[0]; if (!seg.hasWhite()) colPri.setOpacity(0); // strip alpha if not RGBW
+  colSec          = seg.colors[1]; if (!seg.hasWhite()) colPri.setOpacity(0); // strip alpha if not RGBW
   effectCurrent   = seg.mode;
   effectSpeed     = seg.speed;
   effectIntensity = seg.intensity;
@@ -31,10 +25,8 @@ void applyValuesToSelectedSegs() {
     if (effectIntensity != seg.intensity) {seg.intensity = effectIntensity; stateChanged = true;}
     if (effectPalette   != seg.palette)   {seg.setPalette(effectPalette);}
     if (effectCurrent   != seg.mode)      {seg.setMode(effectCurrent);}
-    uint32_t col0 = RGBW32(colPri[0], colPri[1], colPri[2], colPri[3]);
-    uint32_t col1 = RGBW32(colSec[0], colSec[1], colSec[2], colSec[3]);
-    if (col0 != seg.colors[0])            {seg.setColor(0, col0);}
-    if (col1 != seg.colors[1])            {seg.setColor(1, col1);}
+    if (colPri          != seg.colors[0]) {seg.setColor(0, colPri.color32);}
+    if (colSec          != seg.colors[1]) {seg.setColor(1, colSec.color32);}
   }
 }
 
@@ -152,7 +144,7 @@ void updateInterfaces(uint8_t callMode) {
   #ifndef WLED_DISABLE_ALEXA
   if (espalexaDevice != nullptr && callMode != CALL_MODE_ALEXA) {
     espalexaDevice->setValue(bri);
-    espalexaDevice->setColor(colPri[0], colPri[1], colPri[2]);
+    espalexaDevice->setColor(colPri.r, colPri.g, colPri.b);
   }
   #endif
   #ifndef WLED_DISABLE_MQTT

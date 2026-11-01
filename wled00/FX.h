@@ -417,9 +417,163 @@ typedef enum mapping1D2D {
 
 class WS2812FX;
 
-// segment, 80 bytes
+// segment, 76 bytes
 class Segment {
   public:
+    // duplicate segment parameters as a named structure for external use (JSON, etc.)
+    struct Parameters {
+      CRGBA    colors[NUM_COLORS];
+      uint16_t start;
+      uint16_t stop;
+      uint16_t startY;
+      uint16_t stopY;
+      uint16_t offset;
+      union {
+        uint16_t options; //bit pattern
+        struct {
+          bool    selected   : 1;  //     0 : selected
+          bool    reverse    : 1;  //     1 : reversed
+          bool    on         : 1;  //     2 : is On
+          bool    mirror     : 1;  //     3 : mirrored
+          bool    freeze     : 1;  //     4 : paused/frozen
+          bool    reset      : 1;  //     5 : indicates that Segment runtime requires reset
+          bool    reverse_y  : 1;  //     6 : reversed Y (2D)
+          bool    mirror_y   : 1;  //     7 : mirrored Y (2D)
+          bool    transpose  : 1;  //     8 : transposed (2D, swapped X & Y)
+          uint8_t map1D2D    : 3;  //  9-11 : mapping for 1D effect on 2D (0-use as strip, 1-expand vertically, 2-circular/arc, 3-rectangular/corner, ...)
+          bool    zoomWrap   : 1;  //    12 : zoom/rotate wraparound (2D)
+          bool    zoomMirror : 1;  //    13 : zoom/rotate mirror (2D)
+          uint8_t set        : 2;  // 14-15 : 0-3 UI segment sets/groups
+        };
+      };
+      uint8_t  grouping, spacing;
+      uint8_t  mode, palette;
+      uint8_t  opacity, cct;
+      uint8_t  speed, intensity;
+      uint8_t  custom1, custom2;
+      struct {
+        uint8_t custom3 : 5;        // reduced range slider (0-31)
+        bool    check1  : 1;        // checkmark 1
+        bool    check2  : 1;        // checkmark 2
+        bool    check3  : 1;        // checkmark 3
+      };
+      uint8_t   blendMode;          // segment blending modes: top, bottom, add, subtract, difference, multiply, divide, lighten, darken, screen, overlay, hardlight, softlight, dodge, burn, stenci, hue, saturation, value
+      struct {
+        uint8_t zoomAmount  : 4;  // zoom amount (0-15)
+        uint8_t rotateSpeed : 4;  // rotation speed (0-15)
+      };
+      bool modeDefaults;
+
+      //Parameters() { memset(this, 0, sizeof(*this)); }  // "clear everything" constructor
+      Parameters(Parameters &par) = delete;             // no copy constructor
+      Parameters(Parameters &&par) = default;           // default move constructor
+      Parameters(const Segment &seg) {
+        for (size_t i = 0; i < NUM_COLORS; i++) colors[i] = seg.colors[i];
+        start = seg.start;
+        stop = seg.stop;
+        offset = seg.offset;
+        grouping = seg.grouping;
+        spacing = seg.spacing;
+        startY = seg.startY;
+        stopY = seg.stopY;
+        options = seg.options & 0b1111111111011111U; // never store "reset" flag
+        mode = seg.mode;
+        palette = seg.palette;
+        opacity = seg.opacity;
+        cct = seg.cct;
+        speed = seg.speed;
+        intensity = seg.intensity;
+        custom1 = seg.custom1;
+        custom2 = seg.custom2;
+        custom3 = seg.custom3;
+        check1 = seg.check1;
+        check2 = seg.check2;
+        check3 = seg.check3;
+        blendMode = seg.blendMode;
+        zoomAmount = seg.zoomAmount;
+        rotateSpeed = seg.rotateSpeed;
+        modeDefaults = false;
+      }
+      uint8_t differsFrom(const Segment& b) const {
+        uint8_t d = 0;
+        if (start != b.start)             d |= SEG_DIFFERS_BOUNDS;
+        if (stop != b.stop)               d |= SEG_DIFFERS_BOUNDS;
+        if (offset != b.offset)           d |= SEG_DIFFERS_GSO;
+        if (grouping != b.grouping)       d |= SEG_DIFFERS_GSO;
+        if (spacing != b.spacing)         d |= SEG_DIFFERS_GSO;
+        if (opacity != b.opacity)         d |= SEG_DIFFERS_BRI;
+        if (mode != b.mode)               d |= SEG_DIFFERS_FX;
+        if (speed != b.speed)             d |= SEG_DIFFERS_FX;
+        if (intensity != b.intensity)     d |= SEG_DIFFERS_FX;
+        if (palette != b.palette)         d |= SEG_DIFFERS_FX;
+        if (custom1 != b.custom1)         d |= SEG_DIFFERS_FX;
+        if (custom2 != b.custom2)         d |= SEG_DIFFERS_FX;
+        if (custom3 != b.custom3)         d |= SEG_DIFFERS_FX;
+        if (check1 != b.check1)           d |= SEG_DIFFERS_FX;
+        if (check2 != b.check2)           d |= SEG_DIFFERS_FX;
+        if (check3 != b.check3)           d |= SEG_DIFFERS_FX;
+        if (startY != b.startY)           d |= SEG_DIFFERS_BOUNDS;
+        if (stopY != b.stopY)             d |= SEG_DIFFERS_BOUNDS;
+        if (blendMode != b.blendMode)     d |= SEG_DIFFERS_OPT;
+        if (zoomAmount != b.zoomAmount)   d |= SEG_DIFFERS_OPT;
+        if (rotateSpeed != b.rotateSpeed) d |= SEG_DIFFERS_OPT;
+        //bit pattern: (msb first)
+        // [set:2,] rotate:1, zoom:1, mapping:3, transposed, mirrorY, reverseY, [reset,] paused, mirrored, on, reverse, [selected]
+        if ((options & 0b0011111111011110U) != (b.options & 0b0011111111011110U)) d |= SEG_DIFFERS_OPT; // ignore "set", "reset" and "selected"
+        if ((options & 0x0001U) != (b.options & 0x0001U))                         d |= SEG_DIFFERS_SEL;
+        if ((options & 0xC000U) != (b.options & 0xC000U))                         d |= SEG_DIFFERS_SET;
+        for (unsigned i = 0; i < NUM_COLORS; i++) if (colors[i] != b.colors[i])   d |= SEG_DIFFERS_COL;
+        return d;
+      }
+    };
+
+  private:
+
+    CRGBA *pixels;                    // pixel data
+
+    // transition data, holds values during transition (76 bytes)
+    struct Transition {
+      Segment      *_oldSegment;          // previous segment environment (may be nullptr if effect did not change)
+      unsigned long _start;               // must accommodate millis()
+      CRGBA         _colors[NUM_COLORS];  // current colors
+      CRGBPalette16 _palT;                // temporary palette (slowly being morphed from old to new; 48 bytes)
+      uint16_t      _dur;                 // duration of transition in ms
+      uint16_t      _progress;            // transition progress (0-65535); pre-calculated from _start & _dur in handleTransition()
+      uint8_t       _prevPaletteBlends;   // number of previous palette blends (there are max 255 blends possible)
+      uint8_t       _palette, _bri, _cct; // palette ID, brightness and CCT at the start of transition (brightness will be 0 if segment was off)
+      Transition(Transition &p) = delete;
+      Transition(Transition &&p) = delete;
+      Transition(uint16_t dur=750)
+      : _oldSegment(nullptr)
+      , _start(millis())
+      , _colors{0,0,0}
+      , _palT(CRGBPalette16(CRGB::Black))
+      , _dur(dur)
+      , _progress(0)
+      , _prevPaletteBlends(0)
+      , _palette(0)
+      , _bri(0)
+      , _cct(0)
+      {}
+      ~Transition() {
+        DEBUGFX_PRINTF_P(PSTR("-- Destroying transition: %p\n"), this);
+        if (_oldSegment) delete _oldSegment;
+      }
+    } *_t;
+
+  public:
+
+    byte     *data;         // effect data pointer
+    char     *name;         // segment name
+
+    // runtime data
+    mutable unsigned long next_time;  // millis() of next update
+    mutable uint32_t step;  // custom "step" var
+    mutable uint32_t call;  // call counter
+    mutable uint16_t aux0;  // custom var
+    mutable uint16_t aux1;  // custom var
+
+    // duplicating Parameters structure to be accessible without intermediate struct name
     CRGBA    colors[NUM_COLORS];  // primary, secondary, tertiary colors (are considered opaque (0xffRRGGBB) if segment has no white channel)
     uint16_t start;   // start index / start X coordinate 2D (left)
     uint16_t stop;    // stop index / stop X coordinate 2D (right); segment is invalid if stop == 0
@@ -427,7 +581,7 @@ class Segment {
     uint16_t stopY;   // stop Y coordinate 2D (bottom); there should be no more than 255 rows
     uint16_t offset;  // offset for 1D effects (effect will wrap around)
     union {
-      mutable uint16_t options; //bit pattern: msb first: [transposed mirrorY reverseY] transitional (tbd) paused needspixelstate mirrored on reverse selected
+      mutable uint16_t options; //bit pattern: msb first
       struct {
         mutable bool selected : 1;  //     0 : selected
         bool    reverse       : 1;  //     1 : reversed
@@ -447,10 +601,8 @@ class Segment {
     uint8_t  grouping, spacing;
     uint8_t  opacity,  cct;       // 0==1900K, 255==10091K
     // effect data
-    uint8_t  mode;
-    uint8_t  palette;
-    uint8_t  speed;
-    uint8_t  intensity;
+    uint8_t  mode, palette;
+    uint8_t  speed, intensity;
     uint8_t  custom1,  custom2;   // custom FX parameters/sliders
     struct {
       uint8_t custom3 : 5;        // reduced range slider (0-31)
@@ -463,20 +615,11 @@ class Segment {
       uint8_t zoomAmount    : 4;  // zoom amount (0-15)
       uint8_t rotateSpeed   : 4;  // rotation speed (0-15)
     };
-    char     *name;               // segment name
-
-    // runtime data
-    mutable unsigned long next_time;  // millis() of next update
-    mutable uint32_t step;  // custom "step" var
-    mutable uint32_t call;  // call counter
-    mutable uint16_t aux0;  // custom var
-    mutable uint16_t aux1;  // custom var
-    byte     *data; // effect data pointer
 
     static uint16_t maxWidth, maxHeight;  // these define matrix width & height (max. segment dimensions)
 
   private:
-    CRGBA *pixels;                    // pixel data
+
     uint16_t _dataLen;                // size of FX data buffer (in bytes, max 64k)
     uint8_t  _default_palette;        // palette number that gets assigned to pal0
     union {
@@ -503,34 +646,6 @@ class Segment {
     static uint16_t      _clipStart, _clipStop;
     static uint8_t       _clipStartY, _clipStopY;
 
-    // transition data, holds values during transition (76 bytes)
-    struct Transition {
-      Segment      *_oldSegment;          // previous segment environment (may be nullptr if effect did not change)
-      unsigned long _start;               // must accommodate millis()
-      CRGBA         _colors[NUM_COLORS];  // current colors
-      CRGBPalette16 _palT;                // temporary palette (slowly being morphed from old to new; 48 bytes)
-      uint16_t      _dur;                 // duration of transition in ms
-      uint16_t      _progress;            // transition progress (0-65535); pre-calculated from _start & _dur in handleTransition()
-      uint8_t       _prevPaletteBlends;   // number of previous palette blends (there are max 255 blends possible)
-      uint8_t       _palette, _bri, _cct; // palette ID, brightness and CCT at the start of transition (brightness will be 0 if segment was off)
-      Transition(uint16_t dur=750)
-      : _oldSegment(nullptr)
-      , _start(millis())
-      , _colors{0,0,0}
-      , _palT(CRGBPalette16(CRGB::Black))
-      , _dur(dur)
-      , _progress(0)
-      , _prevPaletteBlends(0)
-      , _palette(0)
-      , _bri(0)
-      , _cct(0)
-      {}
-      ~Transition() {
-        DEBUGFX_PRINTF_P(PSTR("-- Destroying transition: %p\n"), this);
-        if (_oldSegment) delete _oldSegment;
-      }
-    } *_t;
-
     inline void reallocatePixelBuffer() {
       // allocate frame buffer after matrix has been set up (gaps!)
       // use IRAM/PSRAM if available: there is no significant perfomance impact between PSRAM and DRAM on S2/S3 with OPI or QSPI PSRAM for this buffer
@@ -542,8 +657,6 @@ class Segment {
       pixels = static_cast<CRGBA*>(allocate_buffer(length() * sizeof(CRGBA), (length() > 512 ? BFRALLOC_PREFER_PSRAM : BFRALLOC_PREFER_DRAM) | BFRALLOC_NOBYTEACCESS | BFRALLOC_CLEAR));
       #endif
     }
-
-  private:
 
     void cleanup() {
       // clean destination
@@ -558,6 +671,8 @@ class Segment {
     }
 
   protected:
+
+    void apply(const Parameters &par);
 
     inline static unsigned getUsedSegmentData()            { return Segment::_usedSegmentData; }
     inline static void     addUsedSegmentData(int len)     { Segment::_usedSegmentData += len; }
@@ -882,7 +997,8 @@ class WS2812FX {
     void calcMilliAmpsAvg();
     void restartRuntime();
     void setTransitionMode(bool t);
-    void addSegmentGeometryUpdate(uint8_t id, uint16_t sStart, uint16_t sStop, uint8_t grp = 1, uint8_t spc = 0, uint16_t ofs = UINT16_MAX, uint16_t sStartY = 0, uint16_t sStopY = 1, uint8_t m12 = 0);
+    void addSegmentUpdate(uint8_t id, Segment::Parameters &par);
+    void applySegmentUpdates(); // applies segment geometry updates (if any) to all segments
 
     bool checkSegmentAlignment() const;
     bool deserializeMap(unsigned n = 0);
@@ -1027,7 +1143,6 @@ class WS2812FX {
 #ifndef WLED_DISABLE_2D
     bool setUpMatrix();                 // sets up automatic matrix ledmap from panel configuration
 #endif
-    void applySegmentGeometryUpdates(); // applies segment geometry updates (if any) to all segments
 
     friend class Segment;
 };

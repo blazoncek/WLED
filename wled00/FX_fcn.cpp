@@ -46,7 +46,16 @@ uint8_t  Segment::_clipStartY = 0;
 uint8_t  Segment::_clipStopY = 1;
 
 Segment::Segment(uint16_t sStart, uint16_t sStop, uint16_t sStartY, uint16_t sStopY)
-: colors{DEFAULT_COLOR,BLACK,BLACK}
+: pixels(nullptr)
+, _t(nullptr)
+, data(nullptr)
+, name(nullptr)
+, next_time(0)
+, step(0)
+, call(0)
+, aux0(0)
+, aux1(0)
+, colors{DEFAULT_COLOR,BLACK,BLACK}
 , start(sStart)
 , stop(sStop > sStart ? sStop : sStart+1) // minimum length is 1
 , startY(sStartY)
@@ -70,19 +79,10 @@ Segment::Segment(uint16_t sStart, uint16_t sStop, uint16_t sStartY, uint16_t sSt
 , blendMode(0)    // top blend mode
 , zoomAmount(8)   // no zoom
 , rotateSpeed(8)  // no rotation
-, name(nullptr)
-, next_time(0)
-, step(0)
-, call(0)
-, aux0(0)
-, aux1(0)
-, data(nullptr)
-, pixels(nullptr)
 , _dataLen(0)
 , _default_palette(6) // PartyColors
 , _capabilities(0)
 , _rotatedAngle(0)
-, _t(nullptr)
 {
   DEBUGFX_PRINTF_P(PSTR("-- Creating segment: %p [%d,%d:%d,%d]\n"), this, (int)start, (int)stop, (int)startY, (int)stopY);
   reallocatePixelBuffer();
@@ -168,6 +168,46 @@ Segment& Segment::operator= (Segment &&orig) noexcept {
     orig._t = nullptr; // old segment cannot be in transition
   }
   return *this;
+}
+
+void Segment::apply(const Segment::Parameters &p) {
+  DEBUGFX_PRINTF_P(PSTR("-- Parameters: [%d,%d]:[%d,%d] p:%d,%d,%d c:[%08x,%08x,%08x] D:%x\n"),
+    (int)p.start, (int)p.stop, (int)p.startY, (int)p.stopY, (int)p.mode, (int)p.palette, (int)p.opacity, (int)p.colors[0].color32, (int)p.colors[1].color32, (int)p.colors[2].color32, p.differsFrom(*this)
+  );
+  // this may stop transition
+  setGeometry(p.start, p.stop, p.grouping, p.spacing, p.offset, p.startY, p.stopY, p.map1D2D);
+  if (stop == 0) return; // segment has become inactive, stop processing
+  if (getLightCapabilities() & (SEG_CAPABILITY_RGB | SEG_CAPABILITY_W)) {
+    // these start or update transition
+    setMode(p.mode, p.modeDefaults);
+    setPalette(getLightCapabilities() & SEG_CAPABILITY_RGB ? p.palette : 0); // only apply palette to RGB segment
+    setOpacity(p.opacity);
+    setCCT(p.cct);
+    for (size_t i = 0; i < NUM_COLORS; i++) setColor(i, p.colors[i].color32); // correctly sets W/alpha
+  } else {
+    // On/Off segments can't have colors, palettes, cct, opacity or transitions
+    mode = p.mode;
+    palette = 0;
+    opacity = p.opacity ? 255 : 0;
+    cct = 127;
+    colors[0].color32 = ULTRAWHITE;
+    colors[1].color32 = BLACK;
+    colors[2].color32 = BLACK;
+  }
+  if (on != p.on) setOption(SEG_OPTION_ON, p.on);
+  // these do not start transition
+  options = (options & 0b1100000000100101U) | (p.options & ~0b1100000000100101U); // ignore "selected", "set", "on" and "reset" options ("on" set above)
+  speed = p.speed;
+  intensity = p.intensity;
+  custom1 = p.custom1;
+  custom2 = p.custom2;
+  custom3 = p.custom3;
+  check1 = p.check1;
+  check2 = p.check2;
+  check3 = p.check3;
+  blendMode = p.blendMode;
+  zoomAmount = p.zoomAmount;
+  rotateSpeed = p.rotateSpeed;
 }
 
 // allocates effect data buffer on heap and initialises (erases) it
@@ -687,8 +727,10 @@ Segment &Segment::setName(const char *newName) {
     const size_t newLen = min(strlen(newName), (size_t)WLED_MAX_SEGNAME_LEN);
     if (newLen) {
       if (mode == FX_MODE_2DSCROLLTEXT) {
+        // if the name changes in scrolling text mode, we need to copy segment for blending
+        // this also ensures that mode_scrollingtext() doesn't use freed buffer
         DEBUGFX_PRINTLN(F("- Starting name transition\n"));
-        startTransition(strip.getTransition(), true); // if the name changes in scrolling text mode, we need to copy the segment for blending
+        startTransition(strip.getTransition(), true);
       }
       char *newBuf = static_cast<char*>(d_malloc(newLen+1));
       if (newBuf) {
@@ -1427,7 +1469,7 @@ void WS2812FX::service() {
   _isServicing = true;
   _segment_index = 0;
 
-  applySegmentGeometryUpdates(); // apply any geometry updates (e.g. segment length changes) before servicing segments
+  applySegmentUpdates(); // apply any geometry updates (e.g. segment length changes) before servicing segments
 
   for (Segment &seg : _segments) {
     if (_suspend) break; // immediately stop processing segments if suspend requested during service()
@@ -1547,26 +1589,26 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
       case 1 : return b;              // bottom (faster than channel lambda)
       case 2 : return color_add(t,b); // add (faster than channel lambda)
       case 16: return t ? t : b;      // stencil (use top layer if not black, else bottom)
-      case 17: { // hue (uses top hue, bottom saturation & value)
+      case 17: { // hue (uses top hue, bottom saturation & value), keeps top white channel
         CHSV32 ht = CHSV32(t), hb = CHSV32(b);
         CHSV32 hc(ht.h, hb.s, hb.v);
-        uint32_t c;
+        CRGBA c; c = t;
         hsv2rgb(hc, c);
-        return c;
+        return c.color32;
       }
-      case 18: { // saturation (uses top saturation, bottom hue & value)
+      case 18: { // saturation (uses top saturation, bottom hue & value), keeps top white channel
         CHSV32 ht = CHSV32(t), hb = CHSV32(b);
         CHSV32 hc(hb.h, ht.s, hb.v);
-        uint32_t c;
+        CRGBA c; c = t;
         hsv2rgb(hc, c);
-        return c;
+        return c.color32;
       }
-      case 19: { // value (uses top value, bottom hue & saturation)
+      case 19: { // value (uses top value, bottom hue & saturation), keeps top white channel
         CHSV32 ht = CHSV32(t), hb = CHSV32(b);
         CHSV32 hc(hb.h, hb.s, ht.v);
-        uint32_t c;
+        CRGBA c; c = t;
         hsv2rgb(hc, c);
-        return c;
+        return c.color32;
       }
     }
     return RGBW32(func(R(t),R(b)), func(G(t),G(b)), func(B(t),B(b)), func(W(t),W(b)));
@@ -2185,35 +2227,32 @@ void WS2812FX::setBrightness(uint8_t b, bool direct) {
   }
 }
 
-typedef struct {
+struct SegmentUpdate {
   uint8_t  id;      // segment id
-  uint16_t start;   // segment start
-  uint16_t stop;    // segment stop
-  uint8_t  grp;     // grouping
-  uint8_t  spc;     // spacing
-  uint16_t off;     // offset/phase
-  uint16_t startY;  // start Y (for 2D segments)
-  uint16_t stopY;   // stop Y (for 2D segments)
-  uint8_t  m12;     // 1D -> 2D mapping
-} SegmentGeometryUpdate;
-static std::vector<SegmentGeometryUpdate> segUpdates;
+  Segment::Parameters p;
+  SegmentUpdate(uint8_t i, Segment::Parameters &par) : id(i), p(std::move(par)) {}
+};
+static std::vector<SegmentUpdate> segUpdates;
 
-void WS2812FX::addSegmentGeometryUpdate(uint8_t id, uint16_t sStart, uint16_t sStop, uint8_t grp, uint8_t spc, uint16_t ofs, uint16_t sStartY, uint16_t sStopY, uint8_t m12) {
+void WS2812FX::addSegmentUpdate(uint8_t id, Segment::Parameters &par) {
   if (id >= _segments.size()) return; // invalid segment id
-  segUpdates.push_back({id, sStart, sStop, grp, spc, ofs, sStartY, sStopY, m12});
+  segUpdates.emplace_back(id, par);
+  //DEBUGFX_PRINTF_P(PSTR("Stored segment %d parameters (%u).\n"), (int)id, segUpdates.size());
 }
 
-void WS2812FX::applySegmentGeometryUpdates() {
-  if (segUpdates.empty()) return; // nothing to update
-  for (auto upd: segUpdates) {
+void WS2812FX::applySegmentUpdates() {
+  if (isServicing() || segUpdates.empty()) return; // nothing to update or wait for service() to finish
+  DEBUGFX_PRINTF_P(PSTR("Applying segment parameters (%u).\n"), segUpdates.size());
+  for (const auto &upd: segUpdates) {
+    DEBUGFX_PRINTF_P(PSTR("-- Segment %d.\n"), (int)upd.id);
     if (upd.id >= _segments.size()) continue; // invalid segment id
     Segment &seg = _segments[upd.id];
-    seg.setGeometry(upd.start, upd.stop, upd.grp, upd.spc, upd.off, upd.startY, upd.stopY, upd.m12);
-    seg.refreshLightCapabilities(); // fix for #3403
-    if (seg.reset && seg.stop == 0) {
+    seg.apply(upd.p);
+    if (seg.stop == 0) {
       if (upd.id == getMainSegmentId()) setMainSegmentId(getFirstSelectedSegId());
     }
   }
+  stateChanged = true;
   segUpdates.clear();         // clear updates for next time
   segUpdates.shrink_to_fit(); // free memory
   interfaceUpdateCallMode = CALL_MODE_WS_SEND; // schedule WS update (to inform UI)

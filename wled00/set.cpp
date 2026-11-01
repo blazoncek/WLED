@@ -943,11 +943,11 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
   }
 
   // temporary values, write directly to segments, globals are updated by setValuesFromFirstSelectedSeg()
-  uint32_t col0    = selseg.colors[0].color32;
-  uint32_t col1    = selseg.colors[1].color32;
-  uint32_t col2    = selseg.colors[2].color32;
-  byte colIn[4]    = {R(col0), G(col0), B(col0), W(col0)};
-  byte colInSec[4] = {R(col1), G(col1), B(col1), W(col1)};
+  CRGBA col0     = selseg.colors[0].color32;
+  CRGBA col1     = selseg.colors[1].color32;
+  CRGBA col2     = selseg.colors[2].color32;
+  CRGBA colIn    = col0;
+  CRGBA colInSec = col1;
   byte effectIn    = selseg.mode;
   byte speedIn     = selseg.speed;
   byte intensityIn = selseg.intensity;
@@ -1030,15 +1030,15 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
 
   bool col0Changed = false, col1Changed = false, col2Changed = false;
   //set colors
-  col0Changed |= updateVal(req.c_str(), "&R=", colIn[0]);
-  col0Changed |= updateVal(req.c_str(), "&G=", colIn[1]);
-  col0Changed |= updateVal(req.c_str(), "&B=", colIn[2]);
-  col0Changed |= updateVal(req.c_str(), "&W=", colIn[3]);
+  col0Changed |= updateVal(req.c_str(), "&R=", colIn.r);
+  col0Changed |= updateVal(req.c_str(), "&G=", colIn.g);
+  col0Changed |= updateVal(req.c_str(), "&B=", colIn.b);
+  col0Changed |= updateVal(req.c_str(), "&W=", colIn.a);
 
-  col1Changed |= updateVal(req.c_str(), "R2=", colInSec[0]);
-  col1Changed |= updateVal(req.c_str(), "G2=", colInSec[1]);
-  col1Changed |= updateVal(req.c_str(), "B2=", colInSec[2]);
-  col1Changed |= updateVal(req.c_str(), "W2=", colInSec[3]);
+  col1Changed |= updateVal(req.c_str(), "R2=", colInSec.r);
+  col1Changed |= updateVal(req.c_str(), "G2=", colInSec.g);
+  col1Changed |= updateVal(req.c_str(), "B2=", colInSec.b);
+  col1Changed |= updateVal(req.c_str(), "W2=", colInSec.a);
 
   #ifdef WLED_ENABLE_LOXONE
   //lox parser
@@ -1097,10 +1097,8 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
   }
   pos = req.indexOf(F("C3="));
   if (pos > 0) {
-    byte tmpCol[4];
-    colorFromDecOrHexString(tmpCol, (char*)req.substring(pos + 3).c_str());
-    col2 = RGBW32(tmpCol[0], tmpCol[1], tmpCol[2], tmpCol[3]);
-    selseg.setColor(2, col2); // defined above (SS= or main)
+    colorFromDecOrHexString(col2, (char*)req.substring(pos + 3).c_str());
+    selseg.setColor(2, col2.color32); // defined above (SS= or main)
     col2Changed = true;
   }
 
@@ -1114,13 +1112,13 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
 
   // apply colors to selected segment, and all selected segments if applicable
   if (col0Changed) {
-    col0 = RGBW32(colIn[0], colIn[1], colIn[2], colIn[3]);
-    selseg.setColor(0, col0);
+    col0 = colIn;
+    selseg.setColor(0, col0.color32); // will correctly use W/alpha
   }
 
   if (col1Changed) {
-    col1 = RGBW32(colInSec[0], colInSec[1], colInSec[2], colInSec[3]);
-    selseg.setColor(1, col1);
+    col1 = colInSec;
+    selseg.setColor(1, col1.color32); // will correctly use W/alpha
   }
 
   //swap 2nd & 1st
@@ -1157,9 +1155,9 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
     if (speedChanged)     seg.speed     = speedIn;
     if (intensityChanged) seg.intensity = intensityIn;
     if (paletteChanged)   seg.setPalette(paletteIn);
-    if (col0Changed)      seg.setColor(0, col0);
-    if (col1Changed)      seg.setColor(1, col1);
-    if (col2Changed)      seg.setColor(2, col2);
+    if (col0Changed)      seg.setColor(0, col0.color32); // will correctly use W/alpha
+    if (col1Changed)      seg.setColor(1, col1.color32); // will correctly use W/alpha
+    if (col2Changed)      seg.setColor(2, col2.color32); // will correctly use W/alpha
     if (custom1Changed)   seg.custom1   = custom1In;
     if (custom2Changed)   seg.custom2   = custom2In;
     if (custom3Changed)   seg.custom3   = custom3In;

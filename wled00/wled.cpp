@@ -648,9 +648,9 @@ void WLED::beginStrip()
       // set all segments black (no transition)
       for (unsigned i = 0; i < strip.getSegmentsNum(); i++) {
         Segment &seg = strip.getSegment(i);
-        if (seg.isActive()) seg.colors[0] = seg.hasWhite() ? CRGBA(0,0,0,0) : BLACK;
+        if (seg.isActive()) seg.colors[0] = CRGBA(0, 0, 0, seg.hasWhite() ? 0 : 255);
       }
-      colPri[0] = colPri[1] = colPri[2] = colPri[3] = 0;  // needed for colorUpdated()
+      colPri = BLACK;  // needed for colorUpdated() set as RGBW
     }
     briLast = briS; bri = 0;
     // needed to clear all outputs (On/Off in particular)

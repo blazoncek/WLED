@@ -15,9 +15,6 @@ private:
   unsigned char select_state = 0; // 0 = brightness 1 = color
   unsigned char button_state = HIGH;
   unsigned char prev_button_state = HIGH;
-  CRGBA fastled_col;
-  CHSV32 prim_hsv;
-  int32_t new_val;
 
   unsigned char Enc_A;
   unsigned char Enc_B;
@@ -95,20 +92,14 @@ public:
           }
           else
           {
-            fastled_col.red = colPri[0];
-            fastled_col.green = colPri[1];
-            fastled_col.blue = colPri[2];
-            prim_hsv = fastled_col;
-            new_val = (int32_t)prim_hsv.h + fadeAmount*256;
+            CHSV32 prim_hsv = colPri;
+            int32_t new_val = (int32_t)prim_hsv.h + fadeAmount*256;
             if (new_val > 65535)
               new_val -= 65535; // roll-over if  bigger than 255
             if (new_val < 0)
               new_val += 65535; // roll-over if smaller than 0
             prim_hsv.h = new_val;
-            hsv2rgb(prim_hsv, fastled_col.color32);
-            colPri[0] = fastled_col.red;
-            colPri[1] = fastled_col.green;
-            colPri[2] = fastled_col.blue;
+            hsv2rgb(prim_hsv, colPri);
           }
         }
         else if (Enc_B == LOW)
@@ -120,20 +111,14 @@ public:
           }
           else
           {
-            fastled_col.red = colPri[0];
-            fastled_col.green = colPri[1];
-            fastled_col.blue = colPri[2];
-            prim_hsv = fastled_col;
-            new_val = (int32_t)prim_hsv.h - fadeAmount*256;
+            CHSV32 prim_hsv = colPri;
+            int32_t new_val = (int32_t)prim_hsv.h - fadeAmount*256;
             if (new_val > 65535)
               new_val -= 65535; // roll-over if  bigger than 255
             if (new_val < 0)
               new_val += 65535; // roll-over if smaller than 0
             prim_hsv.h = new_val;
-            hsv2rgb(prim_hsv, fastled_col.color32);
-            colPri[0] = fastled_col.red;
-            colPri[1] = fastled_col.green;
-            colPri[2] = fastled_col.blue;
+            hsv2rgb(prim_hsv, colPri);
           }
         }
         //call for notifier -> 0: init 1: direct change 2: button 3: notification 4: nightlight 5: other (No notification)

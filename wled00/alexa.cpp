@@ -98,7 +98,7 @@ void onAlexaChange(EspalexaDevice* dev)
   {
     if (dev->getColorMode() == EspalexaColorMode::ct) //shade of white
     {
-      byte rgbw[4];
+      CRGBA rgbw;
       uint16_t ct = dev->getCt();
       if (!ct) return;
       uint16_t k = 1000000 / ct; //mireds to kelvin
@@ -108,24 +108,24 @@ void onAlexaChange(EspalexaDevice* dev)
 
         strip.setCCT(k);
         if (hasManualWhite) {
-          rgbw[0] = 0; rgbw[1] = 0; rgbw[2] = 0; rgbw[3] = 255;
+          rgbw.r = 0; rgbw.g = 0; rgbw.b = 0; rgbw.a = 255;
         } else {
-          rgbw[0] = 255; rgbw[1] = 255; rgbw[2] = 255; rgbw[3] = 0;
+          rgbw.r = 255; rgbw.g = 255; rgbw.b = 255; rgbw.a = 0;
           dev->setValue(255);
         }
       } else if (strip.hasWhiteChannel()) {
         switch (ct) { //these values empirically look good on RGBW
-          case 199: rgbw[0]=255; rgbw[1]=255; rgbw[2]=255; rgbw[3]=255; break;
-          case 234: rgbw[0]=127; rgbw[1]=127; rgbw[2]=127; rgbw[3]=255; break;
-          case 284: rgbw[0]=  0; rgbw[1]=  0; rgbw[2]=  0; rgbw[3]=255; break;
-          case 350: rgbw[0]=130; rgbw[1]= 90; rgbw[2]=  0; rgbw[3]=255; break;
-          case 383: rgbw[0]=255; rgbw[1]=153; rgbw[2]=  0; rgbw[3]=255; break;
+          case 199: rgbw.r=255; rgbw.g=255; rgbw.b=255; rgbw.a=255; break;
+          case 234: rgbw.r=127; rgbw.g=127; rgbw.b=127; rgbw.a=255; break;
+          case 284: rgbw.r=  0; rgbw.g=  0; rgbw.b=  0; rgbw.a=255; break;
+          case 350: rgbw.r=130; rgbw.g= 90; rgbw.b=  0; rgbw.a=255; break;
+          case 383: rgbw.r=255; rgbw.g=153; rgbw.b=  0; rgbw.a=255; break;
           default : colorKtoRGB(k, rgbw);
         }
       } else {
         colorKtoRGB(k, rgbw);
       }
-      strip.getMainSegment().setColor(0, RGBW32(rgbw[0], rgbw[1], rgbw[2], rgbw[3]));
+      strip.getMainSegment().setColor(0, rgbw.color32);
     } else {
       uint32_t color = dev->getRGB();
       strip.getMainSegment().setColor(0, color);

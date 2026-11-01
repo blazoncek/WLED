@@ -5,7 +5,7 @@
 /*
  * Parser for Loxone formats
  */
-bool parseLx(int lxValue, byte* rgbw)
+bool parseLx(int lxValue, CRGBA &rgbw)
 {
   DEBUG_PRINT(F("LX: Lox = "));
   DEBUG_PRINTLN(lxValue);
@@ -29,7 +29,7 @@ bool parseLx(int lxValue, byte* rgbw)
     tmpBri = constrain(tmpBri, 0.0f, 255.0f) / 255.0f; // normalize [0.0,1.0]
 
     colorKtoRGB(ct, rgbw);
-    lxRed = rgbw[0]; lxGreen = rgbw[1]; lxBlue = rgbw[2];
+    lxRed = rgbw.r; lxGreen = rgbw.g; lxBlue = rgbw.b;
 
     lxRed *= tmpBri;
     lxGreen *= tmpBri;
@@ -37,10 +37,10 @@ bool parseLx(int lxValue, byte* rgbw)
   }
 
   if (ok) {
-    rgbw[0] = (uint8_t) constrain(lxRed, 0, 255);
-    rgbw[1] = (uint8_t) constrain(lxGreen, 0, 255);
-    rgbw[2] = (uint8_t) constrain(lxBlue, 0, 255);
-    rgbw[3] = 0;
+    rgbw.r = (uint8_t) constrain(lxRed, 0, 255);
+    rgbw.g = (uint8_t) constrain(lxGreen, 0, 255);
+    rgbw.b = (uint8_t) constrain(lxBlue, 0, 255);
+    rgbw.a = 0;
     return true;
   }
   return false;
@@ -54,7 +54,7 @@ void parseLxJson(int lxValue, byte segId, bool secondary)
     DEBUG_PRINT(F("LX: Lox primary = "));
   }
   DEBUG_PRINTLN(lxValue);
-  byte rgbw[] = {0,0,0,0};
+  CRGBA rgbw(0,0,0,0);
   if (parseLx(lxValue, rgbw)) {
     if (bri == 0) {
       DEBUG_PRINTLN(F("LX: turn on"));
@@ -64,7 +64,7 @@ void parseLxJson(int lxValue, byte segId, bool secondary)
     nightlightActive = false; //always disable nightlight when toggling
     DEBUG_PRINT(F("LX: segment "));
     DEBUG_PRINTLN(segId);
-    strip.getSegment(segId).setColor(secondary, RGBW32(rgbw[0], rgbw[1], rgbw[2], rgbw[3])); // legacy values handled as well in json.cpp by stateUpdated()
+    strip.getSegment(segId).setColor(secondary, rgbw.color32); // legacy values handled as well in json.cpp by stateUpdated()
   }
 }
 

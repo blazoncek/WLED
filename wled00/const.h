@@ -391,11 +391,12 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 
 //Segment differs return byte
 #define SEG_DIFFERS_BRI        0x01 // opacity
-#define SEG_DIFFERS_OPT        0x02 // all segment options except: selected, reset & transitional
+#define SEG_DIFFERS_OPT        0x02 // all segment options except: selected & reset
 #define SEG_DIFFERS_COL        0x04 // colors
 #define SEG_DIFFERS_FX         0x08 // effect/mode parameters
 #define SEG_DIFFERS_BOUNDS     0x10 // segment start/stop bounds
 #define SEG_DIFFERS_GSO        0x20 // grouping, spacing & offset
+#define SEG_DIFFERS_SET        0x40 // set
 #define SEG_DIFFERS_SEL        0x80 // selected
 
 //Playlist option byte

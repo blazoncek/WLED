@@ -49,19 +49,18 @@ void removeCustomPalette(size_t index);
 #define getPaletteCount() (FIXED_PALETTE_COUNT + customPalettes.size())
 
 // color conversion functions
-inline uint32_t colorFromRgbw(byte* rgbw) { return uint32_t((byte(rgbw[3]) << 24) | (byte(rgbw[0]) << 16) | (byte(rgbw[1]) << 8) | (byte(rgbw[2]))); }
-void hsv2rgb(const CHSV32& hsv, uint32_t& rgb);
-void colorHStoRGB(uint16_t hue, byte sat, byte* rgb);
-void rgb2hsv(const CRGBA& rgb, CHSV32& hsv);
-void colorKtoRGB(uint16_t kelvin, byte* rgb);
-void colorCTtoRGB(uint16_t mired, byte* rgb); //white spectrum to rgb
-void colorXYtoRGB(float x, float y, byte* rgb); // only defined if huesync disabled TODO
-void colorRGBtoXY(const byte* rgb, float* xy); // only defined if huesync disabled TODO
-void colorFromDecOrHexString(byte* rgb, const char* in);
-bool colorFromHexString(byte* rgb, const char* in);
+inline __attribute__((always_inline)) uint32_t colorFromRgbw(byte* rgbw) { return RGBW32(rgbw[0], rgbw[1], rgbw[2], rgbw[3]); }
+void setRandomColor(CRGBA &rgb);                // will choose random color (alpha/white is always 0)
+void hsv2rgb(const CHSV32& hsv, CRGBA &rgb);    // converts HSV into RGB (does not affect alpha/white)
+void rgb2hsv(const CRGBA& rgb, CHSV32& hsv);    // converts RGB into HSV (ignores alpha/white)
+void colorKtoRGB(uint16_t kelvin, CRGBA &rgb);    // alpha/white is always 0
+void colorCTtoRGB(uint16_t mired, CRGBA &rgb);    // white spectrum to rgb (alpha/white is always 0)
+void colorXYtoRGB(float x, float y, CRGBA &rgb);  // only defined if huesync disabled TODO
+void colorRGBtoXY(const CRGBA rgb, float* xy);    // only defined if huesync disabled TODO
+void colorFromDecOrHexString(CRGBA &rgb, const char* in); // considers string as (WW)RRGGBB
+bool colorFromHexString(CRGBA &rgb, const char* in);      // considers string as RRGGBB(WW) (returns false if string is not 6 or 8 chars long)
 uint32_t colorBalanceFromKelvin(uint16_t kelvin, uint32_t rgb);
 uint16_t approximateKelvinFromRGB(uint32_t rgb);
-void setRandomColor(byte* rgb);
 
 // CRGBA is like FastLED's CRGB but has an alpha channel
 // in some cases it can be used as RGBW (where W is alpha channel)
@@ -94,29 +93,29 @@ struct CRGBA {
   inline CRGBA() = default;
 
   // Constructor from a 32-bit color (0xAARRGGBB or 0xWWRRGGBB)
-  inline CRGBA(uint32_t color) : color32(color|0xFF000000) {} // assumes no alpha or white is encoded in highest byte
+  inline __attribute__((always_inline)) CRGBA(uint32_t color) : color32(color|0xFF000000) {} // assumes no alpha or white is encoded in highest byte
 
   // Constructor with r, g, b, alpha values (use this constructor to create RGBW color, where W is encoded in alpha channel)
-  inline CRGBA(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha = 255) : b(blue), g(green), r(red), a(alpha) {}
+  inline __attribute__((always_inline)) CRGBA(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha = 255) : b(blue), g(green), r(red), a(alpha) {}
 
   // Constructor from CHSV32
-  inline CRGBA(const CHSV32& hsv) { hsv2rgb(hsv, color32); a = 255; }
+  inline __attribute__((always_inline)) CRGBA(const CHSV32& hsv) { hsv2rgb(hsv, *this); a = 255; }
 
   // set opacity (alpha channel) to a specific value (0-255)
-  inline CRGBA& setOpacity(uint8_t alpha) { a = alpha; return *this; }
-  inline CRGBA  opacity(uint8_t amount) const { CRGBA c(*this); c.a = amount; return c; }
-  inline bool   isOpaque() const { return a == 255; }
-  inline bool   isTransparent() const { return a == 0; }
+  inline __attribute__((always_inline)) CRGBA& setOpacity(uint8_t alpha) { a = alpha; return *this; }
+  inline __attribute__((always_inline)) CRGBA  opacity(uint8_t amount) const { CRGBA c(*this); c.a = amount; return c; }
+  inline __attribute__((always_inline)) bool   isOpaque() const { return a == 255; }
+  inline __attribute__((always_inline)) bool   isTransparent() const { return a == 0; }
 
   // Fade alpha channel (make transparent by amount)
-  inline CRGBA& nfadeOut(uint8_t amount) { a = ((uint16_t)a*(256-amount)) >> 8; return *this; }
-  inline CRGBA  fadeOut(uint8_t amount) const { CRGBA c(*this); c.a = ((uint16_t)c.a*(256-amount)) >> 8; return c; }
+  inline __attribute__((always_inline)) CRGBA& nfadeOut(uint8_t amount) { a = ((uint16_t)a*(256-amount)) >> 8; return *this; }
+  inline __attribute__((always_inline)) CRGBA  fadeOut(uint8_t amount) const { CRGBA c(*this); c.a = ((uint16_t)c.a*(256-amount)) >> 8; return c; }
 
   // maintain compatibility with FastLED
   CRGBA& nscale8(uint8_t scale);
-  inline CRGBA& nscale8_white(uint8_t scale) { fast_color_scale(color32, scale); return *this; }
-  inline CRGBA  scale8(uint8_t scale) const { CRGBA c(*this); c.nscale8(scale); return c; }
-  inline CRGBA  scale8_white(uint8_t scale) const { CRGBA c(*this); c.nscale8_white(scale); return c; }
+  inline __attribute__((always_inline)) CRGBA& nscale8_white(uint8_t scale) { fast_color_scale(color32, scale); return *this; }
+  inline __attribute__((always_inline)) CRGBA  scale8(uint8_t scale) const { CRGBA c(*this); c.nscale8(scale); return c; }
+  inline __attribute__((always_inline)) CRGBA  scale8_white(uint8_t scale) const { CRGBA c(*this); c.nscale8_white(scale); return c; }
 
   // maintain compatibility with FastLED
   inline CRGBA& nscale8_video(uint8_t scale) {
@@ -131,29 +130,29 @@ struct CRGBA {
     color32 += remains; // add back the remains (1 per non-zero channel)
     return *this;
   }
-  inline CRGBA scale8_video(uint8_t scale) const { CRGBA c(*this); c.nscale8_video(scale); return c; }
-  inline CRGBA scale8_video_white(uint8_t scale) const { CRGBA c(*this); c.nscale8_video_white(scale); return c; }
+  inline __attribute__((always_inline)) CRGBA scale8_video(uint8_t scale) const { CRGBA c(*this); c.nscale8_video(scale); return c; }
+  inline __attribute__((always_inline)) CRGBA scale8_video_white(uint8_t scale) const { CRGBA c(*this); c.nscale8_video_white(scale); return c; }
 
   // blend c2 into this color by amount (0-255; 0 = no c2, 255 = full c2)
-  inline CRGBA& nblend(CRGBA c2, uint8_t amount) { color32 = color_blend(color32, c2.color32, amount); return *this; }
-  inline CRGBA& nblend(CRGBA c2, uint16_t amount) { return nblend(c2, (uint8_t)((amount>>8)+((amount>>7)&1))); }
-  inline CRGBA  blend(const CRGBA c2, uint8_t amount) const { CRGBA c(*this); c.nblend(c2, amount); return c; }
-  inline CRGBA  blend(const CRGBA c2, uint16_t amount) const { CRGBA c(*this); c.nblend(c2, (uint8_t)((amount>>8)+((amount>>7)&1))); return c; }
+  inline __attribute__((always_inline)) CRGBA& nblend(CRGBA c2, uint8_t amount) { color32 = color_blend(color32, c2.color32, amount); return *this; }
+  inline __attribute__((always_inline)) CRGBA& nblend(CRGBA c2, uint16_t amount) { return nblend(c2, (uint8_t)((amount>>8)+((amount>>7)&1))); }
+  inline __attribute__((always_inline)) CRGBA  blend(const CRGBA c2, uint8_t amount) const { CRGBA c(*this); c.nblend(c2, amount); return c; }
+  inline __attribute__((always_inline)) CRGBA  blend(const CRGBA c2, uint16_t amount) const { CRGBA c(*this); c.nblend(c2, (uint8_t)((amount>>8)+((amount>>7)&1))); return c; }
 
   // add c2 into this color, scaling c2 by its alpha channel; if preserveCR is true, the resulting color is scaled to preserve the original color ratio
   CRGBA& nadd(const CRGBA &c2, bool preserveCR = false);
-  inline CRGBA& add_white(CRGBA c2, bool preserveCR = false) { color32 = color_add(color32, c2.color32, preserveCR); return *this; }
-  inline CRGBA& nadd(uint8_t x) { return nadd(CRGBA(x,x,x)); }
-  inline CRGBA  add(CRGBA c2, bool preserveCR = false) { CRGBA c(*this); c.nadd(c2, preserveCR); return c; }
-  inline CRGBA  add(uint8_t x) const { CRGBA c(*this); c.nadd(CRGBA(x,x,x)); return c; }
+  inline __attribute__((always_inline)) CRGBA& add_white(CRGBA c2, bool preserveCR = false) { color32 = color_add(color32, c2.color32, preserveCR); return *this; }
+  inline __attribute__((always_inline)) CRGBA& nadd(uint8_t x) { return nadd(CRGBA(x,x,x)); }
+  inline __attribute__((always_inline)) CRGBA  add(CRGBA c2, bool preserveCR = false) { CRGBA c(*this); c.nadd(c2, preserveCR); return c; }
+  inline __attribute__((always_inline)) CRGBA  add(uint8_t x) const { CRGBA c(*this); c.nadd(CRGBA(x,x,x)); return c; }
 
   // maintain compatibility with FastLED
-  inline CRGBA& fadeToBlackBy(uint8_t amount) { return nscale8(255 - amount); }
+  inline __attribute__((always_inline)) CRGBA& fadeToBlackBy(uint8_t amount) { return nscale8(255 - amount); }
 
-  inline uint8_t getAverageLight() const { return (unsigned(r) + unsigned(g) + unsigned(b)) * unsigned(a) / (3*255); }
-  inline uint8_t getPureValue() const { return (unsigned(r) * 77 + unsigned(g) * 150 + unsigned(b) * 29) >> 8; }
+  inline __attribute__((always_inline)) uint8_t getAverageLight() const { return (unsigned(r) + unsigned(g) + unsigned(b)) * unsigned(a) / (3*255); }
+  inline __attribute__((always_inline)) uint8_t getPureValue() const { return (unsigned(r) * 77 + unsigned(g) * 150 + unsigned(b) * 29) >> 8; }
   // get the average of the R, G, B values
-  inline uint8_t getRGBaverage() const {
+  inline __attribute__((always_inline)) uint8_t getRGBaverage() const {
     return ((r + g + b) * 21846) >> 16; // x*21846>>16 is equal to "divide by 3"
   }
 
@@ -162,30 +161,30 @@ struct CRGBA {
   // custom operators to shorten code (see: https://en.cppreference.com/w/cpp/language/operators.html for friend operators)
 
   // Access as an array
-  inline uint8_t& operator[](size_t x) { return raw[x]; }
+  inline __attribute__((always_inline)) uint8_t& operator[](size_t x) { return raw[x]; }
 
-  // Assignment from 32-bit color
-  inline CRGBA& operator=(uint32_t color) { color32 = color; return *this; }
+  // Assignment from 32-bit RGBW color
+  inline __attribute__((always_inline)) CRGBA& operator=(uint32_t color) { color32 = color; return *this; }
 
   // Assignment from CHSV32
-  inline CRGBA& operator=(const CHSV32& hsv) { hsv2rgb(hsv, color32); a = 255; return *this;}
+  inline __attribute__((always_inline)) CRGBA& operator=(const CHSV32& hsv) { hsv2rgb(hsv, *this); a = 255; return *this;}
 
   // Scaling assignment
-  inline CRGBA& operator*=(uint8_t scale) { return nscale8(scale); }
-  inline CRGBA& operator/=(uint8_t scale) { return nscale8(255 - scale); }
+  inline __attribute__((always_inline)) CRGBA& operator*=(uint8_t scale) { return nscale8(scale); }
+  inline __attribute__((always_inline)) CRGBA& operator/=(uint8_t scale) { return nscale8(255 - scale); }
 
   // video scaling: make sure colors do not dim to zero if they started non-zero
-  inline CRGBA& operator%=(uint8_t scale) { return nscale8_video(scale); }
+  inline __attribute__((always_inline)) CRGBA& operator%=(uint8_t scale) { return nscale8_video(scale); }
 
   // Comparison
-  inline bool operator==(const CRGBA &rhs)   { return color32 == rhs.color32; }
-  inline bool operator==(const uint32_t rhs) { return (color32 & 0x00FFFFFF) == (rhs & 0x00FFFFFF); } // ignore white or alpha
-  inline bool operator!=(const CRGBA &rhs)   { return color32 != rhs.color32; }
-  inline bool operator!=(const uint32_t rhs) { return (color32 & 0x00FFFFFF) != (rhs & 0x00FFFFFF); } // ignore white or alpha
-
+  inline __attribute__((always_inline)) bool operator==(const CRGBA &rhs)   { return color32 == rhs.color32; }
+  inline __attribute__((always_inline)) bool operator==(const uint32_t rhs) { return (color32 & 0x00FFFFFF) == (rhs & 0x00FFFFFF); } // ignore white or alpha
+  inline __attribute__((always_inline)) bool operator!=(const CRGBA &rhs)   { return color32 != rhs.color32; }
+  inline __attribute__((always_inline)) bool operator!=(const uint32_t rhs) { return (color32 & 0x00FFFFFF) != (rhs & 0x00FFFFFF); } // ignore white or alpha
+  
   // Addition assignment with scaling of added color
-  inline CRGBA& operator+=(const CRGBA& rhs) { return nadd(rhs, false); }
-  inline CRGBA& operator+=(uint8_t x)        { return nadd(CRGBA(x,x,x), false); }
+  inline __attribute__((always_inline)) CRGBA& operator+=(const CRGBA& rhs) { return nadd(rhs, false); }
+  inline __attribute__((always_inline)) CRGBA& operator+=(uint8_t x)        { return nadd(CRGBA(x,x,x), false); }
 
   inline CRGBA& operator-=(const CRGBA& rhs) {
     auto qsub8 = [](uint8_t a, uint8_t b) { return a > b ? a - b : 0; };
@@ -212,36 +211,40 @@ struct CRGBA {
     return *this;
   }
 
-  inline CRGBA operator+(uint8_t x) const { CRGBA res = *this; res += CRGBA(x,x,x); return res; }
+  inline __attribute__((always_inline)) CRGBA operator+(uint8_t x) const { CRGBA res = *this; res += CRGBA(x,x,x); return res; }
   //inline CRGBA operator+(CRGBA rhs) const { CRGBA res = *this; res += rhs;          return res; } // prefer friend version below
-  inline CRGBA operator|(uint8_t x) const { CRGBA res = *this; res |= CRGBA(x,x,x); return res; }
+  inline __attribute__((always_inline)) CRGBA operator|(uint8_t x) const { CRGBA res = *this; res |= CRGBA(x,x,x); return res; }
 
   // friend operators (to allow optimization of chained operators)
-  friend inline CRGBA operator*(CRGBA lhs, const uint8_t scale) { lhs *= scale; return lhs; }
-  friend inline CRGBA operator/(CRGBA lhs, const uint8_t scale) { lhs /= scale; return lhs; }
-  friend inline CRGBA operator%(CRGBA lhs, const uint8_t scale) { lhs %= scale; return lhs; }
-  friend inline CRGBA operator+(CRGBA lhs, const CRGBA& rhs)    { lhs += rhs;   return lhs; }
-  friend inline CRGBA operator+(CRGBA lhs, const uint8_t x)     { lhs += x;     return lhs; }
-  friend inline CRGBA operator-(CRGBA lhs, const CRGBA& rhs)    { lhs -= rhs;   return lhs; }
-  friend inline CRGBA operator-(CRGBA lhs, const uint8_t x)     { lhs -= x;     return lhs; }
-  friend inline CRGBA operator|(CRGBA lhs, const CRGBA& rhs)    { lhs |= rhs;   return lhs; }
+  friend inline __attribute__((always_inline)) CRGBA operator*(CRGBA lhs, const uint8_t scale)        { lhs *= scale; return lhs; }
+  friend inline __attribute__((always_inline)) CRGBA operator/(CRGBA lhs, const uint8_t scale)        { lhs /= scale; return lhs; }
+  friend inline __attribute__((always_inline)) CRGBA operator%(CRGBA lhs, const uint8_t scale)        { lhs %= scale; return lhs; }
+  friend inline __attribute__((always_inline)) CRGBA operator+(CRGBA lhs, const CRGBA& rhs)           { lhs += rhs;   return lhs; }
+  friend inline __attribute__((always_inline)) CRGBA operator+(CRGBA lhs, const uint8_t x)            { lhs += x;     return lhs; }
+  friend inline __attribute__((always_inline)) CRGBA operator-(CRGBA lhs, const CRGBA& rhs)           { lhs -= rhs;   return lhs; }
+  friend inline __attribute__((always_inline)) CRGBA operator-(CRGBA lhs, const uint8_t x)            { lhs -= x;     return lhs; }
+  friend inline __attribute__((always_inline)) CRGBA operator|(CRGBA lhs, const CRGBA& rhs)           { lhs |= rhs;   return lhs; }
+  friend inline __attribute__((always_inline)) bool  operator==(const CRGBA& lhs, const CRGBA& rhs)   { return lhs.color32 == rhs.color32; }
+  friend inline __attribute__((always_inline)) bool  operator!=(const CRGBA& lhs, const CRGBA& rhs)   { return lhs.color32 != rhs.color32; }
+  friend inline __attribute__((always_inline)) bool  operator==(const CRGBA& lhs, const uint32_t rhs) { return (lhs.color32 & 0x00FFFFFF) == (rhs & 0x00FFFFFF); } // ignore white or alpha
+  friend inline __attribute__((always_inline)) bool  operator!=(const CRGBA& lhs, const uint32_t rhs) { return (lhs.color32 & 0x00FFFFFF) != (rhs & 0x00FFFFFF); } // ignore white or alpha
 
   // Conversion operator to uint32_t (!!! will strip alpha channel, producing 0x00RRGGBB)
-  explicit inline operator uint32_t() const { return color32 & 0x00FFFFFF; }
+  explicit inline __attribute__((always_inline)) operator uint32_t() const { return color32 & 0x00FFFFFF; }
 
 #ifdef FASTLED_VERSION
   // Constructor from CRGB
-  inline CRGBA(const CRGB &rgb) : b(rgb.b), g(rgb.g), r(rgb.r), a(255) {}
+  inline __attribute__((always_inline)) CRGBA(const CRGB &rgb) : b(rgb.b), g(rgb.g), r(rgb.r), a(255) {}
 
   // Assignment from CRGB
-  inline CRGBA& operator=(const CRGB& rgb) { b = rgb.b; g = rgb.g; r = rgb.r; a = 255; return *this; }
-  inline CRGBA& operator=(CRGB&& rgb) { b = rgb.b; g = rgb.g; r = rgb.r; a = 255; rgb = (uint32_t)0; return *this; }
+  inline __attribute__((always_inline)) CRGBA& operator=(const CRGB& rgb) { b = rgb.b; g = rgb.g; r = rgb.r; a = 255; return *this; }
+  inline __attribute__((always_inline)) CRGBA& operator=(CRGB&& rgb) { b = rgb.b; g = rgb.g; r = rgb.r; a = 255; rgb = (uint32_t)0; return *this; }
 
   // Addition from CRGB
-  friend inline CRGBA operator+(CRGBA lhs, const CRGB& rhs) { lhs += rhs; return lhs; }
+  friend inline __attribute__((always_inline)) CRGBA operator+(CRGBA lhs, const CRGB& rhs) { lhs += rhs; return lhs; }
 
   // Conversion operator to CRGB
-  inline operator CRGB() const { return CRGB(r, g, b); }
+  inline __attribute__((always_inline)) operator CRGB() const { return CRGB(r, g, b); }
 #endif
 };
 
@@ -274,7 +277,7 @@ struct CHSV32 { // 32bit HSV color with 16bit hue for more accurate conversions
     : h((uint16_t)ih << 8), s(is), v(iv) {}
   inline CHSV32(const CHSV& chsv)  // constructor from CHSV
     : h((uint16_t)chsv.h << 8), s(chsv.s), v(chsv.v) {}
-  inline CHSV32(const CRGBA& rgb) { rgb2hsv(rgb.color32, *this); } // constructor from CRGBA
+  inline CHSV32(const CRGBA& rgb) { rgb2hsv(rgb, *this); } // constructor from CRGBA
   inline CHSV32(uint32_t rgb) { rgb2hsv(rgb, *this); } // constructor from uint32_t (represented as 0x00RRGGBB)
 
   #ifdef FASTLED_VERSION
@@ -283,8 +286,12 @@ struct CHSV32 { // 32bit HSV color with 16bit hue for more accurate conversions
 };
 
 #ifdef FASTLED_VERSION
-inline CHSV rgb2hsv(const CRGB c) { CHSV32 hsv; rgb2hsv(CRGBA(c).color32, hsv); return CHSV(hsv); } // CRGB to hsv
+inline CHSV rgb2hsv(const CRGB c) { CHSV32 hsv; rgb2hsv(CRGBA(c), hsv); return CHSV(hsv); } // CRGB to hsv
 #endif
+
+// declared after CRGBA and CHSV32 have been defined
+inline void colorHStoRGB(uint16_t hue, byte sat, CRGBA &rgb) { hsv2rgb(CHSV32(hue, sat, 255), rgb); }
+inline uint16_t approximateKelvinFromRGB(CRGBA rgb) { return approximateKelvinFromRGB((uint32_t)rgb); }
 
 // palettes
 extern const TProgmemRGBPalette16* const fastledPalettes[];
