@@ -130,8 +130,7 @@ void handleNightlight();
 
 #ifdef WLED_ENABLE_LOXONE
 //lx_parser.cpp
-bool parseLx(int lxValue, byte* rgbw);
-void parseLxJson(int lxValue, byte segId, bool secondary);
+bool parseLx(int lxValue, CRGBA &rgbw);
 #endif
 
 //mqtt.cpp

@@ -1466,10 +1466,10 @@ void WS2812FX::service() {
   if (nowUp - _lastShow < MIN_SHOW_DELAY || _suspend) return;
   bool doShow = false;
 
+  applySegmentUpdates(); // apply any geometry updates (e.g. segment length changes) before servicing segments
+
   _isServicing = true;
   _segment_index = 0;
-
-  applySegmentUpdates(); // apply any geometry updates (e.g. segment length changes) before servicing segments
 
   for (Segment &seg : _segments) {
     if (_suspend) break; // immediately stop processing segments if suspend requested during service()
@@ -1479,48 +1479,47 @@ void WS2812FX::service() {
     // reset the segment runtime data if needed
     seg.resetIfRequired();
 
-    if (!seg.isActive()) continue;
-
-    #if defined(BOARD_HAS_PSRAM) && (defined(CONFIG_IDF_TARGET_ESP32S2)|| defined(CONFIG_IDF_TARGET_ESP32S3))
-    preload_psram_buffer(seg.getPixels(), seg.length() * sizeof(CRGBA));
-    #endif
-
     const bool mustUpdate = _triggered || (doShow && seg.mode == FX_MODE_STATIC);
+    // only run effect function on active segment, if not frozen and not off (except in transition)
     // last condition ensures all solid segments are updated at the same time
-    if (mustUpdate || seg.needsUpdate(nowUp)) {
+    if (seg.isActive() && !seg.freeze && (seg.on || seg.isInTransition()) && (mustUpdate || seg.needsUpdate(nowUp))) {
       doShow = true;
 
-      if (!seg.freeze) { //only run effect function if not frozen
-        // Effect blending
-        uint16_t prog = seg.progress();
-        // rely on segment's pixel buffer to maintain pixel values if effect function is not called
-        if (mustUpdate || nowUp >= seg.next_time) {
-          seg.beginDraw(prog);                // set up parameters for get/setPixelColor() (will also blend colors and palette if blend style is FADE)
-          _currentSegment = &seg;             // set current segment for effect functions (SEGMENT & SEGENV)
-          // workaround for on/off transition to respect blending style
-          seg.next_time = nowUp + (*_mode[seg.mode])();  // run new/current mode (needed for bri workaround)
-          seg.call++;
-        }
-        // if segment is in transition and no old segment exists we don't need to run the old mode
-        // (blendSegments() takes care of On/Off transitions and clipping)
-        Segment *segO = seg.getOldSegment();
-        if (segO && segO->isActive() && (seg.mode != segO->mode || transitionStyle != TRANSITION_FADE ||
-            (segO->name != seg.name && segO->name && seg.name && strncmp(segO->name, seg.name, WLED_MAX_SEGNAME_LEN) != 0))) {
-          // rely on old segment's pixel buffer to maintain pixel values if effect function is not called
-          if (mustUpdate || nowUp >= segO->next_time) {
-            segO->beginDraw(prog);            // set up palette & colors (also sets draw dimensions), parent segment has transition progress
-            _currentSegment = segO;           // set current segment
-            segO->next_time = nowUp + (*_mode[segO->mode])();  // run old mode
-            segO->call++;                     // increment old mode run counter
-          }
+      #if defined(BOARD_HAS_PSRAM) && (defined(CONFIG_IDF_TARGET_ESP32S2)|| defined(CONFIG_IDF_TARGET_ESP32S3))
+      // preload PSRAM buffer into cache
+      preload_psram_buffer(seg.getPixels(), seg.length() * sizeof(CRGBA));
+      #endif
+
+      // Effect blending
+      uint16_t prog = seg.progress();
+      // rely on segment's pixel buffer to maintain pixel values if effect function is not called
+      if (mustUpdate || nowUp >= seg.next_time) {
+        seg.beginDraw(prog);                // set up parameters for get/setPixelColor() (will also blend colors and palette if blend style is FADE)
+        _currentSegment = &seg;             // set current segment for effect functions (SEGMENT & SEGENV)
+        // workaround for on/off transition to respect blending style
+        seg.next_time = nowUp + (*_mode[seg.mode])();  // run new/current mode (needed for bri workaround)
+        seg.call++;
+      }
+
+      // if segment is in transition and no old segment exists we don't need to run the old mode
+      // (blendSegments() takes care of On/Off transitions and clipping)
+      Segment *segO = seg.getOldSegment();
+      if (segO && /*segO->isActive() &&*/ (seg.mode != segO->mode || transitionStyle != TRANSITION_FADE ||
+          (segO->name != seg.name && segO->name && seg.name && strncmp(segO->name, seg.name, WLED_MAX_SEGNAME_LEN) != 0))) {
+        // rely on old segment's pixel buffer to maintain pixel values if effect function is not called
+        if (mustUpdate || nowUp >= segO->next_time) {
+          segO->beginDraw(prog);            // set up palette & colors (also sets draw dimensions), parent segment has transition progress
+          _currentSegment = segO;           // set current segment
+          segO->next_time = nowUp + (*_mode[segO->mode])();  // run old mode
+          segO->call++;                     // increment old mode run counter
         }
       }
     }
     _segment_index++;
   }
-  // if FRAMETIME has passed and no segments updated (doShow==false) we will still do show()
+  // if _frametime has passed and no segments updated (doShow==false) we will still do show()
   // this will allow brightness change to be applied regardless of actual pixels change
-  if (nowUp - _lastShow >= FRAMETIME) doShow = true;
+  if (nowUp - _lastShow >= _frametime) doShow = true;
 
   #ifdef WLED_DEBUG_FX
   if (millis() - nowUp > _frametime) DEBUGFX_PRINTF_P(PSTR("Slow effects %u/%d.\n"), (unsigned)(millis()-nowUp), (int)_frametime);

@@ -34,18 +34,6 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     id = strip.getSegmentsNum()-1;  // segments are added at the end of list
   }
 
-  // lx parser (will set color directly)
-  #ifdef WLED_ENABLE_LOXONE
-  int lx = elem[F("lx")] | -1;
-  if (lx >= 0) {
-    parseLxJson(lx, id, false);
-  }
-  int ly = elem[F("ly")] | -1;
-  if (ly >= 0) {
-    parseLxJson(ly, id, true);
-  }
-  #endif
-
   //DEBUG_PRINTLN(F("-- JSON deserialize segment."));
   Segment& seg = strip.getSegment(id);
 
@@ -99,6 +87,25 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   segPar.start = start;
   segPar.stop = stop;
 
+  // lx parser
+  #ifdef WLED_ENABLE_LOXONE
+  int lx = elem[F("lx")] | -1;
+  bool loxoneChanged = false;
+  if (lx >= 0) {
+    loxoneChanged |= parseLx(lx, segPar.colors[0]);
+  }
+  int ly = elem[F("ly")] | -1;
+  if (ly >= 0) {
+    loxoneChanged |= parseLx(ly, segPar.colors[1]);
+  }
+  // old/legacy behaviour: when receiving Loxone always turn On and disable nightlight
+  if (loxoneChanged) {
+    if (bri == 0) toggleOnOff();
+    bri = 255;
+    nightlightActive = false;
+  }
+  #endif
+
   JsonArray iarr = elem[F("i")]; //setting individual LEDs?
   if (iarr.isNull()) {
     // we are not setting individual leds
@@ -106,7 +113,6 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
     // update parameters for later schedule
     CJSON(segPar.grouping, elem["grp"]);
     CJSON(segPar.spacing, elem[F("spc")]);
-    CJSON(segPar.offset, elem["of"]);
     CJSON(segPar.map1D2D, elem["m12"]);
     //CJSON(segPar.set, elem[F("set")]);
     //segPar.selected   = getBoolVal(elem["sel"], segPar.selected);
@@ -138,7 +144,7 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
 
     if (len > 0) {
       // offset only makes sense on 1D segments
-      int offset = elem[F("of")] | INT32_MAX;
+      int offset = elem["of"] | INT32_MAX;
       if (offset != INT32_MAX) {
         int offsetAbs = abs(offset);
         offsetAbs %= len;
