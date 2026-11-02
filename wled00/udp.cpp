@@ -335,6 +335,7 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
         DEBUG_PRINTF_P(PSTR("Set segment w/o options: %d [%d,%d;%d,%d]\n"), id, (int)start, (int)stop, (int)startY, (int)stopY);
         strip.suspend().waitForIt(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
         selseg.setGeometry(start, stop, selseg.grouping, selseg.spacing, offset, startY, stopY, selseg.map1D2D);
+        selseg.refreshLightCapabilities();
         strip.resume();
         continue; // we do receive bounds, but not options
       }
@@ -377,11 +378,13 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
         DEBUG_PRINTF_P(PSTR("Set segment w/ options: %d [%d,%d;%d,%d]\n"), id, (int)start, (int)stop, (int)startY, (int)stopY);
         strip.suspend().waitForIt(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
         selseg.setGeometry(start, stop, udpIn[5+ofs], udpIn[6+ofs], offset, startY, stopY, selseg.map1D2D);
+        selseg.refreshLightCapabilities();
         strip.resume();
       } else {
         DEBUG_PRINTF_P(PSTR("Set segment grouping: %d [%d,%d]\n"), id, (int)udpIn[5+ofs], (int)udpIn[6+ofs]);
         strip.suspend().waitForIt(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
         selseg.setGeometry(selseg.start, selseg.stop, udpIn[5+ofs], udpIn[6+ofs], selseg.offset, selseg.startY, selseg.stopY, selseg.map1D2D);
+        selseg.refreshLightCapabilities();
         strip.resume();
       }
     }

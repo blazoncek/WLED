@@ -177,6 +177,7 @@ void Segment::apply(const Segment::Parameters &p) {
   // this may stop transition
   setGeometry(p.start, p.stop, p.grouping, p.spacing, p.offset, p.startY, p.stopY, p.map1D2D);
   if (stop == 0) return; // segment has become inactive, stop processing
+  refreshLightCapabilities(); // fix for #3403
   if (getLightCapabilities() & (SEG_CAPABILITY_RGB | SEG_CAPABILITY_W)) {
     // these start or update transition
     setMode(p.mode, p.modeDefaults);
@@ -246,7 +247,7 @@ bool Segment::allocateData(size_t len) {
 void Segment::deallocateData() {
   if (!data) { _dataLen = 0; return; }
   //if ((Segment::getUsedSegmentData() > 0) && (_dataLen > 0)) { // check that we don't have a dangling / inconsistent data pointer
-    //DEBUGFX_PRINTF_P(PSTR("---  Released data (%p): %d/%d -> %p\n"), this, _dataLen, Segment::getUsedSegmentData(), data);
+    DEBUGFX_PRINTF_P(PSTR("-- Released FX data (%p): %d/%d -> %p\n"), this, _dataLen, Segment::getUsedSegmentData(), data);
     d_free(data);
   //}
   data = nullptr;
@@ -262,7 +263,7 @@ void Segment::deallocateData() {
   * may free that data buffer.
   */
 void Segment::resetIfRequired() {
-  if (!reset || !isActive()) return;
+  if (!(reset && isActive())) return;
   DEBUGFX_PRINTF_P(PSTR("-- Segment reset: %p\n"), this);
   #ifdef WLED_ENABLE_GIF
   if (mode == FX_MODE_IMAGE) endImagePlayback(this);
@@ -270,8 +271,8 @@ void Segment::resetIfRequired() {
   #ifdef ESP8266
   deallocateData();
   #else
-  if (data && _dataLen > 0) memset(data, 0, _dataLen);  // prevent heap fragmentation (just erase buffer instead of deallocateData())
   if (_dataLen > FAIR_DATA_PER_SEG) deallocateData();   // do not keep large allocations
+  else if (data && _dataLen > 0) memset(data, 0, _dataLen);  // prevent heap fragmentation (just erase buffer instead of deallocateData())
   #endif
   if (pixels) for (size_t i = 0; i < length(); i++) pixels[i] = hasWhite() ? BLACK : CRGBA(BLACK); // clear pixel buffer
   next_time = 0; step = 0; call = 0; aux0 = 0; aux1 = 0;
@@ -607,9 +608,7 @@ void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, ui
       // no reset
       return;
     }
-
   }
-  refreshLightCapabilities(); // fix for #3403
 }
 
 
@@ -1723,7 +1722,7 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
       }
       // adjust starting position and steps based on Reverse/Transpose
       if (!topSegment.transpose) {
-        DEBUGFX_PRINTLN(F("Fastpath 2D non-transposed."));
+        //DEBUGFX_PRINTLN(F("Fastpath 2D non-transposed."));
         // Calculate pointer steps to avoid 'if' and 'XY()' inside loops
         int x_inc = 1;
         int y_inc = Segment::maxWidth;
@@ -1742,7 +1741,7 @@ void WS2812FX::blendSegment(const Segment &topSegment, uint8_t *_pixelCCT) const
           }
         }
       } else { // transposed
-        DEBUGFX_PRINTLN(F("Fastpath 2D transposed."));
+        //DEBUGFX_PRINTLN(F("Fastpath 2D transposed."));
         for (int y = 0; y < height; y++) {
           const int px = topSegment.reverse ? (height - y - 1) : y;                 // source pixel: swap y into x, reverse if needed
           for (int x = 0; x < width; x++) {

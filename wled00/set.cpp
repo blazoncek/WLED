@@ -964,6 +964,8 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
   uint16_t stopY   = selseg.stopY;
   uint8_t  grpI    = selseg.grouping;
   uint16_t spcI    = selseg.spacing;
+  //Segment::Parameters segPar(selseg); // TODO: implement scheduled updates
+
   pos = req.indexOf(F("&S=")); //segment start
   if (pos > 0) {
     startI = std::abs(getNumVal(req, pos));
@@ -982,6 +984,7 @@ bool handleSet(AsyncWebServerRequest *request, const String& req, bool apply)
   }
   strip.suspend().waitForIt(); // must suspend strip operations before changing geometry
   selseg.setGeometry(startI, stopI, grpI, spcI, UINT16_MAX, startY, stopY, selseg.map1D2D);
+  selseg.refreshLightCapabilities();
   strip.resume();
 
   pos = req.indexOf(F("RV=")); //Segment reverse
