@@ -10,15 +10,14 @@
   Modified heavily for WLED
 */
 #include "wled.h"
+#include <forward_list>
 
 /*
   Custom per-LED mapping has moved!
   Create a file "ledmap.json" using the edit page. See: https://kno.wled.ge/advanced/mapping/
 */
 
-#if MAX_NUM_SEGMENTS < WLED_MAX_BUSSES
-  #error "Max segments must be at least max number of busses!"
-#endif
+static_assert(MAX_NUM_SEGMENTS >= WLED_MAX_BUSSES, "Max segments must be at least max number of busses!");
 
 #ifdef WLED_DEBUG_FX
   #warning Effect debugging enabled. Performance may suffer.
@@ -624,7 +623,7 @@ Segment &Segment::setColor(uint8_t slot, CRGBA c) {
     if (slot == 0 && c == BLACK) return *this; // on/off segment cannot have primary color black
     if (slot == 1 && c != BLACK) return *this; // on/off segment cannot have secondary color non black
   }
-  DEBUGFX_PRINTF_P(PSTR("- Starting color transition: %d [0x%X]\n"), slot, c);
+  DEBUGFX_PRINTF_P(PSTR("- Starting color transition: %d [0x%06X]\n"), slot, c.color32);
   startTransition(strip.getTransition(), transitionStyle != TRANSITION_FADE); // start transition prior to change
   colors[slot] = c;
   stateChanged = true; // send UDP/WS broadcast
@@ -2228,21 +2227,27 @@ void WS2812FX::setBrightness(uint8_t b, bool direct) {
 struct SegmentUpdate {
   uint8_t  id;      // segment id
   Segment::Parameters p;
-  SegmentUpdate(uint8_t i, Segment::Parameters &par) : id(i), p(std::move(par)) {}
+  SegmentUpdate(uint8_t i, Segment::Parameters &par) : id(i), p(std::move(par)) { DEBUGFX_PRINTF_P(PSTR("Created segment %d parameters.\n"), (int)id); }
+  #ifdef WLED_DEBUG_FX
+  ~SegmentUpdate() { DEBUGFX_PRINTF_P(PSTR("Destroyed segment %d parameters.\n"), (int)id); }
+  #endif
 };
-static std::vector<SegmentUpdate> segUpdates;
+static std::forward_list<SegmentUpdate> segUpdates;
 
 void WS2812FX::addSegmentUpdate(uint8_t id, Segment::Parameters &par) {
   if (id >= _segments.size()) return; // invalid segment id
-  segUpdates.emplace_back(id, par);
+  segUpdates.emplace_front(id, par);
   //DEBUGFX_PRINTF_P(PSTR("Stored segment %d parameters (%u).\n"), (int)id, segUpdates.size());
 }
 
 void WS2812FX::applySegmentUpdates() {
   if (isServicing() || segUpdates.empty()) return; // nothing to update or wait for service() to finish
-  DEBUGFX_PRINTF_P(PSTR("Applying segment parameters (%u).\n"), segUpdates.size());
+  DEBUGFX_PRINTLN(F("Applying segment parameters."));
+  // change order of parameters if desired
+  segUpdates.reverse(); // since members were added "in front"
+  //segUpdates.sort([](const SegmentUpdate &t1, const SegmentUpdate &t2) { return t1.id < t2.id; }); // sort them in increasing order by id
   for (const auto &upd: segUpdates) {
-    DEBUGFX_PRINTF_P(PSTR("-- Segment %d.\n"), (int)upd.id);
+    DEBUGFX_PRINTF_P(PSTR("- Segment %d.\n"), (int)upd.id);
     if (upd.id >= _segments.size()) continue; // invalid segment id
     Segment &seg = _segments[upd.id];
     seg.apply(upd.p);
@@ -2252,7 +2257,6 @@ void WS2812FX::applySegmentUpdates() {
   }
   stateChanged = true;
   segUpdates.clear();         // clear updates for next time
-  segUpdates.shrink_to_fit(); // free memory
   interfaceUpdateCallMode = CALL_MODE_WS_SEND; // schedule WS update (to inform UI)
 }
 
