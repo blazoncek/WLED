@@ -4,11 +4,12 @@
  * UDP sync notifier / Realtime / Hyperion / TPM2.NET
  */
 
-#define UDP_SEG_SIZE 36
-#define SEG_OFFSET (41)
-#define WLEDPACKETSIZE (41+(WS2812FX::getMaxSegments()*UDP_SEG_SIZE)+0)
+#define UDP_SEG_SIZE 38
+#define UDP_SEG_OFFSET 41
+#define NOTIFY_PACKET_SIZE (UDP_SEG_OFFSET+(WS2812FX::getMaxSegments()*UDP_SEG_SIZE)+0)
 #define UDP_IN_MAXSIZE 1472
 #define PRESUMED_NETWORK_DELAY 3 //how many ms could it take on avg to reach the receiver? This will be added to transmitted times
+static_assert(NOTIFY_PACKET_SIZE <= UDP_IN_MAXSIZE, "Notifier packet size is greater than UDP packet size! Reduce MAX_NUM_SEGMENTS.");
 
 
 void notify(byte callMode, bool followUp)
@@ -32,8 +33,9 @@ void notify(byte callMode, bool followUp)
     case CALL_MODE_MQTT:          if (!notifyMQTT)   return; break;
     default: return;
   }
-  byte udpOut[WLEDPACKETSIZE];  //TODO: optimize size to use only active segments
-  Segment& mainseg = strip.getMainSegment();
+  byte udpOut[NOTIFY_PACKET_SIZE];
+  memset(udpOut, 0, sizeof(udpOut));
+  const Segment& mainseg = strip.getMainSegment();
   udpOut[0] = 0; //0: wled notifier protocol 1: WARLS protocol
   udpOut[1] = callMode;
   udpOut[2] = bri;
@@ -51,8 +53,8 @@ void notify(byte callMode, bool followUp)
   //3: supports FX intensity, 24 byte packet 4: supports transitionDelay 5: sup palette
   //6: supports timebase syncing, 29 byte packet 7: supports tertiary color 8: supports sys time sync, 36 byte packet
   //9: supports sync groups, 37 byte packet 10: supports CCT, 39 byte packet 11: per segment options, variable packet length (40+WS2812FX::getMaxSegments()*3)
-  //12: enhanced effect sliders, 2D & mapping options
-  udpOut[11] = 12;
+  //12: enhanced effect sliders, 2D & mapping options, 13: segment rotation and zooming
+  udpOut[11] = 13;
   col = mainseg.colors[1].color32;
   udpOut[12] = R(col);
   udpOut[13] = G(col);
@@ -95,13 +97,13 @@ void notify(byte callMode, bool followUp)
   udpOut[37] = strip.hasCCTBus() ? 0 : 255; //check this is 0 for the next value to be significant
   udpOut[38] = mainseg.cct;
 
-  udpOut[39] = strip.getActiveSegmentsNum();
+  //udpOut[39] = strip.getActiveSegmentsNum();
   udpOut[40] = UDP_SEG_SIZE; //size of each loop iteration (one segment)
   size_t s = 0, nsegs = strip.getSegmentsNum();
   for (size_t i = 0; i < nsegs; i++) {
     const Segment &selseg = strip.getSegment(i);
     if (!selseg.isActive()) continue;
-    unsigned ofs = 41 + s*UDP_SEG_SIZE; //start of segment offset byte
+    unsigned ofs = UDP_SEG_OFFSET + s*UDP_SEG_SIZE; //start of segment offset byte
     udpOut[0 +ofs] = s;
     udpOut[1 +ofs] = selseg.start >> 8;
     udpOut[2 +ofs] = selseg.start & 0xFF;
@@ -130,7 +132,7 @@ void notify(byte callMode, bool followUp)
     udpOut[25+ofs] = selseg.colors[2].b;
     udpOut[26+ofs] = selseg.colors[2].a;
     udpOut[27+ofs] = selseg.cct;
-    udpOut[28+ofs] = (selseg.options>>8) & 0xFF; //mirror_y, transpose, 2D mapping & sound
+    udpOut[28+ofs] = (selseg.options>>8) & 0xFF; //mirror_y, transpose, 2D mapping, zoom mirror & wrap, set
     udpOut[29+ofs] = selseg.custom1;
     udpOut[30+ofs] = selseg.custom2;
     udpOut[31+ofs] = selseg.custom3 | (selseg.check1<<5) | (selseg.check2<<6) | (selseg.check3<<7);
@@ -138,11 +140,11 @@ void notify(byte callMode, bool followUp)
     udpOut[33+ofs] = selseg.startY & 0xFF;
     udpOut[34+ofs] = selseg.stopY >> 8;     // ATM always 0 as Segment::stopY is 8-bit
     udpOut[35+ofs] = selseg.stopY & 0xFF;
+    udpOut[36+ofs] = selseg.zoomAmount;
+    udpOut[37+ofs] = selseg.rotateSpeed;
     ++s;
   }
-
-  //uint16_t offs = SEG_OFFSET;
-  //next value to be added has index: udpOut[offs + 0]
+  udpOut[39] = s; // count actual stored segments
 
 #ifndef WLED_DISABLE_ESPNOW
   if (enableESPNow && useESPNowSync && statusESPNow == ESP_NOW_STATE_ON) {
@@ -151,12 +153,12 @@ void notify(byte callMode, bool followUp)
     DEBUG_PRINTLN(F("ESP-NOW sending first packet."));
     constexpr size_t headerSize = sizeof(EspNowPartialPacket) - sizeof(EspNowPartialPacket::data);
     constexpr size_t bufferSize = sizeof(buffer.data);
-    size_t packetSize = 41; // size of static UDP data (excluding segments)
+    size_t packetSize = UDP_SEG_OFFSET; // size of static UDP data (excluding segments)
     size_t s0 = 0;          // number of already prepared/sent segments
     memcpy(buffer.data, udpOut, packetSize);
     // stuff as many segments in first packet as possible (normally up to 5)
     for (size_t i = 0; packetSize + UDP_SEG_SIZE < bufferSize && i < s; i++) {
-      memcpy(buffer.data + packetSize, &udpOut[41+i*UDP_SEG_SIZE], UDP_SEG_SIZE);
+      memcpy(buffer.data + packetSize, &udpOut[UDP_SEG_OFFSET+i*UDP_SEG_SIZE], UDP_SEG_SIZE);
       packetSize += UDP_SEG_SIZE;
       s0++;
     }
@@ -171,7 +173,7 @@ void notify(byte callMode, bool followUp)
       // to work around that limitation it is mandatory to utilize onDataSent() callback which should reduce number queued messages
       // and wait until at least one space is available in the buffer
       for (size_t i = s0; i < s; i++) {
-        memcpy(buffer.data + packetSize, &udpOut[41+i*UDP_SEG_SIZE], UDP_SEG_SIZE);
+        memcpy(buffer.data + packetSize, &udpOut[UDP_SEG_OFFSET+i*UDP_SEG_SIZE], UDP_SEG_SIZE);
         packetSize += UDP_SEG_SIZE;
         if (packetSize + UDP_SEG_SIZE < bufferSize) continue; // add another segment to buffer
         DEBUG_PRINTF_P(PSTR("ESP-NOW sending packet: %d (%u)\n"), (int)buffer.packet, packetSize + headerSize);
@@ -194,8 +196,9 @@ void notify(byte callMode, bool followUp)
   {
     DEBUG_PRINTLN(F("UDP sending packet."));
     IPAddress broadcastIp = ~uint32_t(Network.subnetMask()) | uint32_t(Network.gatewayIP());
+    size_t packetSize = UDP_SEG_OFFSET + s * UDP_SEG_SIZE;
     notifierUdp.beginPacket(broadcastIp, udpPort);
-    notifierUdp.write(udpOut, WLEDPACKETSIZE); // TODO: add actual used buffer size
+    notifierUdp.write(udpOut, packetSize);
     notifierUdp.endPacket();
   }
   notificationSentCallMode = callMode;
@@ -203,7 +206,7 @@ void notify(byte callMode, bool followUp)
   notificationCount = followUp ? notificationCount + 1 : 0;
 }
 
-static void parseNotifyPacket(const uint8_t *udpIn) {
+static void parseNotifyPacket(const uint8_t *udpIn, size_t packetSize = NOTIFY_PACKET_SIZE) {
   //ignore notification if received within a second after sending a notification ourselves
   if (millis() - notificationSentTime < 1000) return;
   if (udpIn[1] > 199) return; //do not receive custom versions
@@ -301,8 +304,8 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
     }
     size_t inactiveSegs = 0;
     for (size_t i = 0; i < numSrcSegs && i < WS2812FX::getMaxSegments(); i++) {
-      unsigned ofs = 41 + i*udpIn[40]; //start of segment offset byte
-      if (ofs + 36 > UDP_IN_MAXSIZE) break; // avoid reading outside of UDP packet (wrong data?)
+      unsigned ofs = UDP_SEG_OFFSET + i*udpIn[40]; //start of segment offset byte (udpIn[40] == numSegments)
+      if (ofs + UDP_SEG_SIZE > packetSize) break; // avoid reading outside of UDP packet (wrong data?)
       unsigned id = udpIn[0 +ofs];
       DEBUG_PRINTF_P(PSTR("UDP segment received: %u\n"), id);
       if      (id >  strip.getSegmentsNum()) break;
@@ -373,20 +376,21 @@ static void parseNotifyPacket(const uint8_t *udpIn) {
           selseg.check2  = (udpIn[31+ofs]>>6) & 0x1;
           selseg.check3  = (udpIn[31+ofs]>>7) & 0x1;
         }
+        if (version > 12) {
+          selseg.zoomAmount  = udpIn[36+ofs] & 0x0F;
+          selseg.rotateSpeed = udpIn[37+ofs] & 0x0F;
+        }
       }
+      strip.suspend().waitForIt(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
       if (receiveSegmentBounds) {
         DEBUG_PRINTF_P(PSTR("Set segment w/ options: %d [%d,%d;%d,%d]\n"), id, (int)start, (int)stop, (int)startY, (int)stopY);
-        strip.suspend().waitForIt(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
         selseg.setGeometry(start, stop, udpIn[5+ofs], udpIn[6+ofs], offset, startY, stopY, selseg.map1D2D);
-        selseg.refreshLightCapabilities();
-        strip.resume();
       } else {
         DEBUG_PRINTF_P(PSTR("Set segment grouping: %d [%d,%d]\n"), id, (int)udpIn[5+ofs], (int)udpIn[6+ofs]);
-        strip.suspend().waitForIt(); //should not be needed as UDP handling is not done in ISR callbacks but still added "just in case"
         selseg.setGeometry(selseg.start, selseg.stop, udpIn[5+ofs], udpIn[6+ofs], selseg.offset, selseg.startY, selseg.stopY, selseg.map1D2D);
-        selseg.refreshLightCapabilities();
-        strip.resume();
       }
+      selseg.refreshLightCapabilities();
+      strip.resume();
     }
     stateChanged = true;
   }
@@ -609,7 +613,7 @@ void handleNotifications()
   if (udpIn[0] == 0 && !realtimeMode && receiveGroups)
   {
     DEBUG_PRINTF_P(PSTR("UDP notification from: %d.%d.%d.%d\n"), notifierUdp.remoteIP()[0], notifierUdp.remoteIP()[1], notifierUdp.remoteIP()[2], notifierUdp.remoteIP()[3]);
-    parseNotifyPacket(udpIn);
+    parseNotifyPacket(udpIn, packetSize);
     return;
   }
 
@@ -1071,12 +1075,12 @@ void espNowReceiveCB(uint8_t* address, uint8_t* data, uint8_t len, signed int rs
   if (buffer->packet == 0) {
     packetsReceived = 0; // it will increment later (this is to make sure we start counting packets correctly)
     if (udpIn == nullptr) {
-      udpIn = (uint8_t *)d_malloc(WLEDPACKETSIZE); // we cannot use stack as we are in callback
+      udpIn = (uint8_t *)d_malloc(NOTIFY_PACKET_SIZE); // we cannot use stack as we are in callback
       if (!udpIn) return; // memory alocation failed
       DEBUG_PRINTLN(F("ESP-NOW inited UDP buffer."));
     }
     memcpy(udpIn, buffer->data, len-3); // global data (41 bytes + up to 5 segments)
-    segsReceived = (len - 3 - 41) / UDP_SEG_SIZE;
+    segsReceived = (len - 3 - UDP_SEG_OFFSET) / UDP_SEG_SIZE;
   } else if (buffer->packet == packetsReceived && udpIn && ((len - 3) / UDP_SEG_SIZE) * UDP_SEG_SIZE == (len-3)) {
     // we received a packet full of segments
     if (segsReceived >= WS2812FX::getMaxSegments()) {
@@ -1087,7 +1091,7 @@ void espNowReceiveCB(uint8_t* address, uint8_t* data, uint8_t len, signed int rs
       len = ((WS2812FX::getMaxSegments() - segsReceived) * UDP_SEG_SIZE) + 3; // we have reached max number of segments
     }
     if (len > 3) {
-      memcpy(udpIn + 41 + (segsReceived * UDP_SEG_SIZE), buffer->data, len-3);
+      memcpy(udpIn + UDP_SEG_OFFSET + (segsReceived * UDP_SEG_SIZE), buffer->data, len-3);
       segsReceived += (len - 3) / UDP_SEG_SIZE;
     }
   } else {
@@ -1107,7 +1111,7 @@ void espNowReceiveCB(uint8_t* address, uint8_t* data, uint8_t len, signed int rs
     // last packet received
     if (now > lastProcessed + 250) {
       DEBUG_PRINTLN(F("ESP-NOW processing complete message."));
-      parseNotifyPacket(udpIn);
+      parseNotifyPacket(udpIn, NOTIFY_PACKET_SIZE); // as much as allocated in malloc()
       lastProcessed = heartbeatESPNow = now; // also update heartbeat time
       // when we received a full notification packet (usually change of effect or parameter) we can try to
       // reconnect WiFi if it became available. this will temporarily disrupt ESP-NOW processing but
