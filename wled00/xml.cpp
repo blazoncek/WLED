@@ -672,8 +672,9 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormValue(settingsScript,PSTR("SDA"),i2c_sda);
     printSetFormValue(settingsScript,PSTR("SCL"),i2c_scl);
 
+    #ifndef ESP8266
     bool hspiInUse = false;
-    #if defined(WLED_USE_ETHERNET) && !defined(ESP8266)
+      #ifdef WLED_USE_ETHERNET
     for (unsigned b = 0; b < BusManager::getNumBusses(); b++) {
       const Bus *bus = BusManager::getBus(b);
       if (!bus || !bus->isOk()) continue;
@@ -682,6 +683,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
         break;
       }
     }
+      #endif
     #endif
     printSetFormValue(settingsScript,PSTR("MOSI"),spi_mosi);
     printSetFormValue(settingsScript,PSTR("MISO"),spi_miso);

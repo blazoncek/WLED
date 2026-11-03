@@ -46,7 +46,7 @@ bool PinManager::deallocateMultiplePins(const int8_t *pinArray, size_t arrayElem
   bool shouldFail = false;
   DEBUGPM_PRINTLN(F("MULTIPIN DEALLOC"));
   // first verify the pins are OK and allocated by selected owner
-  for (int i = 0; i < arrayElementCount; i++) {
+  for (size_t i = 0; i < arrayElementCount; i++) {
     int8_t gpio = pinArray[i];
     if (gpio < 0) {
       // explicit support for io -1 as a no-op (no allocation of pin),
@@ -75,7 +75,7 @@ bool PinManager::deallocateMultiplePins(const int8_t *pinArray, size_t arrayElem
       return true;
     }
   }
-  for (int i = 0; i < arrayElementCount; i++) {
+  for (size_t i = 0; i < arrayElementCount; i++) {
     deallocatePin(pinArray[i], tag);
   }
   return true;
@@ -84,7 +84,7 @@ bool PinManager::deallocateMultiplePins(const int8_t *pinArray, size_t arrayElem
 bool PinManager::deallocateMultiplePins(const managed_pin_type * mptArray, size_t arrayElementCount, PinOwner tag)
 {
   int8_t pins[arrayElementCount];
-  for (int i=0; i<arrayElementCount; i++) pins[i] = mptArray[i].pin;
+  for (size_t i=0; i<arrayElementCount; i++) pins[i] = mptArray[i].pin;
   return deallocateMultiplePins(pins, arrayElementCount, tag);
 }
 
@@ -92,7 +92,7 @@ bool PinManager::allocateMultiplePins(const managed_pin_type * mptArray, size_t 
 {
   bool shouldFail = false;
   // first verify the pins are OK and not already allocated
-  for (int i = 0; i < arrayElementCount; i++) {
+  for (size_t i = 0; i < arrayElementCount; i++) {
     int8_t gpio = mptArray[i].pin;
     if (gpio < 0) {
       // explicit support for io -1 as a no-op (no allocation of pin),
@@ -138,7 +138,7 @@ bool PinManager::allocateMultiplePins(const managed_pin_type * mptArray, size_t 
 
 bool PinManager::allocateMultiplePins(const int8_t * mptArray, size_t arrayElementCount, PinOwner tag, bool output) {
   PinManagerPinType pins[arrayElementCount];
-  for (int i=0; i<arrayElementCount; i++) pins[i] = {mptArray[i], output};
+  for (size_t i=0; i<arrayElementCount; i++) pins[i] = {mptArray[i], output};
   return allocateMultiplePins(pins, arrayElementCount, tag);
 }
 
