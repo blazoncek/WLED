@@ -67,8 +67,9 @@ static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
   // name is set directly (even though it may happen during rendering)
   // to conserve RAM since transition will take care of releasing old name
   // buffer. if transitions are not enabled then there is a possibility
-  // that mode_scrollingtext() may use old buffer (read after free) during
-  // single frame rendering (one frame only; read-only access)
+  // that mode_2Dscrollingtext() may use old buffer (read after free) during
+  // single frame rendering (one frame only; read-only access) but it has a
+  // safety workaround implemented (captures and compare name pointer)
   if (elem["n"]) {
     // name field exists
     const char * name = elem["n"].as<const char*>();
