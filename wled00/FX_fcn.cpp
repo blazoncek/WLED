@@ -91,6 +91,7 @@ Segment::Segment(uint16_t sStart, uint16_t sStop, uint16_t sStartY, uint16_t sSt
     errorFlag = ERR_NORAM_PX;
     //stop = 0; // mark segment as inactive/invalid
   }
+  refreshLightCapabilities();
 }
 
 // copy constructor
@@ -1153,6 +1154,7 @@ void Segment::refreshLightCapabilities() const {
           // if auto white calculation from RGB is disabled/optional (None/Dual), allow white channel adjustments
           if ( whiteSlider) capabilities |= SEG_CAPABILITY_W;
         }
+        if (bus->is16bit()) capabilities |= SEG_CAPABILITY_16BIT;
         break;
       }
     }

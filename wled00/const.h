@@ -407,6 +407,7 @@ constexpr size_t FIXED_PALETTE_COUNT = DYNAMIC_PALETTE_COUNT + FASTLED_PALETTE_C
 #define SEG_CAPABILITY_RGB     0x01
 #define SEG_CAPABILITY_W       0x02
 #define SEG_CAPABILITY_CCT     0x04
+#define SEG_CAPABILITY_16BIT   0x08
 
 // WLED Error modes
 #define ERR_NONE         0  // All good :)
