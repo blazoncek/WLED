@@ -15,6 +15,9 @@
 //simple macro for ArduinoJSON's or syntax
 #define CJSON(a,b) a = b | a
 
+// we may be called during strip.service() so we should not modify segments directly while effects are executing
+// that's why we save changes int Segment::Parameters struct and stash (strip.addSegmentUpdate()) them for later application
+// the only Segment parameters that can be modified without any side effects are: set, selected, reset
 static bool deserializeSegment(JsonObject elem, byte it, byte presetId)
 {
   byte id = elem["id"] | it;
@@ -375,9 +378,6 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   int it = 0;
   JsonVariant segVar = root["seg"];
   if (!segVar.isNull()) {
-    // we may be called during strip.service() so we should not modify segments while effects are executing
-    // this tries to provide instant UI feedback while waiting max 2 frames (if service() can't be suspended it will stash segment changes)
-    strip.suspend().waitForIt();
     if (segVar.is<const char *>() && tolower(segVar.as<const char *>()[0]) == 'r') {
       strip.makeAutoSegments(true);
       stateChanged = true;
@@ -404,6 +404,10 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
       if (strip.getSegmentsNum() > 3 && deleted >= strip.getSegmentsNum()/2U) strip.purgeSegments(); // batch deleting more than half segments
       if (deleted) stateChanged = true; // if we only deleted segments we still need to set stateChanged
     }
+    // this tries to provide instant UI feedback while waiting max 2 frames
+    // (if service() can't be suspended it will update in next loop() cycle during service() call)
+    // if unsuccessful UI update may happen with 1s delay
+    strip.suspend().waitForIt();
     strip.applySegmentUpdates();  // is thread and service() safe (will only apply if not service()ing)
     strip.resume();
   }
