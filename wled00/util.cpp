@@ -550,7 +550,10 @@ void *d_realloc(void *ptr, size_t size) {
   else
   #endif
     buffer = heap_caps_realloc_prefer(ptr, 3, size, caps1, caps2, MALLOC_CAP_DEFAULT);
-    return validateFreeHeap(buffer); // make sure there is enough free heap left
+    // we cannot validate (and possibly free()) new buffer since the old buffer may be freed
+    // during resize/malloc/memcpy (rendering original pointer incorrect) upon successful rellocation
+    // relloc must not free old buffer if reallocation was unssucessful
+    return buffer;
   }
 
 void *d_calloc(size_t count, size_t size) {
