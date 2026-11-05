@@ -3330,7 +3330,6 @@ uint16_t mode_exploding_fireworks(void)
           else      SEGMENT.setPixelColor(int(sparks[i].posX) ? rows - int(sparks[i].pos) - 1 : int(sparks[i].pos), c);
         }
       }
-      if (SEGMENT.check3) SEGMENT.blur(16);
       *dying_gravity *= .8f; // as sparks burn out they fall slower
     } else {
       SEGENV.aux0 = 6 + hw_random8(10); //wait for this many frames
@@ -3345,7 +3344,7 @@ uint16_t mode_exploding_fireworks(void)
   return FRAMETIME;
 }
 #undef MAX_SPARKS
-static const char _data_FX_MODE_EXPLODING_FIREWORKS[] PROGMEM = "Fireworks 1D@Gravity,Firing side,,,,,,Blur;!,!;!;12;pal=11,ix=128,o3=0";
+static const char _data_FX_MODE_EXPLODING_FIREWORKS[] PROGMEM = "Fireworks 1D@Gravity,Firing side;!,!;!;12;pal=11,ix=128";
 
 
 /*
@@ -4676,12 +4675,10 @@ uint16_t mode_2DBlackHole(void) {            // By: Stepko https://editor.soulma
   }
   // central white dot
   SEGMENT.setPixelColorXY(cols/2, rows/2, WHITE);
-  // blur everything a bit
-  if (SEGMENT.check3) SEGMENT.blur(16, cols*rows < 100);
 
   return FRAMETIME;
 } // mode_2DBlackHole()
-static const char _data_FX_MODE_2DBLACKHOLE[] PROGMEM = "Black Hole@Fade rate,Outer Y freq.,Outer X freq.,Inner X freq.,Inner Y freq.,Solid,,Blur;!;!;2;pal=11,o3=0";
+static const char _data_FX_MODE_2DBLACKHOLE[] PROGMEM = "Black Hole@Fade rate,Outer Y freq.,Outer X freq.,Inner X freq.,Inner Y freq.,Solid,,;!;!;2;pal=11";
 
 
 ////////////////////////////
@@ -4718,11 +4715,10 @@ uint16_t mode_2DColoredBursts() {              // By: ldirko   https://editor.so
       SEGMENT.setPixelColorXY(x2, y2, WHITE);
     }
   }
-  if (SEGMENT.custom3) SEGMENT.blur(SEGMENT.custom3/2);
 
   return FRAMETIME;
 } // mode_2DColoredBursts()
-static const char _data_FX_MODE_2DCOLOREDBURSTS[] PROGMEM = "Colored Bursts@Speed,# of lines,,,Blur,Gradient,,Dots;;!;2;c3=0";
+static const char _data_FX_MODE_2DCOLOREDBURSTS[] PROGMEM = "Colored Bursts@Speed,# of lines,,,,Gradient,,Dots;;!;2;";
 
 
 /////////////////////
@@ -4747,11 +4743,10 @@ uint16_t mode_2Ddna(void) {         // dna originally by by ldirko at https://pa
       SEGMENT.setPixelColorXY(i, y2, c2);
     }
   }
-  if (SEGMENT.intensity) SEGMENT.blur(SEGMENT.intensity>>3);
 
   return FRAMETIME;
 } // mode_2Ddna()
-static const char _data_FX_MODE_2DDNA[] PROGMEM = "DNA@!,Blur,Phase,,Trail,,Fill;;!;2;ix=0,c3=15,o2=0";
+static const char _data_FX_MODE_2DDNA[] PROGMEM = "DNA@!,,Phase,,Trail,,Fill;;!;2;c3=15,o2=0";
 
 
 /////////////////////////
@@ -4818,11 +4813,10 @@ uint16_t mode_2DDrift() {              // By: Stepko   https://editor.soulmateli
     SEGMENT.setPixelColorXY(colsCenter + mySin, rowsCenter + myCos, color);
     if (SEGMENT.check1) SEGMENT.setPixelColorXY(colsCenter + myCos, rowsCenter + mySin, color);
   }
-  if (SEGMENT.intensity) SEGMENT.blur(SEGMENT.intensity>>3);
 
   return FRAMETIME;
 } // mode_2DDrift()
-static const char _data_FX_MODE_2DDRIFT[] PROGMEM = "Drift@Rotation speed,Blur amount,,,,Twin;;!;2;ix=0";
+static const char _data_FX_MODE_2DDRIFT[] PROGMEM = "Drift@Rotation speed,,,,,Twin;;!;2;ix=0";
 
 
 //////////////////////////
@@ -4875,11 +4869,10 @@ uint16_t mode_2DFrizzles(void) {                 // By: Stepko https://editor.so
                             beatsin8_t(SEGMENT.intensity/8 - i, 0, rows - 1),
                             SEGMENT.color_from_palette(beatsin8_t(12, 0, 255), false, true, 255));
   }
-  if (SEGMENT.custom1) SEGMENT.blur(SEGMENT.custom1>>3);
 
   return FRAMETIME;
 } // mode_2DFrizzles()
-static const char _data_FX_MODE_2DFRIZZLES[] PROGMEM = "Frizzles@X frequency,Y frequency,Blur;;!;2;c1=0";
+static const char _data_FX_MODE_2DFRIZZLES[] PROGMEM = "Frizzles@X frequency,Y frequency;;!;2;c1=0";
 
 
 ///////////////////////////////////////////
@@ -5394,11 +5387,10 @@ uint16_t mode_2DPlasmaball(void) {                   // By: Stepko https://edito
                                     (rows - 1 - cy == 0)) ? SEGMENT.color_from_palette(beat8(5), false, true, 255, thisVal) : BLACK);
     }
   }
-  if (SEGMENT.custom2) SEGMENT.blur(SEGMENT.custom2>>5);
 
   return FRAMETIME;
 } // mode_2DPlasmaball()
-static const char _data_FX_MODE_2DPLASMABALL[] PROGMEM = "Plasma Ball@Speed,,Fade,Blur;;!;2;c2=0";
+static const char _data_FX_MODE_2DPLASMABALL[] PROGMEM = "Plasma Ball@Speed,,Fade;;!;2;c2=0";
 
 
 ////////////////////////////////
@@ -5455,11 +5447,9 @@ uint16_t mode_2DPulser(void) {                       // By: ldirko   https://edi
   int y = map((sin8_t(a * 5) + sin8_t(a * 4) + sin8_t(a * 2)), 0, 765, rows-1, 0);
   SEGMENT.setPixelColorXY(x, y, SEGMENT.color_from_palette(map(y, 0, rows-1, 0, 255), false, true, 255));
 
-  if (SEGMENT.intensity) SEGMENT.blur(SEGMENT.intensity>>4);
-
   return FRAMETIME;
 } // mode_2DPulser()
-static const char _data_FX_MODE_2DPULSER[] PROGMEM = "Pulser@!,Blur;;!;2;ix=0";
+static const char _data_FX_MODE_2DPULSER[] PROGMEM = "Pulser@!;;!;2;";
 
 
 /////////////////////////
@@ -5484,11 +5474,10 @@ uint16_t mode_2DSindots(void) {                             // By: ldirko   http
     int y = sin8_t(t2 + i * SEGMENT.intensity/8)*(rows-1)/255;  // max index now 255x15/255=15!
     SEGMENT.setPixelColorXY(x, y, SEGMENT.color_wheel(i * 255 / 13));
   }
-  if (SEGMENT.custom2) SEGMENT.blur(SEGMENT.custom2>>3);
 
   return FRAMETIME;
 } // mode_2DSindots()
-static const char _data_FX_MODE_2DSINDOTS[] PROGMEM = "Sindots@!,Dot distance,Fade rate,Blur;;!;2;c2=0";
+static const char _data_FX_MODE_2DSINDOTS[] PROGMEM = "Sindots@!,Dot distance,Fade rate;;!;2;";
 
 
 //////////////////////////////
@@ -5505,7 +5494,6 @@ uint16_t mode_2Dsquaredswirl(void) {            // By: Mark Kriegsman. https://g
   const uint8_t kBorderWidth = 2;
 
   SEGMENT.fadeToBlackBy(24);
-  if (SEGMENT.custom3) SEGMENT.blur(SEGMENT.custom3>>1);
 
   // Use two out-of-sync sine waves
   int i = beatsin8_t(19, kBorderWidth, cols-kBorderWidth);
@@ -5521,7 +5509,7 @@ uint16_t mode_2Dsquaredswirl(void) {            // By: Mark Kriegsman. https://g
 
   return FRAMETIME;
 } // mode_2Dsquaredswirl()
-static const char _data_FX_MODE_2DSQUAREDSWIRL[] PROGMEM = "Squared Swirl@,,,,Blur;;!;2;c3=0";
+static const char _data_FX_MODE_2DSQUAREDSWIRL[] PROGMEM = "Squared Swirl@,,,,Blur;;!;2;";
 
 
 //////////////////////////////
@@ -5653,11 +5641,10 @@ uint16_t mode_2Dspaceships(void) {    //// Space ships by stepko (c)05.02.21 [ht
       SEGMENT.addPixelColorXY(x, y-1, color);
     }
   }
-  if (SEGMENT.intensity) SEGMENT.blur(SEGMENT.intensity>>3);
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DSPACESHIPS[] PROGMEM = "Spaceships@!,Blur;;!;2;ix=0";
+static const char _data_FX_MODE_2DSPACESHIPS[] PROGMEM = "Spaceships@!,Blur;;!;2;";
 
 
 /////////////////////////
@@ -5819,12 +5806,11 @@ uint16_t mode_2Dghostrider(void) {
       }
       SEGMENT.setWuPixelColor(lighter->lightersPosX[i] * 256 / 10, lighter->lightersPosY[i] * 256 / 10, SEGMENT.color_from_palette((256 - lighter->time[i]), false, PALETTE_FIXED, 255)); // AKA color_wheel() with no palette wrapping
     }
-    if (SEGMENT.intensity) SEGMENT.blur(SEGMENT.intensity>>3);
   }
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DGHOSTRIDER[] PROGMEM = "Ghost Rider@Fade rate,Blur;;!;2;pal=35,ix=0";
+static const char _data_FX_MODE_2DGHOSTRIDER[] PROGMEM = "Ghost Rider@Fade rate,Blur;;!;2;pal=35";
 #undef LIGHTERS_AM
 
 
@@ -5840,19 +5826,53 @@ uint16_t mode_2Dfloatingblobs(void) {
   const int rows = SEG_H;
   const int maxC = (cols-1) << FP_SHIFT;
   const int maxR = (rows-1) << FP_SHIFT;
-  const int rMax = cols>8 ? (cols << (FP_SHIFT-2)) : (2 << FP_SHIFT); // cols/4 or 2
+  const int maxD = min(cols,rows);
+  const int rMax = maxD > 8 ? (maxD << (FP_SHIFT-2)) : (2 << FP_SHIFT); // cols/4 or 2
   //auto abs = [](int16_t x) { return x<0 ? -x : x; };
   auto int106 = [](int16_t a) { return (int16_t)((int32_t)a >> 6); }; // convert 12.4 fixed point to integer
 
   typedef struct Blob {
-    int16_t x, y;   // coordinates are in 12.4 fixed point format
+    int16_t cX, cY; // coordinates are in 10.6 fixed point format
     int16_t sX, sY; // speed is in 10.6 fixed point format
     uint16_t r;     // radius is in 10.6 fixed point format
-    byte color;
-    struct {
-      bool    grow : 1;
-      uint8_t blur : 4;
-    };
+    byte hue;
+    bool grow;
+
+    void draw(bool wrapX = false, bool wrapY = false) {
+      auto int106 = [](int32_t a) { return (int16_t)((a >= 0 ? a : -((-a) + FP_ONE - 1)) / FP_ONE); };  // convert 10.6 fixed point to integer (floor()ed when negative)
+      auto _sq = [](int a) { return a*a; };
+
+      // pre-calculate drawing bounds
+      const int32_t pxMin = int106(cX - r);              // minimum pixel coordinate for drawing; rounded down
+      const int32_t pxMax = int106(cX + r + FP_ONE - 1); // maximum pixel coordinate for drawing; rounded up
+      const int32_t pyMin = int106(cY - r);              // minimum pixel coordinate for drawing; rounded down
+      const int32_t pyMax = int106(cY + r + FP_ONE - 1); // maximum pixel coordinate for drawing; rounded up
+      const int32_t rSq   = _sq(r);
+      const int32_t r2Sq  = r > FP_ONE ? _sq(r - FP_ONE) : 0;
+
+      for (int x = pxMin; x <= pxMax; x++) {
+        for (int y = pyMin; y <= pyMax; y++) {
+          const int32_t distSq = _sq((x<<FP_SHIFT) - cX) + _sq((y<<FP_SHIFT) - cY);
+          if (distSq > rSq) continue;
+          int i = x, j = y;
+          if (wrapX) {
+            if (i <  0    ) i += SEG_W;
+            if (i >= SEG_W) i -= SEG_W;
+          }
+          if (wrapY) {
+            if (j <  0    ) j += SEG_H;
+            if (j >= SEG_H) j -= SEG_H;
+          }
+          uint8_t brightness = 255;
+          if (r <= FP_ONE) { // last pixel
+            brightness = int106(255 * r);
+          } else if (distSq > r2Sq) {
+            brightness = 255 * (rSq - distSq) / (rSq - r2Sq);
+          }
+          SEGMENT.addPixelColorXY(i, j, SEGMENT.color_wheel(hue).opacity(brightness));
+        }
+      }
+    }
   } blob_t;
 
   if (!SEGENV.allocateData(sizeof(blob_t) * MAX_BLOBS + sizeof(unsigned long))) return mode_static(); //allocation failed
@@ -5866,15 +5886,12 @@ uint16_t mode_2Dfloatingblobs(void) {
     //SEGMENT.clear();
     for (size_t i = 0; i < MAX_BLOBS; i++) {
       blob[i].r  = hw_random16(FP_ONE, rMax);
-      blob[i].sX = hw_random16(2*FP_ONE, cols << FP_SHIFT) / (256 - SEGMENT.speed);
-      blob[i].sY = hw_random16(2*FP_ONE, rows << FP_SHIFT) / (256 - SEGMENT.speed);
-      blob[i].x  = hw_random16(0, maxC);
-      blob[i].y  = hw_random16(0, maxR);
-      blob[i].color = hw_random8();
-      blob[i].blur  = hw_random8(3);
-      blob[i].grow  = (blob[i].r <= FP_ONE); // start growing if radius <= 1
-      if (blob[i].sX == 0) blob[i].sX = 2 << FP_SHIFT;
-      if (blob[i].sY == 0) blob[i].sY = 2 << FP_SHIFT;
+      blob[i].sX = hw_random16(FP_HALF, maxD << 2);
+      blob[i].sY = hw_random16(FP_HALF, maxD << 2);
+      blob[i].cX = hw_random16(0, maxC);
+      blob[i].cY = hw_random16(0, maxR);
+      blob[i].hue = hw_random8();
+      blob[i].grow = (blob[i].r <= FP_ONE); // start growing if radius <= 1
     }
   }
 
@@ -5886,13 +5903,14 @@ uint16_t mode_2Dfloatingblobs(void) {
   // Bounce balls around
   const size_t blobCount = map(SEGMENT.intensity, 0, 255, 1, MAX_BLOBS);
   for (size_t i = 0; i < blobCount; i++) {
-    CRGBA c = SEGMENT.color_from_palette(blob[i].color, false, PALETTE_FIXED, 0); // will use SEGCOLOR(0) if Default palette used
-    if (blob[i].r > (1 << FP_SHIFT)) SEGMENT.drawEllipse(blob[i].x, blob[i].y, blob[i].r+FP_HALF, blob[i].r+FP_HALF, c, true, SEGMENT.check2, false, blob[i].blur);
-    else                             SEGMENT.setWuPixelColor(blob[i].x<<(8-FP_SHIFT), blob[i].y<<(8-FP_SHIFT), c);
-    if (i > 0 && SEGMENT.check3)     SEGMENT.drawLine(int106(blob[i-1].x), int106(blob[i-1].y), int106(blob[i].x), int106(blob[i].y), SEGCOLOR(2), SEGCOLOR(2), true);
+    blob[i].draw(SEGMENT.check2, false);
+    if (SEGMENT.check3) {
+      if (i > 0)            SEGMENT.drawLine(int106(blob[i-1].cX), int106(blob[i-1].cY), int106(blob[i].cX), int106(blob[i].cY), SEGCOLOR(2), SEGCOLOR(2), true);
+      if (i == blobCount-1) SEGMENT.drawLine(int106(blob[0].cX), int106(blob[0].cY), int106(blob[i].cX), int106(blob[i].cY), SEGCOLOR(2), SEGCOLOR(2), true);
+    }
 
     // slowly change color every second
-    if (dT > 1000) blob[i].color += 4;
+    if (dT > 1000) blob[i].hue += 4;
 
     // change radius if needed
     if (blob[i].grow) {
@@ -5902,50 +5920,49 @@ uint16_t mode_2Dfloatingblobs(void) {
         blob[i].grow = false;
       }
     } else {
-      // reduce radius until it is < 1
+      // reduce radius until it is < 1.5
       blob[i].r -= !hw_random8(10); // 10% chance to shrink (by 1/64 pixel)
-      if (blob[i].r < FP_ONE) {
+      if (blob[i].r < FP_ONE + FP_HALF) {
         blob[i].grow = true;
       }
-    }
-    if (!hw_random8(10)) {
-      int blur = blob[i].blur + (int)hw_random8(2)-1;
-      blob[i].blur = constrain(blur, 0, 3);
     }
     // make blob movement FPS independent
     if (nextMove < strip.now) {
       // move x
-      blob[i].x += blob[i].sX;
+      blob[i].cX += blob[i].sX;
       // move y
-      blob[i].y += blob[i].sY;
+      blob[i].cY += blob[i].sY;
       if (SEGMENT.check2) {
         // wrap around
-        if (blob[i].x < 0) {
-          blob[i].x += maxC;
+        if (blob[i].cX < 0) {
+          blob[i].cX += maxC;
           if (!hw_random8(10)) blob[i].sX += hw_random8(FP_ONE) - FP_HALF; // ~10% chance of changing speed in x direction
         }
-        if (blob[i].x >= maxC) {
-          blob[i].x -= maxC;
+        if (blob[i].cX >= maxC) {
+          blob[i].cX -= maxC;
           if (!hw_random8(10)) blob[i].sX += hw_random8(FP_ONE) - FP_HALF; // ~10% chance of changing speed in x direction
         }
       } else {
         // bounce x
-        if (blob[i].x-blob[i].r < 0) {
-          blob[i].sX =   hw_random16(4, cols<<2);
-          blob[i].x  = blob[i].r;
-        } else if (blob[i].x+blob[i].r > maxC) {
-          blob[i].sX = -(hw_random16(4, cols<<2));
-          blob[i].x  = maxC - 1 - blob[i].r;
+        if (blob[i].cX-blob[i].r < 0) {
+          blob[i].sX =   hw_random16(4, maxD<<2);
+          blob[i].cX = blob[i].r;
+        } else if (blob[i].cX+blob[i].r > maxC) {
+          blob[i].sX = -(hw_random16(4, maxD<<2));
+          blob[i].cX = maxC - 1 - blob[i].r;
         }
       }
       // bounce y
-      if (blob[i].y-blob[i].r < 0) {
-        blob[i].sY =   hw_random16(4, rows<<2);
-        blob[i].y  = blob[i].r;
-      } else if (blob[i].y+blob[i].r > maxR) {
-        blob[i].sY = -(hw_random16(4, rows<<2));
-        blob[i].y  = maxR - 1 - blob[i].r;
+      if (blob[i].cY-blob[i].r < 0) {
+        blob[i].sY =   hw_random16(4, maxD<<2);
+        blob[i].cY = blob[i].r;
+      } else if (blob[i].cY+blob[i].r > maxR) {
+        blob[i].sY = -(hw_random16(4, maxD<<2));
+        blob[i].cY = maxR - 1 - blob[i].r;
       }
+      // limit speed
+      blob[i].sX = constrain(blob[i].sX, -(maxD << 2), (maxD << 2));
+      blob[i].sY = constrain(blob[i].sY, -(maxD << 2), (maxD << 2));
     }
   }
 
@@ -6141,11 +6158,10 @@ uint16_t mode_2Ddriftrose(void) {
     const uint32_t y = (CY + (cos_t(angle) * range)) * 255.f;
     SEGMENT.setWuPixelColor(x, y, SEGMENT.color_wheel(map(i, 1,37, 0,255)));
   }
-  if (SEGMENT.intensity>>4) SEGMENT.blur(SEGMENT.intensity>>4);
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DDRIFTROSE[] PROGMEM = "Drift Rose@Fade,Blur;;!;2;ix=0";
+static const char _data_FX_MODE_2DDRIFTROSE[] PROGMEM = "Drift Rose@Fade;;!;2;";
 
 /////////////////////////////
 //  2D PLASMA ROTOZOOMER   //
