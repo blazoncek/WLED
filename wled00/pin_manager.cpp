@@ -119,7 +119,7 @@ bool PinManager::allocateMultiplePins(const managed_pin_type * mptArray, size_t 
   if (tag==PinOwner::HW_SPI) spiAllocCount++;
 
   // all pins are available .. track each one
-  for (int i = 0; i < arrayElementCount; i++) {
+  for (size_t i = 0; i < arrayElementCount; i++) {
     int8_t gpio = mptArray[i].pin;
     if (gpio < 0 || gpio >= WLED_NUM_PINS) {
       // allow callers to include -1 value as non-requested pin
