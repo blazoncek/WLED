@@ -661,8 +661,8 @@ void __attribute__((optimize("O2"))) Segment::drawEllipse(int16_t cx, int16_t cy
       }
     }
     // left and right (partially filled) pixel
-    int8_t frac = (leftFixed << (8-FP_SHIFT)) & 0xFF; // we only have .6 expand to .8
-    int8_t alpha = 255 - frac;
+    uint8_t frac = (leftFixed << (8-FP_SHIFT)) & 0xFF; // we only have .6 expand to .8
+    uint8_t alpha = 255 - frac;
     if (alpha > 0) {
       plot(left, y, alpha);
       if (!fill) plot(left+1, y, frac /*255 - alpha*/);

@@ -642,16 +642,13 @@ void WLED::beginStrip()
 
   if (turnOnAtBoot) {
     bri = briS > 0 ? briS : 128;  // briS set in cfg.cpp (from cfg.json); but if user set boot brightness to 0 and enabled "Turn on at boot", override with default
-  } else {
-    // fix for #3196
-    if (bootPreset > 0) {
-      // set all segments black (no transition)
-      for (unsigned i = 0; i < strip.getSegmentsNum(); i++) {
-        Segment &seg = strip.getSegment(i);
-        if (seg.isActive()) seg.colors[0] = CRGBA(0, 0, 0, seg.hasWhite() ? 0 : 255);
-      }
-      colPri = BLACK;  // needed for colorUpdated() set as RGBW
+    // set all segments WLED orange (no transition)
+    for (unsigned i = 0; i < strip.getSegmentsNum(); i++) {
+      Segment &seg = strip.getSegment(i);
+      if (seg.isActive()) seg.colors[0] = DEFAULT_COLOR | (seg.hasWhite() ? 0 : 0xFF000000);
     }
+    colPri = DEFAULT_COLOR;  // needed for colorUpdated() set as RGBW
+  } else {
     briLast = briS; bri = 0;
     // needed to clear all outputs (On/Off in particular)
     strip.fill(BLACK);

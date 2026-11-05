@@ -54,7 +54,7 @@ Segment::Segment(uint16_t sStart, uint16_t sStop, uint16_t sStartY, uint16_t sSt
 , call(0)
 , aux0(0)
 , aux1(0)
-, colors{DEFAULT_COLOR,BLACK,BLACK}
+, colors{BLACK,BLACK,BLACK}
 , start(sStart)
 , stop(sStop > sStart ? sStop : sStart+1) // minimum length is 1
 , startY(sStartY)
