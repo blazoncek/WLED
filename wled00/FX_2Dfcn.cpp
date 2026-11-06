@@ -601,16 +601,16 @@ void __attribute__((optimize("O2"))) Segment::drawEllipse(int16_t cx, int16_t cy
         }
       }
 
-      int8_t frac = (leftFixed << (8-FP_SHIFT)) & 0xFF;
-      int8_t alpha = 255 - frac;
-      if (alpha > 0) {
+      uint8_t frac = (leftFixed << (8-FP_SHIFT)) & 0xFF;
+      uint8_t alpha = 255 - frac;
+      if (alpha > 0U) {
         tempPlot(left, y, alpha);
         if (!fill) tempPlot(left + 1, y, frac /*255 - alpha*/);
       }
 
       if (right != left) {
         alpha = (rightFixed << (8-FP_SHIFT)) & 0xFF;
-        if (alpha > 0) {
+        if (alpha > 0U) {
           tempPlot(right, y, alpha);
           if (!fill) tempPlot(right - 1, y, 255 - alpha);
         }
@@ -663,13 +663,13 @@ void __attribute__((optimize("O2"))) Segment::drawEllipse(int16_t cx, int16_t cy
     // left and right (partially filled) pixel
     uint8_t frac = (leftFixed << (8-FP_SHIFT)) & 0xFF; // we only have .6 expand to .8
     uint8_t alpha = 255 - frac;
-    if (alpha > 0) {
+    if (alpha > 0U) {
       plot(left, y, alpha);
       if (!fill) plot(left+1, y, frac /*255 - alpha*/);
     }
     if (right != left) {
       alpha = (rightFixed << (8-FP_SHIFT)) & 0xFF; // we only have .6 expand to .8
-      if (alpha > 0) {
+      if (alpha > 0U) {
         plot(right, y, alpha);
         if (!fill) plot(right-1, y, 255 - alpha);
       }
