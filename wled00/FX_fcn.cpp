@@ -268,12 +268,8 @@ void Segment::resetIfRequired() {
   #ifdef WLED_ENABLE_GIF
   if (mode == FX_MODE_IMAGE) endImagePlayback(this);
   #endif
-  #ifdef ESP8266
-  deallocateData();
-  #else
   if (_dataLen > FAIR_DATA_PER_SEG) deallocateData();   // do not keep large allocations
   else if (data && _dataLen > 0) memset(data, 0, _dataLen);  // prevent heap fragmentation (just erase buffer instead of deallocateData())
-  #endif
   if (pixels) for (size_t i = 0; i < length(); i++) pixels[i] = hasWhite() ? BLACK : CRGBA(BLACK); // clear pixel buffer
   next_time = 0; step = 0; call = 0; aux0 = 0; aux1 = 0;
   reset = false;
@@ -725,6 +721,7 @@ Segment &Segment::setName(const char *newName) {
     char *oldName = name;
     const size_t newLen = min(strlen(newName), (size_t)WLED_MAX_SEGNAME_LEN);
     if (newLen) {
+      if (name && strlen(name) == newLen && strcmp(name, newName) == 0) return *this; // if name doesn't change skip everything
       if (mode == FX_MODE_2DSCROLLTEXT) {
         // if the name changes in scrolling text mode, we need to copy segment for blending
         // this also ensures that mode_scrollingtext() doesn't use freed buffer
@@ -2483,7 +2480,7 @@ void WS2812FX::printSize() {
 
 // load custom mapping table from JSON file (called from finalizeInit() or deserializeState())
 // if this is a matrix set-up and default ledmap.json file does not exist, create mapping table using setUpMatrix() from panel information
-// WARNING: effect drawing has to be suspended (strip.suspend()) or must be called from loop() context
+// WARNING: loading 2D ledmap may change "strip" geometry (length) so it may require rebuilding of pixels array (done externally)
 bool WS2812FX::deserializeMap(unsigned n) {
   char fileName[32];
   strcpy_P(fileName, PSTR("/ledmap"));
@@ -2558,22 +2555,41 @@ bool WS2812FX::deserializeMap(unsigned n) {
     // pre-fill with direct mapping (1D part)
     for (size_t i = minMappingSize; i < getLengthTotal(); i++) customMappingTable[i] = i;
 
+    size_t arrPos = f.position();  // remember position after "map":[
+
+    #ifdef WLED_DEBUG
+    // count ledmap entries (treat sparse ledmaps as well; each subarray [x,y] counts as one entry)
+    // NOTE: currently unnecessary (but useful for debugging)
+    char token[32]; strcpy_P(token, PSTR(" \n\r\t,[]-0123456789")); // parsing tokens
+    size_t entries = 0;
+    size_t in = 0;  // subarray depth
+    while (f.available()) {
+      char c = f.read();
+      if (strchr(token, c) == nullptr) break; // invalid character, stop
+      if (c == '[') in++;                     // enter inner array
+      if (c == ']') {
+        if (in > 0) in--;                     // exit inner array
+        else { entries++; break; }            // we reached the end of outer array
+      }
+      if (c == ',' && in == 0) entries++;     // only count outer entries
+    }
+    DEBUG_PRINTF_P(PSTR("Verified %u ledmap entries (%u strip size).\n"), (unsigned)entries, (unsigned)getLengthTotal());
+    f.seek(arrPos);             // go back to beginning of array
+    #endif
+
+    char strRead[32]; // should be enough for "regular" coordinate; i.e. "[ 255 , 255 ]" including some extra whitespace
     #ifndef WLED_DISABLE_2D
-    int arrPos = f.position();  // remember position after "map":[
     bool read2D = f.find('[');  // we found the beginning of the first 2D entry "map":[[x,y],...
     f.seek(arrPos);             // go back to beginning of array
     if (isMatrix && read2D) {
       auto XY = [](unsigned x, unsigned y) { return (y * Segment::maxWidth) + x; };
       int index = 0;
       while (f.available()) {
-        String strRead = f.readStringUntil(']'); // will not include the closing bracket
-        #ifdef WLED_DEBUG
-        strRead.trim();           // remove whitespace for debug output
-        strRead.replace("\n",""); // remove newlines for debug output
-        strRead.replace("\r",""); // remove carriage returns for debug output
-        strRead.replace("\t",""); // replace tabs with spaces for debug output
-        #endif
-        strRead += ']';           // add closing bracket that was stripped by readStringUntil()
+        size_t i = f.readBytesUntil(']', strRead, sizeof(strRead)-1);
+        if (i < sizeof(strRead)-1) {
+          strRead[i] = ']'; // append closing bracket
+          strRead[i+1] = 0; // terminate string
+        } else break;       // something is wrong
         // process nested array as XY coordinate of a pixel with currently running index
         // we can do it the hard way by manually parsing "[","," and "]" and numbers in between but ArduinoJson makes it easy and we'll borrow its parser
         StaticJsonDocument<64> arrCoord;
@@ -2582,11 +2598,17 @@ bool WS2812FX::deserializeMap(unsigned n) {
           JsonArray entry = arrCoord.as<JsonArray>();
           unsigned x = max(min(entry[0].as<int>(), Segment::maxWidth-1), 0);  // constrain to valid range (disallow negative values)
           unsigned y = max(min(entry[1].as<int>(), Segment::maxHeight-1), 0); // constrain to valid range (disallow negative values)
-          DEBUG_PRINTF_P(PSTR("%d -> [%u,%u] (%s)\n"), index, x, y, strRead.c_str());
+          #ifdef WLED_DEBUG
+          // remove whitespace from buffer for cleaner debug output
+          char *p = strRead;
+          for (i=0; *p && i < sizeof(strRead); p++) if (!(*p == ' ' || *p == '\n' || *p == '\r' || *p =='\t')) strRead[i++] = *p;
+          strRead[i] = 0;
+          #endif
+          DEBUG_PRINTF_P(PSTR("%d -> [%u,%u] (%s)\n"), index, x, y, strRead);
           customMappingTable[XY(x,y)] = index;
         } else {
-          DEBUG_PRINTF_P(PSTR("ERROR Invalid XY coordinate in %s: %s\n"), fileName, strRead.c_str());
-          int pos = strRead.toInt();
+          DEBUG_PRINTF_P(PSTR("ERROR Invalid XY coordinate in %s: %s\n"), fileName, strRead);
+          int pos = strtol(strRead, nullptr, 10);
           if (pos < 0 || pos > MAX_LEDS) pos = 0xFFFF;
           customMappingTable[index] = pos; // fallback to direct mapping
         }
@@ -2597,11 +2619,12 @@ bool WS2812FX::deserializeMap(unsigned n) {
     } else
     #endif
     while (f.available() && customMappingSize < getLengthTotal()) { // f.position() < f.size() - 1
-      String strRead = f.readStringUntil(','); // read a single number (may include array terminating "]" but not number separator ',')
-      int index = strRead.toInt();
+      size_t i = f.readBytesUntil(',', strRead, sizeof(strRead)-1);
+      strRead[i] = '\0';
+      int index = strtol(strRead, nullptr, 10);
       if (index < 0 || index > MAX_LEDS) index = 0xFFFF;
       customMappingTable[customMappingSize++] = index;
-      if (strRead.indexOf(']') >= 0) break;
+      if (i == sizeof(strRead)-1 || strchr(strRead, ']') != nullptr) break; // end of array or invalid entry (>31 characters between two commas)
     }
     currentLedmap = n;
     f.close();

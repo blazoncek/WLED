@@ -219,10 +219,12 @@ void WLED::loop()
   }
   // new ledmap was requested via JSON
   if (loadLedmap >= 0) {
-    unsigned oldLen = strip.getLengthTotal();
-    strip.deserializeMap(loadLedmap);
-    strip.fixInvalidSegments(); // if 1D or 2D ledmap changed strip dimensions we need to fix segments (switching form 2D to 1D or reloading of default 2D ledmap)
-    if (oldLen != strip.getLengthTotal()) strip.reallocatePixelBuffer(); // fix for wled#5669
+    if (currentLedmap != loadLedmap) {
+      unsigned oldLen = strip.getLengthTotal();
+      strip.deserializeMap(loadLedmap);
+      strip.fixInvalidSegments(); // if 1D or 2D ledmap changed strip dimensions we need to fix segments (switching form 2D to 1D or reloading of default 2D ledmap)
+      if (oldLen != strip.getLengthTotal()) strip.reallocatePixelBuffer(); // fix for wled#5669
+    }
     loadLedmap = -1;
   }
   yield();

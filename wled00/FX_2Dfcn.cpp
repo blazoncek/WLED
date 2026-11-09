@@ -89,7 +89,7 @@ bool WS2812FX::setUpMatrix() {
     } else if (panel.size() == 1 && !panel[0].bottomStart && !panel[0].rightStart && !panel[0].serpentine && !panel[0].vertical) {
       // if we only have one panel that starts at top-left and is not serpentine and vertically oriented then don't bother with ledmap
       DEBUG_PRINTLN(F("Ledmap not needed."));
-      return true;
+      return false;
     }
 
     DEBUG_PRINTLN(F("Creating 2D ledmap"));
