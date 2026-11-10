@@ -754,7 +754,7 @@ WLED_GLOBAL WiFiUDP ntpUdp;
 #ifndef WLED_USE_DDP_ONLY
 WLED_GLOBAL ESPAsyncE131 e131 _INIT({{handleE131Packet}});
 #endif
-WLED_GLOBAL ESPAsyncE131 ddp  _INIT({{handleE131Packet}});
+WLED_GLOBAL ESPAsyncE131 ddp  _INIT({{handleDDPPacket}});
 WLED_GLOBAL bool e131NewData _INIT(false);
 
 // led fx library object

@@ -5,6 +5,50 @@
 #define MAX_CHANNELS_PER_UNIVERSE 512
 
 /*
+ * DDP handler
+ */
+//DDP protocol support
+static bool ddpSeenPush = false;  // have we seen a push yet?
+
+//E1.31 and Art-Net protocol support
+void handleDDPPacket(e131_packet_t* p, IPAddress clientIP, byte protocol) {
+  realtimeIP = clientIP;
+  int lastPushSeq = e131LastSequenceNumber[0];
+  int sn = p->sequenceNum & 0xF;
+  // reject late packets belonging to previous frame (assuming 9 packets max. before push (max ~4300 pixels))
+  if (e131SkipOutOfSequence && lastPushSeq) {
+    if (sn) {
+      if (lastPushSeq > 8) {
+        if (sn > (lastPushSeq - 8) && sn < lastPushSeq) return;
+      } else {
+        if (sn > (15 - lastPushSeq) || sn < lastPushSeq) return;
+      }
+    }
+  }
+  if (!(p->dataType == DDP_TYPE_RGBW32 || p->dataType == DDP_TYPE_RGB24) && p->destination != 1) return; // only RGB or RGBW supported and default device ID
+  unsigned ddpChannelsPerLed = 3 + (p->dataType == DDP_TYPE_RGBW32); // data type 0x1B (formerly 0x1A) is RGBW (type 3, 8 bit/channel)
+  uint32_t start =  htonl(p->channelOffset) / ddpChannelsPerLed;
+  start += DMXAddress / ddpChannelsPerLed;
+  unsigned stop = start + htons(p->dataLen) / ddpChannelsPerLed;
+  uint8_t* data = p->data;
+  unsigned c = 0;
+  if (p->flags & DDP_TIMECODE_FLAG) c = 4; //packet has timecode flag, we do not support it, but data starts 4 bytes later
+  if (realtimeMode != REALTIME_MODE_DDP) ddpSeenPush = false; // just starting, no push yet
+  realtimeLock(realtimeTimeoutMs, REALTIME_MODE_DDP);
+  if (!realtimeOverride) {
+    for (unsigned i = start; i < stop; i++, c += ddpChannelsPerLed) {
+      setRealtimePixel(i, data[c], data[c+1], data[c+2], ddpChannelsPerLed >3 ? data[c+3] : 0);
+    }
+  }
+  bool push = p->flags & DDP_PUSH_FLAG;
+  ddpSeenPush |= push;
+  if (!ddpSeenPush || push) { // if we've never seen a push, or this is one, render display
+    e131NewData = true;
+    if (sn) e131LastSequenceNumber[0] = sn;
+  }
+}
+
+/*
  * E1.31 handler
  */
 
@@ -213,14 +257,9 @@ static void handleArtnetPollReply(IPAddress ipAddress) {
     }
   #endif
 }
-#endif
-
-//DDP protocol support
-static bool ddpSeenPush = false;  // have we seen a push yet?
 
 //E1.31 and Art-Net protocol support
 void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol) {
-#ifndef WLED_USE_DDP_ONLY
   int uni = 0, dmxChannels = 0;
   uint8_t* e131_data = nullptr;
   int seq = 0, mde = REALTIME_MODE_E131;
@@ -250,47 +289,8 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol) {
       if (p->priority >= highPriority.get()) highPriority.set(p->priority);
       if (p->priority < highPriority.get()) return;
     }
-  } else
-#endif
-  { //DDP
-    realtimeIP = clientIP;
-    int lastPushSeq = e131LastSequenceNumber[0];
-    int sn = p->sequenceNum & 0xF;
-    // reject late packets belonging to previous frame (assuming 9 packets max. before push (max ~4300 pixels))
-    if (e131SkipOutOfSequence && lastPushSeq) {
-      if (sn) {
-        if (lastPushSeq > 8) {
-          if (sn > (lastPushSeq - 8) && sn < lastPushSeq) return;
-        } else {
-          if (sn > (15 - lastPushSeq) || sn < lastPushSeq) return;
-        }
-      }
-    }
-    if (!(p->dataType == DDP_TYPE_RGBW32 || p->dataType == DDP_TYPE_RGB24) && p->destination != 1) return; // only RGB or RGBW supported and default device ID
-    unsigned ddpChannelsPerLed = 3 + (p->dataType == DDP_TYPE_RGBW32); // data type 0x1B (formerly 0x1A) is RGBW (type 3, 8 bit/channel)
-    uint32_t start =  htonl(p->channelOffset) / ddpChannelsPerLed;
-    start += DMXAddress / ddpChannelsPerLed;
-    unsigned stop = start + htons(p->dataLen) / ddpChannelsPerLed;
-    uint8_t* data = p->data;
-    unsigned c = 0;
-    if (p->flags & DDP_TIMECODE_FLAG) c = 4; //packet has timecode flag, we do not support it, but data starts 4 bytes later
-    if (realtimeMode != REALTIME_MODE_DDP) ddpSeenPush = false; // just starting, no push yet
-    realtimeLock(realtimeTimeoutMs, REALTIME_MODE_DDP);
-    if (!realtimeOverride) {
-      for (unsigned i = start; i < stop; i++, c += ddpChannelsPerLed) {
-        setRealtimePixel(i, data[c], data[c+1], data[c+2], ddpChannelsPerLed >3 ? data[c+3] : 0);
-      }
-    }
-    bool push = p->flags & DDP_PUSH_FLAG;
-    ddpSeenPush |= push;
-    if (!ddpSeenPush || push) { // if we've never seen a push, or this is one, render display
-      e131NewData = true;
-      if (sn) e131LastSequenceNumber[0] = sn;
-    }
-    return;
-  }
+  } else return;
 
-#ifndef WLED_USE_DDP_ONLY
   #ifdef WLED_ENABLE_DMX
   // does not act on out-of-order packets yet
   if (e131ProxyUniverse > 0 && uni == e131ProxyUniverse) {
@@ -520,5 +520,5 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol) {
   }
 
   e131NewData = true;
-#endif
 }
+#endif

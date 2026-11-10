@@ -34,7 +34,10 @@ void initDMX();
 void handleDMX();
 
 //e131.cpp
+void handleDDPPacket(e131_packet_t* p, IPAddress clientIP, byte protocol);
+#ifndef WLED_USE_DDP_ONLY
 void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol);
+#endif
 
 //file.cpp
 bool handleFileRead(AsyncWebServerRequest*, String path);
@@ -43,7 +46,6 @@ bool writeObjectToFile(const char* file, const char* key, const JsonDocument* co
 bool readObjectFromFileUsingId(const char* file, uint16_t id, JsonDocument* dest, const JsonDocument* filter = nullptr);
 bool readObjectFromFile(const char* file, const char* key, JsonDocument* dest, const JsonDocument* filter = nullptr);
 void updateFSInfo();
-void closeFile();
 inline bool writeObjectToFileUsingId(const String &file, uint16_t id, const JsonDocument* content) { return writeObjectToFileUsingId(file.c_str(), id, content); };
 inline bool writeObjectToFile(const String &file, const char* key, const JsonDocument* content) { return writeObjectToFile(file.c_str(), key, content); };
 inline bool readObjectFromFileUsingId(const String &file, uint16_t id, JsonDocument* dest, const JsonDocument* filter = nullptr) { return readObjectFromFileUsingId(file.c_str(), id, dest); };
