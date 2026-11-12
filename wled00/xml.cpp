@@ -577,6 +577,7 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     getTimeString(tm);
     printSetIdHTML(settingsScript,PSTR("loct"),tm);
     if ((int)(longitude*10.0f) || (int)(latitude*10.0f)) {
+      time_t sunrise = getSunrise(), sunset = getSunset();
       sprintf_P(tm, PSTR("Sunrise: %02d:%02d Sunset: %02d:%02d"), hour(sunrise), minute(sunrise), hour(sunset), minute(sunset));
       printSetIdHTML(settingsScript,PSTR("sun"),tm);
     }

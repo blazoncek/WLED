@@ -209,6 +209,7 @@ bool PIRsensorSwitch::isDayTime() {
   uint8_t hr = hour(localTime);
   uint8_t mi = minute(localTime);
 
+  time_t sunrise = getSunrise(), sunset = getSunset();
   if (sunrise && sunset) {
     if (hour(sunrise)<hr && hour(sunset)>hr) {
       return true;

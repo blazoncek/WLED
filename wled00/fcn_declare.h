@@ -150,6 +150,8 @@ void setCountdown();
 byte weekdayMondayFirst();
 void checkTimers();
 void calculateSunriseAndSunset();
+time_t getSunrise();
+time_t getSunset();
 void setTimeFromAPI(uint32_t timein);
 
 constexpr uint8_t TH_SUNRISE = 255;

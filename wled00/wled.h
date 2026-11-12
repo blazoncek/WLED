@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2611090
+#define VERSION 2611110
 #else
 #define VERSION BUILD
 #endif
@@ -671,7 +671,6 @@ WLED_GLOBAL bool hueStoreAllowed _INIT(false), hueNewKey _INIT(false);
 WLED_GLOBAL unsigned long countdownTime _INIT(1514764800L);
 WLED_GLOBAL bool countdownOverTriggered _INIT(true);
 
-WLED_GLOBAL byte lastTimerMinute  _INIT(0);
 WLED_GLOBAL std::vector<Timer> timers;
 WLED_GLOBAL bool doAdvancePlaylist _INIT(false);
 
@@ -722,8 +721,6 @@ WLED_GLOBAL IPAddress ntpServerIP;
 WLED_GLOBAL uint16_t rolloverMillis _INIT(0);
 WLED_GLOBAL float longitude _INIT(WLED_LON);
 WLED_GLOBAL float latitude _INIT(WLED_LAT);
-WLED_GLOBAL time_t sunrise _INIT(0);
-WLED_GLOBAL time_t sunset _INIT(0);
 WLED_GLOBAL Toki toki _INIT(Toki());
 
 // General filesystem
