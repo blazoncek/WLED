@@ -485,14 +485,18 @@ void getSettingsJS(byte subPage, Print& settingsScript)
     printSetFormCheckbox(settingsScript,PSTR("RD"),receiveDirect);
     printSetFormCheckbox(settingsScript,PSTR("MO"),useMainSegmentOnly);
     printSetFormCheckbox(settingsScript,PSTR("RLM"),realtimeRespectLedMaps);
-    printSetFormValue(settingsScript,PSTR("EP"),e131Port);
     printSetFormCheckbox(settingsScript,PSTR("ES"),e131SkipOutOfSequence);
+    printSetFormValue(settingsScript,PSTR("DA"),DMXAddress);
+    #ifndef WLED_USE_DDP_ONLY
+    printSetFormValue(settingsScript,PSTR("EP"),e131Port);
     printSetFormCheckbox(settingsScript,PSTR("EM"),e131Multicast);
     printSetFormValue(settingsScript,PSTR("EU"),e131Universe);
-    printSetFormValue(settingsScript,PSTR("DA"),DMXAddress);
     printSetFormValue(settingsScript,PSTR("XX"),DMXSegmentSpacing);
     printSetFormValue(settingsScript,PSTR("PY"),e131Priority);
     printSetFormValue(settingsScript,PSTR("DM"),DMXMode);
+    #else
+    settingsScript.print(F("toggle('E131');"));    // hide E1.31 settings
+    #endif
     printSetFormValue(settingsScript,PSTR("ET"),realtimeTimeoutMs);
     printSetFormCheckbox(settingsScript,PSTR("FB"),arlsForceMaxBri);
     printSetFormCheckbox(settingsScript,PSTR("RG"),arlsDisableGammaCorrection);

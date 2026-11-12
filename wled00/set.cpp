@@ -467,19 +467,21 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     useMainSegmentOnly = request->hasArg(F("MO"));
     realtimeRespectLedMaps = request->hasArg(F("RLM"));
     e131SkipOutOfSequence = request->hasArg(F("ES"));
+    t = request->arg(F("DA")).toInt();
+    if (t >= 0  && t <= 510) DMXAddress = t;
+    #ifndef WLED_USE_DDP_ONLY
     e131Multicast = request->hasArg(F("EM"));
     t = request->arg(F("EP")).toInt();
     if (t > 0) e131Port = t;
     t = request->arg(F("EU")).toInt();
     if (t >= 0  && t <= 63999) e131Universe = t;
-    t = request->arg(F("DA")).toInt();
-    if (t >= 0  && t <= 510) DMXAddress = t;
     t = request->arg(F("XX")).toInt();
     if (t >= 0  && t <= 150) DMXSegmentSpacing = t;
     t = request->arg(F("PY")).toInt();
     if (t >= 0  && t <= 200) e131Priority = t;
     t = request->arg(F("DM")).toInt();
     if (t >= DMX_MODE_DISABLED && t <= DMX_MODE_PRESET) DMXMode = t;
+    #endif
     t = request->arg(F("ET")).toInt();
     if (t > 99  && t <= 65000) realtimeTimeoutMs = t;
     arlsForceMaxBri = request->hasArg(F("FB"));

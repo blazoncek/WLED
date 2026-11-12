@@ -701,20 +701,24 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   CJSON(receiveDirect, if_live["en"]);  // UDP/Hyperion realtime
   CJSON(useMainSegmentOnly, if_live[F("mso")]);
   CJSON(realtimeRespectLedMaps, if_live[F("rlm")]);
+  #ifndef WLED_USE_DDP_ONLY
   CJSON(e131Port, if_live["port"]); // 5568
   if (e131Port == DDP_DEFAULT_PORT) e131Port = E131_DEFAULT_PORT; // prevent double DDP port allocation
   CJSON(e131Multicast, if_live[F("mc")]);
+  #endif
 
   JsonObject if_live_dmx = if_live["dmx"];
-  CJSON(e131Universe, if_live_dmx[F("uni")]);
   CJSON(e131SkipOutOfSequence, if_live_dmx[F("seqskip")]);
   CJSON(DMXAddress, if_live_dmx[F("addr")]);
   if (!DMXAddress || DMXAddress > 510) DMXAddress = 1;
+  #ifndef WLED_USE_DDP_ONLY
+  CJSON(e131Universe, if_live_dmx[F("uni")]);
   CJSON(DMXSegmentSpacing, if_live_dmx[F("dss")]);
   if (DMXSegmentSpacing > 150) DMXSegmentSpacing = 0;
   CJSON(e131Priority, if_live_dmx[F("e131prio")]);
   if (e131Priority > 200) e131Priority = 200;
   CJSON(DMXMode, if_live_dmx["mode"]);
+  #endif
 
   tdd = if_live[F("timeout")] | -1;
   if (tdd >= 0) realtimeTimeoutMs = tdd * 100;
@@ -1196,16 +1200,20 @@ void serializeConfig() {
   if_live["en"] = receiveDirect; // UDP/Hyperion realtime
   if_live[F("mso")] = useMainSegmentOnly;
   if_live[F("rlm")] = realtimeRespectLedMaps;
+  #ifndef WLED_USE_DDP_ONLY
   if_live["port"] = e131Port;
   if_live[F("mc")] = e131Multicast;
+  #endif
 
   JsonObject if_live_dmx = if_live.createNestedObject("dmx");
-  if_live_dmx[F("uni")] = e131Universe;
   if_live_dmx[F("seqskip")] = e131SkipOutOfSequence;
-  if_live_dmx[F("e131prio")] = e131Priority;
   if_live_dmx[F("addr")] = DMXAddress;
+  #ifndef WLED_USE_DDP_ONLY
+  if_live_dmx[F("uni")] = e131Universe;
+  if_live_dmx[F("e131prio")] = e131Priority;
   if_live_dmx[F("dss")] = DMXSegmentSpacing;
   if_live_dmx["mode"] = DMXMode;
+  #endif
 
   if_live[F("timeout")] = realtimeTimeoutMs / 100;
   if_live[F("maxbri")] = arlsForceMaxBri;

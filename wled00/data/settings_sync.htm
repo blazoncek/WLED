@@ -126,8 +126,15 @@ Make this instance discoverable: <input type="checkbox" name="NB">
 <h3>Realtime</h3>
 Receive UDP realtime: <input type="checkbox" name="RD"><br>
 Use main segment only: <input type="checkbox" name="MO"><br>
+Skip out-of-sequence packets: <input type="checkbox" name="ES"><br>
+Start address: <input name="DA" type="number" min="1" max="510" required><br>
+Timeout: <input name="ET" type="number" min="1" max="65000" required> ms<br>
+Force max brightness: <input type="checkbox" name="FB"><br>
+Disable realtime gamma correction: <input type="checkbox" name="RG"><br>
+Realtime LED offset: <input name="WO" type="number" min="-255" max="255" required><br>
 Respect LED Maps: <input type="checkbox" name="RLM"><br><br>
 <i>Network DMX input</i><br>
+<div id="NoE131" class="hide"><i class="warn">This device only supports DDP input.</i></div><div id="E131">
 Type:
 <select name=DI onchange="SP(); adj();">
 <option value=5568>E1.31 (sACN)</option>
@@ -137,9 +144,7 @@ Type:
 <div id=xp>Port: <input name="EP" type="number" min="1" max="65535" value="5568" class="d5" required><br></div>
 Multicast: <input type="checkbox" name="EM"><br>
 Start universe: <input name="EU" type="number" min="0" max="63999" required><br>
-<i>Reboot required.</i> Check out <a href="https://github.com/LedFx/LedFx" target="_blank">LedFx</a>!<br>
-Skip out-of-sequence packets: <input type="checkbox" name="ES"><br>
-DMX start address: <input name="DA" type="number" min="1" max="510" required><br>
+<i class="warn">Reboot required.</i> Check out <a href="https://github.com/LedFx/LedFx" target="_blank">LedFx</a>!<br>
 DMX segment spacing: <input name="XX" type="number" min="0" max="150" required><br>
 E1.31 port priority: <input name="PY" type="number" min="0" max="200" required><br>
 DMX mode:
@@ -156,11 +161,8 @@ DMX mode:
 <option value=6>Multi RGBW</option>
 <option value=10>Preset</option>
 </select><br>
-<a href="#" onclick="H('/interfaces/e1.31-dmx')">E1.31 info</a><br>
-Timeout: <input name="ET" type="number" min="1" max="65000" required> ms<br>
-Force max brightness: <input type="checkbox" name="FB"><br>
-Disable realtime gamma correction: <input type="checkbox" name="RG"><br>
-Realtime LED offset: <input name="WO" type="number" min="-255" max="255" required>
+<a href="#" onclick="H('/interfaces/e1.31-dmx')">E1.31 info</a>
+</div>
 <hr class="sml">
 <h3>Alexa Voice Assistant</h3>
 <div id="NoAlexa" class="hide">
