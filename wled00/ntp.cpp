@@ -536,6 +536,19 @@ bool isTodayInDateRange(byte monthStart, byte dayStart, byte monthEnd, byte dayE
 	return (m == monthStart && d >= dayStart && d <= dayEnd); //just the designated days this month
 }
 
+static time_t getTimeFromHHMM(int8_t hh, int8_t mm) {
+  if (hh < 0 && mm < 0) return (time_t)0;
+  struct tm tim;
+  tim.tm_year = year(localTime) - 1900;
+  tim.tm_mon = month(localTime) - 1;
+  tim.tm_mday = day(localTime);
+  tim.tm_hour = hh;
+  tim.tm_min = mm;
+  tim.tm_sec = 0;
+  tim.tm_isdst = -1;
+  return mktime(&tim);
+}
+
 void checkTimers() {
   lastTimerMinute = minute(localTime);  // update timer check flag
 
@@ -556,15 +569,7 @@ void checkTimers() {
       if (!getSunset()) continue;
       tt = getSunset() + t.minute * 60;
     } else {
-      struct tm tim;
-      tim.tm_year = year(localTime) - 1900;
-      tim.tm_mon = month(localTime) - 1;
-      tim.tm_mday = day(localTime);
-      tim.tm_hour = t.hour;
-      tim.tm_min = t.minute;
-      tim.tm_sec = 0;
-      tim.tm_isdst = -1;
-      tt = mktime(&tim);
+      tt = getTimeFromHHMM(t.hour, t.minute);
     }
     if ((hour(tt) == hour(localTime) && minute(tt) == minute(localTime)) || (t.hour == 24 && t.minute == minute(localTime))) {
       applyPreset(t.preset);
@@ -630,24 +635,16 @@ static int getSunriseUTC(int year, int month, int day, float lat, float lon, boo
 	return UT*60;
 }
 
-static uint8_t sunriseHour = 0;
-static uint8_t sunriseMinute = 0;
-static uint8_t sunsetHour = 0;
-static uint8_t sunsetMinute = 0;
+// these are in UTC
+static int8_t sunriseHour = -1;
+static int8_t sunriseMinute = -1;
+static int8_t sunsetHour = -1;
+static int8_t sunsetMinute = -1;
 
 #define SUNSET_MAX (24*60) // 1day = max expected absolute value for sun offset in minutes
 // calculate sunrise and sunset (if longitude and latitude are set)
 void calculateSunriseAndSunset() {
   if ((int)(longitude*10.0f) || (int)(latitude*10.0f)) {
-    #ifdef WLED_DEBUG
-    struct tm tim_0;
-    tim_0.tm_year = year(localTime)-1900;
-    tim_0.tm_mon = month(localTime)-1;
-    tim_0.tm_mday = day(localTime);
-    tim_0.tm_sec = 0;
-    tim_0.tm_isdst = 0;
-    #endif
-
     // Due to limited accuracy, its possible to get a bad sunrise/sunset displayed as "00:00" (see issue #3601)
     // So in case of invalid result, we try to use the sunset/sunrise of previous day. Max 3 days back, this worked well in all cases I tried.
     // When latitude = 66,6 (N or S), the functions sometimes returns 2147483647, so this "unexpected large" is another condition for retry
@@ -665,15 +662,10 @@ void calculateSunriseAndSunset() {
       if (minUTC < 0) minUTC += 24*60; // add a day if negative
       sunriseHour = minUTC / 60;
       sunriseMinute = minUTC % 60;
-      #ifdef WLED_DEBUG
-      tim_0.tm_hour = sunriseHour;
-      tim_0.tm_min = sunriseMinute;
-      time_t sunrise = mktime(&tim_0) + utcOffsetSecs;
-      DEBUG_PRINTF_P(PSTR("Sunrise: %02d:%02d\n"), hour(tz->toLocal(sunrise)), minute(tz->toLocal(sunrise)));
-      #endif
+      DEBUG_PRINTF_P(PSTR("Sunrise: %02d:%02d\n"), hour(getSunrise()), minute(getSunrise()));
     } else {
-      sunriseHour = 0;
-      sunriseMinute = 0;
+      sunriseHour = -1;
+      sunriseMinute = -1;
     }
 
     retryCount = 0;
@@ -689,38 +681,20 @@ void calculateSunriseAndSunset() {
       if (minUTC < 0) minUTC += 24*60; // add a day if negative
       sunsetHour = minUTC / 60;
       sunsetMinute = minUTC % 60;
-      #ifdef WLED_DEBUG
-      tim_0.tm_hour = sunsetHour;
-      tim_0.tm_min = sunsetMinute;
-      time_t sunset = mktime(&tim_0) + utcOffsetSecs;
-      DEBUG_PRINTF_P(PSTR("Sunset: %02d:%02d\n"), hour(tz->toLocal(sunset)), minute(tz->toLocal(sunset)));
-      #endif
+      DEBUG_PRINTF_P(PSTR("Sunset: %02d:%02d\n"), hour(getSunset()), minute(getSunset()));
     } else {
-      sunsetHour = 0;
-      sunsetMinute = 0;
+      sunsetHour = -1;
+      sunsetMinute = -1;
     }
   }
 }
 
-static time_t getTimeFromHHMM(uint8_t hh, uint8_t mm) {
-  if (hh == 0 && mm == 0) return (time_t)0;
-  struct tm tim;
-  tim.tm_year = year(localTime) - 1900;
-  tim.tm_mon = month(localTime) - 1;
-  tim.tm_mday = day(localTime);
-  tim.tm_hour = hh;
-  tim.tm_min = mm;
-  tim.tm_sec = 0;
-  tim.tm_isdst = -1;
-  return tz->toLocal(mktime(&tim));
-}
-
 time_t getSunrise() {
-  return getTimeFromHHMM(sunriseHour, sunriseMinute);
+  return tz->toLocal(getTimeFromHHMM(sunriseHour, sunriseMinute));
 }
 
 time_t getSunset() {
-  return getTimeFromHHMM(sunsetHour, sunsetMinute);
+  return tz->toLocal(getTimeFromHHMM(sunsetHour, sunsetMinute));
 }
 
 //time from JSON and HTTP API
