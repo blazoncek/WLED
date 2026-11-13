@@ -24,6 +24,8 @@ WLED::WLED()
 void WLED::reset(bool factory)
 {
   briT = 0;
+  BusManager::clear();
+  BusManager::show();
   #ifdef WLED_ENABLE_AOTA
   if (aOtaEnabled) ArduinoOTA.end();
   #endif
@@ -667,7 +669,7 @@ void WLED::beginStrip()
     briLast = briS; bri = 0;
     // needed to clear all outputs (On/Off in particular)
     strip.fill(BLACK);
-    for (size_t i = 0; i < strip.getLengthTotal(); i++) BusManager::setPixelColor(i, BLACK);  // fill all pixels with black
+    BusManager::clear();// fill all pixels with black
     BusManager::show(); // force output update
   }
   offMode = !bri;

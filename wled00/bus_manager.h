@@ -629,6 +629,7 @@ namespace BusManager {
   void  show();
   bool canAllShow();
 
+  inline void    clear()                    { for (auto &bus : busses) for (size_t i = 0; i < bus->getLength(); i++) bus->setPixelColor(i, 0); }
   inline void    setStatusPixel(uint32_t c) { for (auto &bus : busses) bus->setStatusPixel(c);}
   inline void    setBrightness(uint8_t b)   { for (auto &bus : busses) bus->setBrightness(b); }
   inline void    setPixelColor(unsigned pix, uint32_t c) { for (auto &bus : busses) bus->setPixelColor(pix - bus->getStart(), c); } // rely on unsigned underflow
