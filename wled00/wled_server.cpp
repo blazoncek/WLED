@@ -223,7 +223,7 @@ static void handleUpload(fs::FS &_fs, AsyncWebServerRequest *request, const Stri
     request->_tempFile.close();
     if (filename.indexOf(F("cfg.json")) >= 0) { // check for filename with or without slash
       request->send(200, FPSTR(CONTENT_TYPE_PLAIN), F("Configuration restore successful.\nRebooting..."));
-      delay(10); // allow some time for response to be sent
+      delay(150); // allow some time for response to be sent
       doReboot = true;
     } else {
       request->send(200, FPSTR(CONTENT_TYPE_PLAIN), String(F("UPLOADED: "))+filename);
