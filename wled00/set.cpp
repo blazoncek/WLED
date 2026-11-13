@@ -625,10 +625,17 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
   {
     if (request->hasArg(F("RS"))) //complete factory reset
     {
-      WLED_FS.format();
-      serveMessage(request, 200, F("All Settings erased."), F("Connect to WLED-AP to setup again"), 255);
-      doReboot = true; // may reboot immediately on dual-core system (race condition) which is desireable in this case
-      doSerializeConfig = false;
+      const char *referer = PSTR("Referer");
+      if (request->hasHeader(FPSTR(referer))) {
+        // prevent factory reset from untrusted referer (only from ourselves)
+        bool validOrigin = request->getHeader(FPSTR(referer))->value().indexOf(Network.localIP().toString()) || request->getHeader(FPSTR(referer))->value().indexOf(hostName);
+        if (validOrigin) {
+          //serveMessage(request, 200, F("All Settings erased."), F("Connect to WLED-AP to setup again"), 255); // does not work
+          request->send(200, FPSTR(CONTENT_TYPE_HTML), F("<!DOCTYPE html><html><head><title>WLED Message</title><style>body{font-family: Verdana,sans-serif;font-size:1rem;text-align:center;background:#222;color:#fff;line-height:200%;margin:0;}</style></head><body><h2>All Settings erased.</h2>Connect to WLED-AP to setup again.</body></html>"));
+          WLED::instance().reset(true);
+        }
+      }
+      serveMessage(request, 401, F("Access Denied"), F("Unauthorized access."), 254);
       return;
     }
 

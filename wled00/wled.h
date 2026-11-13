@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2611120
+#define VERSION 2611130
 #else
 #define VERSION BUILD
 #endif
@@ -905,7 +905,7 @@ public:
   void setup();
 
   void loop();
-  void reset();
+  void reset(bool factory = false);
 
   void beginStrip();
   void handleConnection();

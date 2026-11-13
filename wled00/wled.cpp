@@ -21,19 +21,32 @@ WLED::WLED()
 }
 
 // turns all LEDs off and restarts ESP
-void WLED::reset()
+void WLED::reset(bool factory)
 {
   briT = 0;
+  #ifdef WLED_ENABLE_AOTA
+  if (aOtaEnabled) ArduinoOTA.end();
+  #endif
+  if (mDNSenabled) MDNS.end();
+  #ifdef ARDUINO_ARCH_ESP32
+  if (sdCard) SD.end();
+  #endif
   #ifdef WLED_ENABLE_WEBSOCKETS
   ws.closeAll(1012);
   #endif
-  #ifndef ESP8266
-  if (sdCard) SD.end();
-  #endif
+
   unsigned long dly = millis() + 450;
-  while (millis() < dly) {
-    yield();        // enough time to send response to client
+  while (millis() < dly) yield();   // enough time to send response to client
+
+  if (factory) {
+    DEBUG_PRINTLN(F("Factory reset."));
+    WLED_FS.format();               // erase file system
+    WiFi.disconnect(true, true);    // erase stored WiFi credentials
+    #ifdef ARDUINO_ARCH_ESP32
+    WiFi.eraseAP();
+    #endif
   }
+
   DEBUG_PRINTLN(F("WLED RESET"));
   ESP.restart();
 }
