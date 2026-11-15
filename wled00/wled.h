@@ -9,7 +9,7 @@
 
 // version code in format yymmddb (b = daily build)
 #ifndef AUTOBUILD
-#define VERSION 2611130
+#define VERSION 2611150
 #else
 #define VERSION BUILD
 #endif
@@ -348,10 +348,10 @@ WLED_GLOBAL uint8_t txPower _INIT(WIFI_POWER_19_5dBm);
 #endif
 
 #ifdef WLED_USE_ETHERNET
-  #ifdef WLED_ETH_DEFAULT                                          // default ethernet board type if specified
-    WLED_GLOBAL int ethernetType _INIT(WLED_ETH_DEFAULT);          // ethernet board type
+  #ifdef WLED_ETH_DEFAULT                                       // default ethernet board type if specified
+    WLED_GLOBAL uint8_t ethernetType _INIT(WLED_ETH_DEFAULT);   // ethernet board type
   #else
-    WLED_GLOBAL int ethernetType _INIT(WLED_ETH_NONE);             // use none for ethernet board type if default not defined
+    WLED_GLOBAL uint8_t ethernetType _INIT(WLED_ETH_NONE);      // use none for ethernet board type if default not defined
   #endif
 #endif
 

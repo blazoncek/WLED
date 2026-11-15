@@ -127,8 +127,10 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     #endif
 
     #ifdef WLED_USE_ETHERNET
+    uint8_t oldEth = ethernetType;
     ethernetType = request->arg(F("ETH")).toInt();
-    initEthernet();
+    if (oldEth == WLED_ETH_NONE) initEthernet();
+    else if (oldEth != ethernetType) rebootNeeded = true;
     #endif
   }
 
@@ -544,9 +546,12 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     currentTimezone = request->arg(F("TZ")).toInt();
     utcOffsetSecs = request->arg(F("UO")).toInt();
 
-    //start ntp if not already connected
-    if (ntpEnabled && WLED_CONNECTED && !ntpConnected) ntpConnected = ntpUdp.begin(ntpLocalPort);
-    ntpLastSyncTime = NTP_NEVER; // force new NTP query
+    // restart ntp
+    if (ntpEnabled && WLED_CONNECTED) {
+      ntpUdp.stop();
+      ntpConnected = ntpUdp.begin(ntpLocalPort);
+      ntpLastSyncTime = NTP_NEVER; // force new NTP query
+    }
 
     longitude = request->arg(F("LN")).toFloat();
     latitude = request->arg(F("LT")).toFloat();

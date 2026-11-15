@@ -479,6 +479,10 @@ void WLED::setup()
   PinManager::allocatePin(2, true, PinOwner::DMX);
 #endif
 
+  // to monitor network events (including Ethernet) we must add event callback prior to any initialization
+  // Ethernet is initialized in deserializeConfig()
+  WiFi.onEvent(WiFiEvent);
+
   DEBUG_PRINTLN(F("Registering usermods ..."));
   registerUsermods();
 
@@ -528,7 +532,6 @@ void WLED::setup()
   DEBUG_PRINTLN(F("Starting WiFi"));
   // configurable WiFi options are set in cfg.cpp
   //WiFi.enableLongRange(true);
-  WiFi.onEvent(WiFiEvent);
 #if defined(ARDUINO_ARCH_ESP32) && ESP_IDF_VERSION_MAJOR >= 4
   WiFi.persistent(true);          // storing credentials in NVM fixes boot-up pause as connection is much faster, is disabled after first connection
   WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
@@ -868,6 +871,7 @@ void WLED::connected()
   e131.begin(e131Multicast, e131Port, e131Universe, E131_MAX_UNIVERSE_COUNT);
   #endif
   ddp.begin(false, DDP_DEFAULT_PORT);
+  DEBUG_PRINTLN(F("UDP started."));
 
 #ifndef WLED_DISABLE_HUESYNC
   reconnectHue();
@@ -880,8 +884,13 @@ void WLED::connected()
 
   interfacesInited = true;
   DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
+  DEBUG_PRINTLN(F("Done connected."));
 
   UsermodManager::connected();
+  DEBUG_PRINTLN(F("Done usermod connected."));
+
+  wasConnected = true;
+  showWelcomePage = false;
 }
 
 void WLED::handleConnection()
@@ -1043,7 +1052,7 @@ ESP-NOW  inited in AP mode (channel: 6/1).
       // i.e. initial connect was unsuccessful (12s is enough to connect to SSID if it exists)
       // !wasConnected means this is after boot and we haven't yet successfully connected to SSID
       DEBUG_PRINTF_P(PSTR("WiFi: Opening AP in STA mode (%d) @ %lus.\n"), (int)(apBehavior == AP_BEHAVIOR_ALWAYS), now/1000);
-      WiFi.enableSTA(true); // most likely already set (but force it anyway)
+      if (isWiFiConfigured()) WiFi.enableSTA(true); // most likely already set (but force it anyway)
       initAP();
       staActive = true;
       return;

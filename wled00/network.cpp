@@ -157,11 +157,11 @@ bool initEthernet()
     return false;
   }
   if (ethernetType >= WLED_NUM_ETH_TYPES) {
-    DEBUG_PRINTF_P(PSTR("initE: Ignoring attempt for invalid ethernetType (%d)\n"), ethernetType);
+    DEBUG_PRINTF_P(PSTR("initE: Ignoring attempt for invalid ethernetType (%d)\n"), (int)ethernetType);
     return false;
   }
 
-  DEBUG_PRINTF_P(PSTR("initE: Attempting ETH config: %d\n"), ethernetType);
+  DEBUG_PRINTF_P(PSTR("initE: Attempting ETH config: %d\n"), (int)ethernetType);
 
   // Ethernet initialization should only succeed once -- else reboot required
   ethernet_settings es = ethernetBoards[ethernetType];
@@ -496,6 +496,7 @@ void WiFiEvent(WiFiEvent_t event)
       DEBUG_PRINTF_P(PSTR("WiFi-E: AP Client Connected (%d) @ %lus.\n"), (int)apClients, millis()/1000);
       break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+      wasConnected = true;
       DEBUG_PRINT(F("WiFi-E: IP address: ")); DEBUG_PRINTLN(Network.localIP());
       break;
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
@@ -508,7 +509,6 @@ void WiFiEvent(WiFiEvent_t event)
       #ifdef WLED_DEBUG
       WiFi.printDiag(DEBUGOUT);
       #endif
-      wasConnected = true;
       #ifndef WLED_DISABLE_ESPNOW
       heartbeatESPNow = 0;
       scanESPNow = millis() + 30000;    // postpone heartbeat generation for a few seconds (may be overriden in WLED::connected())
@@ -516,12 +516,18 @@ void WiFiEvent(WiFiEvent_t event)
       break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
       // may be called *after* loop() has called handleConnection() with WiFi disconnected!
-      if (wasConnected && interfacesInited) {
-        DEBUG_PRINTF_P(PSTR("WiFi-E: Disconnected! @ %lus\n"), millis()/1000);
+      DEBUG_PRINTF_P(PSTR("WiFi-E: Disconnected! @ %lus\n"), millis()/1000);
+      if (interfacesInited) {
+        server.end();
+        if (udpPort) notifierUdp.stop();
+        if (udpPort2) notifier2Udp.stop();
+        if (udpRgbPort) rgbUdp.stop();      
+        if (mDNSenabled) MDNS.end();
+        interfacesInited = false;
+
         if (multiWiFi.size() > 1 && WiFi.scanComplete() >= 0)
           findWiFi(true);               // reinit WiFi scan (this may add ~6s connection delay but will select best SSID)
         forceReconnect = true;          // force reconnect
-        interfacesInited = false;
         #ifndef WLED_DISABLE_ESPNOW
         heartbeatESPNow = 0;
         scanESPNow = millis() + 30000;  // postpone scan for master for 30s after disconnect (give auto reconnect enough time to reconnect)
@@ -541,18 +547,33 @@ void WiFiEvent(WiFiEvent_t event)
       // also triggered when connected to selected SSID
       DEBUG_PRINTF_P(PSTR("WiFi-E: SSID scan completed. @ %lus\n"), millis()/1000);
       break;
+    case ARDUINO_EVENT_WIFI_STA_START:
+      DEBUG_PRINTF_P(PSTR("WiFi-E: STA Started. @ %lus\n"), millis()/1000);
+      break;
+    case ARDUINO_EVENT_WIFI_STA_STOP:
+      DEBUG_PRINTF_P(PSTR("WiFi-E: STA Stopped. @ %lus\n"), millis()/1000);
+      break;
     case ARDUINO_EVENT_WIFI_AP_START:
       DEBUG_PRINTF_P(PSTR("WiFi-E: AP Started. @ %lus\n"), millis()/1000);
       break;
     case ARDUINO_EVENT_WIFI_AP_STOP:
       DEBUG_PRINTF_P(PSTR("WiFi-E: AP Stopped. @ %lus\n"), millis()/1000);
-      break;
+      server.end();
+      if (udpPort) notifierUdp.stop();
+      if (udpPort2) notifier2Udp.stop();
+      if (udpRgbPort) rgbUdp.stop();
+      #ifndef WLED_USE_DDP_ONLY
+      e131.end();
+      #endif
+      ddp.end();
+    break;
     #ifdef WLED_USE_ETHERNET
     case ARDUINO_EVENT_ETH_START:
       DEBUG_PRINTF_P(PSTR("ETH-E: Started. @ %lus\n"), millis()/1000);
       break;
     case ARDUINO_EVENT_ETH_GOT_IP:
-      DEBUG_PRINTF_P(PSTR("ETH-E: Got IP. @ %lus\n"), millis()/1000);
+      DEBUG_PRINTF_P(PSTR("ETH-E: Got IP: %s. @ %lus\n"), Network.localIP().toString().c_str(), millis()/1000);
+      wasConnected = true;
       // ESP-NOW requires active radio (STA or AP) to function (see wled#4703)
       // if we want to disable radio entirely, we need to stop ESP-NOW
       // this prevents Ethernet device to be ESP-NOW broadcaster or receiver
@@ -572,7 +593,6 @@ void WiFiEvent(WiFiEvent_t event)
       break;
     case ARDUINO_EVENT_ETH_CONNECTED: {
       DEBUG_PRINTF_P(PSTR("ETH-E: Connected. @ %lus\n"), millis()/1000);
-      showWelcomePage = false;
       break;
       }
     case ARDUINO_EVENT_ETH_DISCONNECTED:
@@ -585,6 +605,19 @@ void WiFiEvent(WiFiEvent_t event)
       #ifndef WLED_DISABLE_ESPNOW
       stopESPNow();                   // we are going to (re)start radio so stop ESP-NOW
       #endif
+      if (interfacesInited) {
+        server.end();
+        if (udpPort) notifierUdp.stop();
+        if (udpPort2) notifier2Udp.stop();
+        if (udpRgbPort) rgbUdp.stop();
+        if (ntpEnabled) ntpUdp.stop();
+        if (mDNSenabled) MDNS.end();
+        #ifndef WLED_USE_DDP_ONLY
+        e131.end();
+        #endif
+        ddp.end();
+        interfacesInited = false;
+      }
       if (isWiFiConfigured()) {
         WiFi.softAPdisconnect(true);  // disengage eventual hidden AP mode
         WiFi.enableSTA(true);         // start connecting to last connected SSID
@@ -595,7 +628,6 @@ void WiFiEvent(WiFiEvent_t event)
         showWelcomePage = true;
         WLED::instance().initAP();    // open AP so we can control/configure WLED
       }
-      interfacesInited = false;
       break;
     #endif
   #endif

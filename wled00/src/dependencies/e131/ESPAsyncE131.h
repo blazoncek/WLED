@@ -231,6 +231,7 @@ class ESPAsyncE131 {
 
     // Generic UDP listener, no physical or IP configuration
     bool begin(bool multicast, uint16_t port = E131_DEFAULT_PORT, uint16_t universe = 1, uint8_t n = 1);
+    void end() { udp.close(); }
 };
 
 // Class to track e131 package priority

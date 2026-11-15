@@ -130,10 +130,12 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   }
 
 #ifdef WLED_USE_ETHERNET
+  uint8_t oldEth = ethernetType;
   JsonObject ethernet = doc[F("eth")];
   CJSON(ethernetType, ethernet["type"]);
   // NOTE: Ethernet configuration takes priority over other use of pins
-  initEthernet();
+  if (fromFS) initEthernet();
+  else if (oldEth != ethernetType) rebootNeeded = true;
 #endif
 
   JsonObject ap = doc["ap"];
