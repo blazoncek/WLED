@@ -701,6 +701,39 @@ void WLED::stopAP(bool stop) {
   apActive = false;
 }
 
+static void _initServers() {
+  #ifdef WLED_ENABLE_WEBSOCKETS
+  ws.onEvent(wsEvent);
+  DEBUG_PRINTLN(F("WS event handler attached"));
+  #endif
+
+  server.end();  // call end to clean possible bind to IP address
+  server.begin();
+  DEBUG_PRINTLN(F("AWS started"));
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
+
+  if (udpPort > 0 && udpPort != ntpLocalPort) {
+    udpConnected = notifierUdp.begin(udpPort);      // no need to do stop(); can do begin() multiple times
+  }
+  if (udpRgbPort > 0 && udpRgbPort != ntpLocalPort && udpRgbPort != udpPort) {
+    udpRgbConnected = rgbUdp.begin(udpRgbPort);     // no need to do stop(); can do begin() multiple times
+  }
+  if (udpPort2 > 0 && udpPort2 != ntpLocalPort && udpPort2 != udpPort && udpPort2 != udpRgbPort) {
+    udp2Connected = notifier2Udp.begin(udpPort2);   // no need to do stop(); can do begin() multiple times
+  }
+  if (ntpEnabled)
+    ntpConnected = ntpUdp.begin(ntpLocalPort);      // no need to do stop(); can do begin() multiple times
+
+  #ifndef WLED_USE_DDP_ONLY
+  e131.end();  // call end to clean possible bind to IP address
+  e131.begin(e131Multicast, e131Port, e131Universe, E131_MAX_UNIVERSE_COUNT);
+  #endif
+  ddp.end();  // call end to clean possible bind to IP address
+  ddp.begin(false, DDP_DEFAULT_PORT);
+  DEBUG_PRINTLN(F("UDP started."));
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
+}
+
 void WLED::initAP(bool resetAP)
 {
   if (apBehavior == AP_BEHAVIOR_BUTTON_ONLY && !resetAP)
@@ -722,27 +755,13 @@ void WLED::initAP(bool resetAP)
 
   if (!apActive && success) // start captive portal if AP active
   {
-    #ifdef WLED_ENABLE_WEBSOCKETS
-    ws.onEvent(wsEvent);
-    #endif
     DEBUG_PRINTF_P(PSTR("WiFi: Init AP interfaces @ %lus\n"), millis()/1000);
-    server.begin();
-    if (udpPort > 0 && udpPort != ntpLocalPort) {
-      udpConnected = notifierUdp.begin(udpPort);
-    }
-    if (udpRgbPort > 0 && udpRgbPort != ntpLocalPort && udpRgbPort != udpPort) {
-      udpRgbConnected = rgbUdp.begin(udpRgbPort);
-    }
-    if (udpPort2 > 0 && udpPort2 != ntpLocalPort && udpPort2 != udpPort && udpPort2 != udpRgbPort) {
-      udp2Connected = notifier2Udp.begin(udpPort2);
-    }
-    #ifndef WLED_USE_DDP_ONLY
-    e131.begin(false, e131Port, e131Universe, E131_MAX_UNIVERSE_COUNT);
-    #endif
-    ddp.begin(false, DDP_DEFAULT_PORT);
+    _initServers();
 
     dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
     dnsServer.start(53, "*", WiFi.softAPIP());
+    DEBUG_PRINTLN(F("DNS server started"));
+    DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 
     #ifndef WLED_DISABLE_ESPNOW
     initESPNow();
@@ -757,7 +776,23 @@ void WLED::initAP(bool resetAP)
 void WLED::initConnection(bool force)
 {
   DEBUG_PRINTF_P(PSTR("initConnection() called @ %lus.\n"), millis()/1000);
-  WiFi.disconnect(); // close old connections
+
+#ifdef ARDUINO_ARCH_ESP32
+  // Stop mDNS before the netif is destroyed below (WIFI_MODE_NULL). Otherwise mDNS can
+  // use a stale netif and crash (#5945). initInterfaces() restarts it after reconnecting.
+  #ifdef WLED_ENABLE_AOTA
+  if (aOtaEnabled) {
+    DEBUG_PRINTLN(F("Stopping arduinoOTA before Wi-Fi disconnect()."));
+    ArduinoOTA.end();
+  }
+  #endif
+  if (mDNSenabled) {
+    DEBUG_PRINTLN(F("Stopping mDNS before Wi-Fi disconnect()."));
+    MDNS.end();
+  }
+#endif
+
+  WiFi.disconnect(); // close old connections (but do not turn off radio)
   delay(5);          // wait for hardware to be ready
 
   const bool newConnection = lastReconnectAttempt > 0;
@@ -806,25 +841,9 @@ void WLED::initConnection(bool force)
 // connected() is called when WiFi connection is established
 void WLED::connected()
 {
-  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
-  DEBUG_PRINTLN(F("Init STA interfaces"));
-
-#ifdef WLED_ENABLE_WEBSOCKETS
-  ws.onEvent(wsEvent);
-#endif
-
 #ifndef WLED_DISABLE_ESPNOW
   DEBUG_PRINTLN(F("ESP-NOW stopping on connect."));
   stopESPNow(); // stop ESP-NOW if it was running
-#endif
-
-#ifndef WLED_DISABLE_HUESYNC
-  IPAddress ipAddress = Network.localIP();
-  if (hueIP[0] == 0) {
-    hueIP[0] = ipAddress[0];
-    hueIP[1] = ipAddress[1];
-    hueIP[2] = ipAddress[2];
-  }
 #endif
 
 #ifndef WLED_DISABLE_ALEXA
@@ -835,9 +854,11 @@ void WLED::connected()
 
 #ifdef WLED_ENABLE_AOTA
   if (aOtaEnabled) ArduinoOTA.begin();
+  DEBUG_PRINTLN(F("ArduinoOTA started"));
   DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 #endif
 
+  DEBUG_PRINTLN(F("Init STA interfaces"));
   // Set up mDNS responder:
   if (mDNSenabled) {
     // "end" must be called before "begin" is called a 2nd time
@@ -851,29 +872,15 @@ void WLED::connected()
     MDNS.addServiceTxt("wled", "tcp", "mac", (const char*)escapedMac);
     DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
   }
-  server.begin();
-  DEBUG_PRINTLN(F("AWS started"));
-  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
-
-  if (udpPort > 0 && udpPort != ntpLocalPort) {
-    udpConnected = notifierUdp.begin(udpPort);
-  }
-  if (udpRgbPort > 0 && udpRgbPort != ntpLocalPort && udpRgbPort != udpPort) {
-    udpRgbConnected = rgbUdp.begin(udpRgbPort);
-  }
-  if (udpPort2 > 0 && udpPort2 != ntpLocalPort && udpPort2 != udpPort && udpPort2 != udpRgbPort) {
-    udp2Connected = notifier2Udp.begin(udpPort2);
-  }
-  if (ntpEnabled)
-    ntpConnected = ntpUdp.begin(ntpLocalPort);
-
-  #ifndef WLED_USE_DDP_ONLY
-  e131.begin(e131Multicast, e131Port, e131Universe, E131_MAX_UNIVERSE_COUNT);
-  #endif
-  ddp.begin(false, DDP_DEFAULT_PORT);
-  DEBUG_PRINTLN(F("UDP started."));
+  _initServers();
 
 #ifndef WLED_DISABLE_HUESYNC
+  IPAddress ipAddress = Network.localIP();
+  if (hueIP[0] == 0) {
+    hueIP[0] = ipAddress[0];
+    hueIP[1] = ipAddress[1];
+    hueIP[2] = ipAddress[2];
+  }
   reconnectHue();
 #endif
   lastMqttReconnectAttempt = 0; // force immediate update (MQTT & node broadcast)
@@ -883,11 +890,12 @@ void WLED::connected()
 #endif
 
   interfacesInited = true;
+  DEBUG_PRINTLN(F("Done connected"));
   DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
-  DEBUG_PRINTLN(F("Done connected."));
 
   UsermodManager::connected();
-  DEBUG_PRINTLN(F("Done usermod connected."));
+  DEBUG_PRINTLN(F("Done usermod connected"));
+  DEBUG_PRINTF_P(PSTR("heap %u\n"), getFreeHeapSize());
 
   wasConnected = true;
   showWelcomePage = false;

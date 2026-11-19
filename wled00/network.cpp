@@ -467,6 +467,9 @@ bool isWiFiConfigured() {
 #endif
 
 //handle Ethernet connection event
+// WARNING: Events may be triggered *after* WLED's loop() has already processed handleConnection()
+// so acting on events may lead to race condition with loop()'s handleConnection()
+// the best way to solve this is to employ semaphores that will trigger actions from within loop()
 void WiFiEvent(WiFiEvent_t event)
 {
   switch (event) {
@@ -518,13 +521,7 @@ void WiFiEvent(WiFiEvent_t event)
       // may be called *after* loop() has called handleConnection() with WiFi disconnected!
       DEBUG_PRINTF_P(PSTR("WiFi-E: Disconnected! @ %lus\n"), millis()/1000);
       if (interfacesInited) {
-        server.end();
-        if (udpPort) notifierUdp.stop();
-        if (udpPort2) notifier2Udp.stop();
-        if (udpRgbPort) rgbUdp.stop();      
-        if (mDNSenabled) MDNS.end();
         interfacesInited = false;
-
         if (multiWiFi.size() > 1 && WiFi.scanComplete() >= 0)
           findWiFi(true);               // reinit WiFi scan (this may add ~6s connection delay but will select best SSID)
         forceReconnect = true;          // force reconnect
@@ -543,34 +540,7 @@ void WiFiEvent(WiFiEvent_t event)
       scanESPNow = millis() + 5000;    // postpone heartbeat generation for a few seconds (may be overriden in WLED::connected())
       #endif
       break;
-    case ARDUINO_EVENT_WIFI_SCAN_DONE:
-      // also triggered when connected to selected SSID
-      DEBUG_PRINTF_P(PSTR("WiFi-E: SSID scan completed. @ %lus\n"), millis()/1000);
-      break;
-    case ARDUINO_EVENT_WIFI_STA_START:
-      DEBUG_PRINTF_P(PSTR("WiFi-E: STA Started. @ %lus\n"), millis()/1000);
-      break;
-    case ARDUINO_EVENT_WIFI_STA_STOP:
-      DEBUG_PRINTF_P(PSTR("WiFi-E: STA Stopped. @ %lus\n"), millis()/1000);
-      break;
-    case ARDUINO_EVENT_WIFI_AP_START:
-      DEBUG_PRINTF_P(PSTR("WiFi-E: AP Started. @ %lus\n"), millis()/1000);
-      break;
-    case ARDUINO_EVENT_WIFI_AP_STOP:
-      DEBUG_PRINTF_P(PSTR("WiFi-E: AP Stopped. @ %lus\n"), millis()/1000);
-      server.end();
-      if (udpPort) notifierUdp.stop();
-      if (udpPort2) notifier2Udp.stop();
-      if (udpRgbPort) rgbUdp.stop();
-      #ifndef WLED_USE_DDP_ONLY
-      e131.end();
-      #endif
-      ddp.end();
-    break;
     #ifdef WLED_USE_ETHERNET
-    case ARDUINO_EVENT_ETH_START:
-      DEBUG_PRINTF_P(PSTR("ETH-E: Started. @ %lus\n"), millis()/1000);
-      break;
     case ARDUINO_EVENT_ETH_GOT_IP:
       DEBUG_PRINTF_P(PSTR("ETH-E: Got IP: %s. @ %lus\n"), Network.localIP().toString().c_str(), millis()/1000);
       wasConnected = true;
@@ -591,10 +561,6 @@ void WiFiEvent(WiFiEvent_t event)
       WiFi.mode(WIFI_MODE_NULL);        // disable radio entirely (should be done above, but just-in-case)
       delay(5);
       break;
-    case ARDUINO_EVENT_ETH_CONNECTED: {
-      DEBUG_PRINTF_P(PSTR("ETH-E: Connected. @ %lus\n"), millis()/1000);
-      break;
-      }
     case ARDUINO_EVENT_ETH_DISCONNECTED:
       DEBUG_PRINTF_P(PSTR("ETH-E: Disconnected. @ %lus\n"), millis()/1000);
       // This doesn't really affect ethernet per se,
@@ -606,16 +572,6 @@ void WiFiEvent(WiFiEvent_t event)
       stopESPNow();                   // we are going to (re)start radio so stop ESP-NOW
       #endif
       if (interfacesInited) {
-        server.end();
-        if (udpPort) notifierUdp.stop();
-        if (udpPort2) notifier2Udp.stop();
-        if (udpRgbPort) rgbUdp.stop();
-        if (ntpEnabled) ntpUdp.stop();
-        if (mDNSenabled) MDNS.end();
-        #ifndef WLED_USE_DDP_ONLY
-        e131.end();
-        #endif
-        ddp.end();
         interfacesInited = false;
       }
       if (isWiFiConfigured()) {
@@ -631,10 +587,38 @@ void WiFiEvent(WiFiEvent_t event)
       break;
     #endif
   #endif
+#ifdef WLED_DEBUG
+  #ifdef ARDUINO_ARCH_ESP32
+    case ARDUINO_EVENT_WIFI_SCAN_DONE:
+      // also triggered when connected to selected SSID
+      DEBUG_PRINTF_P(PSTR("WiFi-E: SSID scan completed. @ %lus\n"), millis()/1000);
+      break;
+    case ARDUINO_EVENT_WIFI_STA_START:
+      DEBUG_PRINTF_P(PSTR("WiFi-E: STA Started. @ %lus\n"), millis()/1000);
+      break;
+    case ARDUINO_EVENT_WIFI_STA_STOP:
+      DEBUG_PRINTF_P(PSTR("WiFi-E: STA Stopped. @ %lus\n"), millis()/1000);
+      break;
+    case ARDUINO_EVENT_WIFI_AP_START:
+      DEBUG_PRINTF_P(PSTR("WiFi-E: AP Started. @ %lus\n"), millis()/1000);
+      break;
+    case ARDUINO_EVENT_WIFI_AP_STOP:
+      DEBUG_PRINTF_P(PSTR("WiFi-E: AP Stopped. @ %lus\n"), millis()/1000);
+      break;
+    #ifdef WLED_USE_ETHERNET
+    case ARDUINO_EVENT_ETH_START:
+      DEBUG_PRINTF_P(PSTR("ETH-E: Started. @ %lus\n"), millis()/1000);
+      break;
+    case ARDUINO_EVENT_ETH_CONNECTED:
+      DEBUG_PRINTF_P(PSTR("ETH-E: Connected. @ %lus\n"), millis()/1000);
+      break;
+    #endif
+  #endif
     case ARDUINO_EVENT_WIFI_AP_PROBEREQRECVED: break;
     default:
       DEBUG_PRINTF_P(PSTR("WiFi-E: Unhandled event %d @ %lus\n"), (int)event, millis()/1000);
       break;
+#endif
   }
 }
 
