@@ -1252,10 +1252,8 @@ int BusManager::add(const BusConfig &bc) {
   return busses.back()->isOk() ? busses.size() : -1;
 }
 
-// credit @willmmiles
-static String LEDTypesToJson(const std::vector<LEDType>& types) {
-  String json;
-  json.reserve(512); // prevent heap fragmentation by allocating needed space upfront
+// credit @willmmiles & @dedehai
+static void printLEDTypes(Print &dest, const std::vector<LEDType>& types) {
   for (const auto &type : types) {
     // capabilities follows similar pattern as JSON API
     int capabilities = Bus::hasRGB(type.id) | Bus::hasWhite(type.id)<<1 | Bus::hasCCT(type.id)<<2 | Bus::is16bit(type.id)<<4 | Bus::mustRefresh(type.id)<<5;
@@ -1270,26 +1268,25 @@ static String LEDTypesToJson(const std::vector<LEDType>& types) {
       }
       str[strlen(str)-1] = ']'; // replace last comma with bracket
     }
-    strcat_P(str, PSTR("},"));
-    json += str;
+    strcat(str, "},");
+    dest.print(str);
   }
-  return json;
 }
 
-// credit @willmmiles & @netmindz https://github.com/wled/WLED/pull/4056
-String BusManager::getLEDTypesJSONString() {
-  String json = "[";
-  json.reserve(1536); // prevent heap fragmentation by allocating needed space upfront
-  json += LEDTypesToJson(BusDigital::getLEDTypes());
-  json += LEDTypesToJson(BusOnOff::getLEDTypes());
-  json += LEDTypesToJson(BusPwm::getLEDTypes());
+
+// credit @willmmiles & @netmindz https://github.com/wled/WLED/pull/4056; addidional tuning @dedehai wled#5982
+void BusManager::printLEDTypesArray(Print &dest) {
+  // settings page will take care of (ignore) last empty array element
+  dest.print('[');
+  printLEDTypes(dest, BusDigital::getLEDTypes());
+  printLEDTypes(dest, BusOnOff::getLEDTypes());
+  printLEDTypes(dest, BusPwm::getLEDTypes());
   #if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
-  json += LEDTypesToJson(BusHub75Matrix::getLEDTypes());
+  printLEDTypes(dest, BusHub75Matrix::getLEDTypes());
   #endif
-  json += LEDTypesToJson(BusNetwork::getLEDTypes());
-  //json += LEDTypesToJson(BusVirtual::getLEDTypes());
-  json.setCharAt(json.length()-1, ']'); // replace last comma with bracket
-  return json;
+  printLEDTypes(dest, BusNetwork::getLEDTypes());
+  //printLEDTypes(dest, BusVirtual::getLEDTypes());
+  dest.print(']');
 }
 
 void BusManager::useParallelOutput() {

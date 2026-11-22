@@ -331,6 +331,7 @@
 				// fill led types (credit @netmindz)
 				let sel = f.lastElementChild.querySelector("select[name^=LT]"); // get recently added LED type select
 				for (let type of ledTypes) {
+					if (type === undefined) continue; // skip empty array entries
 					let opt = cE("option");
 					opt.value = type.i;
 					opt.text = type.n;
