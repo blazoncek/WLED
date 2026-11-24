@@ -547,17 +547,7 @@ Sample:
 */
 static void decodeIRJson(uint32_t code)
 {
-  char objKey[16];
-  char fileName[16];
-  sprintf_P(objKey, PSTR("\"0x%lX\":"), (unsigned long)code);
-  strcpy_P(fileName, PSTR("/ir.json"));
-
-  File f = WLED_FS.open(fileName, "r");
-  if (!f) {
-    DEBUG_PRINTLN(F("Opening ir.json failed."));
-    errorFlag = ERR_FS_IRLOAD; //warn if IR file itself doesn't exist
-    return;
-  }
+  char objKey[16]; sprintf_P(objKey, PSTR("0x%lX"), (unsigned long)code);
 
   PSRAMDynamicJsonDocument doc(4096);   // should be adequate for regular/most common IR commands (but not for i.e. entire preset)
   StaticJsonDocument<200> filter;
@@ -568,9 +558,11 @@ static void decodeIRJson(uint32_t code)
   filter[objKey]["FP"] = true;
 
   // attempt to read command from ir.json
-  DeserializationError retCode = deserializeJson(doc, f, DeserializationOption::Filter(filter));
-  f.close();
-  if (retCode != DeserializationError::Ok) return;
+  if (!readJSONFromFile(PSTR("/ir.json"), &doc, &filter)) {
+    DEBUG_PRINTLN(F("Opening ir.json failed."));
+    errorFlag = ERR_FS_IRLOAD; //warn if IR file itself doesn't exist
+    return;
+  }
 
   JsonObject fdo = doc.as<JsonObject>();
   if (fdo[objKey].isNull()) return;  //the received code does not exist

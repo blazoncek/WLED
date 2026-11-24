@@ -98,22 +98,8 @@ static void presetWithFallback(uint8_t presetID, uint8_t effectID, uint8_t palet
 // this function follows the same principle as decodeIRJson()
 static bool remoteJson(uint32_t button)
 {
-  char objKey[16];
-  char fileName[16];
+  char objKey[16]; sprintf_P(objKey, PSTR("%d"), button);
   bool parsed = false;
-
-  unsigned long maxWait = millis() + 2*strip.getFrameTime();
-  while (strip.isUpdating() && millis() < maxWait) delay(1); // wait for strip to finish updating, accessing FS during sendout causes glitches
-
-  sprintf_P(objKey, PSTR("\"%d\":"), button);
-  strcpy_P(fileName, PSTR("/remote.json"));
-
-  File f = WLED_FS.open(fileName, "r");
-  if (!f) {
-    DEBUG_PRINTLN(F("Opening remote.json failed."));
-    //errorFlag = ERR_FS_RMLOAD; //warn if remote file itself doesn't exist
-    return false;
-  }
 
   PSRAMDynamicJsonDocument doc(4096);   // should be adequate for regular/most common IR commands (but not for i.e. entire preset)
   StaticJsonDocument<200> filter;
@@ -124,9 +110,11 @@ static bool remoteJson(uint32_t button)
   filter[objKey]["FP"] = true;
 
   // attempt to read command from remote.json
-  DeserializationError retCode = deserializeJson(doc, f, DeserializationOption::Filter(filter));
-  f.close();
-  if (retCode != DeserializationError::Ok) return parsed;
+  if (!readJSONFromFile(PSTR("/remote.json"), &doc, &filter)) {
+    DEBUG_PRINTLN(F("Opening remote.json failed."));
+    errorFlag = ERR_FS_IRLOAD; //warn if IR file itself doesn't exist
+    return false;
+  }
 
   JsonObject fdo = doc.as<JsonObject>();
   if (fdo[objKey].isNull()) return parsed;  //the received code does not exist

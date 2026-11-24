@@ -421,19 +421,18 @@ void enumerateLedmaps() {
   #ifndef ESP8266
   ledmapNames.clear();
   #endif
+  char fileName[33];
   for (size_t i=1; i<WLED_MAX_LEDMAPS; i++) {
-    char fileName[33];
     snprintf_P(fileName, sizeof(fileName)-1, s_ledmap_tmpl, i);
 
-    File f = WLED_FS.open(fileName, "r");
-    if (f) {
+    if (WLED_FS.exists(fileName)) {
       ledMaps |= 1 << i;
 
       #ifndef ESP8266
       StaticJsonDocument<256> doc;
       StaticJsonDocument<64> filter;
       filter["n"] = true;
-      if (deserializeJson(doc, f, DeserializationOption::Filter(filter)) == DeserializationError::Ok) {
+      if (readJSONFromFile(fileName, &doc, &filter)) {
         size_t len = 0;
         JsonObject root = doc.as<JsonObject>();
         char name[33];
@@ -445,12 +444,12 @@ void enumerateLedmaps() {
           if (len) strlcpy(name, root["n"].as<const char*>(), sizeof(name));
         }
         ledmapNames.push_back(name);
+        DEBUG_PRINTF_P(PSTR("Ledmap: %s (%s)\n"), name, fileName);
       }
       #endif
-      f.close();
     }
-
   }
+  DEBUG_PRINTF_P(PSTR("Enumerated ledmaps: 0x%04X\n"), (unsigned)ledMaps);
 }
 
 /*

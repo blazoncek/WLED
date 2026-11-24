@@ -1,13 +1,16 @@
 #include "wled.h"
+#include <StreamUtils.h>
 
 #ifdef WLED_DEBUG_FS
   #define DEBUGFS_PRINT(x) DEBUGOUT.print(x)
   #define DEBUGFS_PRINTLN(x) DEBUGOUT.println(x)
   #define DEBUGFS_PRINTF(x...) DEBUGOUT.printf(x)
+  #define DEBUGFS_PRINTF_P(x...) DEBUGOUT.printf_p(x)
 #else
   #define DEBUGFS_PRINT(x)
   #define DEBUGFS_PRINTLN(x)
   #define DEBUGFS_PRINTF(x...)
+  #define DEBUGFS_PRINTF_P(x...)
 #endif
 
 /*
@@ -40,11 +43,9 @@
 constexpr size_t MAX_SPACE = UINT16_MAX * 2U;           // smallest supported config has 128Kb flash size
 static volatile size_t knownLargestSpace = MAX_SPACE;
 
-static File f; // don't export to other cpp files
-
 //find() that reads and buffers data from file stream in 256-byte blocks.
 //Significantly faster, f.find(key) can take SECONDS for multi-kB files
-static bool bufferedFind(const char *target, bool fromStart = true) {
+static bool bufferedFind(File &f, const char *target, bool fromStart = true) {
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINT("Find ");
     DEBUGFS_PRINTLN(target);
@@ -80,7 +81,7 @@ static bool bufferedFind(const char *target, bool fromStart = true) {
 }
 
 //find empty spots in file stream in 256-byte blocks.
-static bool bufferedFindSpace(size_t targetLen, bool fromStart = true) {
+static bool bufferedFindSpace(File &f, size_t targetLen, bool fromStart = true) {
 
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINTF("Find %d spaces\n", targetLen);
@@ -129,7 +130,7 @@ static bool bufferedFindSpace(size_t targetLen, bool fromStart = true) {
 }
 
 //find the closing bracket corresponding to the opening bracket at the file pos when calling this function
-static bool bufferedFindObjectEnd() {
+static bool bufferedFindObjectEnd(File &f) {
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINTLN(F("Find obj end"));
     uint32_t s = millis();
@@ -161,7 +162,7 @@ static bool bufferedFindObjectEnd() {
 }
 
 //fills n bytes from current file pos with ' ' characters
-static void writeSpace(size_t l)
+static void writeSpace(File &f, size_t l)
 {
   byte buf[FS_BUFSIZE];
   memset(buf, ' ', FS_BUFSIZE);
@@ -175,7 +176,7 @@ static void writeSpace(size_t l)
   if (knownLargestSpace < l) knownLargestSpace = l;
 }
 
-static bool appendObjectToFileAndClose(const char* key, const JsonDocument* content, uint32_t s, uint32_t contentLen = 0)
+static bool appendObjectToFileAndClose(File &f, const char* key, const JsonDocument* content, uint32_t s, uint32_t contentLen = 0)
 {
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINTLN(F("Append"));
@@ -194,10 +195,11 @@ static bool appendObjectToFileAndClose(const char* key, const JsonDocument* cont
   //if there is enough empty space in file, insert there instead of appending
   if (!contentLen) contentLen = measureJson(*content);
   DEBUGFS_PRINTF("CLen %d\n", contentLen);
-  if (bufferedFindSpace(contentLen + strlen(key) + 1)) {
+  if (bufferedFindSpace(f, contentLen + strlen(key) + 1)) {
     if (f.position() > 2) f.write(','); //add comma if not first object
     f.print(key);
-    serializeJson(*content, f);
+    WriteBufferingStream bufferedFile(f, 128);
+    serializeJson(*content, bufferedFile);
     DEBUGFS_PRINTF("Inserted, took %lu ms (total %lu)", millis() - s1, millis() - s);
     f.close();
     return true;
@@ -223,7 +225,7 @@ static bool appendObjectToFileAndClose(const char* key, const JsonDocument* cont
   {
     DEBUGFS_PRINTLN(F("not }"));
     f.seek(0);
-    while (bufferedFind("}",false)) //find last closing bracket in JSON if not last char
+    while (bufferedFind(f, "}", false)) //find last closing bracket in JSON if not last char
     {
       pos = f.position();
     }
@@ -242,7 +244,8 @@ static bool appendObjectToFileAndClose(const char* key, const JsonDocument* cont
   f.print(key);
 
   //Append object
-  serializeJson(*content, f);
+  WriteBufferingStream bufferedFile(f, 128);
+  serializeJson(*content, bufferedFile);
   f.write('}');
   f.close();
   DEBUGFS_PRINTF("Appended, took %lu ms (total %lu)", millis() - s1, millis() - s);
@@ -258,30 +261,34 @@ bool writeObjectToFileUsingId(const char* file, uint16_t id, const JsonDocument*
 
 bool writeObjectToFile(const char* file, const char* key, const JsonDocument* content)
 {
+  // before accessing file system wait for buses to become idle
+  BusManager::waitForIdle();
+
   uint32_t s = 0; //timing
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINTF("Write to %s with key %s >>>\n", file, (key==nullptr)?"nullptr":key);
-    serializeJson(*content, Serial); DEBUGFS_PRINTLN();
+    WriteBufferingStream bufferedSerial(DEBUGOUT, 64);
+    serializeJsonPretty(*content, bufferedSerial); DEBUGFS_PRINTLN();
     s = millis();
   #endif
 
   size_t pos = 0;
   char fileName[129]; strncpy_P(fileName, file, 128); fileName[128] = 0; //use PROGMEM safe copy as FS.open() does not
-  f = WLED_FS.open(fileName, WLED_FS.exists(fileName) ? "r+" : "w+");
+  File f = WLED_FS.open(fileName, WLED_FS.exists(fileName) ? "r+" : "w+");
   if (!f) {
     DEBUGFS_PRINTLN(F("Failed to open!"));
     return false;
   }
 
-  if (!bufferedFind(key)) //key does not exist in file
+  if (!bufferedFind(f, key)) //key does not exist in file
   {
-    return appendObjectToFileAndClose(key, content, s);
+    return appendObjectToFileAndClose(f, key, content, s);
   }
 
   //an object with this key already exists, replace or delete it
   pos = f.position();
   //measure out end of old object
-  bufferedFindObjectEnd();
+  bufferedFindObjectEnd(f);
   size_t pos2 = f.position();
 
   uint32_t oldLen = pos2 - pos;
@@ -299,19 +306,21 @@ bool writeObjectToFile(const char* file, const char* key, const JsonDocument* co
   if (contentLen && contentLen <= oldLen) { //replace and fill diff with spaces
     DEBUGFS_PRINTLN(F("replace"));
     f.seek(pos);
-    serializeJson(*content, f);
-    writeSpace(pos2 - f.position());
-  } else if (contentLen && bufferedFindSpace(contentLen - oldLen, false)) { //enough leading spaces to replace
+    WriteBufferingStream bufferedFile(f, FS_BUFSIZE);
+    serializeJson(*content, bufferedFile);
+    writeSpace(f, pos2 - f.position());
+  } else if (contentLen && bufferedFindSpace(f, contentLen - oldLen, false)) { //enough leading spaces to replace
     DEBUGFS_PRINTLN(F("replace (trailing)"));
     f.seek(pos);
-    serializeJson(*content, f);
+    WriteBufferingStream bufferedFile(f, FS_BUFSIZE);
+    serializeJson(*content, bufferedFile);
   } else {
     DEBUGFS_PRINTLN(F("delete"));
     pos -= strlen(key);
     if (pos > 3) pos--; //also delete leading comma if not first object
     f.seek(pos);
-    writeSpace(pos2 - pos);
-    if (contentLen) return appendObjectToFileAndClose(key, content, s, contentLen);
+    writeSpace(f, pos2 - pos);
+    if (contentLen) return appendObjectToFileAndClose(f, key, content, s, contentLen);
   }
 
   f.close();
@@ -319,38 +328,69 @@ bool writeObjectToFile(const char* file, const char* key, const JsonDocument* co
   return true;
 }
 
-bool readObjectFromFileUsingId(const char* file, uint16_t id, JsonDocument* dest, const JsonDocument* filter)
+//if filter is a nullptr, deserialize entire object
+bool readJSONFromFile(const char* file, JsonDocument* dest, const JsonDocument* filter)
+{
+  // before accessing file system wait for buses to become idle
+  BusManager::waitForIdle();
+
+  #ifdef WLED_DEBUG_FS
+    DEBUGFS_PRINTF_P(PSTR("Read from %s with%s filter.\n"), file, filter == nullptr ? PSTR("out") : "");
+    if (filter) serializeJsonPretty(*filter, DEBUGOUT);
+    uint32_t s = millis();
+  #endif
+  char fileName[33]; strncpy_P(fileName, file, sizeof(fileName)-1); fileName[32] = 0; //use PROGMEM safe copy as FS.open() does not
+  File f = WLED_FS.open(fileName, "r");
+  if (!f) return false;
+
+  dest->clear();
+
+  ReadBufferingStream bufferedFile(f, FS_BUFSIZE);
+  DeserializationError err;
+  if (filter) err = deserializeJson(*dest, bufferedFile, DeserializationOption::Filter(*filter));
+  else        err = deserializeJson(*dest, bufferedFile);
+
+  f.close();
+  DEBUGFS_PRINTF("Read, took %lu ms\n", millis() - s);
+  return err == DeserializationError::Ok;
+}
+
+bool readObjectFromFileUsingId(const char* file, uint16_t id, JsonDocument* dest)
 {
   char objKey[10];
   sprintf(objKey, "\"%d\":", id);
-  return readObjectFromFile(file, objKey, dest, filter);
+  return readObjectFromFile(file, objKey, dest);
 }
 
 //if the key is a nullptr, deserialize entire object
-bool readObjectFromFile(const char* file, const char* key, JsonDocument* dest, const JsonDocument* filter)
+bool readObjectFromFile(const char* file, const char* key, JsonDocument* dest)
 {
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINTF("Read from %s with key %s >>>\n", file, (key==nullptr)?"nullptr":key);
     uint32_t s = millis();
   #endif
   char fileName[129]; strncpy_P(fileName, file, 128); fileName[128] = 0; //use PROGMEM safe copy as FS.open() does not
-  f = WLED_FS.open(fileName, "r");
+  File f = WLED_FS.open(fileName, "r");
   if (!f) return false;
 
-  if (key != nullptr && !bufferedFind(key)) //key does not exist in file
-  {
+  if (key != nullptr && !bufferedFind(f, key)) {
+    //key does not exist in file
     f.close();
     dest->clear();
     DEBUGFS_PRINTLN(F("Obj not found."));
     return false;
   }
 
-  if (filter) deserializeJson(*dest, f, DeserializationOption::Filter(*filter));
-  else        deserializeJson(*dest, f);
+  // ArduinoJSON deserializes from f's current position (until closing } or ] which is not necessarily end of file)
+  // bufferedFind() will advance f to the opening { or [ as key is expected in '"key":' format
+  // Note included colon, making "key" not included in resulting document.
+  // This differs from searching by filter which includes "key" in the document.
+  ReadBufferingStream bufferedFile(f, FS_BUFSIZE);
+  DeserializationError err = deserializeJson(*dest, bufferedFile);
 
   f.close();
   DEBUGFS_PRINTF("Read, took %lu ms\n", millis() - s);
-  return true;
+  return err == DeserializationError::Ok;
 }
 
 void updateFSInfo() {
@@ -414,8 +454,9 @@ static const uint8_t *getPresetCache(size_t &size) {
 }
 #endif
 
-bool handleFileRead(AsyncWebServerRequest* request, String path){
-  DEBUGFS_PRINT(F("WS FileRead: ")); DEBUGFS_PRINTLN(path);
+bool handleFileRead(AsyncWebServerRequest* request, String path) {
+  DEBUGFS_PRINTF_P(PSTR("WS FileRead: %s"), path);
+
   if(path.endsWith("/")) path += "index.htm";
   if(path.indexOf(F("sec")) > -1) return false;
   #if defined(BOARD_HAS_PSRAM) && !defined(WLED_DISABLE_PRESET_CACHE)
@@ -429,7 +470,11 @@ bool handleFileRead(AsyncWebServerRequest* request, String path){
     }
   }
   #endif
-  #ifndef ESP8266
+
+  // before accessing file system wait for buses to become idle
+  BusManager::waitForIdle();
+
+  #ifdef ARDUINO_ARCH_ESP32
   fs::FS &_fs = sdCard && SD.cardType() != CARD_NONE && path.indexOf(F("/sd/")) == 0 ? reinterpret_cast<fs::FS&>(SD) : reinterpret_cast<fs::FS&>(WLED_FS);
   #else
   fs::FS &_fs = WLED_FS;

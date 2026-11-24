@@ -1,4 +1,5 @@
 #include "wled.h"
+#include <StreamUtils.h>
 
 #ifndef WLED_DISABLE_OTA
   #ifdef ESP8266
@@ -534,7 +535,8 @@ void initServer()
       /*
       #ifdef WLED_DEBUG
         DEBUG_PRINTLN(F("Serialized HTTP"));
-        serializeJson(root,Serial);
+        WriteBufferingStream bufferedSerial(Serial, 64);
+        serializeJsonPretty(root, bufferedSerial);
         DEBUG_PRINTLN();
       #endif
       */

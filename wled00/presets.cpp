@@ -1,4 +1,5 @@
 #include "wled.h"
+#include <StreamUtils.h>
 
 /*
  * Methods to handle saving and loading presets to/from the filesystem
@@ -51,7 +52,8 @@ static void doSaveState() {
 /*
   #ifdef WLED_DEBUG
     DEBUG_PRINTLN(F("Serialized preset"));
-    serializeJson(*pDoc,Serial);
+    WriteBufferingStream bufferedSerial(Serial, 64);
+    serializeJsonPretty(*pDoc,bufferedSerial);
     DEBUG_PRINTLN();
   #endif
 */
@@ -90,34 +92,31 @@ static void doSaveState() {
 
 bool getPresetName(byte index, String& name)
 {
-  if (!requestJSONBufferLock(19)) return false;
-  bool presetExists = false;
-  if (readObjectFromFileUsingId(getPresetsFileName(), index, pDoc)) {
-    JsonObject fdo = pDoc->as<JsonObject>();
-    if (fdo["n"]) {
-      name = (const char*)(fdo["n"]);
-      presetExists = true;
+  StaticJsonDocument<256> doc;
+  StaticJsonDocument<64> filter;
+  char pName[5]; snprintf_P(pName, sizeof(pName), PSTR("%d"), (int)index);
+  filter[pName]["n"] = true;
+  if (readJSONFromFile(getPresetsFileName(), &doc, &filter)) {
+    JsonObject fdo = doc.as<JsonObject>();
+    if (fdo[pName]["n"].is<const char *>()) {
+      name = (const char*)(fdo[pName]["n"]);
+      return true;
     }
   }
-  releaseJSONBufferLock();
-  return presetExists;
+  return false;
 }
 
 void initPresetsFile()
 {
-  char fileName[33]; strncpy_P(fileName, getPresetsFileName(), 32); fileName[32] = 0; //use PROGMEM safe copy as FS.open() does not
+  char fileName[33]; strncpy_P(fileName, getPresetsFileName(), sizeof(fileName)-1); fileName[32] = 0; //use PROGMEM safe copy as FS.open() does not
   if (WLED_FS.exists(fileName)) return;
 
-  StaticJsonDocument<64> doc;
-  JsonObject sObj = doc.to<JsonObject>();
-  sObj.createNestedObject("0");
   File f = WLED_FS.open(fileName, "w");
-  if (!f) {
+  if (f) {
+    f.print(F("{\"0\":{}}"));
+    f.close();
+  } else
     errorFlag = ERR_FS_GENERAL;
-    return;
-  }
-  serializeJson(doc, f);
-  f.close();
 }
 
 bool applyPreset(byte index, byte callMode)

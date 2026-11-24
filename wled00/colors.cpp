@@ -1,4 +1,5 @@
 #include "wled.h"
+#include <StreamUtils.h>
 
 /*
  * Color conversion & utility methods
@@ -302,6 +303,9 @@ void loadCustomPalettes() {
   filter[F("palette")] = true;
   size_t palCount = 0;
 
+  // before accessing file system wait for buses to become idle
+  BusManager::waitForIdle();
+
   for (unsigned index = 0; index < WLED_MAX_CUSTOM_PALETTES; index++) {
     char fileName[32];
     sprintf_P(fileName, nameTemplate, index);
@@ -309,7 +313,8 @@ void loadCustomPalettes() {
     if (f) {
       DEBUG_PRINTF_P(PSTR("Reading palette from %s\n"), fileName);
       doc.clear(); // make sure it is empty
-      DeserializationError err = deserializeJson(doc, f, DeserializationOption::Filter(filter));
+      ReadBufferingStream bufferedFile(f, 256);
+      DeserializationError err = deserializeJson(doc, bufferedFile, DeserializationOption::Filter(filter));
       if (err == DeserializationError::Ok) {
         JsonArray pal = doc[F("palette")];
         if (!pal.isNull() && pal.size()>3) { // not an empty palette (at least 2 entries)
@@ -323,7 +328,7 @@ void loadCustomPalettes() {
               if (colorFromHexString(rgb, pal[i+1].as<const char *>())) { // will catch non-string entires
                 tcp[ j ] = (uint8_t) pal[ i ].as<int>(); // index
                 for (size_t c=0; c<3; c++) tcp[j+1+c] = rgb[2-c]; // only use RGB component (CRGBA has b in [0] - reverse order)
-                DEBUGFX_PRINTF_P(PSTR("%2u -> %3d [%3d,%3d,%3d]\n"), i, int(tcp[j]), int(tcp[j+1]), int(tcp[j+2]), int(tcp[j+3]));
+                DEBUG_PRINTF_P(PSTR("%2u -> %3d [%3d,%3d,%3d]\n"), i, int(tcp[j]), int(tcp[j+1]), int(tcp[j+2]), int(tcp[j+3]));
                 j += 4;
               }
             }
@@ -333,7 +338,7 @@ void loadCustomPalettes() {
             for (size_t i=0; i<palSize && pal[i].as<int>()<256; i+=4) {
               tcp[ i ] = (uint8_t) pal[ i ].as<int>(); // index
               for (size_t c=0; c<3; c++) tcp[i+1+c] = (uint8_t) pal[i+1+c].as<int>();
-              DEBUGFX_PRINTF_P(PSTR("%2u -> %3d [%3d,%3d,%3d]\n"), i, int(tcp[i]), int(tcp[i+1]), int(tcp[i+2]), int(tcp[i+3]));
+              DEBUG_PRINTF_P(PSTR("%2u -> %3d [%3d,%3d,%3d]\n"), i, int(tcp[i]), int(tcp[i+1]), int(tcp[i+2]), int(tcp[i+3]));
             }
           }
           customPalettes.push_back(targetPalette.loadDynamicGradientPalette(tcp));

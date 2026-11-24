@@ -1,4 +1,5 @@
 #include "wled.h"
+#include <StreamUtils.h>
 
 // forward declarations
 static void sendBytes();
@@ -121,7 +122,8 @@ void handleSerial()
               JsonObject infoDoc  = pDoc->createNestedObject("info");
               serializeInfo(infoDoc);
 
-              serializeJson(*pDoc, Serial);
+              WriteBufferingStream bufferedSerial(Serial, 64);
+              serializeJson(*pDoc, bufferedSerial);
               Serial.println();
             }
           }

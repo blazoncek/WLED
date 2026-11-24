@@ -43,13 +43,14 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol);
 bool handleFileRead(AsyncWebServerRequest*, String path);
 bool writeObjectToFileUsingId(const char* file, uint16_t id, const JsonDocument* content);
 bool writeObjectToFile(const char* file, const char* key, const JsonDocument* content);
-bool readObjectFromFileUsingId(const char* file, uint16_t id, JsonDocument* dest, const JsonDocument* filter = nullptr);
-bool readObjectFromFile(const char* file, const char* key, JsonDocument* dest, const JsonDocument* filter = nullptr);
+bool readJSONFromFile(const char* file, JsonDocument* dest, const JsonDocument* filter = nullptr);
+bool readObjectFromFileUsingId(const char* file, uint16_t id, JsonDocument* dest);
+bool readObjectFromFile(const char* file, const char* key, JsonDocument* dest);
 void updateFSInfo();
 inline bool writeObjectToFileUsingId(const String &file, uint16_t id, const JsonDocument* content) { return writeObjectToFileUsingId(file.c_str(), id, content); };
 inline bool writeObjectToFile(const String &file, const char* key, const JsonDocument* content) { return writeObjectToFile(file.c_str(), key, content); };
-inline bool readObjectFromFileUsingId(const String &file, uint16_t id, JsonDocument* dest, const JsonDocument* filter = nullptr) { return readObjectFromFileUsingId(file.c_str(), id, dest); };
-inline bool readObjectFromFile(const String &file, const char* key, JsonDocument* dest, const JsonDocument* filter = nullptr) { return readObjectFromFile(file.c_str(), key, dest); };
+inline bool readObjectFromFileUsingId(const String &file, uint16_t id, JsonDocument* dest) { return readObjectFromFileUsingId(file.c_str(), id, dest); };
+inline bool readObjectFromFile(const String &file, const char* key, JsonDocument* dest) { return readObjectFromFile(file.c_str(), key, dest); };
 bool initFS();
 
 //hue.cpp

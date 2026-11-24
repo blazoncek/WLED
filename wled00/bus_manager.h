@@ -628,6 +628,7 @@ namespace BusManager {
 
   void  show();
   bool canAllShow();
+  void waitForIdle();
 
   inline void    clear()                    { for (auto &bus : busses) for (size_t i = 0; i < bus->getLength(); i++) bus->setPixelColor(i, 0); }
   inline void    setStatusPixel(uint32_t c) { for (auto &bus : busses) bus->setStatusPixel(c);}

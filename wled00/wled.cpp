@@ -632,13 +632,11 @@ void WLED::beginStrip()
 #if defined(WLED_ENABLE_HUB75MATRIX) && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3))
   // experimental: load custom HUB75 pins from file
   // move to a better location later (see also bus manager BusHub75Matrix class)
-  char fileName[32]; strcpy_P(fileName, PSTR("/hub75pins.json"));
-  File f = WLED_FS.open(fileName, "r");
-  if (f) {
-    DEBUG_PRINTLN(F("Reading custom HUB75 pins."));
+  {
+    // use block to release stack once done processing Hub75 pins
     StaticJsonDocument<256> doc; // enough for 14 pins
-    // read the array into JSON buffer
-    if (f.size() > 0 && deserializeJson(doc, f) == DeserializationError::Ok) {
+    if (readJSONFromFile(PSTR("/hub75pins.json"), &doc)) {
+      //serializeJsonPretty(doc, DEBUGOUT);
       JsonArray pins = doc.as<JsonArray>();
       if (!pins.isNull() && pins.size() == 14) {
         uint8_t *pinMem = BusHub75Matrix::getCustomPinsArray();
@@ -646,7 +644,6 @@ void WLED::beginStrip()
         DEBUG_PRINTLN(F("Custom Hub75 pins loaded."));
       }
     }
-    f.close();
   }
 #endif
 

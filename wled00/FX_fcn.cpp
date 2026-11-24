@@ -11,6 +11,7 @@
 */
 #include "wled.h"
 #include <forward_list>
+#include <StreamUtils.h>
 
 /*
   Custom per-LED mapping has moved!
@@ -2510,6 +2511,9 @@ bool WS2812FX::deserializeMap(unsigned n) {
     return false;
   }
 
+  // before accessing file system wait for buses to become idle
+  BusManager::waitForIdle();
+
   File f = WLED_FS.open(fileName, "r");
   if (!f) {
     DEBUG_PRINTF_P(PSTR("ledmap %s failed to open.\n"), fileName);
@@ -2522,7 +2526,8 @@ bool WS2812FX::deserializeMap(unsigned n) {
     StaticJsonDocument<256> doc;
     filter[F("width")]  = true;
     filter[F("height")] = true;
-    if (deserializeJson(doc, f, DeserializationOption::Filter(filter)) == DeserializationError::Ok) {
+    ReadBufferingStream bufferedFile(f, 256);
+    if (deserializeJson(doc, bufferedFile, DeserializationOption::Filter(filter)) == DeserializationError::Ok) {
       // if we are loading default ledmap (at boot) set matrix width and height from the ledmap (compatible with WLED MM ledmaps)
       JsonObject root = doc.as<JsonObject>();
       if (!root[F("width")].isNull() || !root[F("height")].isNull()) {

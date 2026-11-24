@@ -1,4 +1,5 @@
 #include "wled.h"
+#include <StreamUtils.h>
 
 /*
  * Serializes and parses the cfg.json and wsec.json settings files, stored in internal FS.
@@ -889,7 +890,7 @@ bool deserializeConfigFromFS() {
 
   DEBUG_PRINTLN(F("Reading settings from /cfg.json..."));
 
-  readObjectFromFile(s_cfg_json, nullptr, pDoc);
+  readJSONFromFile(s_cfg_json, pDoc);
   if (pDoc->overflowed()) pDoc->clear(); // partial content (too many elemnets!), clear and start from scratch
 
   // NOTE: This routine deserializes *and* applies the configuration
@@ -1336,8 +1337,11 @@ void serializeConfig() {
   UsermodManager::addToConfig(usermods_settings);
 
   File f = WLED_FS.open(FPSTR(s_cfg_json), "w");
-  if (f) serializeJson(root, f);
-  f.close();
+  if (f) {
+    WriteBufferingStream bufferedFile(f, 256);
+    serializeJson(root, bufferedFile);
+    f.close();
+  }
   releaseJSONBufferLock();
 
   doSerializeConfig = false;
@@ -1352,7 +1356,7 @@ bool deserializeConfigSec() {
 
   if (!requestJSONBufferLock(3)) return false;
 
-  bool success = readObjectFromFile(s_wsec_json, nullptr, pDoc);
+  bool success = readJSONFromFile(s_wsec_json, pDoc);
   if (!success || pDoc->overflowed()) { // reject if overflowed (noMemory)
     releaseJSONBufferLock();
     return false;
@@ -1436,7 +1440,10 @@ void serializeConfigSec() {
   ota[F("aota")] = aOtaEnabled;
 
   File f = WLED_FS.open(FPSTR(s_wsec_json), "w");
-  if (f) serializeJson(root, f);
-  f.close();
+  if (f) {
+    WriteBufferingStream bufferedFile(f, 256);
+    serializeJson(root, bufferedFile);
+    f.close();
+  }
   releaseJSONBufferLock();
 }

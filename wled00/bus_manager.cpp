@@ -1412,6 +1412,15 @@ bool BusManager::canAllShow() {
   return true;
 }
 
+void BusManager::waitForIdle() {
+  #if defined(ARDUINO_ARCH_ESP32) && (SOC_CPU_CORES_NUM < 2)
+  // accessing file system during strip updates may cause flickering on unicore systems
+  // so we wait a bit (about 2 standard frames, i.e. 46ms)
+  unsigned long maxWait = millis() + 50;
+  while (!BusManager::canAllShow() && (millis() < maxWait)) delay(1);
+  #endif
+}
+
 // per bus ABL initialization (idea by @dedehai)
 // handles global ABL and per bus ABL
 // gMilliAmpsMax = global ABL limit (0 = no global ABL)
