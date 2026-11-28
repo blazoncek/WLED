@@ -124,6 +124,7 @@ void handleSerial()
 
               WriteBufferingStream bufferedSerial(Serial, 64);
               serializeJson(*pDoc, bufferedSerial);
+              bufferedSerial.flush();
               Serial.println();
             }
           }

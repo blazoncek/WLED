@@ -537,6 +537,7 @@ void initServer()
         DEBUG_PRINTLN(F("Serialized HTTP"));
         WriteBufferingStream bufferedSerial(Serial, 64);
         serializeJsonPretty(root, bufferedSerial);
+        bufferedSerial.flush();
         DEBUG_PRINTLN();
       #endif
       */

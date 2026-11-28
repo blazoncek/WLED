@@ -1340,6 +1340,7 @@ void serializeConfig() {
   if (f) {
     WriteBufferingStream bufferedFile(f, 256);
     serializeJson(root, bufferedFile);
+    bufferedFile.flush();
     f.close();
   }
   releaseJSONBufferLock();
@@ -1443,6 +1444,7 @@ void serializeConfigSec() {
   if (f) {
     WriteBufferingStream bufferedFile(f, 256);
     serializeJson(root, bufferedFile);
+    bufferedFile.flush();
     f.close();
   }
   releaseJSONBufferLock();

@@ -54,6 +54,7 @@ static void doSaveState() {
     DEBUG_PRINTLN(F("Serialized preset"));
     WriteBufferingStream bufferedSerial(Serial, 64);
     serializeJsonPretty(*pDoc,bufferedSerial);
+    bufferedSerial.flush();
     DEBUG_PRINTLN();
   #endif
 */

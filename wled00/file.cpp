@@ -200,6 +200,7 @@ static bool appendObjectToFileAndClose(File &f, const char* key, const JsonDocum
     f.print(key);
     WriteBufferingStream bufferedFile(f, 128);
     serializeJson(*content, bufferedFile);
+    bufferedFile.flush();
     DEBUGFS_PRINTF("Inserted, took %lu ms (total %lu)", millis() - s1, millis() - s);
     f.close();
     return true;
@@ -246,6 +247,7 @@ static bool appendObjectToFileAndClose(File &f, const char* key, const JsonDocum
   //Append object
   WriteBufferingStream bufferedFile(f, 128);
   serializeJson(*content, bufferedFile);
+  bufferedFile.flush();
   f.write('}');
   f.close();
   DEBUGFS_PRINTF("Appended, took %lu ms (total %lu)", millis() - s1, millis() - s);
@@ -269,6 +271,7 @@ bool writeObjectToFile(const char* file, const char* key, const JsonDocument* co
     DEBUGFS_PRINTF("Write to %s with key %s >>>\n", file, (key==nullptr)?"nullptr":key);
     WriteBufferingStream bufferedSerial(DEBUGOUT, 64);
     serializeJsonPretty(*content, bufferedSerial); DEBUGFS_PRINTLN();
+    bufferedSerial.flush();
     s = millis();
   #endif
 
@@ -308,12 +311,14 @@ bool writeObjectToFile(const char* file, const char* key, const JsonDocument* co
     f.seek(pos);
     WriteBufferingStream bufferedFile(f, FS_BUFSIZE);
     serializeJson(*content, bufferedFile);
+    bufferedFile.flush();
     writeSpace(f, pos2 - f.position());
   } else if (contentLen && bufferedFindSpace(f, contentLen - oldLen, false)) { //enough leading spaces to replace
     DEBUGFS_PRINTLN(F("replace (trailing)"));
     f.seek(pos);
     WriteBufferingStream bufferedFile(f, FS_BUFSIZE);
     serializeJson(*content, bufferedFile);
+    bufferedFile.flush();
   } else {
     DEBUGFS_PRINTLN(F("delete"));
     pos -= strlen(key);
